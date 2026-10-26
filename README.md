@@ -59,7 +59,7 @@ Beware that Capri may try to take over your human CPU. We take no responsibility
 
 1. Download **Capri-Setup.exe** and run it
 2. In the Capri Mainframe, press **Set up her brain**, or press **Free key** to use a free NVIDIA key
-3. Optional: paste an ElevenLabs key so she can talk
+3. Optional: paste an ElevenLabs key so she can talk. Make the key with **Restrict key** turned off
 
 Stuck? The [setup guide](https://lachydotmcg.github.io/capri-desktop/setup/) walks through it, or ask in the [Discord](https://discord.gg/F4fDHfGtFk).
 
