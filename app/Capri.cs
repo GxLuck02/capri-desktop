@@ -627,6 +627,12 @@ namespace CapriDesktop
         private bool dropping;
         private int chatTicket;
         private const double WakeLevel = 0.02;
+        // Free voice chat wakes for sound RoomMargin times the room's level and never for less than QuietWake, so quiet mics work and a steady fan stops counting as talking. It's never stricter than the old fixed WakeLevel unless the room is within 4 dB of it.
+        private const double RoomMargin = 3;
+        private const double QuietWake = 0.006;
+        private double room = -1;
+        private double lineAt = -100;
+        private double lineLevel;
         private readonly object waking = new object();
         private readonly System.Collections.Generic.List<short[]> preroll = new System.Collections.Generic.List<short[]>();
         private System.Collections.Generic.List<short[]> backlog;
@@ -3623,7 +3629,7 @@ namespace CapriDesktop
 
         private void ListenLocally()
         {
-            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); }
+            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); room = -1; lineAt = -100; }
             earsAwaited = false;
             if (OwnEars) { ListenOwn(); return; }
             Hearing.Own = null;
@@ -3678,7 +3684,7 @@ namespace CapriDesktop
         // No Windows speech and her own ears aren't in yet: they type until the ears land, then she switches on her own.
         private void AwaitEars(string why)
         {
-            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); }
+            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); room = -1; lineAt = -100; }
             earsReady = false;
             earsAwaited = true;
             Hearing.Own = null;
@@ -3700,7 +3706,7 @@ namespace CapriDesktop
         // Her own Parakeet ears hear the picked mic offline, about as well as Windows' online speech, so no warning.
         private void ListenOwn()
         {
-            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); }
+            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); room = -1; lineAt = -100; }
             earsAwaited = false;
             Hearing.Own = parakeet;
             try { if (!testing && !ears.Listening) ears.Start(); }
@@ -3718,7 +3724,7 @@ namespace CapriDesktop
 
         private void ListenOffline(string why)
         {
-            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); }
+            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); room = -1; lineAt = -100; }
             earsAwaited = false;
             try { if (!testing && !ears.Listening) ears.Start(); }
             catch (VoiceException error)
@@ -3762,10 +3768,16 @@ namespace CapriDesktop
 
         private void Gather(short[] chunk)
         {
-            bool loud = Speaker.Loudness(chunk, 0, chunk.Length) >= WakeLevel;
+            double level = VoiceLevel(chunk);
             lock (waking)
             {
                 if (!local || !earsReady || dictation != null || ears.Muted || earsShut || transcribing) { utterance = null; preroll.Clear(); loudRun = 0; quietRun = 0; return; }
+                // The room's level is its quietest moment: it drops straight to anything quieter and creeps up 2% a chunk between lines, never mid-line. It starts no higher than the old fixed level allows.
+                if (room < 0) room = Math.Min(Math.Max(level, 0.0003), WakeLevel / RoomMargin);
+                else if (level < room) room = Math.Max(level, 0.0003);
+                else if (utterance == null) room = Math.Min(level, room * 1.02);
+                double wake = RoomWake();
+                bool loud = level >= wake;
                 if (noiseHold)
                 {
                     quietRun = loud ? 0 : quietRun + 1;
@@ -3786,6 +3798,19 @@ namespace CapriDesktop
                 }
                 utterance.Add(chunk);
                 quietRun = loud ? 0 : quietRun + 1;
+                // Two seconds that never vary more than Speech's steadiness allows are a fan or a hum, not a voice: that becomes the room's level and the line is dropped.
+                if (utterance.Count >= 20)
+                {
+                    double low = 1;
+                    double high = 0;
+                    for (int i = utterance.Count - 20; i < utterance.Count; i++)
+                    {
+                        double piece = VoiceLevel(utterance[i]);
+                        low = Math.Min(low, piece);
+                        high = Math.Max(high, piece);
+                    }
+                    if (high < low * 1.2) { room = Math.Max(room, low); utterance = null; quietRun = 0; return; }
+                }
                 if (quietRun < 9 && utterance.Count < 150) return;
                 short[][] taken = utterance.ToArray();
                 bool capped = quietRun < 9;
@@ -3795,24 +3820,57 @@ namespace CapriDesktop
                 int request = asking;
                 if (capped)
                 {
+                    // 15 seconds without a pause is the room, not a line: its quietest chunk after the lead-in becomes the room's level.
+                    double quietest = 1;
+                    for (int i = 4; i < taken.Length; i++) quietest = Math.Min(quietest, VoiceLevel(taken[i]));
+                    room = Math.Max(room, quietest);
                     noiseHold = true;
                     Post(delegate { if (ticket == chatTicket && local) Missed("I heard 15 seconds without a pause. Try a shorter line or lower your mic volume.", false); });
                     return;
                 }
+                if (!LineCounts(taken, wake, clock.Elapsed.TotalSeconds)) return;
                 transcribing = true;
-                Post(delegate { Transcribe(taken, ticket, request); });
+                Post(delegate { Transcribe(taken, ticket, request, wake); });
             }
         }
 
-        private static bool Speech(short[][] taken)
+        private double RoomWake() { return Math.Max(QuietWake, Math.Min(room * RoomMargin, Math.Max(WakeLevel, room * 1.6))); }
+
+        // A finished line goes to her ears if it sounds like speech at the wake level. Within a minute of a line that came through, one under the old fixed level and over 10 dB quieter than it is someone else or the TV, not them.
+        private bool LineCounts(short[][] taken, double wake, double now)
+        {
+            if (!Speech(taken, wake)) return false;
+            double loudest = 0;
+            foreach (short[] piece in taken) loudest = Math.Max(loudest, VoiceLevel(piece));
+            if (now - lineAt < 60 && loudest < lineLevel / 3.16 && !Speech(taken)) return false;
+            lineAt = now;
+            lineLevel = loudest;
+            return true;
+        }
+
+        // Loudness under about 900 Hz, where a voice is: this low-pass keeps a voice within about 2 dB but drops key clicks and hiss about 7.
+        private static double VoiceLevel(short[] samples)
+        {
+            if (samples.Length == 0) return 0;
+            double kept = 0;
+            double sum = 0;
+            foreach (short sample in samples)
+            {
+                kept += 0.3 * (sample - kept);
+                sum += kept * kept;
+            }
+            return Math.Sqrt(sum / samples.Length) / 32768.0;
+        }
+
+        private static bool Speech(short[][] taken, double wake = WakeLevel)
         {
             int voiced = 0;
             double low = 1;
             double high = 0;
             foreach (short[] piece in taken)
             {
-                double level = Speaker.Loudness(piece, 0, piece.Length);
-                if (level < WakeLevel) continue;
+                double level = VoiceLevel(piece);
+                if (level < wake) continue;
                 voiced += piece.Length;
                 low = Math.Min(low, level);
                 high = Math.Max(high, level);
@@ -3820,11 +3878,11 @@ namespace CapriDesktop
             return voiced >= Ears.Rate * 3 / 10 && (voiced < Ears.Rate * 8 / 10 || high >= low * 1.2);
         }
 
-        private void Transcribe(short[][] taken, int ticket, int request)
+        private void Transcribe(short[][] taken, int ticket, int request, double wake = WakeLevel)
         {
             if (ticket != chatTicket || !local || !chatting) return;
             if (request != asking) { transcribing = false; CheckEars(clock.Elapsed.TotalSeconds); return; }
-            if (ears.Muted || talkState == TalkState.Thinking || clock.Elapsed.TotalSeconds < voiceUntil || !Speech(taken))
+            if (ears.Muted || talkState == TalkState.Thinking || clock.Elapsed.TotalSeconds < voiceUntil || !Speech(taken, wake))
             {
                 transcribing = false;
                 CheckEars(clock.Elapsed.TotalSeconds);
@@ -9256,13 +9314,69 @@ namespace CapriDesktop
                             foreach (short[] piece in earLine) ears.Feed(piece);
                             if (!earsShut || utterance != null || transcribing) throw new Exception("Muting did not discard the partial utterance.");
                             ToggleMic();
-                            for (int i = 0; i < 150; i++) ears.Feed(talk);
+                            for (int i = 0; i < 150; i++) ears.Feed(i % 2 == 0 ? talk : soft);
                             if (!noiseHold || utterance != null || transcribing) throw new Exception("The 15-second cap sent continuous noise to her ears.");
-                            for (int i = 0; i < 300; i++) ears.Feed(talk);
+                            for (int i = 0; i < 300; i++) ears.Feed(i % 2 == 0 ? soft : talk);
                             for (int i = 0; i < 8; i++) ears.Feed(hush);
                             if (!noiseHold || transcribing) throw new Exception("Continuous noise rearmed without a full pause.");
                             ears.Feed(hush);
                             if (noiseHold) throw new Exception("A pause did not rearm the local mic.");
+                            ears.Feed(talk);
+                            ears.Feed(soft);
+                            if (utterance == null) throw new Exception("After a pause, a voice didn't start a line.");
+                            for (int i = 0; i < 9; i++) ears.Feed(hush);
+                            if (utterance != null || transcribing) throw new Exception("A blip too short for a word went to her ears.");
+                            Random hiss = new Random(7);
+                            short[] murmur = new short[Ears.Chunk];
+                            short[] mumble = new short[Ears.Chunk];
+                            short[] mutter = new short[Ears.Chunk];
+                            short[] fan = new short[Ears.Chunk];
+                            short[] over = new short[Ears.Chunk];
+                            for (int i = 0; i < murmur.Length; i++)
+                            {
+                                murmur[i] = (short)hiss.Next(-57, 58);
+                                mumble[i] = (short)(murmur[i] + Math.Sin(i * 0.3) * 640);
+                                mutter[i] = (short)(murmur[i] + Math.Sin(i * 0.3) * 460);
+                                fan[i] = (short)hiss.Next(-4500, 4501);
+                                over[i] = (short)(fan[i] + Math.Sin(i * 0.3) * 6000);
+                            }
+                            for (int i = 0; i < 20; i++) ears.Feed(murmur);
+                            if (utterance != null) throw new Exception("A quiet room started a line.");
+                            for (int i = 0; i < 3; i++) { ears.Feed(mumble); ears.Feed(mutter); }
+                            short[][] quietLine;
+                            double quietWake;
+                            lock (waking) { quietLine = utterance == null ? null : utterance.ToArray(); quietWake = RoomWake(); }
+                            if (quietLine == null || Speaker.Loudness(mumble, 0, mumble.Length) >= WakeLevel || !Speech(quietLine, quietWake) || Speech(quietLine)) throw new Exception("A quiet mic in a quiet room didn't start a line she'd hear.");
+                            short[][] loudLine = { talk, soft, talk, soft, hush };
+                            double heardAt = clock.Elapsed.TotalSeconds;
+                            bool quietFirst;
+                            bool loudThen;
+                            bool quietSoon;
+                            bool quietLater;
+                            bool quietAgain;
+                            lock (waking) { lineAt = -100; quietFirst = LineCounts(quietLine, quietWake, heardAt); quietAgain = LineCounts(quietLine, quietWake, heardAt + 5); loudThen = LineCounts(loudLine, quietWake, heardAt + 10); quietSoon = LineCounts(quietLine, quietWake, heardAt + 40); quietLater = LineCounts(quietLine, quietWake, heardAt + 71); lineAt = -100; }
+                            if (!quietFirst || !quietAgain || !loudThen || quietSoon || !quietLater) throw new Exception("A quiet line was handled wrong around a normal one: " + quietFirst + " " + quietAgain + " " + loudThen + " " + quietSoon + " " + quietLater);
+                            ToggleMic();
+                            ToggleMic();
+                            double[] rooms = { 0.0001, 0.004, 0.01, 0.03 };
+                            double[] wakes = { 0.006, 0.012, 0.02, 0.048 };
+                            for (int i = 0; i < rooms.Length; i++)
+                            {
+                                double wakeFor;
+                                lock (waking) { room = rooms[i]; wakeFor = RoomWake(); }
+                                if (Math.Abs(wakeFor - wakes[i]) > 1e-9) throw new Exception("A room at " + rooms[i] + " woke her at " + wakeFor + ", not " + wakes[i] + ".");
+                            }
+                            lock (waking) room = -1;
+                            for (int i = 0; i < 25; i++) ears.Feed(fan);
+                            if (noiseHold || utterance != null || transcribing) throw new Exception("A loud steady fan was still a line after 2.5 seconds.");
+                            for (int i = 0; i < 50; i++) ears.Feed(fan);
+                            if (utterance != null) throw new Exception("A fan she'd learned started a line.");
+                            ears.Feed(over);
+                            ears.Feed(over);
+                            if (utterance == null) throw new Exception("A voice over a learned fan didn't start a line.");
+                            ToggleMic();
+                            ToggleMic();
+                            checks.Add("PASS mic level: free voice chat wakes for voice-band sound 3 times the room's level, never under -44 dB and never stricter than the old fixed -34 dB unless the room is within 4 dB of it, so a -40 dB voice in a quiet room starts a line; within a minute of a line, one under -34 dB and over 10 dB quieter than it is background; a loud steady fan is learned as the room within 2.5 seconds and a voice over it still starts one; blips too short for a word are dropped quietly");
                             int oldTicket = chatTicket;
                             int oldRequest = asking;
                             StopChat();
@@ -9284,7 +9398,7 @@ namespace CapriDesktop
                             if (transcribing || reply != "Typed before transcription started.") throw new Exception("Queued audio took the identity of a newer typed turn.");
                             CheckEars(clock.Elapsed.TotalSeconds);
                             if (earsShut) throw new Exception("The mic did not reopen after a stale transcript finished.");
-                            checks.Add("PASS local capture: real voiced duration, steady-noise rejection, a bounded utterance with a pause before retry, immediate thinking and mute gates, typed replies without paid speech, and stale session results ignored");
+                            checks.Add("PASS local capture: real voiced duration, steady-noise rejection, a bounded utterance that learns the steady sound as the room, immediate thinking and mute gates, typed replies without paid speech, and stale session results ignored");
                             Hearing.Run = delegate(short[] samples) { return samples.Length == talk.Length && samples[1] == talk[1] ? " Merci Capri,  \u00e7a va ? " : "wrong samples"; };
                             if (Hearing.Text(talk) != "Merci Capri, \u00e7a va ?") throw new Exception("Offline hearing was not given the mic's raw samples, or dropped French words.");
                             Hearing.Run = delegate(short[] samples) { throw new IOException("Test ears failure."); };
