@@ -1194,7 +1194,12 @@ namespace CapriDesktop
                 string problem = null;
                 bool invalid = false;
                 try { updater.Install(ready, parent, started); }
-                catch (Exception error) { invalid = error is BrainException || !File.Exists(ready.Path); problem = error is BrainException ? error.Message : "Couldn't start the update. Capri is still running."; }
+                catch (Exception error)
+                {
+                    invalid = error is BrainException || !File.Exists(ready.Path);
+                    problem = error is BrainException ? error.Message : UpdateProblem(error);
+                    Brain.Log("update", -1, error.GetType().Name + ": " + error.Message);
+                }
                 Post(delegate
                 {
                     installing = false;
@@ -1204,6 +1209,16 @@ namespace CapriDesktop
                     updateExit();
                 });
             });
+        }
+
+        // Why the installer didn't start, so they know what to do next.
+        internal static string UpdateProblem(Exception error)
+        {
+            System.ComponentModel.Win32Exception windows = error as System.ComponentModel.Win32Exception;
+            int code = windows == null ? 0 : windows.NativeErrorCode;
+            if (code == 1223) return "The update needs a Yes in the Windows prompt. Try again.";
+            if (code == 225 || code == 226) return "Your antivirus blocked the update. Capri is still running.";
+            return "Couldn't start the update (" + Voice.Short(error.Message).TrimEnd('.') + "). Capri is still running.";
         }
 
         private static void OpenPage(string page)
@@ -5720,9 +5735,11 @@ namespace CapriDesktop
                                 updater.Run = delegate { throw new IOException("fake start failure"); };
                                 updateItem.PerformClick();
                                 finishUpdate();
-                                if (exits != 2 || !updateItem.Enabled || mainframe.UpdateStatus != "Couldn't start the update. Capri is still running.") throw new Exception("A failed installer launch closed Capri.");
+                                if (exits != 2 || !updateItem.Enabled || mainframe.UpdateStatus != "Couldn't start the update (fake start failure). Capri is still running.") throw new Exception("A failed installer launch closed Capri: " + mainframe.UpdateStatus);
+                                if (UpdateProblem(new System.ComponentModel.Win32Exception(1223)) != "The update needs a Yes in the Windows prompt. Try again." || UpdateProblem(new System.ComponentModel.Win32Exception(225)) != "Your antivirus blocked the update. Capri is still running.")
+                                    throw new Exception("An installer launch failure didn't say why.");
                                 updater.Run = delegate(ProcessStartInfo start) { command = start; launches++; };
-                                checks.Add("PASS menu and balloon use the same fake installer command, repeated clicks ignored, launch failure keeps Capri open");
+                                checks.Add("PASS menu and balloon use the same fake installer command, repeated clicks ignored, launch failure keeps Capri open and says why (a declined Windows prompt, antivirus, or the error)");
                                 File.WriteAllText(partial, payload);
                                 bool partialRejected = false;
                                 try { updater.Install(new UpdateFile { Path = partial, Hash = digest, Size = installer.Size }, 42, 123); } catch (BrainException) { partialRejected = true; }
