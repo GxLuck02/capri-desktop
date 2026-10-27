@@ -6872,9 +6872,10 @@ namespace CapriDesktop
                                     {
                                         lookups.Add(address);
                                         if (address.IndexOf("nothing", StringComparison.Ordinal) >= 0) return "<html></html>";
-                                        if (address.IndexOf("%2Fplaylist", StringComparison.Ordinal) >= 0) return "<a href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DWWQRwui0ExPn\">";
+                                        if (address.IndexOf("%2Fplaylist", StringComparison.Ordinal) >= 0) return "<a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DWWQRwui0ExPn\">lofi beats | Spotify Playlist</a>";
                                         if (address.IndexOf("&sp=", StringComparison.Ordinal) >= 0) return "{\"watchEndpoint\":{\"videoId\":\"qboQlr7lAAk\",\"playlistId\":\"RDCLAK5uy_kb7EBi6y3GrtJri4_ZH56Ms786DFEimbM\"}}";
-                                        return address.IndexOf("duckduckgo", StringComparison.Ordinal) >= 0 ? "<a href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0VjIjW4GlUZAMYd2vXMi3b\">" : "{\"videoRenderer\":{\"videoId\":\"4NRXx6U8ABQ\"}}";
+                                        return address.IndexOf("duckduckgo", StringComparison.Ordinal) >= 0 ? "<a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0VjIjW4GlUZAMYd2vXMi3b\">Blinding Lights - song and lyrics by The Weeknd | Spotify</a>"
+                                            + "<a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0VjIjW4GlUZAMYd2vXMi3b\">Désenchantée - song and lyrics by Mylène Farmer | Spotify</a>" : "{\"videoRenderer\":{\"videoId\":\"4NRXx6U8ABQ\"}}";
                                     };
                                     Hands.Windows = delegate
                                     {
@@ -7047,6 +7048,18 @@ namespace CapriDesktop
                                         || Hands.PlayScore("Pause Blinding Lights", "Blinding Lights") != 0 || Hands.PlayScore("Mettre en pause D\u00e9senchant\u00e9e", "D\u00e9senchant\u00e9e") != 0
                                         || Hands.PlayScore("Lire", "D\u00e9senchant\u00e9e") != 0 || Hands.PlayScore("Lire un autre titre", "D\u00e9senchant\u00e9e") != 0) throw new Exception("English and French play buttons matched wrong.");
                                     checks.Add("PASS Play and Lire labels match songs and liked songs with accents, rank exact names first, and reject pause and unrelated buttons");
+                                    string lookupPage = "<div class=\"result\"><h2 class=\"result__title\"><a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DX0XUfTFmNBRM&amp;rut=1\">Punjabi Tragedy Songs | Spotify Playlist</a></h2>"
+                                        + "<a class=\"result__url\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DX0XUfTFmNBRM\">open.spotify.com/playlist/37i9dQZF1DX0XUfTFmNBRM</a></div>"
+                                        + "<div class=\"result\"><h2 class=\"result__title\"><a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Falbum%2F5Z9iiGl2FcIfa3BMiv6OIw&amp;rut=2\"><b>DiRT</b> <b>4</b> (Original <b>Soundtrack</b>) - Album by Various Artists | Spotify</a></h2></div>"
+                                        + "<div class=\"result\"><h2 class=\"result__title\"><a rel=\"nofollow\" class=\"result__a\" href=\"https://open.spotify.com/track/7ouMYWpwJ422jRcDASZB7P\">Don&#x27;t Stop Me Now - Remastered 2011 - song and lyrics by Queen | Spotify</a></h2></div>"
+                                        + "<p><a href=\"https://open.spotify.com/artist/0OdUWJ0sBjDrqHygGUXeCF\">Band of Horses | Spotify</a></p>";
+                                    if (Hands.SpotifyLink(lookupPage, "playlist", "Dirt 4 soundtrack") != null || Hands.SpotifyLink(lookupPage, "album", "Dirt 4 soundtrack") != "5Z9iiGl2FcIfa3BMiv6OIw"
+                                        || Hands.SpotifyLink(lookupPage, "album", "Dirt 4 game soundtrack") != "5Z9iiGl2FcIfa3BMiv6OIw" || Hands.SpotifyLink(lookupPage, "album", "Dirt 5") != null
+                                        || Hands.SpotifyLink(lookupPage, "song", "Don't Stop Me Now by Queen") != "7ouMYWpwJ422jRcDASZB7P" || Hands.SpotifyLink(lookupPage, "song", "Starjunk 95") != null
+                                        || Hands.SpotifyLink("Please complete the following challenge to confirm this search was made by a human.", "song", "Blinding Lights") != null || Hands.SpotifyLink(lookupPage, "album", "") != null
+                                        || Hands.SpotifyLink(lookupPage, "artist", "Band of Horses") != "0OdUWJ0sBjDrqHygGUXeCF" || Hands.SpotifyLink(lookupPage, "playlist", "open spotify") != null)
+                                        throw new Exception("A Spotify lookup kept a result that wasn't what they asked for, or missed one that was.");
+                                    checks.Add("PASS Spotify lookups: a web result only counts when its title has the words they asked for, so a popular playlist the lookup lists for an unknown name never plays; a missing match, or a blocked lookup, opens a Spotify search instead");
                                     Hands.Catalog = fakeCatalog;
                                     Hands.Forget();
                                     Func<string, string> musicFetch = Hands.Fetch;

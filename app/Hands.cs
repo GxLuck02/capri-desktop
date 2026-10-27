@@ -1102,7 +1102,7 @@ namespace CapriDesktop
             if (app != "youtube" && Match(Apps(), "spotify").Count > 0)
             {
                 if (liked) named = "their Liked Songs";
-                string spotted = liked ? null : known ?? Find(Fetch("https://html.duckduckgo.com/html/?q=" + Uri.EscapeDataString("site:open.spotify.com/" + (kind == "song" ? "track" : kind) + " " + song)), @"open\.spotify\.com(?:/|%2F)" + (kind == "song" ? "track" : kind) + @"(?:/|%2F)([A-Za-z0-9]{22})");
+                string spotted = liked ? null : known ?? SpotifyLink(Fetch("https://html.duckduckgo.com/html/?q=" + Uri.EscapeDataString("site:open.spotify.com/" + (kind == "song" ? "track" : kind) + " " + song)), kind, song);
                 if (kind == "song" && spotted != null)
                 {
                     string before = NowPlaying();
@@ -1154,6 +1154,26 @@ namespace CapriDesktop
             }
             return false;
 #endif
+        }
+
+        // A site: lookup that matches nothing still lists popular pages from the site, so only a result whose title has
+        // the words they asked for counts (one may be missing from three or more). Otherwise she searches Spotify instead.
+        internal static string SpotifyLink(string page, string kind, string wanted)
+        {
+            string path = kind == "song" ? "track" : kind;
+            string[] want = Words(wanted);
+            if (want.Length == 0 || want[0].Length == 0) return null;
+            foreach (Match link in Regex.Matches(page ?? "", @"<a\b([^>]*)>(.*?)</a>", RegexOptions.Singleline | RegexOptions.IgnoreCase))
+            {
+                Match id = Regex.Match(link.Groups[1].Value, @"open\.spotify\.com(?:/|%2F)" + path + @"(?:/|%2F)([A-Za-z0-9]{22})");
+                if (!id.Success) continue;
+                // A link that only shows its address (open.spotify.com/playlist/...) says nothing about what's there.
+                string[] title = Plain(Regex.Replace(WebUtility.HtmlDecode(Regex.Replace(link.Groups[2].Value, "<[^>]+>", "")), @"\S*(spotify\.com|https?://|www\.)\S*", " ", RegexOptions.IgnoreCase)).Split(' ');
+                int missing = 0;
+                foreach (string word in want) if (Array.IndexOf(title, word) < 0) missing++;
+                if (missing == 0 || (missing == 1 && want.Length >= 3)) return id.Groups[1].Value;
+            }
+            return null;
         }
 
         internal static int PlayScore(string label, string name)
