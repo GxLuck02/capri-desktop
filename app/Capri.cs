@@ -38,7 +38,7 @@ namespace CapriDesktop
                     string data = smoke ? Path.GetFullPath(args[1]) : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Capri");
                     // Whatever ends her, their own cursor comes back.
                     AppDomain.CurrentDomain.ProcessExit += delegate { HerCursor.Off(); };
-                    AppDomain.CurrentDomain.UnhandledException += delegate { HerCursor.Off(); };
+                    AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs crash) { HerCursor.Off(); Brain.Crashed(crash.ExceptionObject); };
                     using (Companion app = new Companion(data, restore, smoke))
                     {
                         if (smoke) app.StartSmokeTest(data);
@@ -8204,6 +8204,11 @@ namespace CapriDesktop
                             catch (VoiceException unreadable) { if (unreadable.Message != Voice.Unreadable) throw new Exception("An unreadable ElevenLabs reply showed: " + unreadable.Message); }
                             if (Brain.LogPath == null || !File.ReadAllText(Brain.LogPath).Contains("Unreadable AgentMade reply: <html>Access denied</html>")) throw new Exception("An unreadable ElevenLabs reply was not logged for Copy error details.");
                             checks.Add("PASS an unreadable ElevenLabs reply says to send Copy error details, and its first 200 characters go in the error log");
+                            try { throw new InvalidOperationException("test crash"); }
+                            catch (InvalidOperationException thrown) { Brain.Crashed(new TargetInvocationException(thrown)); }
+                            string crashLine = Array.FindLast(File.ReadAllLines(Brain.LogPath), line => line.Contains(" | crash | "));
+                            if (crashLine == null || !crashLine.Contains(" | crash | - | InvalidOperationException: test crash | at ") || crashLine.Length > 300) throw new Exception("A crash wasn't kept in errors.txt: " + crashLine);
+                            checks.Add("PASS crashes: an error that closes her goes in errors.txt with what it was and where, so Copy error details carries it");
                             voices = new VoiceListing();
                             voices.Voices.AddRange(page.Voices);
                             voices.Models.AddRange(listed);
