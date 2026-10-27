@@ -734,7 +734,67 @@ namespace CapriDesktop
             reader.Start();
             if (!reader.Join(10000)) throw new TimeoutException("The app list took too long.");
             if (failed != null) throw failed;
+            return WithSteam(apps, SteamApps(SteamFolder()));
+        }
+
+        // Steam games and apps show in All apps only when Steam made a Start menu shortcut, so her list adds the rest from Steam's own library.
+        internal static List<InstalledApp> WithSteam(List<InstalledApp> apps, List<InstalledApp> steam)
+        {
+            foreach (InstalledApp game in steam)
+                if (AppName(game).Length > 0 && !apps.Exists(app => AppName(app) == AppName(game))) apps.Add(game);
             return apps;
+        }
+
+        // Every library folder's fully installed games and apps, skipping Steam's own redistributables. They open through steam://rungameid.
+        internal static List<InstalledApp> SteamApps(string steam)
+        {
+            List<InstalledApp> apps = new List<InstalledApp>();
+            if (string.IsNullOrEmpty(steam)) return apps;
+            try
+            {
+                List<string> libraries = new List<string> { steam };
+                string folders = Path.Combine(steam, @"steamapps\libraryfolders.vdf");
+                if (File.Exists(folders))
+                    foreach (Match library in Regex.Matches(File.ReadAllText(folders), @"""path""\s+""([^""]+)"""))
+                        libraries.Add(library.Groups[1].Value.Replace(@"\\", @"\"));
+                HashSet<string> seen = new HashSet<string>();
+                foreach (string library in libraries)
+                {
+                    string folder = Path.Combine(library, "steamapps");
+                    if (!Directory.Exists(folder)) continue;
+                    foreach (string manifest in Directory.GetFiles(folder, "appmanifest_*.acf"))
+                    {
+                        string text;
+                        try { text = File.ReadAllText(manifest); }
+                        catch (IOException) { continue; }
+                        catch (UnauthorizedAccessException) { continue; }
+                        Match id = Regex.Match(text, @"""appid""\s+""(\d+)""");
+                        Match name = Regex.Match(text, @"""name""\s+""([^""]+)""");
+                        Match state = Regex.Match(text, @"""StateFlags""\s+""(\d+)""");
+                        long flags;
+                        if (!id.Success || !name.Success || !seen.Add(id.Groups[1].Value)) continue;
+                        if (state.Success && long.TryParse(state.Groups[1].Value, out flags) && (flags & 4) == 0) continue;
+                        if (Regex.IsMatch(name.Groups[1].Value, @"^(Steamworks Common Redistributables|Steam Linux Runtime\b.*|Proton\b.*)$", RegexOptions.IgnoreCase)) continue;
+                        apps.Add(new InstalledApp(name.Groups[1].Value, "steam://rungameid/" + id.Groups[1].Value));
+                    }
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return apps;
+        }
+
+        private static string SteamFolder()
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam"))
+                {
+                    string path = key == null ? null : key.GetValue("SteamPath") as string;
+                    return string.IsNullOrEmpty(path) ? null : path.Replace('/', '\\');
+                }
+            }
+            catch (Exception) { return null; }
         }
 
         private static object Call(object target, string method, params object[] args) { return target.GetType().InvokeMember(method, BindingFlags.InvokeMethod, null, target, args); }

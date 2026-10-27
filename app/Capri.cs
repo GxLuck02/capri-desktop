@@ -6324,6 +6324,38 @@ namespace CapriDesktop
                                 }
                                 finally { Hands.Chord = chordWas; Hands.Windows = windowsWas; Hands.Steer = steerWas; Hands.Catalog = catalogWas; Hands.Forget(); }
                                 checks.Add("PASS shortcuts: mute my mic and deafen me press Discord's keys in Discord and switch back, screenshots, clips, recording and more press Windows keys, and chat about muting doesn't");
+                                string steamRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "steam-test");
+                                Func<System.Collections.Generic.List<InstalledApp>> catalogBefore = Hands.Catalog;
+                                try
+                                {
+                                    string steamMain = Path.Combine(steamRoot, "Steam");
+                                    string steamMore = Path.Combine(steamRoot, "Games");
+                                    Directory.CreateDirectory(Path.Combine(steamMain, "steamapps"));
+                                    Directory.CreateDirectory(Path.Combine(steamMore, "steamapps"));
+                                    File.WriteAllText(Path.Combine(steamMain, @"steamapps\libraryfolders.vdf"), "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"" + steamMain.Replace(@"\", @"\\") + "\"\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"" + steamMore.Replace(@"\", @"\\") + "\"\n\t}\n}\n");
+                                    string[,] manifests = { { steamMain, "431960", "Wallpaper Engine", "4" }, { steamMain, "228980", "Steamworks Common Redistributables", "4" }, { steamMore, "1145360", "Hades", "6" }, { steamMore, "999", "Half Installed", "1026" } };
+                                    for (int i = 0; i < manifests.GetLength(0); i++) File.WriteAllText(Path.Combine(manifests[i, 0], @"steamapps\appmanifest_" + manifests[i, 1] + ".acf"), "\"AppState\"\n{\n\t\"appid\"\t\t\"" + manifests[i, 1] + "\"\n\t\"name\"\t\t\"" + manifests[i, 2] + "\"\n\t\"StateFlags\"\t\t\"" + manifests[i, 3] + "\"\n}\n");
+                                    string steamList = string.Join(" | ", Hands.SteamApps(steamMain).ConvertAll(app => app.Name + " " + app.Id).ToArray());
+                                    if (steamList != "Wallpaper Engine steam://rungameid/431960 | Hades steam://rungameid/1145360" || Hands.SteamApps(Path.Combine(steamRoot, "missing")).Count != 0) throw new Exception("Steam's library read wrong: " + steamList);
+                                    System.Collections.Generic.List<InstalledApp> merged = Hands.WithSteam(new System.Collections.Generic.List<InstalledApp> { new InstalledApp("Hades", "steam://rungameid/1145360"), new InstalledApp("Notepad", @"C:\Windows\notepad.exe") }, Hands.SteamApps(steamMain));
+                                    if (merged.Count != 3) throw new Exception("A Steam game already in All apps was listed twice: " + merged.Count);
+                                    Hands.Catalog = delegate { return merged; };
+                                    Hands.Forget();
+                                    int ranBefore = ran.Count;
+                                    string wallpaper = Hands.Do("open_app", new ToolArguments { Name = "wallpaper engine" });
+                                    string hades = Hands.Do("open_app", new ToolArguments { Name = "Hades" });
+                                    string redist = Hands.Do("open_app", new ToolArguments { Name = "steamworks common redistributables" });
+                                    string steamRan = string.Join(" | ", ran.GetRange(ranBefore, ran.Count - ranBefore).ToArray());
+                                    ran.RemoveRange(ranBefore, ran.Count - ranBefore);
+                                    if (wallpaper != "Opened Wallpaper Engine." || hades != "Opened Hades." || !redist.StartsWith("No app called", StringComparison.Ordinal) || steamRan != "steam://rungameid/431960 | steam://rungameid/1145360" || Hands.Launch("steam://rungameid/431960").FileName != "steam://rungameid/431960") throw new Exception("Steam apps opened wrong: " + wallpaper + " / " + hades + " / " + redist + " / " + steamRan);
+                                    checks.Add("PASS Steam apps: games and apps in Steam's own library (every library folder, fully installed only, no redistributables) open through Steam even without a Start menu shortcut, and one already in All apps isn't listed twice");
+                                }
+                                finally
+                                {
+                                    Hands.Catalog = catalogBefore;
+                                    Hands.Forget();
+                                    try { Directory.Delete(steamRoot, true); } catch (IOException) { }
+                                }
                                 string[,] powerCases = { { "turn off my pc", "shut_down", "" }, { "Capri, can you shut down my computer please", "shut_down", "" }, { "turn my laptop off", "shut_down", "" }, { "restart my pc", "restart", "" }, { "put my computer to sleep", "sleep", "" }, { "lock my pc", "lock", "" }, { "sign me out", "sign_out", "" }, { "shut down my pc in 30 minutes", "shut_down", "30" }, { "turn off the computer in an hour", "shut_down", "60" }, { "cancel the shutdown", "cancel", "" } };
                                 for (int i = 0; i < powerCases.GetLength(0); i++)
                                     if (!Hands.Heard(powerCases[i, 0], out shortTool, out shortArgs) || shortTool != "power" || shortArgs.Action != powerCases[i, 1] || (shortArgs.Minutes ?? "") != powerCases[i, 2]) throw new Exception("Power was heard wrong: " + powerCases[i, 0] + " -> " + shortTool + " " + shortArgs.Action + " " + shortArgs.Minutes);
