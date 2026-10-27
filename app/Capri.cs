@@ -5992,6 +5992,38 @@ namespace CapriDesktop
                                     if (launch.UseShellExecute || !launch.CreateNoWindow || Path.GetFileName(launch.FileName) != "llama-server.exe" || launch.WorkingDirectory != Path.GetDirectoryName(launch.FileName)) throw new Exception("The brain launch window changed.");
                                     if (eyes != args.Contains(" --mmproj \"") || cpu != args.Contains(" --device none -ngl 0 --no-mmproj-offload") || (!cpu && args.Contains(" -ngl "))) throw new Exception("The brain launch changed its eyes or GPU choice.");
                                 }
+                            string crashData = Path.Combine(Path.GetDirectoryName(settingsPath), "engine-crash");
+                            Func<ProcessStartInfo, Process> spawnWas = Engine.Spawn;
+                            Engine crashing = new Engine(crashData);
+                            try
+                            {
+                                ProcessStartInfo crashLaunch = crashing.StartInfo(Engine.Picks[2], false, false, 1);
+                                string crashModel = Regex.Match(crashLaunch.Arguments, "-m \"([^\"]+)\"").Groups[1].Value;
+                                Directory.CreateDirectory(Path.GetDirectoryName(crashLaunch.FileName));
+                                Directory.CreateDirectory(Path.GetDirectoryName(crashModel));
+                                File.WriteAllText(crashLaunch.FileName, "");
+                                File.WriteAllText(crashModel, "");
+                                System.Collections.Generic.List<string> spawned = new System.Collections.Generic.List<string>();
+                                Engine.Spawn = delegate(ProcessStartInfo info)
+                                {
+                                    spawned.Add(info.Arguments.Contains(" --device none ") ? "cpu" : "gpu");
+                                    return Process.Start(new ProcessStartInfo("cmd.exe", "/c exit " + (spawned.Count == 1 ? "-1073741819" : "3")) { UseShellExecute = false, CreateNoWindow = true });
+                                };
+                                string crashSaid = null;
+                                try { crashing.Ensure(Engine.Picks[2]); }
+                                catch (BrainException error) { crashSaid = error.Message; }
+                                string[] crashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => line.Contains(" | brain | - | llama-server stopped while loading " + Engine.Picks[2].Name));
+                                if (crashSaid != "Brain crashed loading. Close games, press Refresh." || string.Join(" ", spawned.ToArray()) != "gpu cpu" || !crashing.CpuOnly || crashLines.Length != 2
+                                    || !crashLines[0].EndsWith(Engine.Picks[2].Name + " with exit code 0xC0000005, restarting it on the CPU", StringComparison.Ordinal) || !crashLines[1].EndsWith(Engine.Picks[2].Name + " on the CPU with exit code 0x00000003", StringComparison.Ordinal))
+                                    throw new Exception("A brain that crashed while loading wasn't retried on the CPU or logged: " + crashSaid + " / " + string.Join(" ", spawned.ToArray()) + " / " + string.Join(" || ", crashLines));
+                                checks.Add("PASS brain load crash: when the built-in brain's server dies while loading on the graphics card, errors.txt gets its exit code and she tries once on the CPU; a CPU crash stops with Close games, press Refresh");
+                            }
+                            finally
+                            {
+                                Engine.Spawn = spawnWas;
+                                crashing.Stop();
+                                try { Directory.Delete(crashData, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                            }
                             using (Process current = Process.GetCurrentProcess())
                             {
                                 ProcessPriorityClass priority = current.PriorityClass;
@@ -8311,6 +8343,9 @@ namespace CapriDesktop
                             catch (VoiceException unreadable) { if (unreadable.Message != Voice.Unreadable) throw new Exception("An unreadable ElevenLabs reply showed: " + unreadable.Message); }
                             if (Brain.LogPath == null || !File.ReadAllText(Brain.LogPath).Contains("Unreadable AgentMade reply: <html>Access denied</html>")) throw new Exception("An unreadable ElevenLabs reply was not logged for Copy error details.");
                             checks.Add("PASS an unreadable ElevenLabs reply says to send Copy error details, and its first 200 characters go in the error log");
+                            string elevenLine = Array.FindLast(File.ReadAllLines(Brain.LogPath), line => line.Contains("/v1/text-to-speech/abc | - | HTTP "));
+                            if (elevenLine == null || !elevenLine.EndsWith("/v1/text-to-speech/abc | - | HTTP 401 {\"detail\":{\"status\":\"invalid_api_key\",\"message\":\"Invalid API key\"}}", StringComparison.Ordinal) || elevenLine.Contains("sk_test_capri_1234")) throw new Exception("ElevenLabs' own error wasn't kept for Copy error details: " + elevenLine);
+                            checks.Add("PASS an ElevenLabs error keeps its HTTP status and ElevenLabs' own answer (never the key) in the error log, so Copy error details shows what really failed");
                             try { throw new InvalidOperationException("test crash"); }
                             catch (InvalidOperationException thrown) { Brain.Crashed(new TargetInvocationException(thrown)); }
                             string crashLine = Array.FindLast(File.ReadAllLines(Brain.LogPath), line => line.Contains(" | crash | "));
