@@ -658,6 +658,7 @@ namespace CapriDesktop
             if (outro != null && now >= outroAt) { Action next = outro; outro = null; next(); }
             if (away && !IsVisible)
             {
+                Talk.Gone();
                 if (now >= nextCheck && Program.Smoke == null) { nextCheck = now + 0.25; CheckPopIn(now); }
                 if (smoke != null) smoke.Tick(now);
                 return;
@@ -1154,7 +1155,7 @@ namespace CapriDesktop
 
         internal void PetLine(int ticket)
         {
-            if (ticket != petTicket || outro != null || !Talk.Quiet) return;
+            if (ticket != petTicket || outro != null || away || !Talk.Quiet) return;
             if (clip == grin) Play(idle);
             string line = PetLines[petLine++ % PetLines.Length];
             Talk.Answer("pets you", line);

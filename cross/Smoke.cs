@@ -889,6 +889,11 @@ namespace CapriDesktop
                 if (now - outFrom < 0.6) throw new Exception("Her glitch-out ended after " + (now - outFrom).ToString("0.00") + " s.");
                 if (!pet.Away || sounds.Count != 1 || sounds[0].Length != Sfx.Make(Cue.Leave, 60).Length) throw new Exception("Her glitch-out didn't play its sound once: " + sounds.Count);
                 checks.Add("PASS glitch out: Hide her plays her glitch-out and its sound for " + (now - outFrom).ToString("0.0") + " s, then her window goes");
+                pet.ToggleShush();
+                bool hushedHidden = pet.Shushed && pet.Talk.Reply == null && !pet.Talk.Bubble.IsVisible && !pet.Talk.Pill.IsVisible;
+                pet.ToggleShush();
+                if (!hushedHidden || pet.Shushed || !pet.Talk.Quiet || pet.Talk.Bubble.IsVisible) throw new Exception("Quiet from the tray while she was hidden left a bubble up: " + pet.Talk.Reply);
+                checks.Add("PASS hidden: Quiet from the tray while she's hidden puts up no bubble with nobody under it, and she's still free to pop in");
                 arrivalsBefore = pet.Arrivals;
                 pet.ComeBack();
                 if (!pet.IsVisible || pet.Away || !pet.Arriving || pet.Arrivals != arrivalsBefore + 1) throw new Exception("Show her didn't glitch her back in.");

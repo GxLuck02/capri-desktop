@@ -442,6 +442,7 @@ namespace CapriDesktop
 
         internal void Thinking(string heard)
         {
+            if (pet.Away) return;
             reply = null;
             thinking = true;
             pace = LettersPerSecond;
@@ -449,8 +450,11 @@ namespace CapriDesktop
             Start(heard);
         }
 
+        // Like on Windows, where her bubble is drawn in her own window, nothing new shows while she's hidden or glitching out of
+        // sight: it would float there with nobody under it, and stop her pop-ins until she's shown.
         internal void Answer(string heard, string answer, double seconds = 0)
         {
+            if (pet.Away) return;
             reply = answer;
             thinking = false;
             pace = seconds < 0.2 ? LettersPerSecond : Math.Max(8, answer.Length / seconds);
@@ -478,6 +482,16 @@ namespace CapriDesktop
             leaving = -1;
             Bubble.Hide();
             Typer.Hide();
+        }
+
+        // While she's hidden her bubble and pill stay down too, even one that was still up when her window went.
+        internal void Gone()
+        {
+            reply = null;
+            thinking = false;
+            leaving = -1;
+            if (Bubble.IsVisible) Bubble.Hide();
+            if (Pill.IsVisible) Pill.Hide();
         }
 
         // How long a finished reply stays up, like Windows: 4 s plus a bit per letter, up to 14 s, halved for Quick and
