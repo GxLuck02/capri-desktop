@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -312,12 +313,22 @@ namespace CapriDesktop
         // Cyberpunk 2077 running: the Mac game, or the Windows one under Proton or Wine on Linux.
         internal static bool CyberpunkRunning() { return Music.Run("pgrep", new[] { "-i", "-f", "[/\\\\]cyberpunk ?2077(\\.exe)?( |$)" }) != null; }
 
-        // How long since they last touched the mouse or keyboard: macOS's HID idle time, GNOME's idle monitor (X11 and Wayland),
-        // or xprintidle on other X11 desktops. XWayland can't see Wayland input, so xprintidle isn't asked there. -1 when unknown.
+        // Seconds since any input, the call Chrome reads its Mac idle time with: 0 is the combined session state, all ones any event.
+        [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")] private static extern double CGEventSourceSecondsSinceLastEventType(int state, uint type);
+
+        // How long since they last touched the mouse or keyboard: macOS's own count (ioreg's HID idle time if that fails), GNOME's
+        // idle monitor (X11 and Wayland), or xprintidle on other X11 desktops. XWayland can't see Wayland input, so xprintidle
+        // isn't asked there. -1 when unknown. On Mac it's read every second while she sleeps, so it's no longer a process each time.
         internal static double IdleSeconds()
         {
             if (OnMac)
             {
+                try
+                {
+                    double seconds = CGEventSourceSecondsSinceLastEventType(0, uint.MaxValue);
+                    if (seconds >= 0 && !double.IsInfinity(seconds)) return seconds;
+                }
+                catch (Exception) { }
                 string hid = Music.Run("ioreg", new[] { "-c", "IOHIDSystem" });
                 Match nanoseconds = hid == null ? Match.Empty : Regex.Match(hid, "\"HIDIdleTime\"\\s*=\\s*(\\d+)");
                 return nanoseconds.Success ? long.Parse(nanoseconds.Groups[1].Value) / 1e9 : -1;
