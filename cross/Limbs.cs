@@ -281,10 +281,13 @@ namespace CapriDesktop
             {
                 // Inside her app, macOS opens Capri by its id, so it finds her wherever she's kept, even moved or still in Downloads,
                 // and runs her as a normal app. A bare build starts from its own path.
-                string[] run = program.Contains(".app/Contents/MacOS/") ? new[] { "/usr/bin/open", "-g", "-b", MacBundle } : new[] { program };
+                bool bundled = program.Contains(".app/Contents/MacOS/");
+                string[] run = bundled ? new[] { "/usr/bin/open", "-g", "-b", MacBundle } : new[] { program };
                 StringBuilder args = new StringBuilder();
                 foreach (string arg in run) args.Append("\t\t<string>").Append(System.Security.SecurityElement.Escape(arg)).Append("</string>\n");
-                return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>Label</key>\n\t<string>com.lachydotmcg.capri</string>\n\t<key>ProgramArguments</key>\n\t<array>\n" + args + "\t</array>\n\t<key>RunAtLoad</key>\n\t<true/>\n\t<key>ProcessType</key>\n\t<string>Interactive</string>\n</dict>\n</plist>\n";
+                // Login Items names the entry after the program it runs, which is Apple's open; this names it after her app instead.
+                string owner = bundled ? "\t<key>AssociatedBundleIdentifiers</key>\n\t<array>\n\t\t<string>" + MacBundle + "</string>\n\t</array>\n" : "";
+                return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>Label</key>\n\t<string>com.lachydotmcg.capri</string>\n" + owner + "\t<key>ProgramArguments</key>\n\t<array>\n" + args + "\t</array>\n\t<key>RunAtLoad</key>\n\t<true/>\n\t<key>ProcessType</key>\n\t<string>Interactive</string>\n</dict>\n</plist>\n";
             }
             // The Exec line quotes the path and escapes what the desktop entry spec reserves; a backslash takes four.
             string quoted = "\"" + program.Replace("\\", "\\\\\\\\").Replace("\"", "\\\"").Replace("`", "\\`").Replace("$", "\\$").Replace("%", "%%") + "\"";
