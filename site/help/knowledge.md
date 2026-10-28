@@ -179,7 +179,7 @@ They tile new windows, so Capri gets squeezed into a tile.
 3. The rule syntax changes between Hyprland versions, so check the Window Rules page of the Hyprland wiki for yours. On Sway it's a for_window rule with floating enable and sticky enable.
 
 ### Her brain on Linux
-The Linux preview uses Ollama. If you installed Ollama but she says her brain is offline or disconnected, you haven't downloaded a model yet. Right-click her > Brain > Download gemma4:e4b. She says "Downloading my brain..." and the Brain menu shows how far it's got; when it's in she says "My brain's in. Talk to me, choom." Or run: ollama pull gemma4:e4b, then right-click her > Brain and pick it.
+The Linux preview uses Ollama. If you installed Ollama but she says her brain is offline or disconnected, you haven't downloaded a model yet. Right-click her > Brain > Download gemma4:e4b. She says "Downloading my brain..." and the Brain menu shows how far it's got; when it's in she says "My brain's in. Talk to me, choom." Or run: ollama pull gemma4:e4b, then right-click her > Brain and pick it. No Ollama, or a slow PC? Right-click her > Brain > Get a free NVIDIA key.
 
 ---
 
@@ -1075,7 +1075,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 ### Works
 - Sitting on windows (X11 and Mac) or the bottom of the screen (Wayland)
 - Chatting by typing: hover her and press the pencil, or right-click her > Talk to her
-- Her brain through Ollama
+- Her brain through Ollama, or through a free NVIDIA key (or an OpenAI, Claude or DeepSeek key) with no Ollama needed
 - Her ElevenLabs voice for spoken replies
 - Remember and forget, nickname, language
 - Her personality file (personality.md), with Reset
@@ -1087,7 +1087,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 ### Not yet
 - No Mainframe. Everything is in her right-click menu.
 - No voice chat: "Voice chat isn't on Mac and Linux yet. Type to me for now, choom."
-- No built-in brain or NVIDIA key. Ollama only.
+- No built-in brain. Use Ollama or an API key.
 - No keyboard shortcuts, closing or switching windows, screen watching or mouse and keyboard jobs.
 - No automatic updates.
 - No transcripts or memories.md yet. She remembers the recent chat and her notes.
@@ -1097,7 +1097,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Sit here
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance
 - Size: Tiny, Small, Medium, Large, Huge, Giant
-- Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it."
+- Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, and Forget the key and use Ollama.
 - Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Show on Discord, Open her notes (me.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
@@ -1114,6 +1114,18 @@ Tray or menu bar icon: Talk to her, Hide her / Show her, Bring her back, Quit Ca
 - "Key saved, but your ElevenLabs account has no voices yet. Add one at elevenlabs.io." Make a voice first (section 11).
 - "ElevenLabs rejected the key. Settings > Voice > New key."
 - Remove key ending XXXX removes it.
+
+### A free NVIDIA key on Mac and Linux
+No Ollama needed, and nothing to download.
+1. Right-click her > Brain > Get a free NVIDIA key. NVIDIA's key page opens.
+2. Make a key there (see "The free NVIDIA key" above) and copy it.
+3. Right-click her > Brain > Use an API key..., paste the key in her box and press Enter. It stays on this computer. (Her box closes if you click away, so copy the key first.)
+4. She says "Key saved. I'm thinking with X now. Change it under Brain in my right-click menu." Pick another model under Brain. Forget the key and use Ollama goes back to Ollama.
+
+An OpenAI, Claude or DeepSeek key works the same way: right-click her > Brain > Use an API key...
+- "That doesn't look like an NVIDIA, OpenAI, Claude or DeepSeek key. NVIDIA's start with nvapi-." You pasted something else.
+- "Couldn't reach NVIDIA. Check your internet, then paste the key again." (or another company)
+- "That key can't use any chat models."
 
 ### Music on Mac
 The first time she controls Spotify or Music, macOS asks "Capri wants to control Spotify". Press OK.

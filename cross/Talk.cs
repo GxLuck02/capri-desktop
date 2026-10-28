@@ -371,6 +371,8 @@ namespace CapriDesktop
         private bool thinking;
         private double pace = LettersPerSecond;
         private Action<string> asked;
+        // Where a key typed in the hidden box goes: her voice key unless something else asked for it.
+        private Action<string> secretTo;
 
         internal Talk(Pet pet)
         {
@@ -381,7 +383,9 @@ namespace CapriDesktop
                 if (!Typer.Secret) { pet.Hear(text); return; }
                 Typer.Secret = false;
                 Typer.Hide();
-                pet.SaveVoiceKey(text);
+                Action<string> keyTo = secretTo ?? pet.SaveVoiceKey;
+                secretTo = null;
+                keyTo(text);
             };
             Pill.Typing += delegate { if (Typer.IsVisible) Typer.Hide(); else Open(); };
             Pill.Voice += delegate { pet.NoVoice(); };
@@ -399,6 +403,7 @@ namespace CapriDesktop
         internal void Open()
         {
             asked = null;
+            secretTo = null;
             if (Typer.Secret) Typer.Secret = false;
             pillUntil = pet.Now + 1.5;
             Typer.Open(pet.Head, pet.FeetPoint, pet.Area, pet.DesktopScaling, Bubble.IsVisible ? Bubble.PanelOnScreen : new PixelRect());
@@ -410,15 +415,19 @@ namespace CapriDesktop
         {
             Answer(heard, ask);
             if (Typer.Secret) Typer.Secret = false;
+            secretTo = null;
             asked = to;
             pillUntil = pet.Now + 1.5;
             Typer.Open(pet.Head, pet.FeetPoint, pet.Area, pet.DesktopScaling, Bubble.IsVisible ? Bubble.PanelOnScreen : new PixelRect());
         }
 
-        internal void AskKey(string ask)
+        internal void AskKey(string ask) { AskKey("(voice key)", ask, null); }
+
+        internal void AskKey(string heard, string ask, Action<string> to)
         {
             asked = null;
-            Answer("(voice key)", ask);
+            secretTo = to;
+            Answer(heard, ask);
             Typer.Secret = true;
             pillUntil = pet.Now + 1.5;
             Typer.Open(pet.Head, pet.FeetPoint, pet.Area, pet.DesktopScaling, Bubble.IsVisible ? Bubble.PanelOnScreen : new PixelRect());

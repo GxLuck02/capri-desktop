@@ -269,6 +269,30 @@ namespace CapriDesktop
                 if (noModels != Pet.PullChoice || pet.FirstBrainChoice != Pet.NoOllama) throw new Exception("The Brain menu didn't offer her brain download: " + noModels + " / " + pet.FirstBrainChoice);
                 if (chatBeforePick < 2 || chatAfterPick != chatBeforePick) throw new Exception("Picking another model wiped her chat: " + chatBeforePick + " then " + chatAfterPick);
                 checks.Add("PASS settings menu: wander, dance, language, reply length, chat memory and the brain picker change her and show which is picked, picking another model keeps the chat, and with Ollama open but empty Brain offers to download gemma4:e4b");
+                // A cloud key instead of Ollama: asked for in a hidden box, a key that isn't one is explained, a good one lists its models under Brain, and Forget goes back to Ollama.
+                pet.ShowBrains(new[] { "qwen3:8b" });
+                string ollamaMenu = pet.BrainMenu;
+                pet.GetFreeKey();
+                string freeKey = pet.Talk.Reply;
+                pet.AskBrainKey();
+                bool keyAsked = pet.Talk.Typing && pet.Talk.Typer.Secret && pet.Talk.Reply != null && pet.Talk.Reply.IndexOf("API key", StringComparison.Ordinal) >= 0;
+                pet.Talk.Submit("not-a-key");
+                string notKey = pet.Talk.Reply;
+                bool keyHidden = !pet.Talk.Typer.Secret && !File.Exists(Path.Combine(folder, "voice-key"));
+                pet.UseCloud("nvapi-smoke-1234", "meta/llama-3.3-70b-instruct", new List<string> { "meta/llama-3.3-70b-instruct", "qwen/qwen3-235b-a22b" });
+                pet.ShowBrains(new[] { "qwen3:8b" });
+                string cloudMenu = pet.BrainMenu;
+                pet.PickCloud("qwen/qwen3-235b-a22b");
+                bool cloudPicked = pet.Brain.Remote != null && pet.Brain.Remote.Model == "qwen/qwen3-235b-a22b" && pet.Brain.Model == "qwen/qwen3-235b-a22b" && pet.Saved.CloudModel == "qwen/qwen3-235b-a22b";
+                File.WriteAllText(Path.Combine(folder, "brain-key"), "nvapi-smoke-1234");
+                pet.ForgetBrainKey();
+                bool cloudGone = pet.Brain.Remote == null && pet.Saved.CloudModel == null && !File.Exists(Path.Combine(folder, "brain-key"));
+                pet.Brain.Model = "qwen3:8b";
+                pet.Talk.Dismiss();
+                if (ollamaMenu != "*qwen3:8b | - | Get a free NVIDIA key | " + Pet.KeyChoice) throw new Exception("The Brain menu didn't offer a cloud key: " + ollamaMenu);
+                if (freeKey != Pet.FreeKeySteps || !keyAsked || notKey != Pet.NotAKey || !keyHidden) throw new Exception("The key choices didn't say where to paste, ask in a hidden box or explain a bad key: " + freeKey + " | " + keyAsked + " | " + notKey + " | " + keyHidden);
+                if (cloudMenu != "NVIDIA key ending 1234 (off) | *meta/llama-3.3-70b-instruct | qwen/qwen3-235b-a22b | - | Forget the key and use Ollama" || !cloudPicked || !cloudGone) throw new Exception("The cloud key's Brain menu went wrong: " + cloudMenu + " | " + cloudPicked + " | " + cloudGone);
+                checks.Add("PASS cloud brain: Brain offers a free NVIDIA key or any API key in a hidden box, explains one that isn't a key, lists a key's models to pick from, and Forget goes back to Ollama");
                 // Her Discord status: the switch, plain states, and Discord's socket found by name in its temp folder.
                 string ipcFolder = Path.Combine(folder, "ipc");
                 Directory.CreateDirectory(ipcFolder);

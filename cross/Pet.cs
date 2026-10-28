@@ -36,6 +36,7 @@ namespace CapriDesktop
         [DataMember] internal bool Silent;
         [DataMember] internal int Typing;
         [DataMember] internal bool NoDiscord;
+        [DataMember] internal string CloudModel;
     }
 
     internal sealed class Clip
@@ -134,6 +135,10 @@ namespace CapriDesktop
         internal const string Starter = "gemma4:e4b";
         internal const string PullChoice = "Download " + Starter + ", her brain (a few GB)";
         internal const string NoOllama = "Ollama isn't running. Install it from ollama.com and open it.";
+        private const string FreeKeyPage = "https://build.nvidia.com/settings/api-keys";
+        internal const string KeyChoice = "Use an API key...";
+        internal const string NotAKey = "That doesn't look like an NVIDIA, OpenAI, Claude or DeepSeek key. NVIDIA's start with nvapi-.";
+        internal const string FreeKeySteps = "Make a key on NVIDIA's page and copy it. Then right-click me > Brain > " + KeyChoice + " and paste it.";
         internal const string DiscordPage = "https://discord.gg/F4fDHfGtFk";
         internal const string HelpPage = "https://lachydotmcg.github.io/capri-desktop/help/";
         internal static readonly double[] Sizes = { 140, 170, 240, 320, 440, 560 };
@@ -208,6 +213,10 @@ namespace CapriDesktop
         private const string NameHeard = "(nickname)";
         private const string PersonalityHeard = "(personality)";
         private const string BrainHeard = "(brain download)";
+        private const string BrainKeyHeard = "(brain key)";
+        // The models on their cloud key, read when the Brain menu opens.
+        private List<string> cloudModels;
+        private bool cloudListing;
         // "Playing Capri" on their Discord profile, like on Windows. Off in the smoke test.
         private readonly Presence presence;
         private MenuItem discordItem;
@@ -265,6 +274,13 @@ namespace CapriDesktop
             if (Program.Smoke == null) Brain.Load(Path.Combine(folder, "chat.json"));
             Limbs.Attach(Brain);
             if (Program.Smoke == null) presence = new Presence(System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
+            // A cloud key they saved thinks for her instead of Ollama, on the model they picked.
+            string brainKey = ReadSecret(BrainKeyFile);
+            if (brainKey != null && Cloud.KindOf(brainKey) != null && !string.IsNullOrEmpty(Saved.CloudModel))
+            {
+                Brain.Remote = new Cloud(brainKey, Saved.CloudModel);
+                Brain.Model = Saved.CloudModel;
+            }
             voice.Key = ReadVoiceKey();
             voice.VoiceId = string.IsNullOrEmpty(Saved.VoiceId) ? null : Saved.VoiceId;
             if (Program.Smoke == null) { Voice.Playback = Limbs.Speak; Voice.Silence = Limbs.Hush; }
@@ -1124,6 +1140,7 @@ namespace CapriDesktop
 
         private void RefreshBrains()
         {
+            if (Brain.Remote != null) { ShowCloud(); ListCloud(); return; }
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string[] found = null;
@@ -1135,31 +1152,103 @@ namespace CapriDesktop
 
         internal void ShowBrains(string[] found)
         {
+            if (Brain.Remote != null) { ShowCloud(); return; }
             brainMenu.Items.Clear();
-            if (found == null)
-            {
-                brainMenu.Items.Add(new MenuItem { Header = NoOllama, IsEnabled = false });
-                return;
-            }
-            if (found.Length == 0)
+            if (found == null) brainMenu.Items.Add(new MenuItem { Header = NoOllama, IsEnabled = false });
+            else if (found.Length == 0)
             {
                 MenuItem fetch = new MenuItem { Header = pulling ? "Downloading " + Starter + (pulled >= 0 ? ": " + pulled + "%" : "...") : PullChoice, IsEnabled = !pulling };
                 fetch.Click += delegate { PullBrain(); };
                 brainMenu.Items.Add(fetch);
-                return;
             }
-            foreach (string name in found)
+            else
+                foreach (string name in found)
+                {
+                    string model = name;
+                    MenuItem pick = new MenuItem { Header = model, ToggleType = MenuItemToggleType.Radio, GroupName = "brain", IsChecked = model == Brain.Model };
+                    pick.Click += delegate { PickBrain(model); };
+                    brainMenu.Items.Add(pick);
+                }
+            // A cloud key thinks for her instead, for PCs that can't run Ollama's models well. NVIDIA's is free.
+            brainMenu.Items.Add(new Separator());
+            MenuItem free = new MenuItem { Header = "Get a free NVIDIA key" };
+            free.Click += delegate { GetFreeKey(); };
+            MenuItem paste = new MenuItem { Header = KeyChoice };
+            paste.Click += delegate { AskBrainKey(); };
+            brainMenu.Items.Add(free);
+            brainMenu.Items.Add(paste);
+        }
+
+        // On a cloud key the Brain menu lists that key's chat models, and can go back to Ollama.
+        private void ShowCloud()
+        {
+            Cloud remote = Brain.Remote;
+            if (remote == null) return;
+            brainMenu.Items.Clear();
+            brainMenu.Items.Add(new MenuItem { Header = remote.Name + " key ending " + Voice.Tail(remote.Key), IsEnabled = false });
+            if (cloudModels == null) brainMenu.Items.Add(new MenuItem { Header = "Loading models...", IsEnabled = false });
+            else
+                foreach (string name in cloudModels)
+                {
+                    string model = name;
+                    MenuItem pick = new MenuItem { Header = model, ToggleType = MenuItemToggleType.Radio, GroupName = "cloud", IsChecked = model == remote.Model };
+                    pick.Click += delegate { PickCloud(model); };
+                    brainMenu.Items.Add(pick);
+                }
+            brainMenu.Items.Add(new Separator());
+            MenuItem back = new MenuItem { Header = "Forget the key and use Ollama" };
+            back.Click += delegate { ForgetBrainKey(); };
+            brainMenu.Items.Add(back);
+        }
+
+        private void ListCloud()
+        {
+            Cloud remote = Brain.Remote;
+            if (remote == null || cloudListing || cloudModels != null) return;
+            cloudListing = true;
+            string key = remote.Key;
+            ThreadPool.QueueUserWorkItem(delegate
             {
-                string model = name;
-                MenuItem pick = new MenuItem { Header = model, ToggleType = MenuItemToggleType.Radio, GroupName = "brain", IsChecked = model == Brain.Model };
-                pick.Click += delegate { PickBrain(model); };
-                brainMenu.Items.Add(pick);
+                List<string> found = null;
+                try { found = Brain.CloudModels(key); }
+                catch (Exception) { }
+                Dispatcher.UIThread.Post(delegate
+                {
+                    cloudListing = false;
+                    if (found == null || Brain.Remote == null || Brain.Remote.Key != key) return;
+                    cloudModels = found;
+                    ShowCloud();
+                });
+            });
+        }
+
+        // The model rows at the top of the Brain menu, above its key choices.
+        internal int BrainChoices
+        {
+            get
+            {
+                int count = 0;
+                foreach (object item in brainMenu.Items) { if (item is Separator) break; count++; }
+                return count;
             }
         }
 
-        internal int BrainChoices { get { return brainMenu.Items.Count; } }
-
         internal string FirstBrainChoice { get { MenuItem first = brainMenu.Items.Count > 0 ? brainMenu.Items[0] as MenuItem : null; return first == null ? null : first.Header as string; } }
+
+        internal string BrainMenu
+        {
+            get
+            {
+                List<string> shown = new List<string>();
+                foreach (object item in brainMenu.Items)
+                {
+                    MenuItem entry = item as MenuItem;
+                    if (entry == null) shown.Add("-");
+                    else shown.Add((entry.IsChecked ? "*" : "") + entry.Header + (entry.IsEnabled ? "" : " (off)"));
+                }
+                return string.Join(" | ", shown);
+            }
+        }
 
         // Ollama has no models yet: she pulls her own brain, shows how far it's got on the Brain menu, then picks it and says so.
         internal void PullBrain()
@@ -1465,19 +1554,25 @@ namespace CapriDesktop
 
         private string KeyFile { get { return Path.Combine(Program.Smoke ?? folder, "voice-key"); } }
 
-        private string ReadVoiceKey()
+        private string BrainKeyFile { get { return Path.Combine(Program.Smoke ?? folder, "brain-key"); } }
+
+        private string ReadVoiceKey() { return ReadSecret(KeyFile); }
+
+        private void WriteVoiceKey(string key) { WriteSecret(KeyFile, key, "voice key"); }
+
+        private static string ReadSecret(string path)
         {
             try
             {
-                string key = File.ReadAllText(KeyFile).Trim();
+                string key = File.ReadAllText(path).Trim();
                 return key.Length == 0 ? null : key;
             }
             catch (Exception) { return null; }
         }
 
-        private void WriteVoiceKey(string key)
+        // Keys are kept in a file only they can read, or deleted with null.
+        private static void WriteSecret(string path, string key, string what)
         {
-            string path = KeyFile;
             try
             {
                 if (key == null) { File.Delete(path); return; }
@@ -1490,7 +1585,84 @@ namespace CapriDesktop
                     using (StreamWriter writer = new StreamWriter(stream)) writer.Write(key);
                 }
             }
-            catch (Exception error) { Brain.Log(path, -1, "Couldn't save the voice key: " + error.Message); }
+            catch (Exception error) { Brain.Log(path, -1, "Couldn't save the " + what + ": " + error.Message); }
+        }
+
+        // NVIDIA's page takes the focus, which would close her key box, so she says where to paste the key instead.
+        internal void GetFreeKey()
+        {
+            ComeBack();
+            if (Program.Smoke == null) Browse(FreeKeyPage);
+            Talk.Answer(BrainKeyHeard, FreeKeySteps);
+        }
+
+        internal void AskBrainKey()
+        {
+            ComeBack();
+            Talk.AskKey(BrainKeyHeard, "Paste your NVIDIA, OpenAI, Claude or DeepSeek API key and press Enter. It stays on this computer. A free NVIDIA key works.", SaveBrainKey);
+        }
+
+        // A key she checks by reading its models, then thinks with on its best chat model until they pick another under Brain.
+        internal void SaveBrainKey(string key)
+        {
+            key = (key ?? "").Trim();
+            if (key.Length == 0) return;
+            string kind = Cloud.KindOf(key);
+            if (kind == null) { Talk.Answer(BrainKeyHeard, NotAKey); return; }
+            int ticket = ++asking;
+            Talk.Thinking(BrainKeyHeard);
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                List<string> found = null;
+                string problem = null;
+                string company = new Cloud(key, null).Company;
+                try { found = Brain.CloudModels(key); }
+                catch (BrainException error) { problem = error.Message; }
+                catch (Exception error) { Brain.Log(company + " models", -1, error.Message); problem = "Couldn't reach " + company + ". Check your internet, then paste the key again."; }
+                Dispatcher.UIThread.Post(delegate
+                {
+                    string model = found == null ? null : Brain.DefaultCloudModel(kind, found);
+                    if (problem == null && model == null) problem = "That key can't use any chat models.";
+                    if (problem != null) { if (ticket == asking) Talk.Answer(BrainKeyHeard, problem); return; }
+                    UseCloud(key, model, found);
+                    WriteSecret(BrainKeyFile, key, "brain key");
+                    if (ticket == asking) Talk.Answer(BrainKeyHeard, "Key saved. I'm thinking with " + model + " now. Change it under Brain in my right-click menu.");
+                });
+            });
+        }
+
+        internal void UseCloud(string key, string model, List<string> models)
+        {
+            Brain.Cancel();
+            Brain.Remote = new Cloud(key, model);
+            Brain.Model = model;
+            Saved.CloudModel = model;
+            cloudModels = models;
+            Save();
+        }
+
+        internal void PickCloud(string model)
+        {
+            Cloud remote = Brain.Remote;
+            if (remote == null || string.IsNullOrEmpty(model)) return;
+            Brain.Cancel();
+            remote.Model = model;
+            Brain.Model = model;
+            Saved.CloudModel = model;
+            Save();
+        }
+
+        // Back to Ollama: the key file goes, and she finds her Ollama model again.
+        internal void ForgetBrainKey()
+        {
+            Brain.Cancel();
+            Brain.Remote = null;
+            Brain.Model = null;
+            cloudModels = null;
+            Saved.CloudModel = null;
+            WriteSecret(BrainKeyFile, null, "brain key");
+            Save();
+            FindBrain();
         }
 
         internal void AskVoiceKey()
