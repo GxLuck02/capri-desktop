@@ -845,7 +845,6 @@ namespace CapriDesktop
         private double voiceUntil;
         private bool spoke;
         private bool checkedIn;
-        private const string GlanceLine = "(You glance at their screen while they do their thing. Reply in two parts, with the labels SAW: and SAY: written exactly like that. SAW: what's on their screen, in under 20 plain words: the game or app and what's happening. SAY: your reaction in one short line, in character, to something specific you can see: tease them, cheer them on, or ask about it. A game scene, scoreboard, inventory or quiet moment is enough. Don't invent action from a still image, and never guess who a person is; name someone only if their name is written on screen. If nothing's worth a line, still give the SAW part and make it SAY: SKIP. For a blank screen, a bare desktop or a loading screen, reply with just SKIP.)";
         private const string BlackScreen = "The screen capture is black. Try borderless or windowed mode.";
         internal static Func<Rectangle, Bitmap> Grab = GrabScreen;
         internal static Func<IntPtr, Rectangle> Display = delegate(IntPtr window) { return window == IntPtr.Zero ? Screen.FromPoint(Cursor.Position).Bounds : Screen.FromHandle(window).Bounds; };
@@ -855,10 +854,6 @@ namespace CapriDesktop
         private bool glancing;
         // Her glance lines from the last hour, so she stops bringing up the same thing on their screen.
         private readonly System.Collections.Generic.List<Tuple<double, string>> glanced = new System.Collections.Generic.List<Tuple<double, string>>();
-        private const double GlanceMemory = 3600;
-        private static readonly System.Collections.Generic.HashSet<string> Plain = new System.Collections.Generic.HashSet<string>((
-            "about after again all also always and another any anything are around away back been before being best better big bit bring but came can come coming could damn dang did does doing done down each even ever every feel feels finally first for from game games get gets getting give going gonna good got great guess had has have hey here hope how huge huh into just keep kind know last least left let like little look looks looking lol lots made make many maybe mean more most move much nah need never new next nice not nothing now off okay old omg once one only ooh other out over own play played player playing pretty probably quite ready real really right same say screen see seen should show some somebody someone something soon still such sure take than that the them then there they thing things think this those though time today too took tried try trying turn use very want wanna was wait watch watching way well went were what when where which while who whoa why will with without wow yeah year yep yes yet you your yours " +
-            "choom preem nova gonk delta eddies flatline flatlined corpo corpos yezzirrr night city arasaka capri").Split(' '));
         private byte[] lastPrint;
         private Rectangle lastArea;
         private volatile bool fetchingEyes;
@@ -3402,13 +3397,13 @@ namespace CapriDesktop
             lastGlance = now;
             int ticket = asking;
             int watch = watchTicket;
-            string ask = GlanceAsk(RecentGlances(clock.Elapsed.TotalSeconds));
+            string ask = Glances.Ask(RecentGlances(clock.Elapsed.TotalSeconds));
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string said = null;
                 string saw = null;
                 string problem = null;
-                try { said = GlanceReply(brain.See(shot, Brain.Persona + Brain.Speech(), ask, 140), out saw); }
+                try { said = Glances.Reply(brain.See(shot, Brain.Persona + Brain.Speech(), ask, 140), out saw); }
                 catch (Exception error)
                 {
                     // Talking to her cancels a glance; that isn't a problem to show. Anything else goes in errors.txt too.
@@ -3423,45 +3418,6 @@ namespace CapriDesktop
             });
         }
 
-        private static string GlanceReply(string said)
-        {
-            string saw;
-            return GlanceReply(said, out saw);
-        }
-
-        // A glance answers "SAW: what's on screen SAY: her line", folded onto one line by See(). Without the labels the whole reply is her line.
-        private static readonly System.Text.RegularExpressions.Regex GlanceLabel = new System.Text.RegularExpressions.Regex(@"(?<![\p{L}\p{N}'])(?:(?<label>SAW|SAY)[*_]*\s*(?::|\p{Pd}(?=\s))|(?<label>[Ss]aw|[Ss]ay)[*_]*\s*:)[*_]*");
-
-        private static string GlanceReply(string raw, out string saw)
-        {
-            saw = null;
-            string text = raw ?? "";
-            System.Text.RegularExpressions.Match sawLabel = null, sayLabel = null;
-            foreach (System.Text.RegularExpressions.Match label in GlanceLabel.Matches(text))
-            {
-                bool saying = label.Groups["label"].Value.ToUpperInvariant() == "SAY";
-                if (saying && sayLabel == null) sayLabel = label;
-                else if (!saying && sawLabel == null) sawLabel = label;
-            }
-            if (sawLabel != null || sayLabel != null)
-            {
-                string seen = sawLabel == null ? "" : Brain.Clean(Labelled(text, sawLabel, sayLabel));
-                if (seen.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(seen, @"^[\[(]?SKIP[\])]?[.!?]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) saw = seen.Length > 200 ? seen.Substring(0, 200).TrimEnd() + "..." : seen;
-                text = sayLabel == null ? "" : Labelled(text, sayLabel, sawLabel);
-            }
-            string said = Brain.Sparing(Brain.Clean(text), false, Brain.Nickname);
-            bool skipped = System.Text.RegularExpressions.Regex.IsMatch(said, @"^[\[(]?(SKIP|nothing|none)[\])]?[.!?]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) || System.Text.RegularExpressions.Regex.IsMatch(said, @"^[\[(]?SKIP\b");
-            return skipped ? "" : said;
-        }
-
-        // The words after one label, up to the other label when that one comes later.
-        private static string Labelled(string text, System.Text.RegularExpressions.Match label, System.Text.RegularExpressions.Match other)
-        {
-            int start = label.Index + label.Length;
-            int end = other != null && other.Index > label.Index ? other.Index : text.Length;
-            return text.Substring(start, end - start).Trim(' ', '*', '_', '#', '>', '-', '|', '/', ';', ',');
-        }
-
         private void FinishGlance(int ticket, int watch, string said, string problem, string saw = null)
         {
             glancing = false;
@@ -3471,7 +3427,7 @@ namespace CapriDesktop
             if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
             if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || shushed || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
             // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
-            if (Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) { Glimpsed(saw); return; }
+            if (Glances.Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) { Glimpsed(saw); return; }
             glanced.Add(Tuple.Create(clock.Elapsed.TotalSeconds, said));
             brain.Saw(saw, said);
             brain.Remember(string.IsNullOrEmpty(saw) ? "(You glanced at their screen.)" : "(You glanced at their screen and saw: " + saw + ")", said);
@@ -3486,107 +3442,10 @@ namespace CapriDesktop
 
         private System.Collections.Generic.List<string> RecentGlances(double now)
         {
-            glanced.RemoveAll(delegate(Tuple<double, string> line) { return now - line.Item1 > GlanceMemory || now < line.Item1; });
+            glanced.RemoveAll(delegate(Tuple<double, string> line) { return now - line.Item1 > Glances.Memory || now < line.Item1; });
             if (glanced.Count > 30) glanced.RemoveRange(0, glanced.Count - 30);
             return glanced.ConvertAll<string>(delegate(Tuple<double, string> line) { return line.Item2; });
         }
-
-        // Each glance is a fresh look with no chat history, so she's shown her recent lines and older topics to stay off.
-        private static string GlanceAsk(System.Collections.Generic.List<string> said)
-        {
-            if (said.Count == 0) return GlanceLine;
-            int shown = Math.Max(0, said.Count - 6);
-            string ask = GlanceLine + "\n(You already said these about their screen:";
-            for (int i = shown; i < said.Count; i++) ask += "\n- " + said[i];
-            System.Collections.Generic.List<string> older = new System.Collections.Generic.List<string>();
-            for (int i = 0; i < shown; i++) foreach (string key in GlanceKeys(said[i], Brain.Nickname)) if (older.Count < 12) Key(older, key);
-            if (older.Count > 0) ask += "\nEarlier you also brought up: " + string.Join(", ", older.ToArray()) + ".";
-            return ask + "\nDon't bring any of it up again: no character, move, item, place, number, name or joke from those lines. Pick something new and specific, or make it SAY: SKIP.)";
-        }
-
-        // True when a glance line brings back a name, number or phrase from one she already said, or mostly the same words.
-        internal static bool Repeats(string said, System.Collections.Generic.IEnumerable<string> before, string nickname)
-        {
-            bool[] capital, opening;
-            string spoken = " " + string.Join(" ", Spoken(said, out capital, out opening)) + " ";
-            string[] own = Own(nickname);
-            System.Collections.Generic.List<string> keys = GlanceKeys(said, nickname);
-            System.Collections.Generic.List<string> content = new System.Collections.Generic.List<string>();
-            foreach (string word in Spoken(said, out capital, out opening)) if (Content(word, own)) Key(content, word);
-            foreach (string old in before)
-            {
-                string then = " " + string.Join(" ", Spoken(old, out capital, out opening)) + " ";
-                if (then == spoken) return true;
-                foreach (string key in keys) if (then.IndexOf(" " + key + " ", StringComparison.Ordinal) >= 0) return true;
-                foreach (string key in GlanceKeys(old, nickname)) if (spoken.IndexOf(" " + key + " ", StringComparison.Ordinal) >= 0) return true;
-                int shared = 0;
-                foreach (string word in content) if (then.IndexOf(" " + word + " ", StringComparison.Ordinal) >= 0) shared++;
-                if (shared >= 2 && shared * 5 >= content.Count * 3) return true;
-            }
-            return false;
-        }
-
-        // Name-like runs ("King of Curses"), names mid-sentence, numbers and two-word phrases: what a glance line is about.
-        internal static System.Collections.Generic.List<string> GlanceKeys(string line, string nickname)
-        {
-            bool[] capital, opening;
-            string[] words = Spoken(line, out capital, out opening);
-            string[] own = Own(nickname);
-            System.Collections.Generic.List<string> keys = new System.Collections.Generic.List<string>();
-            for (int i = 0; i < words.Length; i++)
-            {
-                if (!capital[i]) continue;
-                int end = i;
-                while (end + 1 < words.Length && (capital[end + 1] || (end + 2 < words.Length && capital[end + 2] && (words[end + 1] == "of" || words[end + 1] == "the" || words[end + 1] == "and")))) end += capital[end + 1] ? 1 : 2;
-                int from = i, to = end;
-                while (from <= to && Ordinary(words[from], own)) from++;
-                while (to >= from && Ordinary(words[to], own)) to--;
-                int names = 0;
-                for (int j = from; j <= to; j++) if (capital[j]) names++;
-                if (names >= 2) Key(keys, string.Join(" ", words, from, to - from + 1));
-                else if (from == to && !opening[from] && words[from].Length >= 4) Key(keys, words[from]);
-                i = end;
-            }
-            for (int i = 0; i < words.Length; i++)
-            {
-                if (words[i].Length >= 2 && Regex.IsMatch(words[i], @"^\d+$")) Key(keys, words[i]);
-                else if (i + 1 < words.Length && Content(words[i], own) && Content(words[i + 1], own)) Key(keys, words[i] + " " + words[i + 1]);
-            }
-            return keys;
-        }
-
-        // Lowercase words with "." for sentence breaks; glitch tags drop out, "1,000" reads as 1000 and shouting isn't read as names.
-        private static string[] Spoken(string line, out bool[] capital, out bool[] opening)
-        {
-            string text = Regex.Replace(line ?? "", @"\[[^\]]*\]", ".");
-            text = Regex.Replace(text, @"(?<=\d),(?=\d{3}(?!\d))", "");
-            int letters = 0, upper = 0;
-            foreach (char c in text) if (char.IsLetter(c)) { letters++; if (char.IsUpper(c)) upper++; }
-            if (upper * 2 > letters) text = text.ToLowerInvariant();
-            MatchCollection found = Regex.Matches(text, @"[\p{L}\p{Nd}][\p{L}\p{Nd}'’]*|[.!?]");
-            string[] words = new string[found.Count];
-            capital = new bool[found.Count];
-            opening = new bool[found.Count];
-            bool start = true;
-            for (int i = 0; i < found.Count; i++)
-            {
-                string word = found[i].Value;
-                if (word == "." || word == "!" || word == "?") { words[i] = "."; start = true; continue; }
-                words[i] = Regex.Replace(word.ToLowerInvariant().Replace('’', '\''), @"'s$", "");
-                capital[i] = char.IsUpper(word[0]);
-                opening[i] = start;
-                start = false;
-            }
-            return words;
-        }
-
-        private static string[] Own(string nickname) { return Regex.Split((nickname ?? "").ToLowerInvariant().Replace('’', '\''), @"[^\p{L}\p{Nd}']+"); }
-
-        private static bool Ordinary(string word, string[] own) { return word.Length < 3 || word.IndexOf('\'') >= 0 || Plain.Contains(word) || Array.IndexOf(own, word) >= 0; }
-
-        private static bool Content(string word, string[] own) { return word.Length >= 4 && !Ordinary(word, own) && !Regex.IsMatch(word, @"^\d+$"); }
-
-        private static void Key(System.Collections.Generic.List<string> keys, string key) { if (!keys.Contains(key)) keys.Add(key); }
 
         private bool Changed(Bitmap screen, bool force = false)
         {
@@ -11196,8 +11055,8 @@ namespace CapriDesktop
                                         Grab = blueGrab;
                                     }
                                     checks.Add("PASS capture: foreground monitor wins over the mouse monitor, Capri falls back to the mouse, negative origins and 4K bounds keep overlay offsets and reset the comparison");
-                                    if (GlanceReply("SKIP") != "" || GlanceReply("\"skip.\"") != "" || GlanceReply("[SKIP]") != "" || GlanceReply("Don't skip that chest.") != "Don't skip that chest.") throw new Exception("Glance replies confused SKIP with a normal sentence.");
-                                    if (GlanceReply("Nice shot at that boss.") != "Nice shot at that boss." || GlanceReply("well shit, choom") != Brain.Sparing(Brain.Clean("well shit, choom"), false, Brain.Nickname)) throw new Exception("Glance replies were rewritten after her brain wrote them.");
+                                    if (Glances.Reply("SKIP") != "" || Glances.Reply("\"skip.\"") != "" || Glances.Reply("[SKIP]") != "" || Glances.Reply("Don't skip that chest.") != "Don't skip that chest.") throw new Exception("Glance replies confused SKIP with a normal sentence.");
+                                    if (Glances.Reply("Nice shot at that boss.") != "Nice shot at that boss." || Glances.Reply("well shit, choom") != Brain.Sparing(Brain.Clean("well shit, choom"), false, Brain.Nickname)) throw new Exception("Glance replies were rewritten after her brain wrote them.");
                                     checks.Add("PASS glance replies: only a whole SKIP reply is silent, and her game comments come out as her brain wrote them");
                                     string glanceSaw;
                                     string[,] glanceParts =
@@ -11214,7 +11073,7 @@ namespace CapriDesktop
                                         { "Don't skip that chest.", "Don't skip that chest.", null }
                                     };
                                     for (int i = 0; i < glanceParts.GetLength(0); i++)
-                                        if (GlanceReply(glanceParts[i, 0], out glanceSaw) != glanceParts[i, 1] || glanceSaw != glanceParts[i, 2]) throw new Exception("A glance reply was read wrong: " + glanceParts[i, 0] + " -> " + GlanceReply(glanceParts[i, 0], out glanceSaw) + " / " + glanceSaw);
+                                        if (Glances.Reply(glanceParts[i, 0], out glanceSaw) != glanceParts[i, 1] || glanceSaw != glanceParts[i, 2]) throw new Exception("A glance reply was read wrong: " + glanceParts[i, 0] + " -> " + Glances.Reply(glanceParts[i, 0], out glanceSaw) + " / " + glanceSaw);
                                     Brain.Unsee();
                                     Brain glancer = new Brain();
                                     glancer.Saw("Minecraft, a cave with diamond ore on the wall", "Mine those, choom.");
@@ -11351,12 +11210,12 @@ namespace CapriDesktop
                                     checks.Add("PASS longer memory: chat, her own lines, glances and jobs go in a daily transcript on this PC, folding runs on a new day or when the lines outgrow her chat, the picked brain folds them into memories.md without addresses, schools or numbers, a fold that loses most memories is refused, a day the brain leaves out is kept unless it went into Earlier, memories.md reaches her prompt only with Remember our chats on, remember when finds old transcript lines, and the switch saves");
                                     string curses = "King of Curses with Malevolent Shrine on the hotbar, choom? Somebody's been watching too much anime.";
                                     string[] cursed = { curses };
-                                    if (!Repeats("That King of Curses moveset again? Malevolent Shrine spam incoming.", cursed, "") || !Repeats("still running that king of curses build huh", cursed, "") || !Repeats(curses, cursed, "")) throw new Exception("A glance repeated a name it already brought up.");
-                                    if (!Repeats("Sukuna again? Bold.", new[] { "That Sukuna combo was preem." }, "") || !Repeats("Still stuck at 1000 viewers?", new[] { "1,000 viewers watching you flop, no pressure." }, "") || !Repeats("Don't skip that chest!", new[] { "Don't skip that chest." }, "")) throw new Exception("A glance repeated a name, number or line it already said.");
-                                    if (Repeats("Nice dodge, you barely took a scratch.", cursed, "") || Repeats("Clean dodge, Lachy.", new[] { "Nice inventory, Lachy." }, "Lachy") || Repeats("Nice shot! [SIGNAL CORRUPTED]", new[] { "Nice dodge. [SIGNAL CORRUPTED]" }, "")) throw new Exception("A new glance counted as a repeat.");
+                                    if (!Glances.Repeats("That King of Curses moveset again? Malevolent Shrine spam incoming.", cursed, "") || !Glances.Repeats("still running that king of curses build huh", cursed, "") || !Glances.Repeats(curses, cursed, "")) throw new Exception("A glance repeated a name it already brought up.");
+                                    if (!Glances.Repeats("Sukuna again? Bold.", new[] { "That Sukuna combo was preem." }, "") || !Glances.Repeats("Still stuck at 1000 viewers?", new[] { "1,000 viewers watching you flop, no pressure." }, "") || !Glances.Repeats("Don't skip that chest!", new[] { "Don't skip that chest." }, "")) throw new Exception("A glance repeated a name, number or line it already said.");
+                                    if (Glances.Repeats("Nice dodge, you barely took a scratch.", cursed, "") || Glances.Repeats("Clean dodge, Lachy.", new[] { "Nice inventory, Lachy." }, "Lachy") || Glances.Repeats("Nice shot! [SIGNAL CORRUPTED]", new[] { "Nice dodge. [SIGNAL CORRUPTED]" }, "")) throw new Exception("A new glance counted as a repeat.");
                                     System.Collections.Generic.List<string> glanceLines = new System.Collections.Generic.List<string> { curses, "Nice dodge.", "That boss is toast.", "Big brain move.", "Inventory check, choom?", "Clean landing.", "Go go go." };
-                                    string glanceAsking = GlanceAsk(glanceLines);
-                                    if (GlanceAsk(new System.Collections.Generic.List<string>()) != GlanceLine || !glanceAsking.StartsWith(GlanceLine, StringComparison.Ordinal) || glanceAsking.IndexOf("\n- Nice dodge.\n", StringComparison.Ordinal) < 0 || glanceAsking.IndexOf("\n- " + curses, StringComparison.Ordinal) >= 0 || glanceAsking.IndexOf("Earlier you also brought up: king of curses, malevolent shrine", StringComparison.Ordinal) < 0 || !glanceAsking.EndsWith("make it SAY: SKIP.)", StringComparison.Ordinal)) throw new Exception("The glance prompt lost her recent lines or older topics: " + glanceAsking);
+                                    string glanceAsking = Glances.Ask(glanceLines);
+                                    if (Glances.Ask(new System.Collections.Generic.List<string>()) != Glances.Line || !glanceAsking.StartsWith(Glances.Line, StringComparison.Ordinal) || glanceAsking.IndexOf("\n- Nice dodge.\n", StringComparison.Ordinal) < 0 || glanceAsking.IndexOf("\n- " + curses, StringComparison.Ordinal) >= 0 || glanceAsking.IndexOf("Earlier you also brought up: king of curses, malevolent shrine", StringComparison.Ordinal) < 0 || !glanceAsking.EndsWith("make it SAY: SKIP.)", StringComparison.Ordinal)) throw new Exception("The glance prompt lost her recent lines or older topics: " + glanceAsking);
                                     checks.Add("PASS glance repeats: names, numbers and phrases she already brought up count as a repeat, lowercased or at a sentence start; new lines, their nickname and glitch tags don't; the brain sees her last six lines and older topics");
                                     lastPrint = null;
                                     using (Bitmap wide = new Bitmap(2560, 1440))

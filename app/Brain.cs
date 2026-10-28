@@ -1909,4 +1909,151 @@ namespace CapriDesktop
         }
     }
 
+    // Her glances at their screen for Watch my screen, shared by Windows, Mac and Linux: what she's asked, reading her reply,
+    // and spotting a line that brings back one she already said.
+    internal static class Glances
+    {
+        internal const string Line = "(You glance at their screen while they do their thing. Reply in two parts, with the labels SAW: and SAY: written exactly like that. SAW: what's on their screen, in under 20 plain words: the game or app and what's happening. SAY: your reaction in one short line, in character, to something specific you can see: tease them, cheer them on, or ask about it. A game scene, scoreboard, inventory or quiet moment is enough. Don't invent action from a still image, and never guess who a person is; name someone only if their name is written on screen. If nothing's worth a line, still give the SAW part and make it SAY: SKIP. For a blank screen, a bare desktop or a loading screen, reply with just SKIP.)";
+        // Her glance lines from the last hour count as already said.
+        internal const double Memory = 3600;
+        private static readonly HashSet<string> Plain = new HashSet<string>((
+            "about after again all also always and another any anything are around away back been before being best better big bit bring but came can come coming could damn dang did does doing done down each even ever every feel feels finally first for from game games get gets getting give going gonna good got great guess had has have hey here hope how huge huh into just keep kind know last least left let like little look looks looking lol lots made make many maybe mean more most move much nah need never new next nice not nothing now off okay old omg once one only ooh other out over own play played player playing pretty probably quite ready real really right same say screen see seen should show some somebody someone something soon still such sure take than that the them then there they thing things think this those though time today too took tried try trying turn use very want wanna was wait watch watching way well went were what when where which while who whoa why will with without wow yeah year yep yes yet you your yours " +
+            "choom preem nova gonk delta eddies flatline flatlined corpo corpos yezzirrr night city arasaka capri").Split(' '));
+
+        // Each glance is a fresh look with no chat history, so she's shown her recent lines and older topics to stay off.
+        internal static string Ask(List<string> said)
+        {
+            if (said.Count == 0) return Line;
+            int shown = Math.Max(0, said.Count - 6);
+            string ask = Line + "\n(You already said these about their screen:";
+            for (int i = shown; i < said.Count; i++) ask += "\n- " + said[i];
+            List<string> older = new List<string>();
+            for (int i = 0; i < shown; i++) foreach (string key in Keys(said[i], Brain.Nickname)) if (older.Count < 12) Key(older, key);
+            if (older.Count > 0) ask += "\nEarlier you also brought up: " + string.Join(", ", older.ToArray()) + ".";
+            return ask + "\nDon't bring any of it up again: no character, move, item, place, number, name or joke from those lines. Pick something new and specific, or make it SAY: SKIP.)";
+        }
+
+        // True when a glance line brings back a name, number or phrase from one she already said, or mostly the same words.
+        internal static bool Repeats(string said, IEnumerable<string> before, string nickname)
+        {
+            bool[] capital, opening;
+            string spoken = " " + string.Join(" ", Spoken(said, out capital, out opening)) + " ";
+            string[] own = Own(nickname);
+            List<string> keys = Keys(said, nickname);
+            List<string> content = new List<string>();
+            foreach (string word in Spoken(said, out capital, out opening)) if (Content(word, own)) Key(content, word);
+            foreach (string old in before)
+            {
+                string then = " " + string.Join(" ", Spoken(old, out capital, out opening)) + " ";
+                if (then == spoken) return true;
+                foreach (string key in keys) if (then.IndexOf(" " + key + " ", StringComparison.Ordinal) >= 0) return true;
+                foreach (string key in Keys(old, nickname)) if (spoken.IndexOf(" " + key + " ", StringComparison.Ordinal) >= 0) return true;
+                int shared = 0;
+                foreach (string word in content) if (then.IndexOf(" " + word + " ", StringComparison.Ordinal) >= 0) shared++;
+                if (shared >= 2 && shared * 5 >= content.Count * 3) return true;
+            }
+            return false;
+        }
+
+        // Name-like runs ("King of Curses"), names mid-sentence, numbers and two-word phrases: what a glance line is about.
+        internal static List<string> Keys(string line, string nickname)
+        {
+            bool[] capital, opening;
+            string[] words = Spoken(line, out capital, out opening);
+            string[] own = Own(nickname);
+            List<string> keys = new List<string>();
+            for (int i = 0; i < words.Length; i++)
+            {
+                if (!capital[i]) continue;
+                int end = i;
+                while (end + 1 < words.Length && (capital[end + 1] || (end + 2 < words.Length && capital[end + 2] && (words[end + 1] == "of" || words[end + 1] == "the" || words[end + 1] == "and")))) end += capital[end + 1] ? 1 : 2;
+                int from = i, to = end;
+                while (from <= to && Ordinary(words[from], own)) from++;
+                while (to >= from && Ordinary(words[to], own)) to--;
+                int names = 0;
+                for (int j = from; j <= to; j++) if (capital[j]) names++;
+                if (names >= 2) Key(keys, string.Join(" ", words, from, to - from + 1));
+                else if (from == to && !opening[from] && words[from].Length >= 4) Key(keys, words[from]);
+                i = end;
+            }
+            for (int i = 0; i < words.Length; i++)
+            {
+                if (words[i].Length >= 2 && Regex.IsMatch(words[i], @"^\d+$")) Key(keys, words[i]);
+                else if (i + 1 < words.Length && Content(words[i], own) && Content(words[i + 1], own)) Key(keys, words[i] + " " + words[i + 1]);
+            }
+            return keys;
+        }
+
+        // Lowercase words with "." for sentence breaks; glitch tags drop out, "1,000" reads as 1000 and shouting isn't read as names.
+        private static string[] Spoken(string line, out bool[] capital, out bool[] opening)
+        {
+            string text = Regex.Replace(line ?? "", @"\[[^\]]*\]", ".");
+            text = Regex.Replace(text, @"(?<=\d),(?=\d{3}(?!\d))", "");
+            int letters = 0, upper = 0;
+            foreach (char c in text) if (char.IsLetter(c)) { letters++; if (char.IsUpper(c)) upper++; }
+            if (upper * 2 > letters) text = text.ToLowerInvariant();
+            MatchCollection found = Regex.Matches(text, @"[\p{L}\p{Nd}][\p{L}\p{Nd}'’]*|[.!?]");
+            string[] words = new string[found.Count];
+            capital = new bool[found.Count];
+            opening = new bool[found.Count];
+            bool start = true;
+            for (int i = 0; i < found.Count; i++)
+            {
+                string word = found[i].Value;
+                if (word == "." || word == "!" || word == "?") { words[i] = "."; start = true; continue; }
+                words[i] = Regex.Replace(word.ToLowerInvariant().Replace('’', '\''), @"'s$", "");
+                capital[i] = char.IsUpper(word[0]);
+                opening[i] = start;
+                start = false;
+            }
+            return words;
+        }
+
+        private static string[] Own(string nickname) { return Regex.Split((nickname ?? "").ToLowerInvariant().Replace('’', '\''), @"[^\p{L}\p{Nd}']+"); }
+
+        private static bool Ordinary(string word, string[] own) { return word.Length < 3 || word.IndexOf('\'') >= 0 || Plain.Contains(word) || Array.IndexOf(own, word) >= 0; }
+
+        private static bool Content(string word, string[] own) { return word.Length >= 4 && !Ordinary(word, own) && !Regex.IsMatch(word, @"^\d+$"); }
+
+        private static void Key(List<string> keys, string key) { if (!keys.Contains(key)) keys.Add(key); }
+
+        internal static string Reply(string said)
+        {
+            string saw;
+            return Reply(said, out saw);
+        }
+
+        // A glance answers "SAW: what's on screen SAY: her line", folded onto one line by See(). Without the labels the whole reply is her line.
+        private static readonly Regex Label = new Regex(@"(?<![\p{L}\p{N}'])(?:(?<label>SAW|SAY)[*_]*\s*(?::|\p{Pd}(?=\s))|(?<label>[Ss]aw|[Ss]ay)[*_]*\s*:)[*_]*");
+
+        internal static string Reply(string raw, out string saw)
+        {
+            saw = null;
+            string text = raw ?? "";
+            Match sawLabel = null, sayLabel = null;
+            foreach (Match label in Label.Matches(text))
+            {
+                bool saying = label.Groups["label"].Value.ToUpperInvariant() == "SAY";
+                if (saying && sayLabel == null) sayLabel = label;
+                else if (!saying && sawLabel == null) sawLabel = label;
+            }
+            if (sawLabel != null || sayLabel != null)
+            {
+                string seen = sawLabel == null ? "" : Brain.Clean(Labelled(text, sawLabel, sayLabel));
+                if (seen.Length > 0 && !Regex.IsMatch(seen, @"^[\[(]?SKIP[\])]?[.!?]*$", RegexOptions.IgnoreCase)) saw = seen.Length > 200 ? seen.Substring(0, 200).TrimEnd() + "..." : seen;
+                text = sayLabel == null ? "" : Labelled(text, sayLabel, sawLabel);
+            }
+            string said = Brain.Sparing(Brain.Clean(text), false, Brain.Nickname);
+            bool skipped = Regex.IsMatch(said, @"^[\[(]?(SKIP|nothing|none)[\])]?[.!?]*$", RegexOptions.IgnoreCase) || Regex.IsMatch(said, @"^[\[(]?SKIP\b");
+            return skipped ? "" : said;
+        }
+
+        // The words after one label, up to the other label when that one comes later.
+        private static string Labelled(string text, Match label, Match other)
+        {
+            int start = label.Index + label.Length;
+            int end = other != null && other.Index > label.Index ? other.Index : text.Length;
+            return text.Substring(start, end - start).Trim(' ', '*', '_', '#', '>', '-', '|', '/', ';', ',');
+        }
+    }
 }
