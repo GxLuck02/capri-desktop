@@ -429,15 +429,17 @@ namespace CapriDesktop
         internal static readonly string[,] Languages =
         {
             { "English", "English", "en" }, { "Español", "Spanish", "es" }, { "Français", "French", "fr" }, { "Deutsch", "German", "de" },
-            { "Italiano", "Italian", "it" }, { "Português", "Portuguese", "pt" }, { "Nederlands", "Dutch", "nl" }, { "Svenska", "Swedish", "sv" },
+            { "Italiano", "Italian", "it" }, { "Português", "Portuguese", "pt" }, { "Català", "Catalan", "ca" }, { "Nederlands", "Dutch", "nl" }, { "Svenska", "Swedish", "sv" },
             { "Dansk", "Danish", "da" }, { "Norsk", "Norwegian", "no" }, { "Suomi", "Finnish", "fi" }, { "Eesti", "Estonian", "et" },
             { "Latviešu", "Latvian", "lv" }, { "Lietuvių", "Lithuanian", "lt" }, { "Polski", "Polish", "pl" }, { "Čeština", "Czech", "cs" },
-            { "Slovenčina", "Slovak", "sk" }, { "Magyar", "Hungarian", "hu" }, { "Slovenščina", "Slovenian", "sl" }, { "Hrvatski", "Croatian", "hr" },
+            { "Slovenčina", "Slovak", "sk" }, { "Magyar", "Hungarian", "hu" }, { "Slovenščina", "Slovenian", "sl" }, { "Hrvatski", "Croatian", "hr" }, { "Srpski", "Serbian", "sr" },
             { "Română", "Romanian", "ro" }, { "Türkçe", "Turkish", "tr" }, { "Русский", "Russian", "ru" }, { "Українська", "Ukrainian", "uk" },
             { "Български", "Bulgarian", "bg" }, { "Ελληνικά", "Greek", "el" }, { "Malti", "Maltese", "mt" }, { "Tiếng Việt", "Vietnamese", "vi" },
-            { "Bahasa Indonesia", "Indonesian", "id" }, { "Filipino", "Filipino", "fil" }, { "ไทย", "Thai", "th" },
+            { "Bahasa Indonesia", "Indonesian", "id" }, { "Bahasa Melayu", "Malay", "ms" }, { "Filipino", "Filipino", "fil" }, { "Kiswahili", "Swahili", "sw" }, { "ไทย", "Thai", "th" },
             { "简体中文", "Simplified Chinese", "zh" }, { "繁體中文", "Traditional Chinese", "zh" }, { "日本語", "Japanese", "ja" }, { "한국어", "Korean", "ko" },
-            { "हिन्दी", "Hindi", "hi" }, { "বাংলা", "Bengali", "bn" }, { "العربية", "Arabic", "ar" }, { "اردو", "Urdu", "ur" }, { "فارسی", "Persian", "fa" }, { "עברית", "Hebrew", "he" }
+            { "हिन्दी", "Hindi", "hi" }, { "বাংলা", "Bengali", "bn" }, { "मराठी", "Marathi", "mr" }, { "ગુજરાતી", "Gujarati", "gu" }, { "ਪੰਜਾਬੀ", "Punjabi", "pa" },
+            { "தமிழ்", "Tamil", "ta" }, { "తెలుగు", "Telugu", "te" }, { "ಕನ್ನಡ", "Kannada", "kn" }, { "മലയാളം", "Malayalam", "ml" },
+            { "العربية", "Arabic", "ar" }, { "اردو", "Urdu", "ur" }, { "فارسی", "Persian", "fa" }, { "עברית", "Hebrew", "he" }
         };
         internal static volatile string Language;
         internal static volatile string Nickname;
