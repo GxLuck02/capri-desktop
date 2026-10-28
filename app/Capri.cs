@@ -13015,14 +13015,13 @@ namespace CapriDesktop
                             using (MemoryStream zipped = new MemoryStream())
                             {
                                 using (System.IO.Compression.ZipArchive archive = new System.IO.Compression.ZipArchive(zipped, System.IO.Compression.ZipArchiveMode.Create, true))
-                                using (Stream entry = archive.CreateEntry("llama-server.exe").Open()) entry.WriteByte(1);
+                                using (Stream entry = archive.CreateEntry("tts-server.exe").Open()) entry.WriteByte(1);
                                 hdZip = zipped.ToArray();
                             }
                             byte[] hdCodec = { 2, 2 }, hdModel = { 3, 3, 3 };
-                            float[] hdWave = new float[9600];
-                            for (int i = 0; i < hdWave.Length; i++) hdWave[i] = (float)(0.5 * Math.Sin(i * 0.07));
-                            byte[] hdPcm = new byte[hdWave.Length * 4];
-                            Buffer.BlockCopy(hdWave, 0, hdPcm, 0, hdPcm.Length);
+                            short[] hdWave = new short[9600];
+                            for (int i = 0; i < hdWave.Length; i++) hdWave[i] = (short)Math.Round(16383 * Math.Sin(i * 0.07));
+                            byte[] hdSpoken = Voice.Wave(hdWave, 24000), hdRegistered = System.Text.Encoding.ASCII.GetBytes("{\"name\":\"capri\",\"status\":\"registered\"}");
                             System.Collections.Generic.List<string> hdAsked = new System.Collections.Generic.List<string>();
                             System.Net.Sockets.TcpListener hdServer = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
                             hdServer.Start();
@@ -13051,9 +13050,9 @@ namespace CapriDesktop
                                             lock (hdAsked) hdAsked.Add(request);
                                             string[] words = request.Split(' ');
                                             string path = words.Length > 1 ? words[1] : "";
-                                            bool hdSpeech = path.EndsWith("/tts", StringComparison.Ordinal);
-                                            byte[] answer = hdSpeech ? hdPcm : path.EndsWith(".zip", StringComparison.Ordinal) ? hdZip : path.EndsWith("codec.gguf", StringComparison.Ordinal) ? hdCodec : hdModel;
-                                            byte[] head = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: " + (hdSpeech ? "audio/pcm;rate=24000;encoding=float;bits=32" : "application/octet-stream") + "\r\nContent-Length: " + answer.Length + "\r\nConnection: close\r\n\r\n");
+                                            bool hdSpeech = path.EndsWith("/v1/audio/speech", StringComparison.Ordinal), hdVoices = path.EndsWith("/v1/audio/voices", StringComparison.Ordinal);
+                                            byte[] answer = hdSpeech ? hdSpoken : hdVoices ? hdRegistered : path.EndsWith(".zip", StringComparison.Ordinal) ? hdZip : path.EndsWith("codec.gguf", StringComparison.Ordinal) ? hdCodec : hdModel;
+                                            byte[] head = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: " + (hdSpeech ? "audio/wav" : hdVoices ? "application/json" : "application/octet-stream") + "\r\nContent-Length: " + answer.Length + "\r\nConnection: close\r\n\r\n");
                                             stream.Write(head, 0, head.Length);
                                             stream.Write(answer, 0, answer.Length);
                                         }
@@ -13094,10 +13093,21 @@ namespace CapriDesktop
                                 QwenVoice.CodecSize = hdSizes[1];
                                 QwenVoice.ModelSize = hdSizes[2];
                             }
-                            if (!QwenVoice.ModelUrl.StartsWith("https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/", StringComparison.Ordinal) || QwenVoice.ModelSha.Length != 64 || QwenVoice.CodecSha.Length != 64 || !QwenVoice.EngineUrl.EndsWith("/llama-" + QwenVoice.Build + "-bin-win-vulkan-x64.zip", StringComparison.Ordinal)) throw new Exception("Her HD voice points at the wrong download.");
-                            string hdLaunch = hdVoice.StartInfo(1234).Arguments;
-                            if (!hdLaunch.Contains(QwenVoice.ModelFile) || !hdLaunch.Contains("--mmproj \"") || !hdLaunch.Contains(" --port 1234 -c 2048 -np 1 ") || !hdLaunch.EndsWith(" --poll 0 --poll-batch 0", StringComparison.Ordinal)) throw new Exception("Her HD voice starts with the wrong settings: " + hdLaunch);
-                            checks.Add("PASS HD voice pack: llama.cpp " + QwenVoice.Build + " engine, codec and Qwen3-TTS model download with their checksums and unpack from a fake server, and its server starts with a 2048 context and without busy-waiting on the CPU");
+                            // 0.7.5's llama.cpp pack and a half-finished download of it go; their clips beside it stay.
+                            string hdOld = Path.Combine(Path.Combine(hdRoot, "voice"), QwenVoice.OldEngine), hdKeptClip = Path.Combine(hdVoice.Folder, YourVoice.Kept);
+                            Directory.CreateDirectory(hdOld);
+                            File.WriteAllBytes(hdOld + ".zip.part", new byte[] { 1 });
+                            foreach (string old in QwenVoice.OldFiles) File.WriteAllBytes(Path.Combine(hdVoice.Folder, old), new byte[] { 1 });
+                            File.WriteAllBytes(hdKeptClip, new byte[] { 1 });
+                            hdVoice.Tidy();
+                            if (Directory.Exists(hdOld) || File.Exists(hdOld + ".zip.part") || Array.Exists(QwenVoice.OldFiles, old => File.Exists(Path.Combine(hdVoice.Folder, old))) || !File.Exists(hdKeptClip) || !hdVoice.Installed) throw new Exception("Her old HD voice pack wasn't cleared, or more went with it.");
+                            File.Delete(hdKeptClip);
+                            if (!QwenVoice.CodecUrl.StartsWith("https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/", StringComparison.Ordinal) || !QwenVoice.EngineUrl.StartsWith("https://", StringComparison.Ordinal) || !QwenVoice.EngineUrl.EndsWith("/" + QwenVoice.Build + "-win-vulkan-x64.zip", StringComparison.Ordinal)
+                                || !QwenVoice.ModelUrl.StartsWith("https://", StringComparison.Ordinal) || !QwenVoice.ModelUrl.EndsWith("/" + QwenVoice.ModelFile, StringComparison.Ordinal) || QwenVoice.EngineSha.Length != 64 || QwenVoice.ModelSha.Length != 64 || QwenVoice.CodecSha.Length != 64) throw new Exception("Her HD voice points at the wrong download.");
+                            ProcessStartInfo hdStart = hdVoice.StartInfo(1234);
+                            string hdLaunch = hdStart.Arguments;
+                            if (Path.GetFileName(hdStart.FileName) != "tts-server.exe" || !hdLaunch.StartsWith("--model \"", StringComparison.Ordinal) || !hdLaunch.Contains(QwenVoice.ModelFile + "\" --codec \"") || !hdLaunch.Contains(QwenVoice.CodecFile + "\" --host 127.0.0.1 --port 1234 ") || !hdLaunch.EndsWith(" --ctx-size 1024 --codec-chunk-dur 6", StringComparison.Ordinal)) throw new Exception("Her HD voice starts with the wrong settings: " + hdStart.FileName + " " + hdLaunch);
+                            checks.Add("PASS HD voice pack: the qwentts.cpp engine (" + QwenVoice.Build + "), Qwen3-TTS tokenizer and 1.7B talker download with their checksums and unpack from a fake server, the old llama.cpp pack and its half-finished downloads are cleared while their clips stay, and its server starts with a 1024-frame cache and 6-second codec chunks");
                             string hdTrouble = null;
                             byte[] hdTone = Voice.Wave(new short[12000], 24000);
                             Action<string> hdNoted = delegate(string problem) { hdTrouble = problem; };
@@ -13110,10 +13120,16 @@ namespace CapriDesktop
                             byte[] hdSaid =hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom, this is my HD voice.");
                             int hdRate;
                             short[] hdSamples = Voice.Samples(hdSaid, out hdRate);
-                            string hdBody;
-                            lock (hdAsked) hdBody = hdAsked[hdAsked.Count - 1];
-                            if (hdTrouble != null || hdRate != 24000 || hdSamples.Length != hdWave.Length || Math.Abs(hdSamples[100] - (int)Math.Round(hdWave[100] * 32767)) > 1) throw new Exception("Her HD voice didn't turn the server's float audio into her WAV: " + hdTrouble + " / " + hdRate + " Hz / " + hdSamples.Length);
-                            if (hdBody.IndexOf("POST /tts ", StringComparison.Ordinal) != 0 || hdBody.IndexOf("\"input\":\"Hey chewm, this is my HD voice.\"", StringComparison.Ordinal) < 0 || hdBody.IndexOf("\"response_format\":\"pcm\"", StringComparison.Ordinal) < 0 || hdBody.IndexOf("\"speaker_ref_b64\":\"UklGR", StringComparison.Ordinal) < 0) throw new Exception("Her HD voice sent the wrong request: " + (hdBody.Length > 300 ? hdBody.Substring(0, 300) : hdBody));
+                            string hdBody, hdClipBody;
+                            lock (hdAsked)
+                            {
+                                hdBody = hdAsked[hdAsked.Count - 1];
+                                hdClipBody = hdAsked[hdAsked.Count - 2];
+                            }
+                            if (hdTrouble != null || hdRate != 24000 || hdSamples.Length != hdWave.Length || hdSamples[100] != hdWave[100]) throw new Exception("Her HD voice didn't read the server's WAV: " + hdTrouble + " / " + hdRate + " Hz / " + hdSamples.Length);
+                            if (hdClipBody.IndexOf("POST /v1/audio/voices ", StringComparison.Ordinal) != 0 || hdClipBody.IndexOf("{\"name\":\"capri\",\"ref_text\":\"Oh, there you are!", StringComparison.Ordinal) < 0 || hdClipBody.IndexOf("\"wav_b64\":\"UklGR", StringComparison.Ordinal) < 0
+                                || hdBody.IndexOf("POST /v1/audio/speech ", StringComparison.Ordinal) != 0 || hdBody.IndexOf("\"input\":\"Hey chewm, this is my HD voice.\",\"voice\":\"capri\",\"language\":\"english\",", StringComparison.Ordinal) < 0 || hdBody.IndexOf("\"response_format\":\"wav\"", StringComparison.Ordinal) < 0)
+                                throw new Exception("Her HD voice sent the wrong requests: " + (hdClipBody.Length > 300 ? hdClipBody.Substring(0, 300) : hdClipBody) + " / " + (hdBody.Length > 300 ? hdBody.Substring(0, 300) : hdBody));
                             string hdSentence = "This sentence is here so her voice has to say a long reply in more than one piece today.";
                             string hdLong = string.Join(" ", new string[] { hdSentence, hdSentence, hdSentence, hdSentence, hdSentence, hdSentence });
                             System.Collections.Generic.List<string> hdPieces = QwenVoice.Pieces(hdLong);
@@ -13151,12 +13167,23 @@ namespace CapriDesktop
                             YourVoice.Save(hdTheirs, hdVoice.Folder);
                             string hdTheirsClip = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(hdVoice.Folder, YourVoice.Using)));
                             hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom.");
-                            string hdTheirsBody, hdHersBody;
-                            lock (hdAsked) hdTheirsBody = hdAsked[hdAsked.Count - 1];
+                            string hdTheirsClipBody, hdTheirsBody, hdHersClipBody, hdHersBody;
+                            lock (hdAsked)
+                            {
+                                hdTheirsClipBody = hdAsked[hdAsked.Count - 2];
+                                hdTheirsBody = hdAsked[hdAsked.Count - 1];
+                            }
                             YourVoice.Shelve(hdVoice.Folder);
                             hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom.");
-                            lock (hdAsked) hdHersBody = hdAsked[hdAsked.Count - 1];
-                            if (hdTrouble != null || hdTheirsBody.IndexOf("\"speaker_ref_b64\":\"" + hdTheirsClip + "\"", StringComparison.Ordinal) < 0 || hdHersBody.IndexOf(hdTheirsClip, StringComparison.Ordinal) >= 0 || hdHersBody.IndexOf("\"speaker_ref_b64\":\"UklGR", StringComparison.Ordinal) < 0 || !YourVoice.Saved(hdVoice.Folder) || YourVoice.Active(hdVoice.Folder))
+                            lock (hdAsked)
+                            {
+                                hdHersClipBody = hdAsked[hdAsked.Count - 2];
+                                hdHersBody = hdAsked[hdAsked.Count - 1];
+                            }
+                            // Their clip comes without words, so it goes in for the sound alone.
+                            if (hdTrouble != null || hdTheirsClipBody.IndexOf("POST /v1/audio/voices ", StringComparison.Ordinal) != 0 || hdTheirsClipBody.IndexOf("{\"name\":\"capri\",\"wav_b64\":\"" + hdTheirsClip + "\"}", StringComparison.Ordinal) < 0 || hdTheirsBody.IndexOf("POST /v1/audio/speech ", StringComparison.Ordinal) != 0
+                                || hdHersClipBody.IndexOf("POST /v1/audio/voices ", StringComparison.Ordinal) != 0 || hdHersClipBody.IndexOf(hdTheirsClip, StringComparison.Ordinal) >= 0 || hdHersClipBody.IndexOf("\"ref_text\":\"Oh, there you are!", StringComparison.Ordinal) < 0 || hdHersClipBody.IndexOf("\"wav_b64\":\"UklGR", StringComparison.Ordinal) < 0
+                                || hdHersBody.IndexOf("POST /v1/audio/speech ", StringComparison.Ordinal) != 0 || !YourVoice.Saved(hdVoice.Folder) || YourVoice.Active(hdVoice.Folder))
                                 throw new Exception("Her HD voice didn't clone their clip, or didn't go back to hers: " + hdTrouble);
                             hdServer.Stop();
                             byte[] hdBackup = hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Still there?");
@@ -13185,11 +13212,11 @@ namespace CapriDesktop
                                 QwenVoice.Spawn = hdSpawnWas;
                                 hdVoice.Stop();
                             }
-                            string[] hdCrashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => LoggedSince(line, hdCrashFrom) && line.Contains(" | HD voice | ") && line.EndsWith(" | llama-server stopped while loading with exit code 0x00000003", StringComparison.Ordinal));
+                            string[] hdCrashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => LoggedSince(line, hdCrashFrom) && line.Contains(" | HD voice | ") && line.EndsWith(" | tts-server stopped while loading with exit code 0x00000003", StringComparison.Ordinal));
                             if (hdCrash != "Her HD voice crashed loading. Close games, then try again." || hdCrashLines.Length != 1 || hdStopped != "quiet" || hdVoice.Awake) throw new Exception("Her HD voice didn't handle a crash or a stop while waking: " + hdCrash + " / " + hdCrashLines.Length + " log lines / " + hdStopped);
                             Directory.Delete(hdRoot, true);
-                            checks.Add("PASS HD voice speech: a fake /tts server's float PCM becomes a 24 kHz WAV, the request carries her reference clip and respelled words, a long reply goes a few sentences per call so none hits the 41 s cap, the pitch slider lifts it 6 semitones without changing its length, its own robot (10% out of the box) and glitch (Off out of the box) change it, their saved clip goes out as her reference until Her voice puts hers back, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
-                            checks.Add("LIMIT HD voice synthesis not run in the smoke test; it needs the 1.5 GB pack and a graphics card");
+                            checks.Add("PASS HD voice speech: her clip goes to a fake qwentts server once, with its words, then each line asks for her by name in English with her respelled words and its WAV becomes hers at 24 kHz, a long reply goes a few sentences per call so none hits the 41 s cap, the pitch slider lifts it 6 semitones without changing its length, its own robot and glitch (both Off out of the box) change it, their saved clip goes in without words until Her voice puts hers back, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
+                            checks.Add("LIMIT HD voice synthesis not run in the smoke test; it needs the " + Engine.Amount(QwenVoice.PackSize) + " pack and a graphics card, and the engine and talker links are placeholders until they're hosted");
                             // Their own voice server: a fake one answers like Kokoro-FastAPI or vLLM-Omni would, with a 16-bit WAV, a float WAV
                             // streamed in chunks, an MP3, an error or nothing in time, and her free voice says the lines it can't.
                             short[] vsTone = new short[22050];
