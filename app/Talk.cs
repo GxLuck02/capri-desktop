@@ -187,9 +187,56 @@ namespace CapriDesktop
 
         internal static int Cells(string text)
         {
+            if (Indic(text)) return (int)Math.Ceiling(Span(text) - 0.01);
             int cells = 0;
             foreach (char c in text ?? "") cells += Cells(c);
             return cells;
+        }
+
+        // True when the text has an Indian script in it, Devanagari to Malayalam.
+        internal static bool Indic(string text)
+        {
+            foreach (char c in text ?? "") if (c >= 0x0900 && c <= 0x0DFF) return true;
+            return false;
+        }
+
+        // Indian scripts join letters and marks into one shape, and Tamil, Kannada and Malayalam draw wider than her columns,
+        // so their words are measured in her bubble's font instead of counted. Other words still count by letter.
+        private static readonly Dictionary<string, double> measured = new Dictionary<string, double>();
+        private static Bitmap rulerPage;
+        private static Graphics ruler;
+        private static Font rulerFont;
+        private static float rulerColumn;
+
+        private static double Span(string text)
+        {
+            double cells = 0;
+            string[] words = text.Split(' ');
+            foreach (string word in words)
+            {
+                if (!Indic(word)) { foreach (char c in word) cells += Cells(c); continue; }
+                lock (measured)
+                {
+                    double width;
+                    if (!measured.TryGetValue(word, out width))
+                    {
+                        if (ruler == null)
+                        {
+                            rulerPage = new Bitmap(1, 1);
+                            ruler = Graphics.FromImage(rulerPage);
+                            ruler.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                            rulerFont = Mono(14f, FontStyle.Regular, GraphicsUnit.Pixel, "क");
+                            rulerColumn = ruler.MeasureString(new string('M', 20), rulerFont, PointF.Empty, StringFormat.GenericTypographic).Width / 20f;
+                        }
+                        // A shade over, since hinting at other sizes can draw a little wider.
+                        width = ruler.MeasureString(word, rulerFont, PointF.Empty, StringFormat.GenericTypographic).Width / rulerColumn * 1.03;
+                        if (measured.Count > 4000) measured.Clear();
+                        measured[word] = width;
+                    }
+                    cells += width;
+                }
+            }
+            return cells + words.Length - 1;
         }
 
         // True when the first letter is Arabic, Urdu, Persian or Hebrew, so the line reads right to left. Digits and
@@ -207,7 +254,7 @@ namespace CapriDesktop
         // Right-to-left lines sit against the bubble's right edge and never wrap inside it.
         internal static readonly StringFormat Leftward = Mirrored();
 
-        // Measures a line with its trailing spaces, for the caret after Thai, whose letters run a little narrower than her columns.
+        // Measures a line with its trailing spaces, for the caret after Thai and Indian scripts, whose letters don't keep to her columns.
         internal static readonly StringFormat Spaced = Trailing();
 
         private static StringFormat Trailing()
@@ -229,6 +276,19 @@ namespace CapriDesktop
         internal static string Cut(string text, int columns)
         {
             text = text ?? "";
+            if (Indic(text))
+            {
+                // Whole letters with their marks, measured.
+                int fits = 0;
+                int[] starts = System.Globalization.StringInfo.ParseCombiningCharacters(text);
+                for (int k = 1; k <= starts.Length; k++)
+                {
+                    int end = k < starts.Length ? starts[k] : text.Length;
+                    if (Cells(text.Substring(0, end)) > columns) break;
+                    fits = end;
+                }
+                return text.Substring(0, fits);
+            }
             int cells = 0, length = 0;
             while (length < text.Length && cells + Cells(text[length]) <= columns) cells += Cells(text[length++]);
             return text.Substring(0, length);
@@ -2195,7 +2255,7 @@ namespace CapriDesktop
                             else
                             {
                                 graphics.DrawString(words, text, ink, from, row2 + i * line, StringFormat.GenericTypographic);
-                                caret = new PointF(Look.Thai(words) ? from + graphics.MeasureString(words, text, PointF.Empty, Look.Spaced).Width : x + Look.Cells(shown) * cw, row2 + i * line);
+                                caret = new PointF(Look.Thai(words) || Look.Indic(words) ? from + graphics.MeasureString(words, text, PointF.Empty, Look.Spaced).Width : x + Look.Cells(shown) * cw, row2 + i * line);
                             }
                         }
                         if (cursorOn) graphics.FillRectangle(ink, caret.X + s, caret.Y + s, cw * 0.85f, line - 5 * s);

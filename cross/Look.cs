@@ -71,9 +71,45 @@ namespace CapriDesktop
 
         internal static int Cells(string text)
         {
+            if (Indic(text)) return (int)Math.Ceiling(Span(text) - 0.01);
             int cells = 0;
             foreach (char c in text ?? "") cells += Cells(c);
             return cells;
+        }
+
+        // True when the text has an Indian script in it, Devanagari to Malayalam.
+        internal static bool Indic(string text)
+        {
+            foreach (char c in text ?? "") if (c >= 0x0900 && c <= 0x0DFF) return true;
+            return false;
+        }
+
+        // Indian scripts join letters and marks into one shape, and Tamil, Kannada and Malayalam draw wider than her columns,
+        // so their words are measured in her bubble's font instead of counted, the same as on Windows.
+        private static readonly Dictionary<string, double> measured = new Dictionary<string, double>();
+
+        private static double Span(string text)
+        {
+            double cells = 0;
+            string[] words = text.Split(' ');
+            foreach (string word in words)
+            {
+                if (!Indic(word)) { foreach (char c in word) cells += Cells(c); continue; }
+                lock (measured)
+                {
+                    double width;
+                    if (!measured.TryGetValue(word, out width))
+                    {
+                        // A shade over, like Windows; a font that can't measure falls back to a column a letter.
+                        try { width = Text(word, Regular, 14, Ink).WidthIncludingTrailingWhitespace / CharWidth(14) * 1.03; }
+                        catch (Exception) { width = word.Length; }
+                        if (measured.Count > 4000) measured.Clear();
+                        measured[word] = width;
+                    }
+                    cells += width;
+                }
+            }
+            return cells + words.Length - 1;
         }
 
         // True when the first letter is Arabic, Urdu, Persian or Hebrew, so the line reads right to left. Digits and
@@ -92,6 +128,19 @@ namespace CapriDesktop
         internal static string Cut(string text, int columns)
         {
             text = text ?? "";
+            if (Indic(text))
+            {
+                // Whole letters with their marks, measured.
+                int fits = 0;
+                int[] starts = StringInfo.ParseCombiningCharacters(text);
+                for (int k = 1; k <= starts.Length; k++)
+                {
+                    int end = k < starts.Length ? starts[k] : text.Length;
+                    if (Cells(text.Substring(0, end)) > columns) break;
+                    fits = end;
+                }
+                return text.Substring(0, fits);
+            }
             int cells = 0, length = 0;
             while (length < text.Length && cells + Cells(text[length]) <= columns) cells += Cells(text[length++]);
             return text.Substring(0, length);

@@ -11799,6 +11799,37 @@ namespace CapriDesktop
                                 thaiBox.Hide();
                             }
                             checks.Add("PASS Thai in her bubble: a line breaks between two words, found by Windows' own word breaker, vowel and tone marks take no column, nothing passes the bubble's edge, every letter shows, and a new install on Thai Windows picks Thai");
+                            // Indian scripts join letters into one shape, and Tamil and Malayalam draw wider than her columns, so their
+                            // words are measured: every line, drawn in her bubble's font, stays inside it.
+                            string tamilReply = "வணக்கம் நண்பா, இன்று உன் நாள் எப்படி இருந்தது? நான் உனக்காக ஒரு பாடலை இயக்குகிறேன், எது என்று சொல்.";
+                            string malayalamReply = "ഹലോ സുഹൃത്തേ, ഇന്ന് നിന്റെ ദിവസം എങ്ങനെയുണ്ടായിരുന്നു? ഞാൻ നിനക്കായി ഒരു പാട്ട് പ്ലേ ചെയ്യാം, ഏതാണെന്ന് പറയൂ.";
+                            string indicOver = "";
+                            using (Font indicFont = Look.Mono(14f, FontStyle.Regular, GraphicsUnit.Pixel, tamilReply))
+                            using (Bitmap indicPage = new Bitmap(1, 1))
+                            using (Graphics indicRuler = Graphics.FromImage(indicPage))
+                            {
+                                indicRuler.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                                float indicColumn = Look.CharWidth(indicFont);
+                                foreach (string indicReply in new[] { tamilReply, malayalamReply, "अरे चूम, आज का दिन कैसा रहा? मैं तुम्हारे लिए एक गाना चला सकती हूँ, बस बताओ कौन सा।" })
+                                    foreach (string indicRow in Look.Wrap("CAPRI: " + indicReply, 34))
+                                        if (indicRuler.MeasureString(indicRow, indicFont, PointF.Empty, StringFormat.GenericTypographic).Width > 34 * indicColumn + 0.5f) indicOver += indicRow + " | ";
+                            }
+                            string tamilStart = Look.Cut(tamilReply, 8);
+                            if (indicOver.Length > 0 || !Look.Indic("hey " + tamilReply) || Look.Indic("hey choom") || tamilStart.Length == 0 || Look.Cells(tamilStart) > 8 || Look.Cells("hey choom") != 9)
+                                throw new Exception("An Indian script passed her bubble's edge: " + indicOver);
+                            using (SpeechBox tamilBox = new SpeechBox())
+                            {
+                                tamilBox.State = TalkState.Online;
+                                tamilBox.Heard = "hey";
+                                tamilBox.Reply = tamilReply;
+                                tamilBox.Revealed = tamilReply.Length;
+                                Rectangle tamilArea = Screen.PrimaryScreen.WorkingArea;
+                                tamilBox.Update(clock.Elapsed.TotalSeconds, 1f, new Point(tamilArea.Left + tamilArea.Width / 2, tamilArea.Bottom - 120), new Point(tamilArea.Left + tamilArea.Width / 2, tamilArea.Bottom - 10), tamilArea);
+                                if (tamilBox.Image == null) throw new Exception("A Tamil reply drew no bubble.");
+                                tamilBox.Image.Save(Path.Combine(output, "talk-tamil.png"), ImageFormat.Png);
+                                tamilBox.Hide();
+                            }
+                            checks.Add("PASS Indian scripts in her bubble: Tamil, Malayalam and Hindi words are measured in her bubble's font, so every line stays inside it and the caret follows the last letter");
                             System.Collections.Generic.List<short[]> effectsHeard = new System.Collections.Generic.List<short[]>();
                             Action<short[]> soundOut = Sfx.Out;
                             Sfx.Out = delegate(short[] sound) { effectsHeard.Add(sound); };
