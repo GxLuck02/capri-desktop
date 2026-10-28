@@ -43,12 +43,16 @@ namespace CapriDesktop
         internal readonly int Count;
         internal readonly double Fps;
         internal readonly double Height;
+        // How far a cell's middle sits from the middle of her square, as a share of her size. Narrow cells cut to the art need it.
+        internal readonly double ShiftX, ShiftY;
 
-        internal Clip(string name, int count, double fps, double height)
+        internal Clip(string name, int count, double fps, double height, double shiftX = 0, double shiftY = 0)
         {
             Count = count;
             Fps = fps;
             Height = height;
+            ShiftX = shiftX;
+            ShiftY = shiftY;
             Stream stream = typeof(Clip).Assembly.GetManifestResourceStream("Capri.Sprite." + name + ".png");
             if (stream == null) throw new FileNotFoundException("Capri's " + name + " animation is missing.");
             using (stream) Strip = new Bitmap(stream);
@@ -89,7 +93,7 @@ namespace CapriDesktop
         {
             double tall = Size * shown.Height;
             double wide = tall * shown.Wide / shown.Strip.PixelSize.Height;
-            return new Rect(Centre.X - wide / 2, Centre.Y - tall / 2, wide, tall);
+            return new Rect(Centre.X - wide / 2 + shown.ShiftX * Size, Centre.Y - tall / 2 + shown.ShiftY * Size, wide, tall);
         }
 
         public override void Render(DrawingContext context)
@@ -113,6 +117,9 @@ namespace CapriDesktop
         internal const double PerchTop = 0.17;
         internal const double PerchRight = 0.69;
         private const int BlinkFrom = 9;
+        private const int PerchBlinkFrom = 34;
+        // her artist's perch: 60 frames at 30 fps in cells cut to her outline, 26 px left of her square's middle and 36 px down it in 384 px art.
+        private const double PerchShiftX = -26.0 / 384, PerchShiftY = 36.0 / 384;
         private const double StandX = 0.35;
         private const double StandY = 0.99;
         private static readonly double[] WanderPaces = { 3, 1, 0.45, 0.18 };
@@ -136,18 +143,18 @@ namespace CapriDesktop
         private readonly Clip blinkGlitch = new Clip("blink_glitch", 4, 8, 1.11);
         private readonly Clip glitch = new Clip("glitch", 10, 15, 1.11);
         private readonly Clip dangle = new Clip("dangle", 24, 10, 1.11);
-        private readonly Clip perch = new Clip("perch", 16, 8, 1);
-        private readonly Clip perchBlink = new Clip("perch_blink", 4, 8, 1);
-        private readonly Clip perchBlinkGlitch = new Clip("perch_blink_glitch", 4, 8, 1);
-        private readonly Clip perchGlitch = new Clip("perch_glitch", 10, 15, 1);
+        private readonly Clip perch = new Clip("perch", 60, 30, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchBlink = new Clip("perch_blink", 4, 30, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchBlinkGlitch = new Clip("perch_blink_glitch", 4, 30, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchGlitch = new Clip("perch_glitch", 10, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip mouth = new Clip("mouth", 5, 12, 1.11);
         private readonly Clip walk = new Clip("walk", 12, 12, 1.11);
         private readonly Clip dance = new Clip("dance", 16, 16, 1.11);
         private readonly Clip perchDance = new Clip("perch_dance", 16, 16, 1);
         private readonly Clip arrive = new Clip("arrive", 14, 15, 1.11);
         private readonly Clip leave = new Clip("leave", 12, 15, 1.11);
-        private readonly Clip perchArrive = new Clip("perch_arrive", 14, 15, 1);
-        private readonly Clip perchLeave = new Clip("perch_leave", 12, 15, 1);
+        private readonly Clip perchArrive = new Clip("perch_arrive", 14, 15, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchLeave = new Clip("perch_leave", 12, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip grin = new Clip("grin", 16, 8, 1.11);
         internal static readonly string[] PetLines = { "Heh. Okay, I'll allow it.", "Pets logged. Morale up twelve percent.", "Careful, choom. I bite viruses." };
         private readonly List<double> petTurns = new List<double>();
@@ -329,7 +336,7 @@ namespace CapriDesktop
         private void Fit()
         {
             Width = Math.Ceiling(body.Size * 0.77 + 16);
-            Height = Math.Ceiling(body.Size * 1.12 + 16);
+            Height = Math.Ceiling(body.Size * 1.16 + 16);
             body.Centre = new Point(body.Size / 2 - FrameX, body.Size / 2 - FrameY);
         }
 
@@ -484,7 +491,8 @@ namespace CapriDesktop
             }
             int cell = index % clip.Count;
             Clip shown = clip;
-            if ((clip == idle || clip == perch) && blinkWith != null && cell >= BlinkFrom && cell < BlinkFrom + blinkWith.Count) { shown = blinkWith; cell -= BlinkFrom; }
+            int blinkFrom = clip == perch ? PerchBlinkFrom : BlinkFrom;
+            if ((clip == idle || clip == perch) && blinkWith != null && cell >= blinkFrom && cell < blinkFrom + blinkWith.Count) { shown = blinkWith; cell -= blinkFrom; }
             bool settled = !dragging && clip != dangle;
             body.Breathe = settled ? Math.Sin(now * 1.75) * 2.2 : 0;
             body.Tilt = settled ? Math.Sin(now * 0.95) * 0.65 : 0;

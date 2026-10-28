@@ -475,12 +475,16 @@ namespace CapriDesktop
         internal readonly int Count;
         internal readonly double Fps;
         internal readonly float Height;
+        // How far a cell's middle sits from the middle of her square, as a share of her size. Narrow cells cut to the art need it.
+        internal readonly float ShiftX, ShiftY;
 
-        internal Clip(string name, int count, double fps, float height)
+        internal Clip(string name, int count, double fps, float height, float shiftX = 0, float shiftY = 0)
         {
             Count = count;
             Fps = fps;
             Height = height;
+            ShiftX = shiftX;
+            ShiftY = shiftY;
             Strip = Companion.LoadArt("Capri.Sprite." + name + ".png");
             if (Strip == null) throw new FileNotFoundException("Capri's " + name + " animation is missing. Rebuild with assets/sprites.");
         }
@@ -491,6 +495,8 @@ namespace CapriDesktop
             Count = art.Count;
             Fps = art.Fps;
             Height = art.Height;
+            ShiftX = art.ShiftX;
+            ShiftY = art.ShiftY;
         }
     }
 
@@ -512,18 +518,21 @@ namespace CapriDesktop
         private readonly Clip dangle = new Clip("dangle", 24, 10, 1.11f);
         private readonly Clip sleep = new Clip("sleep", 16, 6, 1.11f);
         private readonly Clip wake = new Clip("wake", 13, 15, 1.11f);
-        private readonly Clip perch = new Clip("perch", 16, 8, 1);
-        private readonly Clip perchBlink = new Clip("perch_blink", 4, 8, 1);
-        private readonly Clip perchBlinkGlitch = new Clip("perch_blink_glitch", 4, 8, 1);
-        private readonly Clip perchGlitch = new Clip("perch_glitch", 10, 15, 1);
+        // her artist's perch: 60 frames at 30 fps. Its cells are cut to her outline, so they sit 26 px left of her
+        // square's middle and start 36 px down it, in 384 px art, which leaves room for her longer dangling legs.
+        private const float PerchShiftX = -26f / 384, PerchShiftY = 36f / 384;
+        private readonly Clip perch = new Clip("perch", 60, 30, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchBlink = new Clip("perch_blink", 4, 30, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchBlinkGlitch = new Clip("perch_blink_glitch", 4, 30, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchGlitch = new Clip("perch_glitch", 10, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip mouth = new Clip("mouth", 5, 12, 1.11f);
         private readonly Clip walk = new Clip("walk", 12, 12, 1.11f);
         private readonly Clip dance;
         private readonly Clip perchDance;
         private readonly Clip arrive = new Clip("arrive", 14, 15, 1.11f);
         private readonly Clip leave = new Clip("leave", 12, 15, 1.11f);
-        private readonly Clip perchArrive = new Clip("perch_arrive", 14, 15, 1);
-        private readonly Clip perchLeave = new Clip("perch_leave", 12, 15, 1);
+        private readonly Clip perchArrive = new Clip("perch_arrive", 14, 15, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchLeave = new Clip("perch_leave", 12, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Random random = new Random();
         private readonly NotifyIcon tray;
         private readonly ContextMenuStrip menu;
@@ -800,7 +809,8 @@ namespace CapriDesktop
         internal static Action<string> Browse = delegate(string page) { try { Process.Start(page); } catch (System.ComponentModel.Win32Exception) { } };
         // Opens a file of hers in Notepad. Smoke tests swap it to see which file a button opened.
         internal static Action<string> Edit = delegate(string path) { using (Process.Start(new ProcessStartInfo("notepad.exe", "\"" + path + "\"") { UseShellExecute = false })) { } };
-        private const int PaddingSize = 36;
+        // Room around her square, so her perched legs (they hang 8% of her size below it) aren't cut off at Giant.
+        private const int PaddingSize = 48;
         internal const int MinSize = 140;
         internal const int MaxSize = 560;
         private const int DismountId = 0x4361;
@@ -817,6 +827,7 @@ namespace CapriDesktop
         private bool typeKey;
         private bool hideKey;
         private const int BlinkFrom = 9;
+        private const int PerchBlinkFrom = 34;
         internal bool TestFailed;
 
         internal Companion(string data, EventWaitHandle signal, bool smoke)
@@ -5339,7 +5350,8 @@ namespace CapriDesktop
                 if ((clip == arrive || clip == perchArrive) && !instant && preferences.Motion) Arrival(now);
             }
             Clip shown = clip;
-            if ((clip == idle || clip == perch) && blinkWith != null && cell >= BlinkFrom && cell < BlinkFrom + blinkWith.Count) { shown = blinkWith; cell -= BlinkFrom; }
+            int blinkFrom = clip == perch ? PerchBlinkFrom : BlinkFrom;
+            if ((clip == idle || clip == perch) && blinkWith != null && cell >= blinkFrom && cell < blinkFrom + blinkWith.Count) { shown = blinkWith; cell -= blinkFrom; }
             int talk = MouthCell(now, shown);
             Bitmap next = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb);
             using (Graphics graphics = Graphics.FromImage(next)) Draw(graphics, shown, cell, talk);
@@ -5411,10 +5423,11 @@ namespace CapriDesktop
             int width = shown.Strip.Width / shown.Count;
             float tall = preferences.Size * shown.Height;
             float wide = tall * width / shown.Strip.Height;
+            float shiftX = shown.ShiftX * preferences.Size, shiftY = shown.ShiftY * preferences.Size;
             if (shown == walk && walking && preferences.Motion) Wisp(graphics, now, Math.Sign(walkTo - anchor.X) * (facingLeft ? -1 : 1), wide, tall);
             float nod = shown == dance || shown == perchDance ? NodDepth() : 0;
-            if (nod > 0.002f) Nod(graphics, shown.Strip, cell, width, wide, tall, nod, shown == perchDance);
-            else graphics.DrawImage(shown.Strip, new RectangleF(-wide / 2f, -tall / 2f, wide, tall), new RectangleF(cell * width, 0, width, shown.Strip.Height), GraphicsUnit.Pixel);
+            if (nod > 0.002f) Nod(graphics, shown.Strip, cell, width, wide, tall, nod, shown == perchDance, shiftX, shiftY);
+            else graphics.DrawImage(shown.Strip, new RectangleF(-wide / 2f + shiftX, -tall / 2f + shiftY, wide, tall), new RectangleF(cell * width, 0, width, shown.Strip.Height), GraphicsUnit.Pixel);
             if (talk >= 0) graphics.DrawImage(mouth.Strip, new RectangleF(-wide / 2f, -tall / 2f, wide, tall), new RectangleF(talk * width, 0, width, mouth.Strip.Height), GraphicsUnit.Pixel);
             if (notes.Count > 0 && preferences.Motion) Notes(graphics, now, seat != null || riding || onPanel);
         }
@@ -5502,16 +5515,18 @@ namespace CapriDesktop
             return edges;
         }
 
-        internal static void Nod(Graphics graphics, Bitmap strip, int cell, int width, float wide, float tall, float nod, bool sitting)
+        internal static void Nod(Graphics graphics, Bitmap strip, int cell, int width, float wide, float tall, float nod, bool sitting, float shiftX = 0, float shiftY = 0)
         {
             int high = strip.Height;
-            float head = sitting ? 196 : 138, chest = sitting ? 232 : 176, neck = sitting ? 214 : 152;
             float scale = tall / high, left = cell * width, drop = nod * 10, lean = nod * 0.22f;
+            // Her neck rows are measured in her square; a cell that starts lower down has them higher up.
+            float rowsDown = shiftY / scale;
+            float head = (sitting ? 196 : 138) - rowsDown, chest = (sitting ? 232 : 176) - rowsDown, neck = (sitting ? 214 : 152) - rowsDown;
             Func<float, float, PointF> at = delegate(float x, float y)
             {
                 float w = y <= head ? 1 : y >= chest ? 0 : (chest - y) / (chest - head);
                 w = w * w * (3 - 2 * w);
-                return new PointF((x + (neck - y) * lean * w) * scale - wide / 2f, (y + drop * w) * scale - tall / 2f);
+                return new PointF((x + (neck - y) * lean * w) * scale - wide / 2f + shiftX, (y + drop * w) * scale - tall / 2f + shiftY);
             };
             Action<float, float> piece = delegate(float top, float bottom)
             {
@@ -6869,7 +6884,7 @@ namespace CapriDesktop
                             if (!cornered) throw new Exception("She can't sit in the bottom corner: " + perched + " in " + corner);
                             checks.Add("PASS screen bounds: her body, not her see-through window, stays on screen, so she stands and sits right in the corners");
                             ((ToolStripMenuItem)((ToolStripMenuItem)menu.Items[4]).DropDownItems[0]).PerformClick();
-                            if (Width != 242) throw new Exception("Small size failed.");
+                            if (Width != 170 + PaddingSize * 2) throw new Exception("Small size failed.");
                             ((ToolStripMenuItem)((ToolStripMenuItem)menu.Items[4]).DropDownItems[1]).PerformClick();
                             checks.Add("PASS size menu");
                             string[] tops = new string[menu.Items.Count];
