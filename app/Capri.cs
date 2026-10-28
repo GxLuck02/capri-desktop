@@ -9628,22 +9628,30 @@ namespace CapriDesktop
                                 System.Collections.Generic.List<string> driveAsked = new System.Collections.Generic.List<string>();
                                 System.Net.Sockets.TcpListener driveFake;
                                 string driveAnthropic = Brain.Anthropic;
-                                Brain.Anthropic = FakeServer(new[] { "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Clicking it.\"},{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"left_click\",\"toolset_name\":\"computer\",\"input\":{\"coordinate\":[12,34]}}],\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5}}" }, driveAsked, out driveFake);
+                                string driveReply = "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Clicking it.\"},{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"left_click\",\"toolset_name\":\"computer\",\"input\":{\"coordinate\":[12,34]}}],\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5}}";
+                                Brain.Anthropic = FakeServer(new[] { driveReply, driveReply }, driveAsked, out driveFake);
                                 try
                                 {
                                     Brain driver = new Brain();
                                     driver.Remote = new Cloud("sk-ant-test", "claude-sonnet-5-5");
                                     driver.Model = "claude-sonnet-5-5";
                                     ClaudeReply drove = driver.Drive(Computer.Seeing, Computer.Toolset, "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]");
+                                    // Claude Opus 5, which doesn't bind thinking to the turns before it, gets no thinking setting or its beta.
+                                    driver.Remote = new Cloud("sk-ant-test", "claude-opus-5");
+                                    driver.Drive(Computer.Seeing, Computer.Toolset, "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]");
+                                    driver.Remote = new Cloud("sk-ant-test", "claude-sonnet-5-5");
                                     string[] driveSent;
                                     lock (driveAsked) driveSent = driveAsked.ToArray();
-                                    string driveRequest = driveSent.Length == 1 ? driveSent[0] : "";
-                                    int driveBody = driveRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal);
-                                    string driveJson = driveBody < 0 ? "" : driveRequest.Substring(driveBody + 4);
+                                    string driveRequest = driveSent.Length == 2 ? driveSent[0] : "", unboundRequest = driveSent.Length == 2 ? driveSent[1] : "";
+                                    int driveBody = driveRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal), unboundBody = unboundRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                                    string driveJson = driveBody < 0 ? "" : driveRequest.Substring(driveBody + 4), unboundJson = unboundBody < 0 ? "" : unboundRequest.Substring(unboundBody + 4);
                                     bool driveShaped = Brain.Field(driveJson, "tools") == Computer.Toolset && Brain.Field(driveJson, "max_tokens") == "4096" && Brain.Field(driveJson, "output_config") == "{\"effort\":\"low\"}"
                                         && Brain.Field(driveJson, "system") == "[{\"type\":\"text\",\"text\":" + Voice.Quote(Computer.Seeing) + ",\"cache_control\":{\"type\":\"ephemeral\"}}]"
                                         && Brain.Field(driveJson, "messages") == "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]"
-                                        && driveRequest.IndexOf("anthropic-beta: server-side-fallback-2026-07-01", StringComparison.OrdinalIgnoreCase) > 0;
+                                        && Brain.Field(driveJson, "thinking") == "{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}}"
+                                        && driveRequest.IndexOf("anthropic-beta: server-side-fallback-2026-07-01,thinking-binding-controls-2026-08-01\r\n", StringComparison.OrdinalIgnoreCase) > 0
+                                        && Brain.Field(unboundJson, "thinking") == null && Brain.Field(unboundJson, "max_tokens") == "4096"
+                                        && unboundRequest.IndexOf("anthropic-beta: server-side-fallback-2026-07-01\r\n", StringComparison.OrdinalIgnoreCase) > 0;
                                     bool driveRead = drove.Raw == "[{\"type\":\"text\",\"text\":\"Clicking it.\"},{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"left_click\",\"toolset_name\":\"computer\",\"input\":{\"coordinate\":[12,34]}}]"
                                         && drove.Content.Length == 2 && drove.Content[1].Toolset == "computer" && drove.Content[1].Id == "toolu_1" && drove.Content[1].Input.Coordinate[1] == 34;
                                     bool driveNew = driver.Drives;

@@ -1413,11 +1413,17 @@ namespace CapriDesktop
             Cloud remote = Remote;
             if (remote == null || !remote.Claude) throw new BrainException(Offline);
             bool fallback = Regex.IsMatch(remote.Model, @"^claude-(opus-5|sonnet-5-5|fable-5-1)");
-            string body = "{\"model\":" + Voice.Quote(remote.Model) + ",\"max_tokens\":4096,\"system\":[{\"type\":\"text\",\"text\":" + Voice.Quote(system) + ",\"cache_control\":{\"type\":\"ephemeral\"}}],\"messages\":" + messages + ",\"tools\":" + tools + ",\"output_config\":{\"effort\":\"low\"}" + (fallback ? ",\"fallbacks\":\"default\"" : "") + "}";
+            // Her hands keep only the newest three pictures, which changes earlier turns. These models bind each thinking block to
+            // the turns before it, and accounts made since 31 August 2026 reject a changed one with a 400, so it's dropped instead
+            // and the model thinks again. Adaptive is already their default.
+            bool bound = Regex.IsMatch(remote.Model, @"^claude-(opus-5-5|sonnet-5-5|fable-5-1|haiku-5-5)");
+            string body = "{\"model\":" + Voice.Quote(remote.Model) + ",\"max_tokens\":4096" + (bound ? ",\"thinking\":{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}}" : "")
+                + ",\"system\":[{\"type\":\"text\",\"text\":" + Voice.Quote(system) + ",\"cache_control\":{\"type\":\"ephemeral\"}}],\"messages\":" + messages + ",\"tools\":" + tools + ",\"output_config\":{\"effort\":\"low\"}" + (fallback ? ",\"fallbacks\":\"default\"" : "") + "}";
+            string betas = (fallback ? "server-side-fallback-2026-07-01" : "") + (fallback && bound ? "," : "") + (bound ? "thinking-binding-controls-2026-08-01" : "");
             string text = Send<string>(Anthropic + "/v1/messages", body, CloudWait, null, delegate(HttpWebRequest request)
             {
                 Sign(request, remote.Key, true);
-                if (fallback) request.Headers["anthropic-beta"] = "server-side-fallback-2026-07-01";
+                if (betas.Length > 0) request.Headers["anthropic-beta"] = betas;
             }, null, ticket);
             return Parsed(text);
         }
