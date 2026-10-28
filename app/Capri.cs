@@ -162,6 +162,8 @@ namespace CapriDesktop
         [DataMember] public string Nickname;
         [DataMember] public int Wordiness;
         [DataMember] public int Recall = 8;
+        // Remember our chats is on by default: transcripts and memories.md stay on this PC.
+        [DataMember] public bool Remembers = true;
         [DataMember] public int Volume = 100;
         [DataMember] public int Sounds = 60;
         [DataMember] public int SleepAfter = 120;
@@ -207,6 +209,7 @@ namespace CapriDesktop
             Motion = true;
             OnTop = true;
             Recall = 8;
+            Remembers = true;
             Volume = 100;
             Sounds = 60;
             SleepAfter = 120;
@@ -890,6 +893,8 @@ namespace CapriDesktop
             Brain.PersonalityPath = Path.Combine(data, Brain.PersonalityName);
             if (smoke) foreach (string old in new[] { Brain.PersonalityPath, Brain.PersonalityBackup }) if (File.Exists(old)) File.Delete(old);
             Brain.MakePersonality();
+            Brain.MemoriesPath = Path.Combine(data, "memories.md");
+            Brain.TranscriptPath = Path.Combine(data, "transcripts");
             engine = new Engine(data);
             kokoro = new LocalVoice(data);
             qwen = new QwenVoice(data);
@@ -903,6 +908,8 @@ namespace CapriDesktop
             Brain.Nickname = Brain.Nick(preferences.Nickname).Length == 0 ? null : Brain.Nick(preferences.Nickname);
             Brain.Wordiness = Math.Max(0, Math.Min(2, preferences.Wordiness));
             Brain.Recall = preferences.Recall == 16 || preferences.Recall == 32 ? preferences.Recall : 8;
+            Brain.Keeping = preferences.Remembers;
+            if (!smoke) Brain.Keeper = brain;
             if (!smoke) brain.Load(Path.Combine(data, "chat.json"));
             Voice.Loudness = Math.Max(0, Math.Min(150, preferences.Volume));
             VoiceFx.Pitch = Math.Max(-VoiceFx.MostPitch, Math.Min(VoiceFx.MostPitch, preferences.VoicePitch));
@@ -2082,6 +2089,8 @@ namespace CapriDesktop
             if (missed) done = Hands.Do(tool, args);
             System.Collections.Generic.List<string> ran = ranHere;
             if (ran != null && !string.IsNullOrEmpty(done)) ran.Add(done);
+            // A look is already in her transcript; anything else she did goes in as a job.
+            if (tool != "look_at_screen" && !string.IsNullOrEmpty(done)) Brain.Transcribe(null, "Job: " + done);
             return done;
         }
 
@@ -2294,6 +2303,31 @@ namespace CapriDesktop
             heard = "settings";
             box.Prompt = "> sys: ";
             Answer(++asking, backup.Length > 0 ? Brain.ResetKept : Brain.ResetDone, TalkState.Talking);
+        }
+
+        // Shows memories.md in File Explorer, beside her transcripts folder.
+        internal void OpenMemories()
+        {
+            string path = Brain.MemoriesPath;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                Directory.CreateDirectory(Brain.TranscriptPath);
+                if (!File.Exists(path)) File.WriteAllText(path, Brain.MemoriesHead);
+                if (testing) return;
+                using (Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = false })) { }
+            }
+            catch (Exception) { Tell("open memories", "Couldn't open my memories. They live in " + Path.GetDirectoryName(path) + "."); }
+        }
+
+        internal bool Remembers { get { return preferences.Remembers; } }
+
+        internal void ToggleRemembering()
+        {
+            preferences.Remembers = !preferences.Remembers;
+            Brain.Keeping = preferences.Remembers;
+            SavePreferences();
+            mainframe.Sync();
         }
 
         private static readonly double[] WanderPaces = { 3, 1, 0.45, 0.18 };
@@ -3226,8 +3260,8 @@ namespace CapriDesktop
             // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
             if (Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) { Glimpsed(saw); return; }
             glanced.Add(Tuple.Create(clock.Elapsed.TotalSeconds, said));
-            brain.Remember(string.IsNullOrEmpty(saw) ? "(You glanced at their screen.)" : "(You glanced at their screen and saw: " + saw + ")", said);
             brain.Saw(saw, said);
+            brain.Remember(string.IsNullOrEmpty(saw) ? "(You glanced at their screen.)" : "(You glanced at their screen and saw: " + saw + ")", said);
             Tell("watching", said);
         }
 
@@ -5255,6 +5289,7 @@ namespace CapriDesktop
         private void ChatHeard(string text)
         {
             if (!chatting) return;
+            Brain.Transcribe("You (voice)", text);
             spoke = true;
             stirred = Environment.TickCount;
             checkedIn = false;
@@ -5319,6 +5354,7 @@ namespace CapriDesktop
             string promised = null;
             lock (shortcutGate) if (!toolAsked && heardLast != null && Hands.Promised(said)) { promised = heardLast; heardLast = null; }
             if (promised != null) { string missed = said; ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(4000); lock (shortcutGate) if (toolAsked) return; Brain.Log("https://api.elevenlabs.io/v1/convai/conversation", -1, "Voice chat said she'd do it but no tool ran. Heard: " + promised + " | Said: " + missed); }); }
+            Brain.Transcribe("Capri (voice)", said);
             reply = said;
             replyStart = clock.Elapsed.TotalSeconds;
             replyDone = -1;
@@ -8226,6 +8262,8 @@ namespace CapriDesktop
                                 string notesFile = Brain.MemoryPath;
                                 if (notesFile == null || Path.GetFileName(notesFile) != "me.md") throw new Exception("Her notes file is not set.");
                                 if (File.Exists(notesFile)) File.Delete(notesFile);
+                                if (File.Exists(Brain.MemoriesPath)) File.Delete(Brain.MemoriesPath);
+                                if (Directory.Exists(Brain.TranscriptPath)) Directory.Delete(Brain.TranscriptPath, true);
                                 if (Brain.Notes() != "" || Brain.Remembered() != "") throw new Exception("Empty notes still put something in her prompt.");
                                 if (!Hands.Heard("Capri, remember that I love Hollow Knight.", out shortTool, out shortArgs) || shortTool != "remember" || shortArgs.Action != null || shortArgs.Text != "I love Hollow Knight") throw new Exception("Remember was heard wrong: " + shortTool + " / " + shortArgs.Text);
                                 string savedNote = Hands.Do(shortTool, shortArgs);
@@ -10625,6 +10663,104 @@ namespace CapriDesktop
                                     }
                                     finally { Brain.OpenAi = seenOpenAi; seenFake.Stop(); Brain.Unsee(); }
                                     checks.Add("PASS screen memory replies: a glance answers SAW and SAY, read with bold, lowercase, dashes or either order; SKIP stays silent and keeps what she saw; a blocked description stays out; her chat prompt lists what she saw, oldest first, for 3 hours and across a restart");
+                                    string transcriptsWas = Brain.TranscriptPath, memoriesWas = Brain.MemoriesPath, foldOpenAi = Brain.OpenAi;
+                                    string memoryRoot = Path.Combine(Path.GetDirectoryName(Brain.MemoryPath), "memory-test");
+                                    if (Directory.Exists(memoryRoot)) Directory.Delete(memoryRoot, true);
+                                    Brain.TranscriptPath = Path.Combine(memoryRoot, "transcripts");
+                                    Brain.MemoriesPath = Path.Combine(memoryRoot, "memories.md");
+                                    System.Collections.Generic.List<string> foldAsked = new System.Collections.Generic.List<string>();
+                                    System.Net.Sockets.TcpListener foldFake = null;
+                                    try
+                                    {
+                                        string todayName = DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+                                        string todayFile = Path.Combine(Brain.TranscriptPath, todayName + ".md"), queueFile = Path.Combine(Brain.TranscriptPath, "unfolded.txt");
+                                        Brain.Transcribe("You", "I finally beat Malenia after 40 tries");
+                                        Brain logger = new Brain();
+                                        logger.Remember("did you see that?", "Forty tries, choom. Legend.");
+                                        logger.Remember("(You glanced at their screen and saw: an Elden Ring victory screen)", "GG.");
+                                        logger.Saw("Elden Ring, a victory screen", null);
+                                        Brain.Transcribe(null, "Job: Opened Spotify.");
+                                        Brain.Keeping = false;
+                                        Brain.Transcribe("You", "this line stays out");
+                                        logger.Remember("this stays out too", "Yep.");
+                                        Brain.Keeping = true;
+                                        Brain.Unsee();
+                                        string written = File.ReadAllText(todayFile);
+                                        string[] queued = File.ReadAllLines(queueFile);
+                                        bool transcribed = written.StartsWith("# Capri and you, ", StringComparison.Ordinal) && written.IndexOf("> Kept on this PC only, never uploaded.", StringComparison.Ordinal) >= 0
+                                            && System.Text.RegularExpressions.Regex.IsMatch(written, @"\n\*\*\d\d:\d\d You:\*\* I finally beat Malenia after 40 tries\n\*\*\d\d:\d\d You:\*\* did you see that\?\n\*\*\d\d:\d\d Capri:\*\* Forty tries, choom\. Legend\.\n\*\*\d\d:\d\d Capri:\*\* GG\.\n\*\d\d:\d\d She glanced at your screen: Elden Ring, a victory screen\. She stayed quiet\.\*\n\*\d\d:\d\d Job: Opened Spotify\.\*\n$")
+                                            && queued.Length == 6 && queued[0].StartsWith(todayName + " ", StringComparison.Ordinal) && queued[0].EndsWith(" You: I finally beat Malenia after 40 tries", StringComparison.Ordinal) && queued[5].EndsWith(" Job: Opened Spotify.", StringComparison.Ordinal);
+                                        if (!transcribed) throw new Exception("Her transcript wasn't written right: " + written + " / " + string.Join(" | ", queued));
+                                        string yesterdayLine = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) + " 23:50 You: night";
+                                        if (Brain.FoldDue(queued, DateTime.Now) || Brain.FoldDue(new string[0], DateTime.Now) || !Brain.FoldDue(new[] { yesterdayLine }, DateTime.Now) || !Brain.FoldDue(new[] { todayName + " 10:00 You: " + new string('x', Brain.FoldBudget) }, DateTime.Now)) throw new Exception("Folding wasn't due at the right times.");
+                                        string forgotDays = "## Monday 26 October 2026\n- They started a Roblox obby.\n## Tuesday 27 October 2026\n- They beat Hornet.";
+                                        if (Brain.Unforgotten(forgotDays, "## Wednesday 28 October 2026\n- They beat Malenia.") != forgotDays + "\n## Wednesday 28 October 2026\n- They beat Malenia."
+                                            || Brain.Unforgotten(forgotDays, "## Earlier\n- They started an obby and beat Hornet.\n## Wednesday 28 October 2026\n- They beat Malenia.") != "## Earlier\n- They started an obby and beat Hornet.\n## Wednesday 28 October 2026\n- They beat Malenia."
+                                            || Brain.Unforgotten("## Earlier\n- They main Jett.\n" + forgotDays, "## Mon 26 Oct 2026\n- They started a Roblox obby with lava.\n## Tue 27 Oct 2026\n- They beat Hornet.") != "## Earlier\n- They main Jett.\n## Mon 26 Oct 2026\n- They started a Roblox obby with lava.\n## Tue 27 Oct 2026\n- They beat Hornet."
+                                            || Brain.Unforgotten(forgotDays, "- They started a Roblox obby.\n- They beat Hornet.\n- They beat Malenia.") != "- They started a Roblox obby.\n- They beat Hornet.\n- They beat Malenia."
+                                            || Brain.Unforgotten("", "## Wednesday 28 October 2026\n- They beat Malenia.") != "## Wednesday 28 October 2026\n- They beat Malenia.") throw new Exception("A fold that left out a day lost it, or kept a day it merged into Earlier.");
+                                        string longMemory = Brain.MemoriesHead + "## Earlier\n" + string.Join("\n", System.Linq.Enumerable.Repeat("- They're building a Roblox obby with lava jumps and a secret room behind the waterfall.", 12)) + "\n";
+                                        Brain.Transcribe("You", "my address is 14 Carrington Street btw");
+                                        Brain.Transcribe("You", "I'm at 7 Ocean Parade now, come say hi");
+                                        Brain.OpenAi = FakeServer(new[]
+                                        {
+                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"## Wednesday 28 October 2026\\n- They finally beat Malenia in Elden Ring after 40 tries, and I called them a legend.\\n* They finally beat Malenia in Elden Ring after 40 tries, and I called them a legend.\\n- They live at 42 Wallaby Way.\\n- Their phone number is 0412 345 678.\\n- Their school is called Hillcrest High.\\n- They don't keep addresses, but they mentioned 14 Carrington Street.\\n- They hang out at 7 Ocean Parade.\\nSome chatter that isn't a bullet.\"}}]}",
+                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"## Earlier\\n- They like games.\"}}]}",
+                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"## Earlier\\n## Thursday 29 October 2026\\n- They like games, apparently.\"}}]}",
+                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"You beat the Hornet fight, choom. I remember.\"}}]}"
+                                        }, foldAsked, out foldFake);
+                                        Brain folder = new Brain();
+                                        folder.Remote = new Cloud("sk-proj-test", "gpt-5-mini");
+                                        folder.Model = "gpt-5-mini";
+                                        string folded = folder.Fold();
+                                        string memoriesText = File.ReadAllText(Brain.MemoriesPath);
+                                        string foldSent;
+                                        lock (foldAsked) foldSent = string.Join("\n", foldAsked.ToArray());
+                                        if (folded != null || memoriesText != Brain.MemoriesHead + "## Wednesday 28 October 2026\n- They finally beat Malenia in Elden Ring after 40 tries, and I called them a legend.\n" || File.ReadAllText(queueFile) != "") throw new Exception("Folding didn't write memories.md or keep personal details out: " + folded + " / " + memoriesText);
+                                        if (foldSent.IndexOf("(empty)", StringComparison.Ordinal) < 0 || foldSent.IndexOf("You: I finally beat Malenia after 40 tries", StringComparison.Ordinal) < 0 || foldSent.IndexOf("Job: Opened Spotify.", StringComparison.Ordinal) < 0 || foldSent.IndexOf("Never write addresses, schools, phone numbers", StringComparison.Ordinal) < 0 || foldSent.IndexOf("Carrington", StringComparison.Ordinal) >= 0 || foldSent.IndexOf("Ocean Parade", StringComparison.Ordinal) >= 0) throw new Exception("Folding didn't send her the waiting lines and the rules, or sent their address: " + foldSent);
+                                        string remembered = Brain.Remembered();
+                                        Brain.Keeping = false;
+                                        string unremembered = Brain.Memories();
+                                        Brain.Keeping = true;
+                                        if (remembered.IndexOf("\nYour memories of past chats with them, from memories.md", StringComparison.Ordinal) < 0 || remembered.IndexOf("## Wednesday 28 October 2026\n- They finally beat Malenia", StringComparison.Ordinal) < 0 || unremembered != "") throw new Exception("memories.md didn't reach her prompt, or still did with Remember our chats off: " + remembered);
+                                        File.WriteAllText(Brain.MemoriesPath, longMemory);
+                                        Brain.Transcribe("You", "I like games");
+                                        string dropped = folder.Fold();
+                                        if (dropped == null || File.ReadAllText(Brain.MemoriesPath) != longMemory || File.ReadAllLines(queueFile).Length != 1) throw new Exception("A fold that lost most of her memories replaced them: " + dropped);
+                                        string newDayOnly = folder.Fold();
+                                        if (newDayOnly != null || File.ReadAllText(Brain.MemoriesPath) != longMemory + "## Thursday 29 October 2026\n- They like games, apparently.\n" || File.ReadAllText(queueFile) != "") throw new Exception("A fold that sent back only the new day lost the older ones: " + newDayOnly + " / " + File.ReadAllText(Brain.MemoriesPath));
+                                        File.WriteAllText(Path.Combine(Brain.TranscriptPath, "2026-10-20.md"), "# Capri and you, Tuesday 20 October 2026\n> Kept on this PC only, never uploaded.\n\n**21:04 You:** We beat the Hornet fight in Silksong!\n**21:05 Capri:** Took you long enough.\n**21:30 You:** going to bed\n");
+                                        string recalled = Brain.Recalled("remember when we beat Hornet?");
+                                        if (recalled.IndexOf("- 2026-10-20 21:04 You: We beat the Hornet fight in Silksong!", StringComparison.Ordinal) < 0 || recalled.IndexOf("going to bed", StringComparison.Ordinal) >= 0 || Brain.Recalled("how's it going?") != "" || Brain.Recalled("remember when we did stuff?") != "" || Brain.Recalled("remember my address on Carrington Street?") != "") throw new Exception("Remember when didn't find the right lines, or found an address: " + recalled);
+                                        Brain rememberer = new Brain();
+                                        rememberer.Remote = new Cloud("sk-proj-test", "gpt-5-mini");
+                                        rememberer.Model = "gpt-5-mini";
+                                        string recallSaid = rememberer.Ask("remember when we beat Hornet?");
+                                        lock (foldAsked) foldSent = foldAsked.Count == 4 ? foldAsked[3] : "";
+                                        if (recallSaid != "You beat the Hornet fight, choom. I remember." || foldSent.IndexOf("We beat the Hornet fight in Silksong!", StringComparison.Ordinal) < 0) throw new Exception("Remember when didn't reach her chat: " + recallSaid + " / " + foldSent);
+                                        File.Delete(Brain.MemoriesPath);
+                                        OpenMemories();
+                                        if (File.ReadAllText(Brain.MemoriesPath) != Brain.MemoriesHead || !Directory.Exists(Brain.TranscriptPath)) throw new Exception("Open her memories didn't make memories.md.");
+                                        DataContractJsonSerializer rememberJson = new DataContractJsonSerializer(typeof(Preferences));
+                                        Preferences rememberOld = (Preferences)rememberJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Size\":240}")));
+                                        Preferences rememberOff = (Preferences)rememberJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Remembers\":false,\"Size\":240}")));
+                                        if (!new Preferences().Remembers || !rememberOld.Remembers || rememberOff.Remembers) throw new Exception("Remember our chats isn't on by default, or off doesn't stick.");
+                                        mainframe.FlipRemembering();
+                                        bool rememberStopped = !preferences.Remembers && !Brain.Keeping && !mainframe.RemembersShown && !LoadPreferences().Remembers;
+                                        mainframe.FlipRemembering();
+                                        if (!rememberStopped || !preferences.Remembers || !Brain.Keeping || !mainframe.RemembersShown || !LoadPreferences().Remembers) throw new Exception("Remember our chats didn't switch off and back on and save.");
+                                    }
+                                    finally
+                                    {
+                                        Brain.TranscriptPath = transcriptsWas;
+                                        Brain.MemoriesPath = memoriesWas;
+                                        Brain.OpenAi = foldOpenAi;
+                                        Brain.Keeping = true;
+                                        Brain.Unsee();
+                                        if (foldFake != null) foldFake.Stop();
+                                        if (Directory.Exists(memoryRoot)) Directory.Delete(memoryRoot, true);
+                                    }
+                                    checks.Add("PASS longer memory: chat, her own lines, glances and jobs go in a daily transcript on this PC, folding runs on a new day or when the lines outgrow her chat, the picked brain folds them into memories.md without addresses, schools or numbers, a fold that loses most memories is refused, a day the brain leaves out is kept unless it went into Earlier, memories.md reaches her prompt only with Remember our chats on, remember when finds old transcript lines, and the switch saves");
                                     string curses = "King of Curses with Malevolent Shrine on the hotbar, choom? Somebody's been watching too much anime.";
                                     string[] cursed = { curses };
                                     if (!Repeats("That King of Curses moveset again? Malevolent Shrine spam incoming.", cursed, "") || !Repeats("still running that king of curses build huh", cursed, "") || !Repeats(curses, cursed, "")) throw new Exception("A glance repeated a name it already brought up.");
@@ -10784,7 +10920,7 @@ namespace CapriDesktop
                             int mainTall = mainframe.ClientSize.Height, mainWide = mainframe.ClientSize.Width;
                             mainframe.ShowSettings(true);
                             // Settings opens a second column beside the first. With four voice sliders and her perch row it can be taller than the main page too.
-                            if (!mainframe.SettingsShown || mainframe.ClientSize.Width <= mainWide || mainframe.SettingsStatus != "English | 100% | 60% | Off | 2 min | dance | intro | Short | Short | Normal") throw new Exception("The settings page did not open right: " + mainframe.SettingsStatus);
+                            if (!mainframe.SettingsShown || mainframe.ClientSize.Width <= mainWide || mainframe.SettingsStatus != "English | 100% | 60% | Off | 2 min | dance | intro | Short | Short | Normal") throw new Exception("The settings page did not open right: " + mainframe.SettingsStatus + " / " + mainWide + " to " + mainframe.ClientSize.Width + " wide, " + mainTall + " to " + mainframe.ClientSize.Height + " tall");
                             snap("mainframe-settings.png");
                             string pageTabs = mainframe.TabWalk();
                             if (pageTabs != null) throw new Exception("Settings page keyboard: " + pageTabs);
@@ -12868,6 +13004,7 @@ namespace CapriDesktop
                             preferences.AgentPersonality = "0123456789abcdef";
                             Brain.Unsee();
                             brain.Saw("a pixel art farm with a red barn", "Cute barn.");
+                            File.WriteAllText(Brain.MemoriesPath, Brain.MemoriesHead + "## Earlier\n- They beat Malenia after 40 tries.\n");
                             CloseTalk();
                             pill.Press(2);
                             if (!pill.Chatting || pill.Muted || !chatting || TalkPill.Render(1, 0, true).Width <= TalkPill.Measure(1).Width + 30) throw new Exception("Wave did not start voice chat with the mic button apart on the right.");
@@ -12919,6 +13056,11 @@ namespace CapriDesktop
                             lock (asked) foreach (string entry in asked) if (entry.StartsWith("init ", StringComparison.Ordinal) && entry.IndexOf("a pixel art farm with a red barn. You said: \\\"Cute barn.\\\"", StringComparison.Ordinal) >= 0) sawInVoice = true;
                             Brain.Unsee();
                             if (!sawInVoice) throw new Exception("Voice chat didn't start with what she saw on their screen: " + log);
+                            bool memoriesInVoice = false;
+                            lock (asked) foreach (string entry in asked) if (entry.StartsWith("init ", StringComparison.Ordinal) && entry.IndexOf("Your memories of past chats with them", StringComparison.Ordinal) >= 0 && entry.IndexOf("They beat Malenia after 40 tries.", StringComparison.Ordinal) >= 0) memoriesInVoice = true;
+                            File.Delete(Brain.MemoriesPath);
+                            string voiceDay = File.ReadAllText(Path.Combine(Brain.TranscriptPath, DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) + ".md"));
+                            if (!memoriesInVoice || !System.Text.RegularExpressions.Regex.IsMatch(voiceDay, @"\*\*\d\d:\d\d You \(voice\):\*\* hi\n") || !System.Text.RegularExpressions.Regex.IsMatch(voiceDay, @"\*\*\d\d:\d\d Capri \(voice\):\*\* Loud and clear, choom\.\n") || !System.Text.RegularExpressions.Regex.IsMatch(voiceDay, @"\*\d\d:\d\d Job: Opened Spotify\.\*\n")) throw new Exception("Voice chat didn't start with her memories, or its lines and jobs missed her transcript: " + voiceDay);
                             if (log.IndexOf("tool_stale", StringComparison.Ordinal) >= 0 || System.Text.RegularExpressions.Regex.Matches(log, "http POST /v1/convai/tools").Count != 18) throw new Exception("Voice chat reused a stale tool or remade a kept one: " + log);
                             Hands.Run = handsRun;
                             Hands.Catalog = handsCatalog;
@@ -13378,6 +13520,8 @@ namespace CapriDesktop
                             Preferences caughtOld = (Preferences)caughtJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Size\":240}")));
                             Preferences caughtOff = (Preferences)caughtJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"CaughtUp\":false,\"Size\":240}")));
                             if (!new Preferences().CaughtUp || !caughtOld.CaughtUp || caughtOff.CaughtUp) throw new Exception("Keep her caught up isn't on by default, or off doesn't stick.");
+                            string glanceDay = File.ReadAllText(Path.Combine(Brain.TranscriptPath, DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) + ".md"));
+                            if (!System.Text.RegularExpressions.Regex.IsMatch(glanceDay, @"\*\d\d:\d\d She glanced at your screen: a dungeon with a closed treasure chest\. She stayed quiet\.\*\n") || !System.Text.RegularExpressions.Regex.IsMatch(glanceDay, @"\*\d\d:\d\d She glanced at your screen: a treasure chest next to their character\.\*\n\*\*\d\d:\d\d Capri:\*\* Don't skip that chest\.\n") || !System.Text.RegularExpressions.Regex.IsMatch(glanceDay, @"\*\d\d:\d\d She looked at your screen: A code editor with a red error on line 12\.\*\n") || !System.Text.RegularExpressions.Regex.IsMatch(glanceDay, @"\*\d\d:\d\d She glanced at your screen: a world map with three quest markers\. She stayed quiet\.\*\n") || glanceDay.IndexOf("a settings menu", StringComparison.Ordinal) >= 0) throw new Exception("Her glances and looks didn't reach her transcript the right way: " + glanceDay);
                             Brain.Unsee();
                             checks.Add("PASS screen memory: a spoken glance goes in her chat as what she saw plus her line, a look they asked for is kept too, and Keep her caught up (on by default, saved) decides whether glances she stays quiet about are kept");
                             resetGlance();

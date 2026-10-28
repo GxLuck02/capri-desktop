@@ -211,6 +211,8 @@ Yes. She keeps the chat for up to a week, even after a restart. Mainframe > Sett
 
 She also keeps in mind what she saw on your screen in the last 3 hours, so "what did you see?" gets a real answer instead of a guess (section 16).
 
+Older chats aren't lost either. She writes every chat into a daily transcript on your PC and folds older chats into memories.md, which she reads every time you talk. Ask "remember when we beat that boss?" and she looks it up in her transcripts (section 13).
+
 For things she should never forget, use her notes (section 13).
 
 ### Clicking her
@@ -309,7 +311,7 @@ YOU
 - Next to YOU: which personality she's using. "personality.md · her default" or "personality.md · your edit". In yellow: "personality.md · long, slows small brains". In red, when she's gone back to her default: "personality.md missing · her default", "personality.md is empty · her default" or "can't read personality.md · her default".
 - Language: the language she replies in. 20 to pick from: English, Español, Français, Deutsch, Italiano, Português, Nederlands, Svenska, Dansk, Norsk, Polski, Čeština, Română, Türkçe, Русский, Українська, Ελληνικά, Tiếng Việt, Bahasa Indonesia, Filipino.
 - "What should she call you?": type a nickname, press Save.
-- Open her notes: opens me.md, her memories.
+- Open her notes: opens me.md, her notes about you, in Notepad.
 - Edit personality: opens personality.md, who she is and how she talks. See "Make her yours" in section 13.
 - Reset: puts her default personality back straight away. Yours is kept as personality.backup.md.
 
@@ -353,6 +355,8 @@ HABITS
 - Use her cursor: on by default. She does music and video jobs with her own cursor, so you can watch her: to play a YouTube video she types in YouTube's search bar, scrolls through the results and picks one; to play a song she searches Spotify and presses play; when you ask to turn Spotify up or down she drags Spotify's volume slider (plain "turn it up" changes your PC's volume). Turn it off for the quick way (straight to the top result, Windows volume). If her brain gets lost on the way, she does it the quick way.
 - Blackwall mode: off by default, and called Bypass all permissions before 0.7.4. The line under it says "She won't ask twice when you ask her to do something." Turn it on and she never stops to ask before a step, even buying, paying, sending, posting, deleting or installing something you didn't mention. She also types passwords and card numbers when a job needs them, presses any key, and stops filtering what she opens, plays or remembers: what she will or won't do is up to the brain model you picked. She still never follows orders written on your screen, still points you to a helpline if you say you want to hurt yourself, and Esc still stops her.
 - Perch: how many frames a second she shows while she sits on a window: 10, 15, 20, 30 (default), 40, 50 or 60 fps. Her sway takes 2 seconds at every setting. 10 and 15 use less CPU. Above 30 she draws in-between frames, so she moves more smoothly but uses more CPU, and the HABITS line says "Perch over 30 fps uses more CPU". On Mac and Linux her perch stays at 30.
+- Remember our chats (under Perch): on by default. She writes every chat into a daily transcript and folds older chats into memories.md. Both stay on your PC (section 13).
+- Open her memories (beside Remember our chats): shows memories.md and her transcripts folder in File Explorer.
 
 KEYS (bottom of the page)
 - Talk, Mute mic, Type and Hide/show buttons show her keys. Click one, press new keys, then Confirm. Since 0.7.4 any key works, on its own or with any of Ctrl, Alt, Shift and Win: F8, Ctrl + Shift + K and Win + Alt + J all work. Cancel keeps the old key.
@@ -684,6 +688,21 @@ Who she is and how she talks lives in a file you can rewrite. Capri is open sour
 - Where it is: %LOCALAPPDATA%\Capri\personality.md on Windows, ~/.config/Capri/personality.md on Mac and Linux.
 - It goes to her brain with the rest of her prompt, so with a brain key that company sees it too.
 
+### Her memories (memories.md and transcripts)
+With Remember our chats on (Mainframe > Settings > HABITS, on by default), she remembers more than the recent chat.
+- Transcripts: every chat goes into a file per day, like transcripts\2026-10-28.md. That's typed chat, voice chat, her glances at your screen with what she saw, and the jobs she did. You can read them in any text editor.
+- memories.md: when the chat outgrows what she keeps in mind, or a new day starts, the brain you picked folds the older lines into memories.md: a short note per day, oldest first. Older days get merged into an "Earlier" section as it grows, so it never fills up. If her brain leaves a day out, she keeps that day as it was.
+- She reads memories.md every time you talk, in text and voice chat, next to her notes. Edit or delete anything in it.
+- "Remember when we beat Malenia?" makes her search her transcripts for matching lines. The search runs on your PC.
+- memories.md follows the same rule as her notes: no addresses, schools, phone numbers, emails, passwords, full names, birthdays or bank details. Chat lines with them stay in your transcript but never go to her brain for folding, and "remember when" skips them.
+- transcripts\unfolded.txt holds the newest lines she hasn't folded in yet.
+
+Where they are: Mainframe > Settings > Open her memories shows them in File Explorer. On Windows it's %LOCALAPPDATA%\Capri\memories.md and %LOCALAPPDATA%\Capri\transcripts. They stay on your PC and are never uploaded.
+
+What folding costs: with her built-in brain or Ollama it's free and runs on your PC. With an API key it's one small request each time, about 600 to 2,000 words in and up to 300 words out, which is usually well under a cent. The free NVIDIA key costs nothing. She folds about once every 10 to 15 messages (less often with a longer Memory setting) and once a day, and waits until the chat has been quiet for 20 seconds so she doesn't hold up a reply.
+
+Turn Remember our chats off and she stops writing transcripts, stops folding and stops reading memories.md. Nothing gets deleted. Delete the files yourself if you want them gone.
+
 ### Nickname: "What should she call you?"
 1. Mainframe > Settings.
 2. Type a name (up to 24 letters) in "What should she call you?".
@@ -941,13 +960,14 @@ Quit Capri, then delete the Capri folder you unpacked. Her settings are in ~/.co
 - Her built-in brain and Ollama: your chats never leave your PC.
 - Her free voice, and her own ears in free voice chat (English and 24 other European languages).
 - Her notes (me.md), her personality (personality.md), chat history and what she saw on your screen lately (chat.json, kept a week), settings and error log.
+- Her transcripts (transcripts folder, one file per day) and memories.md. They're never uploaded.
 - Your keys. On Windows they're locked to your Windows account. On Mac and Linux the ElevenLabs key is a file only your user can read.
 - Dancing: she listens to what your PC is playing to find the beat, in memory only. Nothing is recorded or sent.
 - Capri has no ads and no analytics.
 
 ### What goes to the services you pick
-- A brain key (NVIDIA, OpenAI, Claude, DeepSeek): your messages, her personality, her notes, recent chat and what she saw on your screen lately go to that company. With Watch my screen on, or when you say "check my screen", so does the screenshot.
-- ElevenLabs: the text she says out loud. In ElevenLabs voice chat: your voice, your words, her personality, her notes and what she saw lately.
+- A brain key (NVIDIA, OpenAI, Claude, DeepSeek): your messages, her personality, her notes, memories.md, recent chat and what she saw on your screen lately go to that company. With Watch my screen on, or when you say "check my screen", so does the screenshot. With Remember our chats on, folding sends that company the newest transcript lines too, voice chat lines included.
+- ElevenLabs: the text she says out loud. In ElevenLabs voice chat: your voice, your words, her personality, her notes, memories.md and what she saw lately.
 - Free voice chat in a language other than English uses Windows speech, which goes through Microsoft.
 
 ### The help chat on the website
@@ -962,7 +982,7 @@ Quit Capri, then delete the Capri folder you unpacked. Her settings are in ~/.co
 - Your browser: when she opens Google, YouTube and other sites for you.
 
 ### Where are my files?
-- Windows: %LOCALAPPDATA%\Capri (settings.json, me.md, personality.md, chat.json, errors.txt, and the brain folder)
+- Windows: %LOCALAPPDATA%\Capri (settings.json, me.md, personality.md, memories.md, chat.json, errors.txt, and the transcripts and brain folders)
 - Mac and Linux: ~/.config/Capri
 
 ---
@@ -1012,6 +1032,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - No keyboard shortcuts, closing or switching windows, screen watching or mouse and keyboard jobs.
 - No Copy error details.
 - No automatic updates.
+- No transcripts or memories.md yet. She remembers the recent chat and her notes.
 
 ### Right-click menu
 - Talk to her
@@ -1131,7 +1152,8 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 - "My brain sent gibberish." or replies full of <unused49>: she moves her brain to your processor (CPU) by herself and asks again. If it keeps happening, use the free NVIDIA key. To let the built-in brain try your graphics card again later, delete the file cpu-only.txt in %LOCALAPPDATA%\Capri\brain\engine-b11669.
 - "My brain sent an empty reply." or "That model ran out of room before answering": try again, or pick another model.
 - "[SIGNAL CORRUPTED] ...": a one-off hiccup. Try again, or ask something else.
-- She forgets what you said a few messages ago: Mainframe > Settings > Memory > Long. For things she should always remember, tell her "remember ..." so it goes in her notes. If she still forgets, post the exact messages in the Discord.
+- She forgets what you said a few messages ago: Mainframe > Settings > Memory > Long, and keep Remember our chats on so older chats get folded into memories.md. For things she should always remember, tell her "remember ..." so it goes in her notes. If she still forgets, post the exact messages in the Discord.
+- She says she guessed what was on your screen: she only remembers her looks from the last 3 hours. Turn on Keep her caught up (Settings > WATCH) so the glances she keeps quiet about count too.
 - Her replies are too long or too short: Mainframe > Settings > Replies.
 - She doesn't act like herself after you edited personality.md, or you want her back: Mainframe > Settings > Reset. Yours is kept as personality.backup.md.
 - She makes things up: smaller brains on your PC do this sometimes. The free NVIDIA key is smarter.

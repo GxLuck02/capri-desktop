@@ -18,11 +18,11 @@ namespace CapriDesktop
         private static readonly int[] Gaps = { 10, 15, 30, 60, 90, 120, 180, 300, 600 };
         private static readonly string[] GapNames = { "10 s", "15 s", "30 s", "1 min", "1.5 min", "2 min", "3 min", "5 min", "10 min" };
         private const int SetupHeight = 118;
-        private const int PageTall = 742;
+        private const int PageTall = 770;
         // Settings opens a second column to the right, so every setting shows at once.
         private const int Column = 380;
         private const int Far = 30000;
-        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 484 }, new[] { 0, 494, 614 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 460 }, new[] { Column, 482, 624 }, new[] { 0, 646, 706 } };
+        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 484 }, new[] { 0, 494, 614 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 460 }, new[] { Column, 482, 652 }, new[] { 0, 674, 734 } };
         private static readonly string[] PerchNames = Array.ConvertAll(Companion.PerchRates, rate => rate + " fps");
         // Her voice's pitch in semitones, and her speed.
         private static readonly string[] PitchNames = { "-6", "-5", "-4", "-3", "-2", "-1", "Normal", "+1", "+2", "+3", "+4", "+5", "+6" };
@@ -88,6 +88,7 @@ namespace CapriDesktop
         private int heldMods;
         private readonly Toggle watch;
         private readonly Toggle caughtUp;
+        private readonly Toggle remembering;
         private readonly Label voiceHead;
         private readonly Rung[] voiceRungs = new Rung[3];
         private bool off;
@@ -351,7 +352,7 @@ namespace CapriDesktop
             nickname.Box.AccessibleName = "What should she call you?";
             nickname.Box.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UseNickname(); } };
             Make("Save", 280, 140, 76, 28, delegate { UseNickname(); });
-            Make("Open her notes", 28, 176, 120, 28, delegate { capri.OpenNotes(); }).AccessibleName = "Open her notes: me.md, her memories";
+            Make("Open her notes", 28, 176, 120, 28, delegate { capri.OpenNotes(); }).AccessibleName = "Open her notes: me.md, her notes about you";
             Make("Edit personality", 156, 176, 130, 28, delegate { capri.OpenPersonality(); }).AccessibleName = "Edit her personality: personality.md";
             Make("Reset", 294, 176, 62, 28, delegate { capri.ResetPersonality(); }).AccessibleName = "Reset her personality to her default";
             Caption("VOICE >", 28, 220, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
@@ -459,24 +460,27 @@ namespace CapriDesktop
             perchNote.AutoSize = false;
             perchNote.TextAlign = ContentAlignment.MiddleRight;
             perchNote.Bounds = new Rectangle(120 + c, 480, 236, 20);
-            Caption("KEYS >", 28, 650, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
-            talkKeys = Make("Talk: Ctrl + Alt + V", 96, 644, 250, 28, delegate { PickKeys(0); });
+            remembering = Check("Remember our chats", 28 + c, 626, 150, delegate { if (!syncing) capri.ToggleRemembering(); });
+            remembering.AccessibleName = "Remember our chats. She keeps daily transcripts and memories.md on this PC, never uploaded";
+            Make("Open her memories", 186 + c, 626, 170, 22, delegate { capri.OpenMemories(); }).AccessibleName = "Open her memories: memories.md and her chat transcripts, kept on this PC";
+            Caption("KEYS >", 28, 678, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
+            talkKeys = Make("Talk: Ctrl + Alt + V", 96, 672, 250, 28, delegate { PickKeys(0); });
             talkKeys.AccessibleName = "Her talk key. Click, press new keys, then Confirm";
-            muteKeys = Make("Mute mic: Ctrl + Alt + N", 358, 644, 250, 28, delegate { PickKeys(1); });
+            muteKeys = Make("Mute mic: Ctrl + Alt + N", 358, 672, 250, 28, delegate { PickKeys(1); });
             muteKeys.AccessibleName = "Her mute key. Click, press new keys, then Confirm";
-            typeKeys = Make("Type: Ctrl + Alt + T", 96, 678, 250, 28, delegate { PickKeys(2); });
+            typeKeys = Make("Type: Ctrl + Alt + T", 96, 706, 250, 28, delegate { PickKeys(2); });
             typeKeys.AccessibleName = "Her typing key. Click, press new keys, then Confirm";
-            hideKeys = Make("Hide/show: Ctrl + Alt + H", 358, 678, 250, 28, delegate { PickKeys(3); });
+            hideKeys = Make("Hide/show: Ctrl + Alt + H", 358, 706, 250, 28, delegate { PickKeys(3); });
             hideKeys.AccessibleName = "Her hide key. Click, press new keys, then Confirm";
             // Only a click ends picking a key, so Enter, Esc and Tab can be her keys too.
-            confirmKeys = Make("Confirm", 620, 644, 116, 28, delegate { ConfirmKeys(); });
+            confirmKeys = Make("Confirm", 620, 672, 116, 28, delegate { ConfirmKeys(); });
             confirmKeys.Accent = Look.Cyan;
             confirmKeys.Loud = true;
             confirmKeys.AccessibleName = "Confirm her new keys";
-            cancelKeys = Make("Cancel", 620, 678, 116, 28, delegate { CancelKeys(); });
+            cancelKeys = Make("Cancel", 620, 706, 116, 28, delegate { CancelKeys(); });
             cancelKeys.AccessibleName = "Cancel and keep her old keys";
             confirmKeys.Visible = cancelKeys.Visible = false;
-            keysNote = Caption("", 96, 714, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+            keysNote = Caption("", 96, 742, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             keysNote.MaximumSize = new Size(512, 0);
             for (int i = first; i < Controls.Count; i++)
             {
@@ -744,6 +748,7 @@ namespace CapriDesktop
             bypass.Checked = capri.Bypassing;
             watch.Checked = capri.Watching;
             caughtUp.Checked = capri.CaughtUp;
+            remembering.Checked = capri.Remembers;
             VoiceTier();
             int chosen = Array.IndexOf(Gaps, capri.GlanceGap);
             gap.Value = chosen < 0 ? 5 : chosen;
@@ -827,6 +832,10 @@ namespace CapriDesktop
         internal bool CaughtUpShown { get { return caughtUp.Checked; } }
 
         internal void FlipCaughtUp() { caughtUp.Checked = !caughtUp.Checked; }
+
+        internal bool RemembersShown { get { return remembering.Checked; } }
+
+        internal void FlipRemembering() { remembering.Checked = !remembering.Checked; }
 
         internal bool ElevenShown { get { return voiceRungs[2].Checked && !voiceRungs[1].Checked && !voiceRungs[0].Checked; } }
 
