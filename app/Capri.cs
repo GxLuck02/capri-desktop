@@ -10193,7 +10193,9 @@ namespace CapriDesktop
                                         { "ဒီသီချင်းနာမည် ဘာလဲ", "", "true" }, { "Spotify ဖွင" + "\u103A\u1037" + "ပေးပါ", "", "true" }, { "ပုံပြင်တစ်ပုဒ် ပြောပြပေးပါ", "", "false" }, { "ပါးစပ်ပိတ်ပါ", "", "false" },
                                         { "Spotify ဖွင့်လိုက်ပြီ", "", "false" }, { "ဒါဘာလဲ", "", "false" }, { "ဈေးလျှော့ပေးပါ", "", "false" }, { "ငါ့ screen ကို ကြည့်ပေးပါ", "", "true" }, { "မင်း ဘာမြင်လဲ", "", "true" },
                                         { "Spotify-ს გახსენი გთხოვ", "", "true" }, { "მუსიკა ჩართე", "", "true" }, { "გუშინ Spotify გავხსენი", "", "false" }, { "ეს რა სიმღერაა?", "", "true" },
-                                        { "Spotify-ը բացիր, խնդրում եմ", "", "true" }, { "երաժշտություն միացրու", "", "true" }, { "երեկ Spotify-ը բացեցի", "", "false" }, { "ինչ երգ է սա", "", "true" }
+                                        { "Spotify-ը բացիր, խնդրում եմ", "", "true" }, { "երաժշտություն միացրու", "", "true" }, { "երեկ Spotify-ը բացեցի", "", "false" }, { "ինչ երգ է սա", "", "true" },
+                                        { "karnım aç", "", "false" }, { "çok aç", "", "false" }, { "çeneni kapat", "", "false" }, { "müzik aç", "", "true" }, { "kapıyı aç", "", "true" }, { "қарным аш", "", "false" },
+                                        { "बकवास बंद करो", "", "false" }, { "bakwas band karo", "", "false" }, { "بکواس بند کرو", "", "false" }, { "Spotify बंद करो", "", "true" }, { "Spotify band karo", "", "true" }
                                     };
                                     for (int i = 0; i < intents.GetLength(0); i++)
                                     {
