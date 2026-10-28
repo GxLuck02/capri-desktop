@@ -193,21 +193,81 @@ namespace CapriDesktop
             return cells;
         }
 
-        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao or Khmer.
+        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao, Khmer or Burmese.
         internal static bool Indic(string text)
         {
             foreach (char c in text ?? "")
-                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF)) return true;
+                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF) || Myanmar(c)) return true;
             return false;
         }
 
+        // True when the text has Burmese in it.
+        internal static bool Burmese(string text)
+        {
+            foreach (char c in text ?? "") if (Myanmar(c)) return true;
+            return false;
+        }
+
+        private static bool Myanmar(char c) { return (c >= 0x1000 && c <= 0x109F) || (c >= 0xA9E0 && c <= 0xA9FF) || (c >= 0xAA60 && c <= 0xAA7F); }
+
+        // Her mono font has no stand-in for Burmese, so GDI+ would draw nothing there. Burmese draws in Myanmar Text instead,
+        // on the same baseline as the rest of the line, which stays in her font.
+        internal static Font Myanmar(Font font)
+        {
+            foreach (string family in new[] { "Myanmar Text", "Segoe UI" })
+            {
+                Font found = new Font(family, font.Size, font.Style, font.Unit);
+                if (found.Name == family) return found;
+                found.Dispose();
+            }
+            return new Font(FontFamily.GenericSansSerif, font.Size, font.Style, font.Unit);
+        }
+
+        // Draws a line like DrawString does, with any Burmese in Myanmar Text. Returns where a Burmese line ends, or x for
+        // any other line, which draws exactly as before.
+        internal static float Draw(Graphics graphics, string text, Font font, Brush brush, float x, float y)
+        {
+            if (!Burmese(text)) { graphics.DrawString(text, font, brush, x, y, StringFormat.GenericTypographic); return x; }
+            using (Font burmese = Myanmar(font))
+            {
+                float lift = Ascent(burmese) - Ascent(font);
+                foreach (string piece in Pieces(text))
+                {
+                    Font used = Myanmar(piece[0]) ? burmese : font;
+                    graphics.DrawString(piece, used, brush, x, used == font ? y : y - lift, StringFormat.GenericTypographic);
+                    x += graphics.MeasureString(piece, used, PointF.Empty, Spaced).Width;
+                }
+            }
+            return x;
+        }
+
+        private static float Mixed(Graphics graphics, string text, Font font, Font burmese)
+        {
+            float width = 0;
+            foreach (string piece in Pieces(text)) width += graphics.MeasureString(piece, Myanmar(piece[0]) ? burmese : font, PointF.Empty, Spaced).Width;
+            return width;
+        }
+
+        // The text in turns of Burmese and everything else.
+        private static List<string> Pieces(string text)
+        {
+            List<string> pieces = new List<string>();
+            int start = 0;
+            for (int i = 1; i <= text.Length; i++)
+                if (i == text.Length || Myanmar(text[i]) != Myanmar(text[start])) { pieces.Add(text.Substring(start, i - start)); start = i; }
+            return pieces;
+        }
+
+        private static float Ascent(Font font) { return font.Size * font.FontFamily.GetCellAscent(font.Style) / font.FontFamily.GetEmHeight(font.Style); }
+
         // Indian scripts, Lao and Khmer join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic draw
-        // wider than her columns, so their words are measured in her bubble's font instead of counted. Other words still count
-        // by letter.
+        // wider than her columns, so their words are measured in her bubble's font instead of counted, and Burmese in Myanmar
+        // Text, which draws it. Other words still count by letter.
         private static readonly Dictionary<string, double> measured = new Dictionary<string, double>();
         private static Bitmap rulerPage;
         private static Graphics ruler;
         private static Font rulerFont;
+        private static Font rulerBurmese;
         private static float rulerColumn;
 
         private static double Span(string text)
@@ -229,9 +289,10 @@ namespace CapriDesktop
                             ruler.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
                             rulerFont = Mono(14f, FontStyle.Regular, GraphicsUnit.Pixel, "क");
                             rulerColumn = ruler.MeasureString(new string('M', 20), rulerFont, PointF.Empty, StringFormat.GenericTypographic).Width / 20f;
+                            rulerBurmese = Myanmar(rulerFont);
                         }
                         // A shade over, since hinting at other sizes can draw a little wider.
-                        width = ruler.MeasureString(word, rulerFont, PointF.Empty, StringFormat.GenericTypographic).Width / rulerColumn * 1.03;
+                        width = (Burmese(word) ? Mixed(ruler, word, rulerFont, rulerBurmese) : ruler.MeasureString(word, rulerFont, PointF.Empty, StringFormat.GenericTypographic).Width) / rulerColumn * 1.03;
                         if (measured.Count > 4000) measured.Clear();
                         measured[word] = width;
                     }
@@ -303,10 +364,10 @@ namespace CapriDesktop
             return false;
         }
 
-        // True when the text has Thai, Lao or Khmer in it, which write no spaces between words.
+        // True when the text has Thai, Lao, Khmer or Burmese in it, which write no spaces between words.
         internal static bool Unspaced(string text)
         {
-            foreach (char c in text ?? "") if ((c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF)) return true;
+            foreach (char c in text ?? "") if ((c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF) || Myanmar(c)) return true;
             return Thai(text);
         }
 
@@ -318,9 +379,9 @@ namespace CapriDesktop
         [DllImport("icu.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int ubrk_next(IntPtr iterator);
         [DllImport("icu.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void ubrk_close(IntPtr iterator);
 
-        // Where a line may break inside a word with Thai, Lao or Khmer in it. They write no spaces between words, so a word
-        // breaker finds them: Windows' own for Thai, and for Lao and Khmer, which it doesn't know, the ICU that comes with
-        // Windows 10 1903 and later. Without ICU a Lao or Khmer line breaks between letters.
+        // Where a line may break inside a word with Thai, Lao, Khmer or Burmese in it. They write no spaces between words, so a
+        // word breaker finds them: Windows' own for Thai, and for the others, which it doesn't know, the ICU that comes with
+        // Windows 10 1903 and later. Without ICU their lines break between letters.
         internal static bool[] Breaks(string word)
         {
             if (!Thai(word))
@@ -369,14 +430,15 @@ namespace CapriDesktop
 
         // Without a word breaker a line can still break between letters. A Thai or Lao line never breaks before a vowel or
         // tone mark, or a vowel that follows its letter, and never after a vowel written before its letter. Every script keeps
-        // each letter with its marks, and with the next letter after a sign that joins them (a virama, or Khmer's coeng).
+        // each letter with its marks, and with the next letter after a sign that joins them (a virama, or Khmer's coeng), and
+        // a Burmese line never breaks before a letter that ends the syllable before it.
         internal static bool[] Letters(string word)
         {
             bool[] breaks = new bool[word.Length];
             if (!Thai(word))
             {
                 foreach (int start in System.Globalization.StringInfo.ParseCombiningCharacters(word))
-                    if (start > 0 && !Joins(word[start - 1]) && (word[start - 1] < 0x0EC0 || word[start - 1] > 0x0EC4) && "ະາຳໆຯ".IndexOf(word[start]) < 0) breaks[start] = true;
+                    if (start > 0 && !Joins(word[start - 1]) && !Ends(word, start) && (word[start - 1] < 0x0EC0 || word[start - 1] > 0x0EC4) && "ະາຳໆຯ".IndexOf(word[start]) < 0) breaks[start] = true;
                 return breaks;
             }
             for (int i = 1; i < word.Length; i++)
@@ -384,13 +446,21 @@ namespace CapriDesktop
             return breaks;
         }
 
-        // Signs that join the next letter to the one before: the Indian scripts' viramas and Khmer's coeng.
+        // Signs that join the next letter to the one before: the Indian scripts' and Burmese viramas and Khmer's coeng.
         private static bool Joins(char c)
         {
-            return c == '्' || c == '্' || c == '੍' || c == '્' || c == '୍' || c == '்' || c == '్' || c == '್' || c == '്' || c == '្';
+            return c == '्' || c == '্' || c == '੍' || c == '્' || c == '୍' || c == '்' || c == '్' || c == '್' || c == '്' || c == '្' || c == '္';
         }
 
-        // The longest start of a word with Thai, Lao or Khmer in it that ends where a line may break and fits in that many columns.
+        // True when the Burmese letter there ends the syllable before it: an asat silences it, or a virama stacks the next
+        // letter under it, after a dot below or not.
+        private static bool Ends(string word, int at)
+        {
+            int next = at + 1 < word.Length && word[at + 1] == '့' ? at + 2 : at + 1;
+            return next < word.Length && (word[next] == '်' || word[next] == '္');
+        }
+
+        // The longest start of a word with Thai, Lao, Khmer or Burmese in it that ends where a line may break and fits in that many columns.
         internal static string Fill(string word, int columns)
         {
             bool[] breaks = Breaks(word);
@@ -405,8 +475,8 @@ namespace CapriDesktop
         }
 
         // Lines by columns, so Chinese, Japanese and Korean fit the bubble too. They have no spaces to break at, so a run of
-        // them fills the rest of a line and carries on below, the way they're written. Thai, Lao and Khmer do the same between
-        // their words. Other words only break when they're longer than a whole line.
+        // them fills the rest of a line and carries on below, the way they're written. Thai, Lao, Khmer and Burmese do the same
+        // between their words. Other words only break when they're longer than a whole line.
         internal static List<string> Wrap(string text, int columns)
         {
             List<string> lines = new List<string>();
@@ -2123,20 +2193,20 @@ namespace CapriDesktop
                     using (Pen edge = new Pen(Color.FromArgb(a, Look.Cyan), 2 * s)) graphics.DrawPath(edge, path);
                     float x = panel.Left + 15 * s, y = panel.Top + 12 * s;
                     using (Brush dim = new SolidBrush(Color.FromArgb(a, Look.Dim)))
-                        foreach (string row in you) { graphics.DrawString(row, heard, dim, x, y, StringFormat.GenericTypographic); y += line; }
+                        foreach (string row in you) { Look.Draw(graphics, row, heard, dim, x, y); y += line; }
                     using (Brush red = new SolidBrush(Color.FromArgb(a, Look.Red)))
                     using (Brush ink = new SolidBrush(Color.FromArgb(a, Look.Neon)))
                         for (int i = 0; i < said.Count; i++)
                         {
                             int name = i == 0 ? Math.Min(said[i].Length, Speaker.Length - 1) : 0;
                             if (name > 0) graphics.DrawString(said[i].Substring(0, name), bold, red, x, y, StringFormat.GenericTypographic);
-                            graphics.DrawString(said[i].Substring(name), text, ink, x + name * cw, y, StringFormat.GenericTypographic);
+                            Look.Draw(graphics, said[i].Substring(name), text, ink, x + name * cw, y);
                             y += line;
                         }
                     if (rows.Count > 0) y += 6 * s;
                     for (int i = 0; i < rows.Count; i++)
                     {
-                        using (Brush ink = new SolidBrush(Color.FromArgb(a, inks[i]))) graphics.DrawString(rows[i], text, ink, x, y, StringFormat.GenericTypographic);
+                        using (Brush ink = new SolidBrush(Color.FromArgb(a, inks[i]))) Look.Draw(graphics, rows[i], text, ink, x, y);
                         if (thinking && caret && i == rows.Count - 1)
                             using (Brush block = new SolidBrush(Color.FromArgb(a, Look.Neon))) graphics.FillRectangle(block, x + Look.Cells(rows[i]) * cw + 2 * s, y + s, cw * 0.85f, line - 5 * s);
                         y += line;
@@ -2280,7 +2350,7 @@ namespace CapriDesktop
                     float row2 = panel.Top + 12 * s;
                     string you = Prompt + (Heard ?? "");
                     if (Look.Cells(you) > columns) you = Look.Cut(you, columns - 3) + "...";
-                    using (Brush dim = new SolidBrush(Look.Dim)) graphics.DrawString(you, heard, dim, x, row2, StringFormat.GenericTypographic);
+                    using (Brush dim = new SolidBrush(Look.Dim)) Look.Draw(graphics, you, heard, dim, x, row2);
                     row2 += line;
                     int[] takes = Look.Takes(lines, Speaker + (Reply ?? ""), Speaker.Length + (State == TalkState.Thinking ? (Reply ?? "").Length : Math.Max(0, Revealed)));
                     PointF caret = new PointF(x, row2);
@@ -2304,8 +2374,8 @@ namespace CapriDesktop
                             }
                             else
                             {
-                                graphics.DrawString(words, text, ink, from, row2 + i * line, StringFormat.GenericTypographic);
-                                caret = new PointF(Look.Thai(words) || Look.Indic(words) ? from + graphics.MeasureString(words, text, PointF.Empty, Look.Spaced).Width : x + Look.Cells(shown) * cw, row2 + i * line);
+                                float end = Look.Draw(graphics, words, text, ink, from, row2 + i * line);
+                                caret = new PointF(Look.Burmese(words) ? end : Look.Thai(words) || Look.Indic(words) ? from + graphics.MeasureString(words, text, PointF.Empty, Look.Spaced).Width : x + Look.Cells(shown) * cw, row2 + i * line);
                             }
                         }
                         if (cursorOn) graphics.FillRectangle(ink, caret.X + s, caret.Y + s, cw * 0.85f, line - 5 * s);

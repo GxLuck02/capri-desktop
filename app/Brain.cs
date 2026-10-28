@@ -440,7 +440,7 @@ namespace CapriDesktop
             { "Tiếng Việt", "Vietnamese", "vi" }, { "Bahasa Indonesia", "Indonesian", "id" }, { "Bahasa Melayu", "Malay", "ms" }, { "Basa Jawa", "Javanese", "jv" },
             { "Filipino", "Filipino", "fil" }, { "Kiswahili", "Swahili", "sw" }, { "Hausa", "Hausa", "ha" }, { "Yorùbá", "Yoruba", "yo" }, { "Igbo", "Igbo", "ig" },
             { "isiZulu", "Zulu", "zu" }, { "isiXhosa", "Xhosa", "xh" }, { "Soomaali", "Somali", "so" }, { "አማርኛ", "Amharic", "am" }, { "ไทย", "Thai", "th" }, { "ລາວ", "Lao", "lo" }, { "ខ្មែរ", "Khmer", "km" },
-            { "简体中文", "Simplified Chinese", "zh" }, { "繁體中文", "Traditional Chinese", "zh" }, { "日本語", "Japanese", "ja" }, { "한국어", "Korean", "ko" },
+            { "မြန်မာ", "Burmese", "my" }, { "简体中文", "Simplified Chinese", "zh" }, { "繁體中文", "Traditional Chinese", "zh" }, { "日本語", "Japanese", "ja" }, { "한국어", "Korean", "ko" },
             { "हिन्दी", "Hindi", "hi" }, { "नेपाली", "Nepali", "ne" }, { "বাংলা", "Bengali", "bn" }, { "मराठी", "Marathi", "mr" }, { "ગુજરાતી", "Gujarati", "gu" }, { "ਪੰਜਾਬੀ", "Punjabi", "pa" },
             { "தமிழ்", "Tamil", "ta" }, { "తెలుగు", "Telugu", "te" }, { "ಕನ್ನಡ", "Kannada", "kn" }, { "മലയാളം", "Malayalam", "ml" },
             { "العربية", "Arabic", "ar" }, { "اردو", "Urdu", "ur" }, { "فارسی", "Persian", "fa" }, { "עברית", "Hebrew", "he" }

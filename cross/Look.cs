@@ -77,16 +77,19 @@ namespace CapriDesktop
             return cells;
         }
 
-        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao or Khmer.
+        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao, Khmer or Burmese.
         internal static bool Indic(string text)
         {
             foreach (char c in text ?? "")
-                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF)) return true;
+                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF) || Myanmar(c)) return true;
             return false;
         }
 
-        // Indian scripts, Lao and Khmer join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic draw
-        // wider than her columns, so their words are measured in her bubble's font instead of counted, the same as on Windows.
+        private static bool Myanmar(char c) { return (c >= 0x1000 && c <= 0x109F) || (c >= 0xA9E0 && c <= 0xA9FF) || (c >= 0xAA60 && c <= 0xAA7F); }
+
+        // Indian scripts, Lao, Khmer and Burmese join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic
+        // draw wider than her columns, so their words are measured in her bubble's font instead of counted, the same as on Windows.
+        // Burmese measures in whichever font the system draws it with.
         private static readonly Dictionary<string, double> measured = new Dictionary<string, double>();
 
         private static double Span(string text)
@@ -154,24 +157,25 @@ namespace CapriDesktop
             return false;
         }
 
-        // True when the text has Thai, Lao or Khmer in it, which write no spaces between words.
+        // True when the text has Thai, Lao, Khmer or Burmese in it, which write no spaces between words.
         internal static bool Unspaced(string text)
         {
-            foreach (char c in text ?? "") if ((c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF)) return true;
+            foreach (char c in text ?? "") if ((c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF) || Myanmar(c)) return true;
             return Thai(text);
         }
 
-        // Thai, Lao and Khmer write no spaces between words, and Mac and Linux have no word breaker she can call, so their
-        // lines break between letters. A Thai or Lao line never breaks before a vowel or tone mark, or a vowel that follows
-        // its letter, and never after a vowel written before its letter. Every script keeps each letter with its marks, and
-        // with the next letter after a sign that joins them (a virama, or Khmer's coeng). Windows breaks between words.
+        // Thai, Lao, Khmer and Burmese write no spaces between words, and Mac and Linux have no word breaker she can call, so
+        // their lines break between letters. A Thai or Lao line never breaks before a vowel or tone mark, or a vowel that
+        // follows its letter, and never after a vowel written before its letter. Every script keeps each letter with its marks,
+        // and with the next letter after a sign that joins them (a virama, or Khmer's coeng), and a Burmese line never breaks
+        // before a letter that ends the syllable before it. Windows breaks between words.
         internal static bool[] Letters(string word)
         {
             bool[] breaks = new bool[word.Length];
             if (!Thai(word))
             {
                 foreach (int start in StringInfo.ParseCombiningCharacters(word))
-                    if (start > 0 && !Joins(word[start - 1]) && (word[start - 1] < 0x0EC0 || word[start - 1] > 0x0EC4) && "ະາຳໆຯ".IndexOf(word[start]) < 0) breaks[start] = true;
+                    if (start > 0 && !Joins(word[start - 1]) && !Ends(word, start) && (word[start - 1] < 0x0EC0 || word[start - 1] > 0x0EC4) && "ະາຳໆຯ".IndexOf(word[start]) < 0) breaks[start] = true;
                 return breaks;
             }
             for (int i = 1; i < word.Length; i++)
@@ -179,13 +183,21 @@ namespace CapriDesktop
             return breaks;
         }
 
-        // Signs that join the next letter to the one before: the Indian scripts' viramas and Khmer's coeng.
+        // Signs that join the next letter to the one before: the Indian scripts' and Burmese viramas and Khmer's coeng.
         private static bool Joins(char c)
         {
-            return c == '्' || c == '্' || c == '੍' || c == '્' || c == '୍' || c == '்' || c == '్' || c == '್' || c == '്' || c == '្';
+            return c == '्' || c == '্' || c == '੍' || c == '્' || c == '୍' || c == '்' || c == '్' || c == '್' || c == '്' || c == '្' || c == '္';
         }
 
-        // The longest start of a word with Thai, Lao or Khmer in it that ends where a line may break and fits in that many columns.
+        // True when the Burmese letter there ends the syllable before it: an asat silences it, or a virama stacks the next
+        // letter under it, after a dot below or not.
+        private static bool Ends(string word, int at)
+        {
+            int next = at + 1 < word.Length && word[at + 1] == '့' ? at + 2 : at + 1;
+            return next < word.Length && (word[next] == '်' || word[next] == '္');
+        }
+
+        // The longest start of a word with Thai, Lao, Khmer or Burmese in it that ends where a line may break and fits in that many columns.
         internal static string Fill(string word, int columns)
         {
             bool[] breaks = Letters(word);
@@ -200,8 +212,8 @@ namespace CapriDesktop
         }
 
         // Lines by columns, so Chinese, Japanese and Korean fit the bubble too. They have no spaces to break at, so a run of
-        // them fills the rest of a line and carries on below, the way they're written. Thai, Lao and Khmer do the same. Other
-        // words only break when they're longer than a whole line.
+        // them fills the rest of a line and carries on below, the way they're written. Thai, Lao, Khmer and Burmese do the
+        // same. Other words only break when they're longer than a whole line.
         internal static List<string> Wrap(string text, int columns)
         {
             List<string> lines = new List<string>();

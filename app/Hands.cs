@@ -126,6 +126,8 @@ namespace CapriDesktop
         internal static readonly string ClaudeTools = Render(true);
         internal static readonly string Listing = Written();
         private const string LookupWords = @"^(what('?s| is| are)|how('?s| is)|is it|will it|when('?s| is| does| do)|who won|did|check|get|tell me|show me|find)\b.*\b(weather|forecast|temperature|raining|snowing|news|headlines|scores?|stock price|price of|exchange rate|time (is it )?in|opening hours|open (today|now|tonight)|release date|showtimes|rain|snow|sunny|hot out|cold out)\b|^(weather|forecast|news|headlines)\b|^who (won|is winning)\b";
+        // Burmese asks with ပေး (for me), လိုက် (go ahead) or ပါ (please) after the verb, and ends a sentence with "။".
+        private const string BurmeseAsk = @"(လိုက်|ပေး|စမ်း|ပါ)+(ဦး|ဥ\u102Eး)?(နော်)?[။၊!?.\s]*$";
 
         private static readonly Regex Asks = new Regex(
             @"^(open|launch|start|run|load up|boot up|fire up|play|shuffle|put on|blast|queue|close|quit|exit|kill|shut down|switch (back |over )?to|back to|go to|bring up|pull up|show me|minimi[sz]e|pause|unpause|resume|stop the music|skip|next|previous|go back|volume|louder|quieter|mute|unmute|search|google|look up|mind (opening|launching|playing|closing))\b" +
@@ -216,6 +218,11 @@ namespace CapriDesktop
             @"|^fadlan\b.*\b(fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami|tus|dir)$|(-(ka|ga|ha|ta|da)|\b(heesta|heesaha|muusigga|muusikada|fiidiyowga|barnaamijka|codka)) (fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami)( fadlan)?$|\bi tus( fadlan)?$" +
             // Amharic puts the verb last too, and ends a sentence with "።" or asks with "፧".
             @"|(^|\s)(ክፈት|ክፈቺ|ክፈቱ|ክፈትልኝ|ክፈቺልኝ|ክፈቱልኝ|አጫውት|አጫውቺ|አጫውቱ|አጫውትልኝ|አጫውቺልኝ|አጫውቱልኝ|ዝጋ|ዝጊ|ዝጉ|ዝጋልኝ|ዝጊልኝ|ዝጉልኝ|ፈልግ|ፈልጊ|ፈልጉ|ፈልግልኝ|ፈልጊልኝ|ፈልጉልኝ|አሳየኝ|አሳይኝ|አሳዩኝ|አቁም|አቁሚ|አቁሙ|ላክ|ላኪ|ላኩ|ላክልኝ|ላኪልኝ|ላኩልኝ)( እባክህ| እባክሽ| እባካችሁ| እባክዎ)?[።፧!?.\s]*$" +
+            // Burmese puts the verb last too. ပြ (show) is left out, since it also ends ပြောပြ (tell) and ရှင်းပြ (explain),
+            // and ပါးစပ်ပိတ် (shut your mouth) is chat.
+            @"|(?<!ပါးစပ် ?)(ဖွင့်(ပြ)?|ပိတ်|ရှာဖွေ|ရှာ|ပို့|ရပ်|ကျော်)" + BurmeseAsk + @"|အသံ.*(ချဲ့|လျှော့|တိုး)" + BurmeseAsk +
+            @"|(ဖွင့်|ပိတ်|ရှာ|ပို့|ရပ်|ကျော်)(လိုက်)?ပေး(နိုင်မလား|နိုင်လား|မလား)|^(ဒါ(က)? ?ဘာ ?သီချင်း|(ဒီ ?|အခု ?(ဖွင့်နေတဲ့ ?)?)သီချင်း(က)? ?(ဘာ ?သီချင်း|ဘာ|နာမည် ?ဘာ))(လဲ|လည်း)" +
+            @"|(မျက်နှာပြင်|စခရင်|screen)( ?ကို)? ?ကြည့်" + BurmeseAsk + @"|^(မင်း|နင်|သင်|ရှင်)? ?ဘာ ?(တွေ)? ?မြင်(ရ)?(လဲ|သလဲ)" +
             // Hebrew, Urdu and Persian. Urdu and Persian put the verb last.
             @"|^(בבקשה )?(פתח|פתחי|תפתח|תפתחי|נגן|נגני|תנגן|תנגני|סגור(?= )|סגרי|תסגור|תסגרי|חפש|חפשי|תחפש|תחפשי|תראה לי|תראי לי|הראה לי|הראי לי|עצור|עצרי|תעצור|תעצרי|הגבר|תגביר|תגבירי|הנמך|תנמיך|תנמיכי|שים(?! לב)|שימי(?! לב)|תשים|תשימי|הפעל|הפעילי|תפעיל|תפעילי|כבה|כבי|תכבה|תכבי|שלח|שלחי|תשלח|תשלחי)(?!\w)|^(את יכולה|אתה יכול|תוכלי|תוכל|אפשר) (בבקשה )?ל(פתוח|נגן|סגור|חפש|הראות|הפעיל|כבות|שים|הגביר|הנמיך|שלוח)(?!\w)" +
             @"|(کھولو|کھول دو|کھولیں|کھول دیں|چلاؤ|چلا دو|چلائیں|چلا دیں|بجاؤ|بجا دو|بجائیں|بند کرو|بند کر دو|بند کریں|بند کر دیں|ڈھونڈو|ڈھونڈ دو|تلاش کرو|تلاش کریں|دکھاؤ|دکھا دو|دکھائیں|روکو|روک دو|روکیں|بڑھاؤ|بڑھا دو|کم کرو|کم کر دو|بھیجو|بھیج دو)( نا| پلیز| پلز)?[۔.!?؟\s]*$|(کھول|چلا|بجا|بند کر|دکھا|ڈھونڈ) (سکتے|سکتی|سکو) (ہو|ہیں|گے|گی)|کون سا گانا" +
@@ -390,7 +397,7 @@ namespace CapriDesktop
             @"|làm ơn|lam on|cảm ơn|cám ơn|cam on|tolong|mohon|terima kasih|makasih|sila|tulung|mangga|matur nuwun|suwun|pakiusap|paki\w*|salamat|tafadhali|asante|don allah|dan allah|na gode" +
             @"|jọ̀wọ́|jọwọ|jowo|o ṣeun|o seun|biko|daalụ|daalu|ngiyacela|ngicela|sicela|ngiyabonga|siyabonga|ndiyacela|ndicela|enkosi|fadlan|mahadsanid" +
             @"|من فضلك|لو سمحت|رجاء|رجاءً|الرجاء|شكرا|شكراً|براہ کرم|مہربانی|پلیز|شکریہ|لطفا|لطفاً|ممنون|مرسی|בבקשה|תודה|እባክህ|እባክሽ|እባካችሁ|እባክዎ|አመሰግናለሁ|እናመሰግናለን)\b" +
-            @"|请|請|麻烦|麻煩|拜托|拜託|谢谢|謝謝|ください|下さい|お願い|おねがい|ありがとう|주세요|부탁|제발|고마워|감사|กรุณา|รบกวน|ขอบคุณ|ກະລຸນາ|ຂອບໃຈ|សូម|អរគុណ" +
+            @"|请|請|麻烦|麻煩|拜托|拜託|谢谢|謝謝|ください|下さい|お願い|おねがい|ありがとう|주세요|부탁|제발|고마워|감사|กรุณา|รบกวน|ขอบคุณ|ກະລຸນາ|ຂອບໃຈ|សូម|អរគុណ|ကျေးဇူးပြု၍|ကျေးဇူးပြုပြီး|ကျေးဇူးတင်|ကျေးဇူးပဲ|ပါ(ဦး|ဥ\u102Eး|နော်)?[။၊!?.\s]*$" +
             @"|कृपया|प्लीज़|प्लीज|प्लिज|धन्यवाद|शुक्रिया|দয়া করে|প্লিজ|প্লীজ|ধন্যবাদ|કૃપા કરીને|પ્લીઝ|આભાર|ਕਿਰਪਾ ਕਰਕੇ|ਪਲੀਜ਼|ਪਲੀਜ|ਧੰਨਵਾਦ" +
             @"|தயவுசெய்து|ப்ளீஸ்|பிளீஸ்|நன்றி|దయచేసి|ప్లీజ్|ధన్యవాదాలు|ದಯವಿಟ್ಟು|ಪ್ಲೀಸ್|ಧನ್ಯವಾದ|ദയവായി|പ്ലീസ്|നന്ദി", RegexOptions.IgnoreCase);
         private static readonly Regex JustPlease = new Regex(@"^\W*((ok|okay|fine|sorry|vale|perd[oó]n|d[ée]sol[ée])\W+)?(pretty\s+)?(please+|pls|plz|pleas+e*|por favor|porfavor|porfa|porfis|s'il (te|vous) pla[iî]t|sil (te|vous) pla[iî]t|stp|svp" +
@@ -398,7 +405,7 @@ namespace CapriDesktop
             @"|proszę|prosze|prosím|prosim|kérlek|kerlek|légyszi|legyszi|molim( te| vas)?|молим( те)?|të lutem|te lutem|ju lutem|te rog|vă rog|va rog|le do thoil|plîs|plis|os gwelwch yn dda|jekk jogħġbok|jekk joghgbok" +
             @"|lütfen|lutfen|zəhmət olmasa|xahiş edirəm|iltimos|пожалуйста|пожалуста|плиз|плз|пж|будь ласка|калі ласка|моля|те молам|ве молам|өтінемін|гуйя|παρακαλώ|παρακαλω" +
             @"|làm ơn|lam on|tolong|mohon|sila|tulung|mangga|pakiusap|tafadhali|don allah|dan allah|jọ̀wọ́|jọwọ|jowo|biko|ngiyacela|ngicela|sicela|ndiyacela|ndicela|fadlan" +
-            @"|请|請|拜托|拜託|お願い(します)?|おねがい(します)?|ください|부탁(해|해요|합니다)|제발|กรุณา|ขอร้อง|ກະລຸນາ|សូម(មេត្តា)?" +
+            @"|请|請|拜托|拜託|お願い(します)?|おねがい(します)?|ください|부탁(해|해요|합니다)|제발|กรุณา|ขอร้อง|ກະລຸນາ|សូម(មេត្តា)?|ကျေးဇူးပြု၍|ကျေးဇူးပြုပြီး" +
             @"|कृपया|प्लीज़|प्लीज|प्लिज|দয়া করে|প্লিজ|প্লীজ|કૃપા કરીને|પ્લીઝ|ਕਿਰਪਾ ਕਰਕੇ|ਪਲੀਜ਼|ਪਲੀਜ|தயவுசெய்து|ப்ளீஸ்|பிளீஸ்|దయచేసి|ప్లీజ్|ದಯವಿಟ್ಟು|ಪ್ಲೀಸ್|ദയവായി|പ്ലീസ്" +
             @"|من فضلك|لو سمحت|رجاء|رجاءً|الرجاء|براہ کرم|پلیز|لطفا|لطفاً|בבקשה|እባክህ|እባክሽ|እባካችሁ|እባክዎ)(\s+capri)?\W*$", RegexOptions.IgnoreCase);
         private static readonly Random Dice = new Random();
@@ -420,7 +427,7 @@ namespace CapriDesktop
         internal static bool Wants(string said)
         {
             if (Regex.IsMatch(said ?? "", @"\b(please|pls|plz|stp)\s*[.!?]*$", RegexOptions.IgnoreCase) && Site(Asked(said))) return true;
-            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？。．،؟।።፣፧]\s*|\.\s+"))
+            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？。．،؟।።፣፧။၊]\s*|\.\s+"))
             {
                 string text = Asked(part);
                 if (!Chatter.IsMatch(text) && Asks.IsMatch(text)) return true;
@@ -509,7 +516,7 @@ namespace CapriDesktop
 
         internal static bool Errand(string said)
         {
-            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？。．،؟।።፣፧]\s*|\.\s+"))
+            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？。．،؟।።፣፧။၊]\s*|\.\s+"))
             {
                 string text = Asked(part);
                 if (!Chatter.IsMatch(text) && Errands.IsMatch(text)) return true;
@@ -611,10 +618,14 @@ namespace CapriDesktop
             @"|\b(angikwazi|andikwazi|andinako) uku(vula|dlala|vala|lawula|finyelela|fikelela|qala|cisha|qalisa)(?!\w)|\b(anginayo|andinayo|andinalo) (imvume|ukufinyelela|ufikelelo)(?!\w)" +
             @"|\bma (awoodo|kari karo|karo) (inaan )?(furo|daaro|shido|xiro|xidho|maamulo|galo|bilaabo)(?!\w)|\bma (furi|daari|shidi|xiri|xidhi|maamuli|gali|bilaabi) karo(?!\w)|\bma haysto (oggolaansho|fursad|marin)(?!\w)" +
             @"|(መክፈት|ማጫወት|መዝጋት|መቆጣጠር|መድረስ|ማስጀመር|መፈለግ) (አልችልም|አልቻልኩም)|(መዳረሻ|ፈቃድ|ፍቃድ) የለኝም" +
-            @"|ບໍ່ສາມາດ ?(ເປີດ|ຫຼິ້ນ|ຫລິ້ນ|ເຂົ້າເຖິງ|ຄວບຄຸມ|ປິດ|ຊອກຫາ)|ບໍ່ມີສິດ ?(ເຂົ້າເຖິງ|ເຂົ້າໃຊ້)|មិន ?អាច ?(បើក|ចាក់|ចូលប្រើ|គ្រប់គ្រង|បិទ|ស្វែងរក)|(គ្មាន|មិនមាន) ?សិទ្ធិ ?(ចូលប្រើ|ចូល)", RegexOptions.IgnoreCase);
+            @"|ບໍ່ສາມາດ ?(ເປີດ|ຫຼິ້ນ|ຫລິ້ນ|ເຂົ້າເຖິງ|ຄວບຄຸມ|ປິດ|ຊອກຫາ)|ບໍ່ມີສິດ ?(ເຂົ້າເຖິງ|ເຂົ້າໃຊ້)|មិន ?អាច ?(បើក|ចាក់|ចូលប្រើ|គ្រប់គ្រង|បិទ|ស្វែងរក)|(គ្មាន|មិនមាន) ?សិទ្ធិ ?(ចូលប្រើ|ចូល)" +
+            @"|မ(ဖွင့်|ပိတ်|ရှာ|ထိန်းချုပ်|ဝင်ရောက်)(ပေး)?နိုင်|(ဖွင့်|ပိတ်|ရှာ|ထိန်းချုပ်|ဝင်ရောက်)(ပေး)?(လို့|၍) ?မရ|(ဝင်ရောက်ခွင့်|ဝင်ခွင့်|အသုံးပြုခွင့်|ခွင့်ပြုချက်) ?မရှိ", RegexOptions.IgnoreCase);
         private const string Able = @"(open|launch|start|run|play|pause|resume|skip|control|access|use|search|google|close|mute|unmute|put on|turn (up|down|on|off)|change)\b";
 
-        internal static bool Refused(string reply) { return Refusal.IsMatch((reply ?? "").Replace('’', '\'')); }
+        internal static bool Refused(string reply) { return Refusal.IsMatch(Dots((reply ?? "").Replace('’', '\''))); }
+
+        // Burmese can store a dot below and an asat on one letter in either order, so they're put in one order to match.
+        private static string Dots(string text) { return text.Replace("\u103A\u1037", "\u1037\u103A"); }
 
         // They asked her to do something, rather than asked about her: "do you play Valorant?" is a question, "can you put on some music?" isn't.
         internal static bool Requested(string said)
@@ -633,18 +644,18 @@ namespace CapriDesktop
                 @"|(ці )?можаш|(ці )?можаце|дали можеш|za (ka|ki) iya|(don|dan) allah|ṣé o lè|se o le|jọ̀wọ́|jọwọ|jowo|biko|(i|ị) nwere ike|ungakwazi|ngicela|ndicela|sicela|fadlan|tulung" +
                 @"|את יכולה|אתה יכול|תוכלי|תוכל|אפשר|בבקשה|می[\u200C ]?(تونی|توانی)|می[\u200C ]?شه|لطفا|لطفاً)(?!\w)", RegexOptions.IgnoreCase)
                 // Chinese and Thai ask at the start without spaces; Japanese, Korean, Turkish, Hindi and the other verb-last languages ask at the end.
-                || Regex.IsMatch(text, @"^(capri[\s,，]*)?((你|您)?(能不能|可不可以|能|可以|会不会|會不會)?(帮|幫|给|給|替)我|(你|您)(能|可以)|请|請|麻烦|麻煩|ช่วย|กรุณา|รบกวน|ກະລຸນາ|ຊ່ວຍ|សូម|ជួយ)", RegexOptions.IgnoreCase)
+                || Regex.IsMatch(text, @"^(capri[\s,，]*)?((你|您)?(能不能|可不可以|能|可以|会不会|會不會)?(帮|幫|给|給|替)我|(你|您)(能|可以)|请|請|麻烦|麻煩|ช่วย|กรุณา|รบกวน|ກະລຸນາ|ຊ່ວຍ|សូម|ជួយ|ကျေးဇူးပြု၍|ကျေးဇူးပြုပြီး)", RegexOptions.IgnoreCase)
                 || Regex.IsMatch(text, @"(くれる|くれない|くれます|くれませんか|もらえる|もらえない|もらえます|もらえませんか|ください|줄래|줄래요|줄 ?수 ?있어|줄 ?수 ?있어요|주세요|주실래요|줘|줘요|r m[ıi]s[ıi]n|bilir misin|सकते हो|सकती हो|सकोगे|सकोगी|सकते हैं|सकती हैं|سکتے ہو|سکتی ہو|سکتے ہیں|سکتی ہیں|سکو گے|سکو گی|পারবে|পারবেন|পারবি|शकतेस का|शकतोस का|शकता का|शकाल का|શકે|શકીશ|શકો|શકશો|ਸਕਦੇ ਹੋ|ਸਕਦੀ ਹੋ|ਸਕਦੀ ਹੈਂ|ਸਕੋਗੇ|ਸਕੋਗੀ|முடியுமா|గలవా|గలరా|ಬಹುದಾ|ാമോ|പറ്റുമോ|ได้ไหม|ได้มั้ย|ได้มั๊ย|หน่อย" +
-                    @"|dezakezu|ahal duzu|al duzu|bilərsən|bilərsənmi|bilərsiniz|bilərsinizmi|olasanmi|olasizmi|berasanmi|berasizmi|аласың ба|аласыз ба|бересің бе|бересіз бе|чадах уу|өгөх үү|өгнө үү|өгөөч|सक्छौ|सक्नुहुन्छ|सक्छस्|दिनुहुन्छ|दिन्छौ|kartaa|kartid|ትችላለህ|ትችያለሽ|ትችላላችሁ|ይችላሉ|ໄດ້ບໍ|ໄດ້ບໍ່|បានទេ|បានអត់)\s*(か)?\s*[?？؟፧]\s*$", RegexOptions.IgnoreCase);
+                    @"|dezakezu|ahal duzu|al duzu|bilərsən|bilərsənmi|bilərsiniz|bilərsinizmi|olasanmi|olasizmi|berasanmi|berasizmi|аласың ба|аласыз ба|бересің бе|бересіз бе|чадах уу|өгөх үү|өгнө үү|өгөөч|सक्छौ|सक्नुहुन्छ|सक्छस्|दिनुहुन्छ|दिन्छौ|kartaa|kartid|ትችላለህ|ትችያለሽ|ትችላላችሁ|ይችላሉ|ໄດ້ບໍ|ໄດ້ບໍ່|បានទេ|បានអត់|နိုင်မလား|နိုင်လား|ပေးမလား|လို့ ?ရမလား|လို့ ?ရလား)\s*(か)?\s*[?？؟፧]\s*$", RegexOptions.IgnoreCase);
         }
 
         private static readonly Regex Chatter = new Regex(@"^(play (with|along|around|dead|dumb|nice|fair|a game with|a joke)|open up (to|about)|start (a story|a joke|an argument)|run (a mile|a race)|kill (the boss|me|time)|look (at it this way|forward)|show me (how|why)|check my (spelling|grammar)|rate my joke|mets-toi)\b", RegexOptions.IgnoreCase);
 
         private static string Asked(string said)
         {
-            said = Regex.Replace(said ?? "", @"^[\s¿¡]+", "");
+            said = Dots(Regex.Replace(said ?? "", @"^[\s¿¡]+", ""));
             string text = Lead.Replace(Opener.Replace(Regex.Replace((said ?? "").Replace('\u2019', '\'').Trim(), @"\s+", " "), ""), "");
-            for (int i = 0; i < 3; i++) text = Regex.Replace(Regex.Replace(text, @"[\s,.!?;，；！？、。．…،؟।॥።፣፧;]+$", ""),@"\s+(for me|please|pls|plz|rn|right now|now|stp|s'il te pla[iî]t|sil te pla[iî]t|por favor|porfavor|porfa|porfis|bitte|bitte schön|per favore|perfavore|per piacere|proszę|prosze|пожалуйста|плз|пж|будь ласка|lütfen|lutfen|alsjeblieft|alstublieft|a\.?u\.?b|tolong|dong)$", "", RegexOptions.IgnoreCase);
+            for (int i = 0; i < 3; i++) text = Regex.Replace(Regex.Replace(text, @"[\s,.!?;，；！？、。．…،؟।॥።፣፧။၊;]+$", ""),@"\s+(for me|please|pls|plz|rn|right now|now|stp|s'il te pla[iî]t|sil te pla[iî]t|por favor|porfavor|porfa|porfis|bitte|bitte schön|per favore|perfavore|per piacere|proszę|prosze|пожалуйста|плз|пж|будь ласка|lütfen|lutfen|alsjeblieft|alstublieft|a\.?u\.?b|tolong|dong)$", "", RegexOptions.IgnoreCase);
             return text;
         }
         // Volume, mute and music in everyday words, so they never wait on a brain: English, Spanish and French in full, and the
