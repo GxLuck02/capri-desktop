@@ -18,11 +18,11 @@ namespace CapriDesktop
         private static readonly int[] Gaps = { 10, 15, 30, 60, 90, 120, 180, 300, 600 };
         private static readonly string[] GapNames = { "10 s", "15 s", "30 s", "1 min", "1.5 min", "2 min", "3 min", "5 min", "10 min" };
         private const int SetupHeight = 118;
-        private const int PageTall = 770;
+        private const int PageTall = 804;
         // Settings opens a second column to the right, so every setting shows at once.
         private const int Column = 380;
         private const int Far = 30000;
-        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 484 }, new[] { 0, 494, 650 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 460 }, new[] { Column, 482, 652 }, new[] { 0, 674, 734 } };
+        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 484 }, new[] { 0, 494, 650 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 460 }, new[] { Column, 482, 652 }, new[] { 0, 674, 768 } };
         private static readonly string[] PerchNames = Array.ConvertAll(Companion.PerchRates, rate => rate + " fps");
         // Her voice's pitch in semitones, and her speed.
         private static readonly string[] PitchNames = { "-6", "-5", "-4", "-3", "-2", "-1", "Normal", "+1", "+2", "+3", "+4", "+5", "+6" };
@@ -81,6 +81,7 @@ namespace CapriDesktop
         private readonly Key muteKeys;
         private readonly Key typeKeys;
         private readonly Key hideKeys;
+        private readonly Key quietKeys;
         private readonly Key confirmKeys;
         private readonly Key cancelKeys;
         // The keys pressed so far while one of her keys is being picked: -1 until a real key comes, then its modifiers.
@@ -126,8 +127,10 @@ namespace CapriDesktop
         private string muteName = "Ctrl + Alt + N";
         private string typeName = "Ctrl + Alt + T";
         private string hideName = "Ctrl + Alt + H";
+        private string quietName = "Ctrl + Alt + P";
         private bool typeReady = true;
         private bool hideReady = true;
+        private bool quietReady = true;
         private readonly Label muteShortcut;
         private readonly Key mics;
         private readonly ContextMenuStrip micMenu;
@@ -497,6 +500,8 @@ namespace CapriDesktop
             typeKeys.AccessibleName = "Her typing key. Click, press new keys, then Confirm";
             hideKeys = Make("Hide/show: Ctrl + Alt + H", 358, 706, 250, 28, delegate { PickKeys(3); });
             hideKeys.AccessibleName = "Her hide key. Click, press new keys, then Confirm";
+            quietKeys = Make("Quiet: Ctrl + Alt + P", 96, 740, 250, 28, delegate { PickKeys(4); });
+            quietKeys.AccessibleName = "Her quiet key: she only talks when you talk to her until you press it again. Click, press new keys, then Confirm";
             // Only a click ends picking a key, so Enter, Esc and Tab can be her keys too.
             confirmKeys = Make("Confirm", 620, 672, 116, 28, delegate { ConfirmKeys(); });
             confirmKeys.Accent = Look.Cyan;
@@ -505,7 +510,7 @@ namespace CapriDesktop
             cancelKeys = Make("Cancel", 620, 706, 116, 28, delegate { CancelKeys(); });
             cancelKeys.AccessibleName = "Cancel and keep her old keys";
             confirmKeys.Visible = cancelKeys.Visible = false;
-            keysNote = Caption("", 96, 742, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+            keysNote = Caption("", 96, 776, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             keysNote.MaximumSize = new Size(512, 0);
             for (int i = first; i < Controls.Count; i++)
             {
@@ -942,7 +947,7 @@ namespace CapriDesktop
         internal void SlidePops(int steps) { Press(pops, steps); }
 
         // The HABITS row and KEYS fit inside the settings page.
-        internal bool PerchFits { get { Rectangle page = PageArea; return page.Contains(perchFpsName.Bounds) && page.Contains(perchFps.Bounds) && page.Contains(hideKeys.Bounds); } }
+        internal bool PerchFits { get { Rectangle page = PageArea; return page.Contains(perchFpsName.Bounds) && page.Contains(perchFps.Bounds) && page.Contains(hideKeys.Bounds) && page.Contains(quietKeys.Bounds); } }
 
         internal string Status { get { return brainName.Text + " | " + brainNote.Text; } }
 
@@ -1001,7 +1006,7 @@ namespace CapriDesktop
 
         internal int BackTop { get { return more.Top; } }
 
-        internal bool HideKeyShows { get { return ClientRectangle.Contains(hideKeys.Bounds); } }
+        internal bool HideKeyShows { get { return ClientRectangle.Contains(hideKeys.Bounds) && ClientRectangle.Contains(quietKeys.Bounds); } }
 
         internal int Px(int value) { return Scaled(value); }
 
@@ -1041,11 +1046,11 @@ namespace CapriDesktop
                 Control whole = at;
                 while (whole.Parent != this) whole = whole.Parent;
                 if (!ClientRectangle.Contains(whole.Bounds)) return "Tab reached " + (whole.AccessibleName ?? whole.Text) + " half off the screen";
-                keys = keys || whole == hideKeys;
+                keys = keys || whole == quietKeys;
                 from = at;
             }
             more.Focus();
-            return keys ? null : "Tab never reached the hide key";
+            return keys ? null : "Tab never reached the quiet key";
         }
 
         internal string VoiceStyleStatus { get { return pitchName.Text + " | " + paceName.Text + " | " + robotName.Text + " | " + glitchName.Text; } }
@@ -1439,23 +1444,25 @@ namespace CapriDesktop
             KeyLabels();
         }
 
-        internal void ShowKeys(bool type, bool hide)
+        internal void ShowKeys(bool type, bool hide, bool quiet)
         {
             typeReady = type;
             hideReady = hide;
+            quietReady = quiet;
             KeyLabels();
         }
 
-        internal void Hotkeys(string talk, string mute, string type, string hide)
+        internal void Hotkeys(string talk, string mute, string type, string hide, string quiet)
         {
             talkName = talk;
             muteName = mute;
             typeName = type;
             hideName = hide;
+            quietName = quiet;
             KeyLabels();
         }
 
-        // Which of her keys to change: 0 talk, 1 mute mic, 2 type to her, 3 hide or show her.
+        // Which of her keys to change: 0 talk, 1 mute mic, 2 type to her, 3 hide or show her, 4 quiet.
         // Opening another key while one is being picked drops what was pressed, so the old key stays.
         internal void PickKeys(int slot)
         {
@@ -1499,7 +1506,7 @@ namespace CapriDesktop
             capturing = 0;
             pendingMods = -1;
             KeyLabels();
-            KeysNote("Saved. " + (slot == 0 ? talkName + " starts voice chat." : slot == 1 ? muteName + " mutes your mic." : slot == 2 ? typeName + " opens her typing box." : hideName + " hides or shows her.") + (Companion.Swallows(mods, vk) ? " It won't type in other apps while she runs." : Companion.ByMouse(vk) ? " It still does its own job in other apps too." : ""), false);
+            KeysNote("Saved. " + (slot == 0 ? talkName + " starts voice chat." : slot == 1 ? muteName + " mutes your mic." : slot == 2 ? typeName + " opens her typing box." : slot == 3 ? hideName + " hides or shows her." : quietName + " keeps her quiet, and lets her talk again.") + (Companion.Swallows(mods, vk) ? " It won't type in other apps while she runs." : Companion.ByMouse(vk) ? " It still does its own job in other apps too." : ""), false);
         }
 
         internal void CancelKeys()
@@ -1513,7 +1520,7 @@ namespace CapriDesktop
 
         internal bool ConfirmReady { get { return confirmKeys.Visible && confirmKeys.Enabled; } }
 
-        private Control PickedKey { get { return capturing == 1 ? talkKeys : capturing == 2 ? muteKeys : capturing == 3 ? typeKeys : capturing == 4 ? hideKeys : null; } }
+        private Control PickedKey { get { return capturing == 1 ? talkKeys : capturing == 2 ? muteKeys : capturing == 3 ? typeKeys : capturing == 4 ? hideKeys : capturing == 5 ? quietKeys : null; } }
 
         private static bool WinHeld() { return (Native.GetKeyState(0x5B) & 0x8000) != 0 || (Native.GetKeyState(0x5C) & 0x8000) != 0; }
 
@@ -1558,6 +1565,7 @@ namespace CapriDesktop
             muteKeys.Text = capturing == 2 ? PickingText("Mute mic: ") : "Mute mic: " + muteName + (muteReady ? "" : " (taken)");
             typeKeys.Text = capturing == 3 ? PickingText("Type: ") : "Type: " + typeName + (typeReady ? "" : " (taken)");
             hideKeys.Text = capturing == 4 ? PickingText("Hide/show: ") : "Hide/show: " + hideName + (hideReady ? "" : " (taken)");
+            quietKeys.Text = capturing == 5 ? PickingText("Quiet: ") : "Quiet: " + quietName + (quietReady ? "" : " (taken)");
             confirmKeys.Visible = cancelKeys.Visible = capturing != 0;
             confirmKeys.Enabled = pendingMods >= 0;
             confirmKeys.Invalidate();
@@ -1574,6 +1582,7 @@ namespace CapriDesktop
         internal string TierNote { get { return tierNote.Text; } }
         internal string KeyStatus { get { return shortcut.Text + " | " + muteShortcut.Text; } }
         internal string KeysShown { get { return talkKeys.Text + " | " + muteKeys.Text + " | " + typeKeys.Text + " | " + hideKeys.Text; } }
+        internal string QuietKeyShown { get { return quietKeys.Text; } }
 
         internal void ShowMic(string name)
         {

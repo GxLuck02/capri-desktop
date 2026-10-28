@@ -181,6 +181,9 @@ namespace CapriDesktop
         [DataMember] public int TypeVk = 0x54;
         [DataMember] public int HideMods = 3;
         [DataMember] public int HideVk = 0x48;
+        // Her quiet key, Ctrl + Alt + P (Zenni's ask). P, since AltGr + Q types @ on German keyboards and Ctrl + Alt is AltGr.
+        [DataMember] public int QuietMods = 3;
+        [DataMember] public int QuietVk = 0x50;
         [DataMember] public int WanderPace = 1;
         // How often she pops in while Check in on me is on: 0 rarely, 1 sometimes (every 8 to 20 minutes, as before), 2 often.
         [DataMember] public int PopPace = 1;
@@ -235,6 +238,8 @@ namespace CapriDesktop
             TypeVk = 0x54;
             HideMods = 3;
             HideVk = 0x48;
+            QuietMods = 3;
+            QuietVk = 0x50;
             WanderPace = 1;
             PopPace = 1;
             PerchFps = 30;
@@ -892,10 +897,14 @@ namespace CapriDesktop
         private const int MuteKeyId = 0x434D;
         private const int TypeKeyId = 0x4354;
         private const int HideKeyId = 0x4348;
+        private const int QuietKeyId = 0x4351;
         private bool talkKey;
         private bool muteKey;
         private bool typeKey;
         private bool hideKey;
+        private bool quietKey;
+        // Her quiet key's state: no glances, pop-ins, check-ins, cheers or jokes until it's pressed again. Starting her again ends it.
+        private bool shushed;
         private const int BlinkFrom = 9;
         private const int PerchBlinkFrom = 34;
         // Her perch fps choices. The art is 30 fps: slower holds each frame longer, faster mixes in-betweens of neighbouring frames.
@@ -1161,11 +1170,12 @@ namespace CapriDesktop
             bool muteFree = !testing && (ByMouse(preferences.MuteVk) || (Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk) && Native.UnregisterHotKey(Handle, MuteKeyId)));
             if (!testing) typeKey = ByMouse(preferences.TypeVk) || Native.RegisterHotKey(Handle, TypeKeyId, preferences.TypeMods | 0x4000, preferences.TypeVk);
             if (!testing) hideKey = ByMouse(preferences.HideVk) || Native.RegisterHotKey(Handle, HideKeyId, preferences.HideMods | 0x4000, preferences.HideVk);
+            if (!testing) quietKey = ByMouse(preferences.QuietVk) || Native.RegisterHotKey(Handle, QuietKeyId, preferences.QuietMods | 0x4000, preferences.QuietVk);
             mouseKeys.Tick += delegate { WatchMouseKeys(); };
             WatchMouse();
-            mainframe.Hotkeys(TalkKeyName, MuteKeyName, TypeKeyName, HideKeyName);
+            mainframe.Hotkeys(TalkKeyName, MuteKeyName, TypeKeyName, HideKeyName, QuietKeyName);
             mainframe.ShowShortcut(talkKey, muteFree);
-            mainframe.ShowKeys(typeKey, hideKey);
+            mainframe.ShowKeys(typeKey, hideKey, quietKey);
             RefreshIcons();
             if (!testing && !hidden) DropSoon();
             if (!testing && Program.StartedFresh)
@@ -1756,6 +1766,7 @@ namespace CapriDesktop
             if (message.Msg == 0x0312 && message.WParam.ToInt32() == MuteKeyId) { ToggleMic(); return; }
             if (message.Msg == 0x0312 && message.WParam.ToInt32() == TypeKeyId) { if (hidden) SetHidden(false); OpenTyper(); return; }
             if (message.Msg == 0x0312 && message.WParam.ToInt32() == HideKeyId) { ToggleHidden(); return; }
+            if (message.Msg == 0x0312 && message.WParam.ToInt32() == QuietKeyId) { ToggleShush(); return; }
             if (message.Msg == 0x02E0) { anchor = KeepOnScreen(anchor); Location = anchor; RenderFrame(); }
             base.WndProc(ref message);
         }
@@ -1945,7 +1956,7 @@ namespace CapriDesktop
         {
             if (popOut >= 0 && (clicks != popClicks || chatting || typer.Visible || talkState != TalkState.Off)) EndPopIn(false);
             if (popOut >= 0 && now >= popOut && speech == null) EndPopIn(true);
-            if (!preferences.CheckIns) { nextPopIn = -1; return; }
+            if (!preferences.CheckIns || shushed) { nextPopIn = -1; return; }
             if (nextPopIn < 0) nextPopIn = now + PopGap();
             if (now < nextPopIn) return;
             nextPopIn = now + PopGap();
@@ -1999,6 +2010,22 @@ namespace CapriDesktop
             mainframe.Sync();
         }
 
+        internal bool Shushed { get { return shushed; } }
+
+        // Her quiet key, for when they focus or game: she stops what she's saying and talks only when they talk to her.
+        // Watch my screen and Check in on me keep their settings and pick up again on the next press.
+        internal void ToggleShush()
+        {
+            shushed = !shushed;
+            nextPopIn = -1;
+            nudgeOut = -1;
+            nudgeGap = NudgeGap;
+            noticed = -1;
+            nextGlance = -1;
+            if (shushed) voice.Stop();
+            Say(shushed ? "Going quiet. " + QuietKeyName + " when you want me back." : "I'm back, choom.");
+        }
+
         // With Check in on me on, ignored for a while when they're at the PC, she comes over and asks for attention: a click gets a happy line, silence gets a sulk and a longer wait.
         private void CheckNudge(double now, long quiet)
         {
@@ -2021,7 +2048,7 @@ namespace CapriDesktop
                 }
                 return;
             }
-            if (!preferences.CheckIns || hidden || quiet > 30000 || now - noticed < nudgeGap || (lastGlance >= 0 && now - lastGlance < 300)) return;
+            if (!preferences.CheckIns || shushed || hidden || quiet > 30000 || now - noticed < nudgeGap || (lastGlance >= 0 && now - lastGlance < 300)) return;
             if (quitting || riding || onPanel || falling || hanging || typer.Visible || speech != null || outro != null || popOut >= 0 || (clip != idle && clip != perch)) return;
             Nudge(now);
         }
@@ -2578,6 +2605,8 @@ namespace CapriDesktop
 
         internal string HideKeyName { get { return KeyName(preferences.HideMods, preferences.HideVk); } }
 
+        internal string QuietKeyName { get { return KeyName(preferences.QuietMods, preferences.QuietVk); } }
+
         // Any key alone or with any of Alt (1), Ctrl (2), Shift (4) and Win (8), which are RegisterHotKey's own flags, and middle click
         // or a side mouse button too. A modifier on its own, a left or right click or an IME placeholder never counts.
         internal static bool Bindable(int mods, int vk) { return (mods & ~15) == 0 && vk > 0 && vk < 0xFF && Array.IndexOf(NotKeys, vk) < 0; }
@@ -2623,28 +2652,31 @@ namespace CapriDesktop
             if (!Bindable(value.MuteMods, value.MuteVk) || (value.MuteMods == value.TalkMods && value.MuteVk == value.TalkVk)) { value.MuteMods = 3; value.MuteVk = 0x4E; }
             if (!Bindable(value.TypeMods, value.TypeVk)) { value.TypeMods = 3; value.TypeVk = 0x54; }
             if (!Bindable(value.HideMods, value.HideVk)) { value.HideMods = 3; value.HideVk = 0x48; }
+            if (!Bindable(value.QuietMods, value.QuietVk)) { value.QuietMods = 3; value.QuietVk = 0x50; }
             Unclash(value);
         }
 
-        // Her keys, in the order the Mainframe shows them: talk, mute mic, type to her, hide or show her.
-        private static readonly string[] KeyJobs = { "talk", "mute", "typing", "hide" };
-        private static readonly int[][] SpareKeys = { null, null, new[] { 0x54, 0x59, 0x55, 0x49, 0x4F }, new[] { 0x48, 0x4A, 0x4B, 0x4C, 0x42 } };
+        // Her keys, in the order the Mainframe shows them: talk, mute mic, type to her, hide or show her, quiet.
+        private static readonly string[] KeyJobs = { "talk", "mute", "typing", "hide", "quiet" };
+        private static readonly int[][] SpareKeys = { null, null, new[] { 0x54, 0x59, 0x55, 0x49, 0x4F }, new[] { 0x48, 0x4A, 0x4B, 0x4C, 0x42 }, new[] { 0x50, 0x44, 0x52, 0x4A, 0x4B } };
 
-        // Talk and mute were her first keys. A type or hide key that lands on an earlier one, as 0.7.3's new defaults could,
-        // moves to the first free Ctrl + Alt spare, so mute on Ctrl + Alt + H stays mute instead of hiding her.
+        // Talk and mute were her first keys. A newer type, hide or quiet key that lands on an earlier one, as 0.7.3's new defaults
+        // could, moves to the first free Ctrl + Alt spare, so mute on Ctrl + Alt + H stays mute instead of hiding her.
         internal static void Unclash(Preferences value)
         {
-            int[] bound = { value.TalkMods, value.TalkVk, value.MuteMods, value.MuteVk, value.TypeMods, value.TypeVk, value.HideMods, value.HideVk };
-            for (int slot = 2; slot < 4; slot++)
+            int[] bound = { value.TalkMods, value.TalkVk, value.MuteMods, value.MuteVk, value.TypeMods, value.TypeVk, value.HideMods, value.HideVk, value.QuietMods, value.QuietVk };
+            for (int slot = 2; slot < KeyJobs.Length; slot++)
             {
                 if (!Clashes(bound, slot, bound[slot * 2], bound[slot * 2 + 1], slot)) continue;
                 foreach (int vk in SpareKeys[slot])
-                    if (!Clashes(bound, slot, 3, vk, 4)) { bound[slot * 2] = 3; bound[slot * 2 + 1] = vk; break; }
+                    if (!Clashes(bound, slot, 3, vk, KeyJobs.Length)) { bound[slot * 2] = 3; bound[slot * 2 + 1] = vk; break; }
             }
             value.TypeMods = bound[4];
             value.TypeVk = bound[5];
             value.HideMods = bound[6];
             value.HideVk = bound[7];
+            value.QuietMods = bound[8];
+            value.QuietVk = bound[9];
         }
 
         // Whether a key matches one of the other slots before below.
@@ -2660,7 +2692,7 @@ namespace CapriDesktop
         {
             if (!Bindable(mods, vk)) return "Press a key, alone or with Ctrl, Alt, Shift or Win.";
             string name = KeyName(mods, vk);
-            int[] bound = { preferences.TalkMods, preferences.TalkVk, preferences.MuteMods, preferences.MuteVk, preferences.TypeMods, preferences.TypeVk, preferences.HideMods, preferences.HideVk };
+            int[] bound = { preferences.TalkMods, preferences.TalkVk, preferences.MuteMods, preferences.MuteVk, preferences.TypeMods, preferences.TypeVk, preferences.HideMods, preferences.HideVk, preferences.QuietMods, preferences.QuietVk };
             for (int i = 0; i < KeyJobs.Length; i++)
                 if (i != slot && mods == bound[i * 2] && vk == bound[i * 2 + 1]) return name + " is already her " + KeyJobs[i] + " key.";
             if (!testing && IsHandleCreated)
@@ -2679,33 +2711,34 @@ namespace CapriDesktop
                 }
                 else
                 {
-                    int id = slot == 0 ? TalkKeyId : slot == 2 ? TypeKeyId : HideKeyId;
-                    if (slot == 0 ? talkKey : slot == 2 ? typeKey : hideKey) Native.UnregisterHotKey(Handle, id);
+                    int id = slot == 0 ? TalkKeyId : slot == 2 ? TypeKeyId : slot == 3 ? HideKeyId : QuietKeyId;
+                    if (slot == 0 ? talkKey : slot == 2 ? typeKey : slot == 3 ? hideKey : quietKey) Native.UnregisterHotKey(Handle, id);
                     bool held = ByMouse(vk) || Native.RegisterHotKey(Handle, id, mods | 0x4000, vk);
                     bool kept = held || ByMouse(bound[slot * 2 + 1]) || Native.RegisterHotKey(Handle, id, bound[slot * 2] | 0x4000, bound[slot * 2 + 1]);
-                    if (slot == 0) talkKey = kept; else if (slot == 2) typeKey = kept; else hideKey = kept;
+                    if (slot == 0) talkKey = kept; else if (slot == 2) typeKey = kept; else if (slot == 3) hideKey = kept; else quietKey = kept;
                     if (!held) return name + " is taken by another app. Try another.";
                 }
             }
             if (slot == 0) { preferences.TalkMods = mods; preferences.TalkVk = vk; }
             else if (slot == 1) { preferences.MuteMods = mods; preferences.MuteVk = vk; }
             else if (slot == 2) { preferences.TypeMods = mods; preferences.TypeVk = vk; }
-            else { preferences.HideMods = mods; preferences.HideVk = vk; }
+            else if (slot == 3) { preferences.HideMods = mods; preferences.HideVk = vk; }
+            else { preferences.QuietMods = mods; preferences.QuietVk = vk; }
             SavePreferences();
             WatchMouse();
-            if (!testing) { mainframe.ShowShortcut(talkKey, true); mainframe.ShowKeys(typeKey, hideKey); }
-            mainframe.Hotkeys(TalkKeyName, MuteKeyName, TypeKeyName, HideKeyName);
+            if (!testing) { mainframe.ShowShortcut(talkKey, true); mainframe.ShowKeys(typeKey, hideKey, quietKey); }
+            mainframe.Hotkeys(TalkKeyName, MuteKeyName, TypeKeyName, HideKeyName, QuietKeyName);
             return null;
         }
 
         // A bound mouse button is checked about 30 times a second, only while one of her keys is a mouse button.
         private readonly System.Windows.Forms.Timer mouseKeys = new System.Windows.Forms.Timer { Interval = 30 };
-        private readonly bool[] mouseHeld = new bool[4];
+        private readonly bool[] mouseHeld = new bool[5];
         internal static Func<int, bool> KeyHeld = delegate(int vk) { return (Native.GetAsyncKeyState(vk) & 0x8000) != 0; };
 
         private void WatchMouse()
         {
-            if (!testing && (ByMouse(preferences.TalkVk) || ByMouse(preferences.MuteVk) || ByMouse(preferences.TypeVk) || ByMouse(preferences.HideVk))) mouseKeys.Start();
+            if (!testing && (ByMouse(preferences.TalkVk) || ByMouse(preferences.MuteVk) || ByMouse(preferences.TypeVk) || ByMouse(preferences.HideVk) || ByMouse(preferences.QuietVk))) mouseKeys.Start();
             else mouseKeys.Stop();
         }
 
@@ -2713,8 +2746,8 @@ namespace CapriDesktop
         // swallowed, so the button still does its own job in the app under it. While a new key is being picked, nothing fires.
         internal void WatchMouseKeys()
         {
-            int[] bound = { preferences.TalkMods, preferences.TalkVk, preferences.MuteMods, preferences.MuteVk, preferences.TypeMods, preferences.TypeVk, preferences.HideMods, preferences.HideVk };
-            int[] ids = { TalkKeyId, MuteKeyId, TypeKeyId, HideKeyId };
+            int[] bound = { preferences.TalkMods, preferences.TalkVk, preferences.MuteMods, preferences.MuteVk, preferences.TypeMods, preferences.TypeVk, preferences.HideMods, preferences.HideVk, preferences.QuietMods, preferences.QuietVk };
+            int[] ids = { TalkKeyId, MuteKeyId, TypeKeyId, HideKeyId, QuietKeyId };
             int mods = (KeyHeld(0x12) ? 1 : 0) | (KeyHeld(0x11) ? 2 : 0) | (KeyHeld(0x10) ? 4 : 0) | (KeyHeld(0x5B) || KeyHeld(0x5C) ? 8 : 0);
             for (int slot = 0; slot < ids.Length; slot++)
             {
@@ -2835,7 +2868,7 @@ namespace CapriDesktop
                 Post(delegate
                 {
                     homeBusy = false;
-                    bool free = preferences.CheckIns && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null;
+                    bool free = preferences.CheckIns && !shushed && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null;
                     string line = Cheer(game, song, clock.Elapsed.TotalSeconds, free);
                     if (line != null) Say(line);
                 });
@@ -2853,7 +2886,7 @@ namespace CapriDesktop
             double busy = lagTotal == 0 || total <= lagTotal ? 0 : 1 - (double)(idle - lagIdle) / (total - lagTotal);
             lagIdle = idle;
             lagTotal = total;
-            bool free = preferences.CheckIns && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null && !Native.Gaming();
+            bool free = preferences.CheckIns && !shushed && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null && !Native.Gaming();
             string line = Lagging(busy, now, free);
             if (line != null) Say(line);
         }
@@ -3341,7 +3374,7 @@ namespace CapriDesktop
 
         private void CheckGlance(double now, long quiet)
         {
-            if (!preferences.Watch || glancing) return;
+            if (!preferences.Watch || glancing || shushed) return;
             if (nextGlance < 0) nextGlance = now + Math.Min(20, GlanceGap);
             if (now < nextGlance || quiet > 600000 || brain.Model == null || hidden || MicOpen || dragging || typer.Visible || talkState != TalkState.Off) return;
             nextGlance = now + GlanceGap * (0.8 + random.NextDouble() * 0.4);
@@ -3428,7 +3461,7 @@ namespace CapriDesktop
             string unseen = Unseeing();
             if (unseen != null || problem != null) { lastPrint = null; mainframe.ShowProblem(unseen ?? problem); return; }
             if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
-            if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
+            if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || shushed || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
             // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
             if (Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) { Glimpsed(saw); return; }
             glanced.Add(Tuple.Create(clock.Elapsed.TotalSeconds, said));
@@ -6285,7 +6318,8 @@ namespace CapriDesktop
             talkKey = false;
             if (typeKey) Native.UnregisterHotKey(Handle, TypeKeyId);
             if (hideKey) Native.UnregisterHotKey(Handle, HideKeyId);
-            typeKey = hideKey = false;
+            if (quietKey) Native.UnregisterHotKey(Handle, QuietKeyId);
+            typeKey = hideKey = quietKey = false;
             speaker.Close();
             effects.Close();
             typist.Close();
@@ -11932,7 +11966,7 @@ namespace CapriDesktop
                             ChooseVoiceModel("eleven_v3");
                             if (preferences.VoiceId != "abc" || preferences.VoiceModel != "eleven_v3" || mainframe.VoiceStatus != "ElevenLabs · Capri 1 | abc | v3 | Forget") throw new Exception("Voice picks did not show: " + mainframe.VoiceStatus);
                             mainframe.ShowShortcut(true, true);
-                            mainframe.ShowKeys(true, true);
+                            mainframe.ShowKeys(true, true, true);
                             if (!mainframe.MicStatus.EndsWith("| help | keys | mute", StringComparison.Ordinal)) throw new Exception("The Ctrl + Alt + V and N hints did not show with a key: " + mainframe.MicStatus);
                             mainframe.PickKeys(0);
                             bool talkWaiting = mainframe.KeyStatus.StartsWith("Press new keys, then Confirm", StringComparison.Ordinal) && !mainframe.ConfirmReady;
@@ -11996,6 +12030,38 @@ namespace CapriDesktop
                             if (typeClash != "Ctrl + Alt + V is already her talk key." || hideSaved != "Saved. Ctrl + Alt + J hides or shows her." || keysMoved != "Talk: Ctrl + Alt + V | Mute mic: Ctrl + Alt + N | Type: Ctrl + Alt + T | Hide/show: Ctrl + Alt + J" || hideBack != null || preferences.HideVk != 0x48 || preferences.TypeVk != 0x54 || !typerOpened || !typerClosed || !hidPressed || !shownAgain)
                                 throw new Exception("Her type and hide keys went wrong: " + typeClash + " / " + hideSaved + " / " + keysMoved + " / typer " + typerOpened + " " + typerClosed + " / hide " + hidPressed + " " + shownAgain);
                             checks.Add("PASS type and hide keys: Ctrl + Alt + T opens her typing box and Ctrl + Alt + H hides or shows her, both change in the KEYS row, and a key she already uses is refused");
+                            // Her quiet key (Zenni's ask): pressed, she stops glancing, popping in and checking in until it's pressed again.
+                            bool watchWas = preferences.Watch, checkInsWas = preferences.CheckIns;
+                            preferences.Watch = true;
+                            preferences.CheckIns = true;
+                            string quietButton = mainframe.QuietKeyShown;
+                            Message quietPress = Message.Create(Handle, 0x0312, new IntPtr(QuietKeyId), IntPtr.Zero);
+                            WndProc(ref quietPress);
+                            bool quietOn = shushed && speech == "Going quiet. Ctrl + Alt + P when you want me back.";
+                            nextGlance = -1;
+                            CheckGlance(clock.Elapsed.TotalSeconds, 0);
+                            nextPopIn = clock.Elapsed.TotalSeconds + 5;
+                            CheckPopIn(clock.Elapsed.TotalSeconds, 0);
+                            bool quietHeld = nextGlance < 0 && nextPopIn < 0 && !glancing;
+                            WndProc(ref quietPress);
+                            bool quietOff = !shushed && speech == "I'm back, choom.";
+                            Say(null);
+                            preferences.Watch = watchWas;
+                            preferences.CheckIns = checkInsWas;
+                            string quietClash = SetHotkey(4, Keys.Control | Keys.Alt | Keys.V);
+                            mainframe.PickKeys(4);
+                            mainframe.TakeKeys(Keys.Control | Keys.Alt | Keys.D);
+                            mainframe.ConfirmKeys();
+                            string quietSaved = mainframe.VoiceNoteText, quietMoved = mainframe.QuietKeyShown;
+                            string quietBack = SetHotkey(4, Keys.Control | Keys.Alt | Keys.P);
+                            Preferences quietOnHide = new Preferences { HideMods = 3, HideVk = 0x48, QuietMods = 3, QuietVk = 0x48 };
+                            Preferences muteOnQuiet = new Preferences { MuteMods = 3, MuteVk = 0x50 };
+                            Unclash(quietOnHide);
+                            Unclash(muteOnQuiet);
+                            if (quietButton != "Quiet: Ctrl + Alt + P" || !quietOn || !quietHeld || !quietOff || quietClash != "Ctrl + Alt + V is already her talk key." || quietSaved != "Saved. Ctrl + Alt + D keeps her quiet, and lets her talk again." || quietMoved != "Quiet: Ctrl + Alt + D" || quietBack != null || preferences.QuietVk != 0x50
+                                || quietOnHide.QuietVk != 0x50 || quietOnHide.HideVk != 0x48 || muteOnQuiet.MuteVk != 0x50 || muteOnQuiet.QuietVk != 0x44 || new Preferences().QuietVk != 0x50 || LoadPreferences().QuietVk != 0x50)
+                                throw new Exception("Her quiet key went wrong: " + quietButton + " / on " + quietOn + ", held " + quietHeld + ", off " + quietOff + " / " + quietClash + " / " + quietSaved + " / " + quietMoved + " / back " + quietBack + " / spares " + KeyName(quietOnHide.QuietMods, quietOnHide.QuietVk) + " " + KeyName(muteOnQuiet.QuietMods, muteOnQuiet.QuietVk));
+                            checks.Add("PASS quiet key: Ctrl + Alt + P stops her glances, pop-ins and check-ins until it's pressed again, she says so in her bubble both times, it changes in the KEYS row, a key she already uses is refused, and a quiet key on an older key moves to a free spare");
                             // 0.7.3's new type and hide defaults could land on a key saved in 0.7.2. The older talk and mute keys win, and the newer one moves to a free spare.
                             Preferences hideOnMute = new Preferences { TalkMods = 3, TalkVk = 0x56, MuteMods = 3, MuteVk = 0x48, TypeMods = 3, TypeVk = 0x54, HideMods = 3, HideVk = 0x48 };
                             Preferences typeOnTalk = new Preferences { TalkMods = 3, TalkVk = 0x54, MuteMods = 3, MuteVk = 0x4E, TypeMods = 3, TypeVk = 0x54, HideMods = 3, HideVk = 0x48 };
@@ -12123,7 +12189,7 @@ namespace CapriDesktop
                                 || KeyName(badKeys.TalkMods, badKeys.TalkVk) + " | " + KeyName(badKeys.MuteMods, badKeys.MuteVk) + " | " + KeyName(badKeys.TypeMods, badKeys.TypeVk) + " | " + KeyName(badKeys.HideMods, badKeys.HideVk) != "Ctrl + Alt + V | Ctrl + Alt + N | Ctrl + Alt + T | Ctrl + Alt + H")
                                 throw new Exception("Saved keys didn't load right: " + KeyName(oldKeys.TalkMods, oldKeys.TalkVk) + " / " + KeyName(newKeys.MuteMods, newKeys.MuteVk) + " / " + KeyName(badKeys.TalkMods, badKeys.TalkVk));
                             checks.Add("PASS saved keys: 0.7.2 and 0.7.3 keys load as they were, new keys like F8 or Win + Alt + J load too, and a saved value that isn't a key goes back to its default");
-                            if (SetHotkey(0, Keys.Control | Keys.Alt | Keys.V) != null || SetHotkey(1, Keys.Control | Keys.Alt | Keys.N) != null || SetHotkey(2, Keys.Control | Keys.Alt | Keys.T) != null || SetHotkey(3, Keys.Control | Keys.Alt | Keys.H) != null) throw new Exception("Her default keys didn't come back.");
+                            if (SetHotkey(0, Keys.Control | Keys.Alt | Keys.V) != null || SetHotkey(1, Keys.Control | Keys.Alt | Keys.N) != null || SetHotkey(2, Keys.Control | Keys.Alt | Keys.T) != null || SetHotkey(3, Keys.Control | Keys.Alt | Keys.H) != null || SetHotkey(4, Keys.Control | Keys.Alt | Keys.P) != null) throw new Exception("Her default keys didn't come back.");
                             mainframe.ShowSettings(false);
                             snap("mainframe-voice.png");
                             string crowded = mainframe.Overlap();

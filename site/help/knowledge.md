@@ -369,12 +369,13 @@ HABITS
 - Open her memories (beside Remember our chats): shows memories.md and her transcripts folder in File Explorer.
 
 KEYS (bottom of the page)
-- Talk, Mute mic, Type and Hide/show buttons show her keys. Click one, press new keys, then Confirm. Since 0.7.4 any key works, on its own or with any of Ctrl, Alt, Shift and Win: F8, Ctrl + Shift + K and Win + Alt + J all work. Cancel keeps the old key.
+- Talk, Mute mic, Type, Hide/show and Quiet buttons show her keys. Click one, press new keys, then Confirm. Since 0.7.4 any key works, on its own or with any of Ctrl, Alt, Shift and Win: F8, Ctrl + Shift + K and Win + Alt + J all work. Cancel keeps the old key.
 - Type (Ctrl + Alt + T) opens her typing box from anywhere. Press it again to close it.
 - Hide/show (Ctrl + Alt + H) hides her, and shows her again.
+- Quiet (Ctrl + Alt + P), for when you focus or game: she stops what she's saying and stays on screen, but doesn't comment on your screen, pop in or check in until you press it again. She still answers when you talk or type to her. Her bubble says "Going quiet." and "I'm back, choom." Restarting her ends it.
 
 ### Changing her keys
-1. In the Mainframe, click Settings and use the KEYS row at the bottom (Talk, Mute mic, Type or Hide/show). Clicking "Ctrl + Alt + V to talk" or "Ctrl + Alt + N mutes mic" on the main page opens Settings with that key ready to change.
+1. In the Mainframe, click Settings and use the KEYS row at the bottom (Talk, Mute mic, Type, Hide/show or Quiet). Clicking "Ctrl + Alt + V to talk" or "Ctrl + Alt + N mutes mic" on the main page opens Settings with that key ready to change.
 2. The button says "Press new keys, then Confirm", and Confirm and Cancel show beside the keys.
 3. Press any key, alone or with Ctrl, Alt, Shift or Win. The button shows what you press as you press it, and pressing again replaces it. Enter, Esc and Tab count as keys too. For a mouse button, middle click or press a side button (Mouse 4 or Mouse 5) with the pointer over the Mainframe.
 4. Click Confirm to save it, or Cancel to keep the old key. Clicking another key's button, Back, or into anything else in the Mainframe also keeps the old key.
@@ -388,9 +389,9 @@ Middle click and the side mouse buttons (Mouse 4 and Mouse 5) can be her keys, o
 Messages you may see:
 - "Confirm to keep <key>, or Cancel."
 - "<key> won't type in other apps while she runs. Confirm to keep it."
-- "<key> is already her talk key." (or mute, typing or hide key). The key stays open to change, so press another.
+- "<key> is already her talk key." (or mute, typing, hide or quiet key). The key stays open to change, so press another.
 - "<key> is taken by another app. Try another." The key stays open here too.
-- "Saved. <key> starts voice chat.", "Saved. <key> mutes your mic.", "Saved. <key> opens her typing box." or "Saved. <key> hides or shows her." A key that types adds "It won't type in other apps while she runs."
+- "Saved. <key> starts voice chat.", "Saved. <key> mutes your mic.", "Saved. <key> opens her typing box.", "Saved. <key> hides or shows her." or "Saved. <key> keeps her quiet, and lets her talk again." A key that types adds "It won't type in other apps while she runs."
 
 These show under the KEYS row.
 
