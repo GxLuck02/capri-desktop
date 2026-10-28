@@ -420,7 +420,7 @@ namespace CapriDesktop
         internal static bool Wants(string said)
         {
             if (Regex.IsMatch(said ?? "", @"\b(please|pls|plz|stp)\s*[.!?]*$", RegexOptions.IgnoreCase) && Site(Asked(said))) return true;
-            foreach (string part in Regex.Split(said ?? "", @"[,;!?]\s*|\.\s+"))
+            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？、。．،؟।።፣፧]\s*|\.\s+"))
             {
                 string text = Asked(part);
                 if (!Chatter.IsMatch(text) && Asks.IsMatch(text)) return true;
@@ -509,7 +509,7 @@ namespace CapriDesktop
 
         internal static bool Errand(string said)
         {
-            foreach (string part in Regex.Split(said ?? "", @"[,;!?]\s*|\.\s+"))
+            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？、。．،؟।።፣፧]\s*|\.\s+"))
             {
                 string text = Asked(part);
                 if (!Chatter.IsMatch(text) && Errands.IsMatch(text)) return true;
@@ -644,12 +644,13 @@ namespace CapriDesktop
         {
             said = Regex.Replace(said ?? "", @"^[\s¿¡]+", "");
             string text = Lead.Replace(Opener.Replace(Regex.Replace((said ?? "").Replace('\u2019', '\'').Trim(), @"\s+", " "), ""), "");
-            for (int i = 0; i < 3; i++) text = Regex.Replace(Regex.Replace(text, @"[\s,.!?]+$", ""), @"\s+(for me|please|pls|plz|rn|right now|now|stp|s'il te pla[iî]t|por favor|porfa|porfis|bitte|bitte schön|per favore|per piacere|proszę|prosze|пожалуйста|пж|будь ласка|lütfen|lutfen|alsjeblieft|alstublieft|a\.?u\.?b|tolong|dong)$", "", RegexOptions.IgnoreCase);
+            for (int i = 0; i < 3; i++) text = Regex.Replace(Regex.Replace(text, @"[\s,.!?;，；！？、。．…،؟।॥።፣፧;]+$", ""),@"\s+(for me|please|pls|plz|rn|right now|now|stp|s'il te pla[iî]t|por favor|porfa|porfis|bitte|bitte schön|per favore|per piacere|proszę|prosze|пожалуйста|пж|будь ласка|lütfen|lutfen|alsjeblieft|alstublieft|a\.?u\.?b|tolong|dong)$", "", RegexOptions.IgnoreCase);
             return text;
         }
         // Volume, mute and music in everyday words, so they never wait on a brain: English, Spanish and French in full, and the
-        // plain commands in German, Portuguese, Italian, Polish, Dutch, Russian, Ukrainian, Turkish, Indonesian, Japanese,
-        // Chinese and Korean. Words that also tell a person to hush or carry on ("тише", "avanti", "continua") stay with her brain.
+        // plain commands and "what song is this" in German, Portuguese, Italian, Polish, Dutch, Russian, Ukrainian, Turkish,
+        // Indonesian, Japanese, Chinese and Korean. Words that also tell a person to hush or carry on ("тише", "avanti",
+        // "continua") stay with her brain, and so does "was läuft" (what's up).
         // Volume means the PC's volume: Spotify's own slider only when they say Spotify.
         private const string Owner = @"(?:(?:the|my|ur|your|our|this|that|all the|pc'?s?|computer'?s?|laptop'?s?|spotify'?s?|youtube'?s?|game'?s?|video'?s?|music'?s?|song'?s?)\s+)*";
         private const string Noise = Owner + @"(?:volume|vol|sound|sounds|audio|music|song|track|tune|tunes|video|game|pc|computer|laptop|speakers?|headphones?|headset|everything|spotify|youtube)";
@@ -735,7 +736,18 @@ namespace CapriDesktop
             @"^(?:vorherige[sr]?(?:\s+(?:lied|song|titel))?|m\u00fasica anterior|musica anterior|volta uma m\u00fasica|volta uma musica|precedente|canzone precedente|la precedente|poprzednia(?:\s+piosenka)?|poprzedni(?:\s+(?:utw\u00f3r|utwor))?|vorige(?:\s+(?:nummer|liedje))?)$" +
             @"|^(?:\u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449(?:\u0430\u044f|\u0438\u0439|\u0443\u044e)(?:\s+(?:\u043f\u0435\u0441\u043d\u044f|\u043f\u0435\u0441\u043d\u044e|\u0442\u0440\u0435\u043a))?|\u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044f(?:\s+\u043f\u0456\u0441\u043d\u044f)?|\u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u0456\u0439 \u0442\u0440\u0435\u043a|\u00f6nceki(?: \u015fark\u0131)?|lagu sebelumnya)$" +
             @"|^(?:\u524d\u306e\u66f2(?:\u306b\u3057\u3066|\u306b\u623b\u3057\u3066)?)(?:\u304f\u3060\u3055\u3044)?$|^(?:\u8bf7|\u8acb)?(?:\u4e0a\u4e00\u9996|\u4e0a\u4e00\u66f2)(?:\u6b4c)?$|^(?:\uc774\uc804\s*(?:\uace1|\ub178\ub798)(?:\uc73c\ub85c|\ub85c)?)$", "previous", "",
-            @"^((what('|\u2019)?s|what is) (playing|this song|this track|the song|on spotify)|what (song|track)( is|('|\u2019)s)? (this|playing|on)|what am i listening to|what are we listening to)$|^(?:qu[eé] (?:canci[oó]n|m[uú]sica|tema) (?:es (?:esta|esa)|es|suena|est[aá] sonando)|qu[eé] est[aá] sonando|(?:cu[aá]l es|c[oó]mo se llama) (?:esta|esa) canci[oó]n)(?:\s+en\s+spotify)?$", "now_playing", ""
+            @"^((what('|\u2019)?s|what is) (playing|this song|this track|the song|on spotify)|what (song|track)( is|('|\u2019)s)? (this|playing|on)|what am i listening to|what are we listening to)$|^(?:qu[eé] (?:canci[oó]n|m[uú]sica|tema) (?:es (?:esta|esa)|es|suena|est[aá] sonando)|qu[eé] est[aá] sonando|(?:cu[aá]l es|c[oó]mo se llama) (?:esta|esa) canci[oó]n)(?:\s+en\s+spotify)?$" +
+            @"|^(?:c'est quoi (?:cette|la|ce|le) (?:chanson|musique|son|morceau|titre)|(?:c'est )?quelle chanson(?: c'est)?|quelle est (?:cette|la) chanson|quel est (?:ce|le) (?:morceau|titre)|qu'est-ce (?:qu'on |que j')(?:écoute|ecoute)|qu'est-ce qui passe|comment s'appelle (?:cette|la) chanson)$" +
+            @"|^(?:was (?:ist das )?für ein (?:lied|song|track)(?: ist das)?|was ist das für (?:ein lied|ein song|ein track|musik)|welche[sr]? (?:lied|song|track|titel) (?:ist das|läuft(?: da| gerade| hier)?|spielt(?: gerade)?)|wie heißt (?:das|dieses|der) (?:lied|song|track)|was hör(?:e|en) (?:ich|wir)(?: gerade| da)?)$" +
+            @"|^(?:que (?:música|musica|som) é (?:essa|esta|esse|este)|qual (?:é )?(?:essa|esta|a) (?:música|musica)|qual (?:é )?o nome (?:dessa|desta|da) (?:música|musica)|(?:o )?que (?:música |musica )?(?:está|esta|tá|ta) tocando)$" +
+            @"|^(?:che (?:canzone|musica|brano|pezzo) (?:è|e'?)(?: questa| questo)?|che canzone sta suonando|cosa sta suonando|come si chiama (?:questa|la) canzone|qual (?:è|e'?) (?:questa|la) canzone|cos'(?:è|e) questa canzone|cosa (?:stiamo|sto) ascoltando)$" +
+            @"|^(?:co to za (?:piosenka|utwór|utwor|kawałek|kawalek|muzyka)|co (?:teraz )?(?:gra|leci)|jaka to (?:piosenka|muzyka)|jak si[eę] nazywa ta piosenka|czego (?:teraz )?(?:słucham|slucham|słuchamy|sluchamy))$" +
+            @"|^(?:welk (?:nummer|liedje|lied) is dit|wat is dit voor (?:een )?(?:nummer|liedje|lied|muziek)|hoe heet dit (?:nummer|liedje|lied)|waar luister(?:en we| ik) naar)$" +
+            @"|^(?:что (?:это )?за (?:песня|трек|музыка)|что (?:сейчас )?играет|какая (?:это )?песня|как называется (?:эта )?песня|что (?:я|мы) (?:сейчас )?слуша(?:ю|ем)|що (?:це )?за (?:пісня|трек|музика)|що (?:зараз )?грає|яка (?:це )?пісня|як називається (?:ця )?пісня)$" +
+            @"|^(?:bu (?:şarkı|sarki) ne|bu hangi (?:şarkı|sarki)|(?:şu an|su an|şimdi|simdi) (?:ne|hangi (?:şarkı|sarki)) (?:çalıyor|caliyor)|(?:çalan|calan) (?:şarkı|sarki) ne|bu (?:şarkının|sarkinin) (?:adı|adi) ne|ne dinliyoruz|lagu apa (?:ini|itu|yang (?:lagi |sedang )?diputar)|ini lagu apa|judul lagu(?:nya)? (?:ini )?apa|apa judul lagu (?:ini|itu))$" +
+            @"|^(?:(?:この|今の)(?:曲|歌)|(?:今|いま)?(?:流れて|かかって)(?:る|いる)(?:曲|歌))(?:は|って)?(?:何|なに|なん)(?:ですか|だっけ|て曲|て歌)?$|^これ(?:は|って)?(?:何|なに|なん)の(?:曲|歌)(?:ですか|だっけ)?$|^(?:今|いま)?(?:何|なに)が(?:流れて|かかって)(?:る|いる|ます)(?:の)?$" +
+            @"|^(?:这|這)(?:是)?(?:什么|什麼|哪首)(?:歌|歌曲|音乐|音樂)(?:啊|呀|呢)?$|^(?:这|這)首歌(?:叫|是)(?:什么|什麼)(?:名字)?(?:啊|呀|呢)?$|^(?:现在|現在)?(?:正在|在)(?:放|播|播放)(?:的是)?(?:什么|什麼)(?:歌|歌曲|音乐|音樂)?(?:啊|呀|呢)?$|^(?:现在|現在)?(?:放|播放)的是(?:什么|什麼)(?:歌|歌曲|音乐|音樂)?(?:啊|呀|呢)?$" +
+            @"|^(?:(?:이|이거|지금|지금 나오는|나오는)\s*)?(?:노래|곡)\s*(?:제목\s*)?(?:뭐야|뭐예요|뭐에요|뭐지|뭐니|머야)$|^(?:(?:이거|이건|지금)\s*)?무슨\s*(?:노래|곡)(?:야|이야|예요|이에요|지|임)$", "now_playing", ""
         };
 
         internal static bool Loudness(string said, out string action, out string level, out bool spotify)
