@@ -45,6 +45,7 @@ namespace CapriDesktop
         [DataMember] internal bool Watch;
         [DataMember] internal int GlanceGap;
         [DataMember] internal bool NoCaughtUp;
+        [DataMember] internal int? SleepAfter;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -188,6 +189,8 @@ namespace CapriDesktop
         private readonly Clip perchArrive = new Clip("perch_arrive", 14, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip perchLeave = new Clip("perch_leave", 12, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip grin = new Clip("grin", 16, 8, 1.11);
+        private readonly Clip sleep = new Clip("sleep", 16, 6, 1.11);
+        private readonly Clip wake = new Clip("wake", 13, 15, 1.11);
         internal static readonly string[] PetLines =
         {
             "Heh. Okay, I'll allow it.", "Pets logged. Morale up twelve percent.", "Careful, choom. I bite viruses.",
@@ -323,6 +326,15 @@ namespace CapriDesktop
         // Settings > Start at login. Off until they tick it; the file is the setting.
         internal readonly string LoginFile;
         private MenuItem loginItem;
+        // Move > Fall asleep after, like Windows' Sleep slider: how long without the mouse or keyboard before she dozes off
+        // where she stands, 0 for never. Where she was told the mouse was when she fell asleep, to wake when it moves.
+        internal static readonly int[] Sleeps = { 0, 60, 120, 300, 600, 1800 };
+        internal static readonly string[] SleepNames = { "Never", "1 min", "2 min", "5 min", "10 min", "30 min" };
+        private readonly List<MenuItem> sleepPicks = new List<MenuItem>();
+        private double nextSleepCheck;
+        private bool sleepChecking;
+        private double sleepIdle;
+        private PixelPoint? sleptAt;
         private readonly DispatcherTimer frames = new DispatcherTimer();
         private readonly Stopwatch clock = Stopwatch.StartNew();
         private readonly Random random = new Random();
@@ -446,11 +458,14 @@ namespace CapriDesktop
         internal double BodySize { get { return body.Size; } }
         internal Clip Showing { get { return clip; } }
         internal Clip PerchGlitch { get { return perchGlitch; } }
-        internal IList<Clip> Clips { get { return new[] { idle, blink, blinkGlitch, glitch, dangle, perch, perchBlink, perchBlinkGlitch, perchGlitch, mouth, walk, dance, perchDance, arrive, leave, perchArrive, perchLeave, grin }; } }
+        internal IList<Clip> Clips { get { return new[] { idle, blink, blinkGlitch, glitch, dangle, perch, perchBlink, perchBlinkGlitch, perchGlitch, mouth, walk, dance, perchDance, arrive, leave, perchArrive, perchLeave, grin, sleep, wake }; } }
         internal Clip Arrival { get { return arrive; } }
         internal Clip PerchArrival { get { return perchArrive; } }
         internal Clip SeatDance { get { return perchDance; } }
         internal bool Arriving { get { return clip == arrive || clip == perchArrive; } }
+        internal bool Upright { get { return clip == idle && seat == null; } }
+        internal bool Asleep { get { return clip == sleep; } }
+        internal bool Waking { get { return clip == wake; } }
         internal bool Walking { get { return walking; } }
         internal bool Leaving { get { return outro != null; } }
         internal bool Dancing { get { return dancing; } set { dancing = value; Sync(); } }
@@ -600,6 +615,7 @@ namespace CapriDesktop
                 if (Program.Smoke == null) CheckLag(now);
                 if (Program.Smoke == null) CheckNudge(now);
                 if (Program.Smoke == null) CheckGlance(now);
+                if (Program.Smoke == null) CheckSleep(now);
             }
             Advance(now);
             Talk.Update(now);
@@ -615,6 +631,7 @@ namespace CapriDesktop
                 if (away) return "Taking a break";
                 if (!Talk.Quiet) return "Chatting";
                 if (clip == dance || clip == perchDance) return "Dancing to music";
+                if (clip == sleep) return "Asleep";
                 return "Hanging out";
             }
         }
@@ -751,7 +768,9 @@ namespace CapriDesktop
             if ((!perched && seated) || (clip == dangle && !dragging && !falling)) Play(idle);
             int index = (int)((now - clipStart) * clip.Fps);
             if (clip == leave || clip == perchLeave) index = Math.Min(index, clip.Count - 1);
-            if ((clip == glitch && index >= glitch.Count) || (clip == grin && index >= grin.Count * 2)) { Play(idle); index = 0; }
+            if ((clip == glitch && index >= glitch.Count) || (clip == wake && index >= wake.Count) || (clip == grin && index >= grin.Count * 2)) { Play(idle); index = 0; }
+            // Like on Windows, she's awake as soon as she has something to say or they open her typing box.
+            if (clip == sleep && !Talk.Quiet) { sleptAt = null; Play(idle); index = 0; }
             if (clip == arrive && index >= arrive.Count)
             {
                 Play(idle);
@@ -788,7 +807,7 @@ namespace CapriDesktop
             Clip shown = clip;
             int blinkFrom = clip == perch ? PerchBlinkFrom : BlinkFrom;
             if ((clip == idle || clip == perch) && blinkWith != null && cell >= blinkFrom && cell < blinkFrom + blinkWith.Count) { shown = blinkWith; cell -= blinkFrom; }
-            bool settled = !dragging && clip != dangle;
+            bool settled = !dragging && clip != dangle && clip != sleep;
             body.Breathe = settled ? Math.Sin(now * 1.75) * 2.2 : 0;
             body.Tilt = settled ? Math.Sin(now * 0.95) * 0.65 : 0;
             body.Shown = shown;
@@ -1152,6 +1171,17 @@ namespace CapriDesktop
             danceItem = new MenuItem { Header = "Dance", ToggleType = MenuItemToggleType.CheckBox };
             danceItem.Click += delegate { Dancing = !dancing; };
             move.Items.Add(danceItem);
+            move.Items.Add(new Separator());
+            MenuItem sleeps = new MenuItem { Header = "Fall asleep after" };
+            for (int i = 0; i < Sleeps.Length; i++)
+            {
+                int seconds = Sleeps[i];
+                MenuItem pick = new MenuItem { Header = SleepNames[i], ToggleType = MenuItemToggleType.Radio, GroupName = "sleeps" };
+                pick.Click += delegate { SetSleepAfter(seconds); };
+                sleepPicks.Add(pick);
+                sleeps.Items.Add(pick);
+            }
+            move.Items.Add(sleeps);
             brainMenu = new MenuItem { Header = "Brain" };
             brainMenu.Items.Add(new MenuItem { Header = "Looking for models...", IsEnabled = false });
             MenuItem settings = new MenuItem { Header = "Settings" };
@@ -1305,7 +1335,77 @@ namespace CapriDesktop
             for (int i = 0; i < gapPicks.Count; i++) gapPicks[i].IsChecked = GlanceGaps[i] == GlanceGap;
             caughtUpItem.IsChecked = !Saved.NoCaughtUp;
             quietItem.IsChecked = shushed;
+            for (int i = 0; i < sleepPicks.Count; i++) sleepPicks[i].IsChecked = Sleeps[i] == SleepAfter;
         }
+
+        internal int SleepAfter { get { return Saved.SleepAfter ?? 120; } }
+
+        internal string SleepPicked
+        {
+            get
+            {
+                for (int i = 0; i < sleepPicks.Count; i++) if (sleepPicks[i].IsChecked) return SleepNames[i];
+                return null;
+            }
+        }
+
+        internal void SetSleepAfter(int seconds)
+        {
+            Saved.SleepAfter = Math.Max(0, Math.Min(3600, seconds));
+            Save();
+            Sync();
+            if (seconds <= 0 && clip == sleep) Wake();
+        }
+
+        // She dozes off like on Windows when nobody's touched the mouse or keyboard for Fall asleep after, and only standing,
+        // as there: sitting on a window she stays awake. Reading the idle time starts a process on Mac and Linux, so it's read
+        // off her thread every 5 s awake and every second asleep, and a moved mouse wakes her at once on Mac and X11.
+        internal void CheckSleep(double now)
+        {
+            if (clip == sleep && sleptAt != null)
+            {
+                PixelPoint? mouse = Mouse();
+                if (mouse != null && mouse.Value != sleptAt.Value) { Wake(); return; }
+            }
+            if (sleepChecking || now < nextSleepCheck) return;
+            if (clip != sleep && (SleepAfter <= 0 || !Drowsy)) return;
+            nextSleepCheck = now + (clip == sleep ? 1 : 5);
+            sleepChecking = true;
+            Func<double> read = Idle;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                double idle = -1;
+                try { idle = read(); }
+                catch (Exception) { }
+                Dispatcher.UIThread.Post(delegate { sleepChecking = false; Doze(idle); });
+            });
+        }
+
+        // What she does with how long the mouse and keyboard have been left alone (-1 when the desktop won't say). Asleep, a
+        // shorter wait than the last reading means they're back.
+        internal void Doze(double idle)
+        {
+            if (idle < 0) return;
+            if (clip == sleep)
+            {
+                if (idle < sleepIdle) Wake();
+                else sleepIdle = idle;
+                return;
+            }
+            if (SleepAfter <= 0 || idle < SleepAfter || !Drowsy) return;
+            Play(sleep);
+            sleepIdle = idle;
+            sleptAt = Mouse();
+            nextSleepCheck = Now + 1;
+        }
+
+        private void Wake()
+        {
+            sleptAt = null;
+            Play(wake);
+        }
+
+        private bool Drowsy { get { return clip == idle && seat == null && !walking && !dragging && !pressed && !falling && outro == null && !away && !quitting && Talk.Quiet && (ContextMenu == null || !ContextMenu.IsOpen); } }
 
         internal bool Shushed { get { return shushed; } }
         internal bool QuietShown { get { return quietItem.IsChecked; } }

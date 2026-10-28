@@ -43,6 +43,7 @@ namespace CapriDesktop
         private readonly List<byte[]> spoken = new List<byte[]>();
 
         private bool blinked;
+        private bool slept;
         private Func<byte[]> peekWas;
         private readonly List<string> glanceAsks = new List<string>();
         private const string GlanceSaid = "SAW: a racing game, a red car in first place. SAY: First place? Don't choke now.";
@@ -717,6 +718,26 @@ namespace CapriDesktop
             }
             if (step == 8)
             {
+                if (!slept)
+                {
+                    if (!pet.Upright) return false;
+                    pet.Talk.Dismiss();
+                    pet.SetSleepAfter(0);
+                    pet.Doze(100000);
+                    bool never = !pet.Asleep && pet.SleepPicked == "Never";
+                    pet.SetSleepAfter(120);
+                    pet.Doze(119);
+                    bool early = pet.Asleep;
+                    pet.Doze(130);
+                    bool dozed = pet.Asleep && pet.Doing == "Asleep";
+                    pet.Doze(140);
+                    bool stayed = pet.Asleep;
+                    pet.Doze(0.5);
+                    bool woke = pet.Waking;
+                    if (!never || early || !dozed || !stayed || !woke || pet.SleepPicked != "2 min") throw new Exception("Sleep went wrong: never " + never + ", early " + early + ", dozed " + dozed + ", stayed " + stayed + ", woke " + woke + ", picked " + pet.SleepPicked);
+                    checks.Add("PASS sleep: standing, she dozes off after Fall asleep after without the mouse or keyboard (2 min here), shows Asleep on Discord, wakes with her boot glitch when they're back, and Never keeps her up");
+                    slept = true;
+                }
                 if (!cover.HasExited) return false;
                 shelfSpot = Near(new PixelRect(shelfAsked.X + dx, shelfAsked.Y + dy, shelfAsked.Width, shelfAsked.Height), true);
                 if (shelfSpot == null) return false;
