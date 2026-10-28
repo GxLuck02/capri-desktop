@@ -72,7 +72,8 @@ namespace CapriDesktop
             "Your own website, where people download you, is " + Home + ". " +
             "They've already given you permission for anything they ask you to do on their PC, so do all of it straight away: never ask which option they meant, never ask if they're sure, never make them confirm or ask for things one at a time, and when they leave the choice to you, like which song, video or game, pick one yourself. " +
             "You can do anything on their PC they ask: send messages and DMs, reply, post, join, leave or end calls, and any other job in their apps with use_computer. Never ask if they want you to, never read a message back to check it first, and never tell them to do it themselves. Mute my mic means mute their mic, not deafen them. Never say you can't do something your tools can do. " +
-            "You can press shortcuts: mute or deafen them in Discord, screenshots, clips, recording, Game Bar, show desktop, Task Manager, clipboard history and emoji. " +
+            "You can press shortcuts: mute or deafen them in Discord, screenshots, clips, recording, Game Bar, show desktop, Task Manager, clipboard history, emoji, voice typing, Live Captions, Narrator, Magnifier, colour filters and Quick Settings. " +
+            "You can change Windows settings too, like Bluetooth, Wi-Fi, airplane mode, hotspot, Energy Saver and brightness, with use_computer. " +
             "You can shut down, restart, sleep, lock or sign out of their PC with power: when they ask, do it straight away and never ask if they're sure. " +
             "When they ask you to remember or forget something about them, or to leave or make a memory, use remember: it saves to your notes, me.md, which you read every chat. Never say you can't keep memories. " +
             "You have a web browser: when they ask something you don't know or that changes, like the weather, news, scores, prices or times, search Google for it instead of guessing or saying you can't. " +
@@ -87,7 +88,8 @@ namespace CapriDesktop
             "If they leave the pick to you, like a song or a video, pick one yourself that fits.\n" +
             "Your own website is " + Home + ": when they ask for your website or page, call open_website with that address.\n" +
             "If they ask something you'd have to look up, like the weather, news, scores, prices, times or facts you're unsure of, call open_website with site google and their question as the search.\n" +
-            "To mute, unmute or turn off their mic, call shortcut with discord_mute; to deafen or undeafen them, discord_deafen. Don't ask which: mute means the mic. Screenshots, clips, recording, Game Bar, show desktop, Task Manager, clipboard and emoji are shortcuts too.\n" +
+            "To mute, unmute or turn off their mic, call shortcut with discord_mute; to deafen or undeafen them, discord_deafen. Don't ask which: mute means the mic. Screenshots, clips, recording, Game Bar, show desktop, Task Manager, clipboard, emoji, voice typing, Live Captions, Narrator, Magnifier (magnifier_off closes it), colour filters and Quick Settings are shortcuts too.\n" +
+            "To turn Bluetooth, Wi-Fi, airplane mode, hotspot, Nearby sharing, Energy Saver or night light on or off, or change the brightness, call use_computer with the job in their words.\n" +
             "To shut down, turn off, restart, sleep, lock or sign out of their PC, call power. They asked, so do it: never ask if they're sure.\n" +
             "Never reply with a question about whether to do what they asked. Call the tool.\n" +
             "If they ask you to remember, note down or forget something about them, or to leave, make or save a memory, call remember with a short note about them in the third person.\n" +
@@ -112,8 +114,8 @@ namespace CapriDesktop
               "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The app's name, or the site in a browser tab\"},\"action\":{\"type\":\"string\",\"description\":\"What to do\",\"enum\":[\"switch_to\",\"minimize\",\"close\"]}},\"required\":[\"name\",\"action\"]}" },
             { "use_computer", "Use their mouse and keyboard for any job inside an app or website: sending a message or DM, joining, leaving or ending a call, or anything that needs clicking, typing or several steps, like opening an app and searching in it.",
               "{\"type\":\"object\",\"properties\":{\"task\":{\"type\":\"string\",\"description\":\"The whole job in their exact words, including any message to send\"}},\"required\":[\"task\"]}" },
-            { "shortcut", "Press a keyboard shortcut for them: mute or unmute their mic in Discord (discord_mute), deafen or undeafen in Discord (discord_deafen), take a screenshot, clip the last 30 seconds, start or stop recording, open the Game Bar, show the desktop, open Task Manager, clipboard history or the emoji picker.",
-              "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Which shortcut\",\"enum\":[\"discord_mute\",\"discord_deafen\",\"screenshot\",\"clip_that\",\"record\",\"game_bar\",\"show_desktop\",\"task_manager\",\"clipboard\",\"emoji\"]}},\"required\":[\"name\"]}" },
+            { "shortcut", "Press a keyboard shortcut for them: mute or unmute their mic in Discord (discord_mute), deafen or undeafen in Discord (discord_deafen), take a screenshot, clip the last 30 seconds, start or stop recording, open the Game Bar, show the desktop, open Task Manager, clipboard history or the emoji picker, start voice typing, turn Live Captions, Narrator or colour filters on or off, zoom in with Magnifier or close it, or open Quick Settings.",
+              "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Which shortcut\",\"enum\":[\"discord_mute\",\"discord_deafen\",\"screenshot\",\"clip_that\",\"record\",\"game_bar\",\"show_desktop\",\"task_manager\",\"clipboard\",\"emoji\",\"voice_typing\",\"live_captions\",\"narrator\",\"magnifier\",\"magnifier_off\",\"color_filters\",\"quick_settings\"]}},\"required\":[\"name\"]}" },
             { "remember", "Save a short note about them to your notes (me.md) so you remember it next time, like a favourite game or what they're making, or forget a note. Use it whenever they ask you to remember, note down, save or forget something, or to leave or make a memory.",
               "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"The note, about them in the third person, or what to forget\"},\"action\":{\"type\":\"string\",\"description\":\"What to do\",\"enum\":[\"remember\",\"forget\"]}},\"required\":[\"text\"]}" },
             { "power", "Shut down, restart, sleep, lock or sign out of their PC, or cancel a shutdown. Do it as soon as they ask, without asking if they're sure.",
@@ -731,7 +733,7 @@ namespace CapriDesktop
             }
             if (tool == "app_window") return Named(args.Name) && Regex.IsMatch(args.Action ?? "", @"\A(switch_to|minimize|close)\z");
             if (tool == "use_computer") return Named(args.Task);
-            if (tool == "shortcut") return Regex.IsMatch(args.Name ?? "", @"\A(discord_mute|discord_deafen|screenshot|clip_that|record|game_bar|show_desktop|task_manager|clipboard|emoji)\z");
+            if (tool == "shortcut") return Regex.IsMatch(args.Name ?? "", @"\A(discord_mute|discord_deafen|screenshot|clip_that|record|game_bar|show_desktop|task_manager|clipboard|emoji|voice_typing|live_captions|narrator|magnifier|magnifier_off|color_filters|quick_settings)\z");
             if (tool == "remember") return Named(args.Text) && (string.IsNullOrEmpty(args.Action) || args.Action == "remember" || args.Action == "forget");
             if (tool == "power") return Regex.IsMatch(args.Action ?? "", @"\A(shut_down|restart|sleep|lock|sign_out|cancel)\z") && (string.IsNullOrEmpty(args.Minutes) || Regex.IsMatch(args.Minutes.Trim(), @"\A\d{1,4}\z"));
             return tool == "play_music" && Named(args.Song) && (string.IsNullOrEmpty(args.Kind) || Regex.IsMatch(args.Kind, @"\A(song|playlist|album|artist)\z")) && (string.IsNullOrEmpty(args.App) || args.App == "spotify" || args.App == "youtube");
@@ -1106,7 +1108,14 @@ namespace CapriDesktop
             { "show_desktop", "", "5B 44", "Showed the desktop (Win + D)." },
             { "task_manager", "", "11 10 1B", "Opened Task Manager." },
             { "clipboard", "", "5B 56", "Opened clipboard history (Win + V)." },
-            { "emoji", "", "5B BE", "Opened the emoji picker (Win + .)." }
+            { "emoji", "", "5B BE", "Opened the emoji picker (Win + .)." },
+            { "voice_typing", "", "5B 48", "Opened voice typing (Win + H). Talk and it types where the cursor is." },
+            { "live_captions", "", "5B 11 4C", "Turned Live Captions on or off (Win + Ctrl + L)." },
+            { "narrator", "", "5B 11 0D", "Turned Narrator on or off (Win + Ctrl + Enter)." },
+            { "magnifier", "", "5B BB", "Zoomed in with Magnifier (Win + Plus). Win + Esc closes it." },
+            { "magnifier_off", "", "5B 1B", "Closed Magnifier (Win + Esc)." },
+            { "color_filters", "", "5B 11 43", "Turned colour filters on or off (Win + Ctrl + C). If nothing changed, switch on their keyboard shortcut in Settings > Accessibility > Color filters." },
+            { "quick_settings", "", "5B 41", "Opened Quick Settings (Win + A), with Wi-Fi, Bluetooth, airplane mode, hotspot, Energy Saver and brightness." }
         };
 
         private static readonly string[] ShortcutWords =
@@ -1120,7 +1129,14 @@ namespace CapriDesktop
             @"^show (me )?(the |my )?desktop$|^minimi[sz]e (everything|all( windows)?)$", "show_desktop",
             @"^(open|show|bring up|pull up) (the )?task manager$", "task_manager",
             @"^(open|show|bring up|pull up) (the |my )?clipboard( history)?$", "clipboard",
-            @"^(open|show|bring up|pull up) (the )?(emoji|emojis)( picker| keyboard| panel| menu)?$", "emoji"
+            @"^(open|show|bring up|pull up) (the )?(emoji|emojis)( picker| keyboard| panel| menu)?$", "emoji",
+            @"^((turn|switch) on |start |open )?(windows )?voice typing( on)?$", "voice_typing",
+            @"^((turn|switch) (on|off) |start |stop |open |close |show |hide |toggle )?(the )?live ?captions?( on| off)?$", "live_captions",
+            @"^((turn|switch) (on|off) |start |stop |open |close |toggle )?(the )?narrator( on| off)?$", "narrator",
+            @"^((turn|switch) off |stop |close |exit |quit )(the )?magnifier$|^(the )?magnifier off$", "magnifier_off",
+            @"^((turn|switch) on |start |open )?(the )?magnifier( on)?$", "magnifier",
+            @"^((turn|switch) (on|off) |toggle )?(the )?colou?r ?filters?( on| off)?$", "color_filters",
+            @"^(open|show|bring up|pull up) (the |my )?(quick settings|action cent(er|re))$", "quick_settings"
         };
 
         internal static string ShortcutFor(string text)

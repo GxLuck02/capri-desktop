@@ -8303,10 +8303,11 @@ namespace CapriDesktop
                                 if (later.Gap().IndexOf("3 hours ago", StringComparison.Ordinal) < 0 || stale.Gap() != "" || File.ReadAllText(chatFile).IndexOf("\"messages\":[]", StringComparison.Ordinal) < 0) throw new Exception("Old chats were not aged or dropped: " + later.Gap());
                                 File.Delete(chatFile);
                                 checks.Add("PASS me.md notes: remember and forget save to her notes in the third person, refuse personal details, skip chat and questions, pick up favourites and projects on their own, reach her chat prompt, and the chat carries over a restart for a week");
-                                string[,] pressCases = { { "Capri, mute my mic.", "discord_mute" }, { "unmute me on discord", "discord_mute" }, { "turn off my mic", "discord_mute" }, { "can you mute myself in the call please", "discord_mute" }, { "deafen me", "discord_deafen" }, { "take a screenshot", "screenshot" }, { "clip that", "clip_that" }, { "start recording", "record" }, { "show the desktop", "show_desktop" }, { "open the emoji picker", "emoji" } };
+                                string[,] pressCases = { { "Capri, mute my mic.", "discord_mute" }, { "unmute me on discord", "discord_mute" }, { "turn off my mic", "discord_mute" }, { "can you mute myself in the call please", "discord_mute" }, { "deafen me", "discord_deafen" }, { "take a screenshot", "screenshot" }, { "clip that", "clip_that" }, { "start recording", "record" }, { "show the desktop", "show_desktop" }, { "open the emoji picker", "emoji" },
+                                    { "turn on live captions", "live_captions" }, { "Capri, start narrator", "narrator" }, { "open magnifier", "magnifier" }, { "close the magnifier", "magnifier_off" }, { "turn on colour filters", "color_filters" }, { "voice typing", "voice_typing" }, { "open quick settings", "quick_settings" } };
                                 for (int i = 0; i < pressCases.GetLength(0); i++)
                                     if (!Hands.Heard(pressCases[i, 0], out shortTool, out shortArgs) || shortTool != "shortcut" || shortArgs.Name != pressCases[i, 1]) throw new Exception("Shortcut was heard wrong: " + pressCases[i, 0] + " -> " + shortTool + " " + shortArgs.Name);
-                                foreach (string chat in new[] { "how do I mute my mic", "i muted my mic", "should I deafen", "mute" })
+                                foreach (string chat in new[] { "how do I mute my mic", "i muted my mic", "should I deafen", "mute", "what are live captions", "is narrator any good" })
                                     if (Hands.Heard(chat, out shortTool, out shortArgs) && shortTool == "shortcut") throw new Exception("Chat was taken as a shortcut: " + chat);
                                 if (!Hands.Promised("Muting your mic now, choom.") || !Hands.Promised("I'll deafen you.")) throw new Exception("A promise to mute was missed.");
                                 Action<byte[]> chordWas = Hands.Chord;
@@ -8321,15 +8322,17 @@ namespace CapriDesktop
                                     Hands.Windows = delegate { return new System.Collections.Generic.List<OpenWindow> { new OpenWindow(new IntPtr(41), "Friends - Discord", "Discord") }; };
                                     string muted = Hands.Do("shortcut", new ToolArguments { Name = "discord_mute" });
                                     string snipped = Hands.Do("shortcut", new ToolArguments { Name = "screenshot" });
+                                    string captions = Hands.Do("shortcut", new ToolArguments { Name = "live_captions" });
                                     Hands.Windows = delegate { return new System.Collections.Generic.List<OpenWindow>(); };
                                     Hands.Catalog = delegate { return new System.Collections.Generic.List<InstalledApp>(); };
                                     Hands.Forget();
                                     string missing = Hands.Do("shortcut", new ToolArguments { Name = "discord_deafen" });
                                     string pressed = string.Join(" | ", pressLog.ToArray());
-                                    if (muted != "Toggled their mic mute in Discord (Ctrl + Shift + M)." || !pressed.StartsWith("switch_to 41 | keys 11-10-4D", StringComparison.Ordinal) || snipped.IndexOf("Win + Shift + S", StringComparison.Ordinal) < 0 || pressed.IndexOf("keys 5B-10-53", StringComparison.Ordinal) < 0 || !missing.StartsWith("Discord isn't open", StringComparison.Ordinal)) throw new Exception("Shortcuts pressed the wrong keys: " + muted + " / " + snipped + " / " + missing + " / " + pressed);
+                                    if (muted != "Toggled their mic mute in Discord (Ctrl + Shift + M)." || !pressed.StartsWith("switch_to 41 | keys 11-10-4D", StringComparison.Ordinal) || snipped.IndexOf("Win + Shift + S", StringComparison.Ordinal) < 0 || pressed.IndexOf("keys 5B-10-53", StringComparison.Ordinal) < 0 || !missing.StartsWith("Discord isn't open", StringComparison.Ordinal)
+                                        || captions != "Turned Live Captions on or off (Win + Ctrl + L)." || pressed.IndexOf("keys 5B-11-4C", StringComparison.Ordinal) < 0) throw new Exception("Shortcuts pressed the wrong keys: " + muted + " / " + snipped + " / " + captions + " / " + missing + " / " + pressed);
                                 }
                                 finally { Hands.Chord = chordWas; Hands.Windows = windowsWas; Hands.Steer = steerWas; Hands.Catalog = catalogWas; Hands.Forget(); }
-                                checks.Add("PASS shortcuts: mute my mic and deafen me press Discord's keys in Discord and switch back, screenshots, clips, recording and more press Windows keys, and chat about muting doesn't");
+                                checks.Add("PASS shortcuts: mute my mic and deafen me press Discord's keys in Discord and switch back, screenshots, clips, recording, Live Captions, Narrator, Magnifier, colour filters, voice typing, Quick Settings and more press Windows keys, and chat about muting or captions doesn't");
                                 string steamRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "steam-test");
                                 Func<System.Collections.Generic.List<InstalledApp>> catalogBefore = Hands.Catalog;
                                 try

@@ -804,6 +804,14 @@ She presses the keys for you:
 - "Open task manager" (Ctrl + Shift + Esc)
 - "Open clipboard" (Win + V)
 - "Open the emoji picker" (Win + .)
+- "Voice typing" (Win + H)
+- "Turn on live captions" (Win + Ctrl + L)
+- "Start narrator" (Win + Ctrl + Enter)
+- "Open magnifier" zooms in (Win + Plus), and "close the magnifier" closes it (Win + Esc)
+- "Turn on colour filters" (Win + Ctrl + C), once its keyboard shortcut is on in Settings > Accessibility > Color filters
+- "Open quick settings" (Win + A)
+
+Bluetooth, Wi-Fi, airplane mode, hotspot, Nearby sharing, Energy Saver, night light and brightness have no shortcut, so she flips them as a job with her cursor in Quick Settings or Settings.
 
 For Discord she brings Discord to the front, presses the keys, then switches you back. If Discord isn't open she opens it. The Discord ones use Discord's default keys. If you changed them in Discord, they won't work.
 
