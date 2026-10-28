@@ -10186,6 +10186,53 @@ namespace CapriDesktop
                                     finally { Brain.Ollama = splitOllama; manyFake.Stop(); }
                                     checks.Add("PASS no cap per ask: when her brain calls five tools for one ask, all five run");
 
+                                    // Eight apps at once run past routing's short reply on Ollama and local brains, so the cut-off reply is asked again with room for every call.
+                                    System.Collections.Generic.List<string> longAsked = new System.Collections.Generic.List<string>();
+                                    System.Net.Sockets.TcpListener longFake;
+                                    string[] longApps = { "Discord", "Spotify", "Steam", "Roblox", "Blender", "Notepad", "Paint", "OBS Studio" };
+                                    string longOllamaCalls = "", longLocalCalls = "";
+                                    foreach (string longApp in longApps)
+                                    {
+                                        longOllamaCalls += (longOllamaCalls.Length > 0 ? "," : "") + "{\"function\":{\"name\":\"open_app\",\"arguments\":{\"name\":\"" + longApp + "\"}}}";
+                                        longLocalCalls += (longLocalCalls.Length > 0 ? "," : "") + "{\"function\":{\"name\":\"open_app\",\"arguments\":\"{\\\"name\\\":\\\"" + longApp + "\\\"}\"}}";
+                                    }
+                                    string longUrl = FakeServer(new string[]
+                                    {
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"open_app{\\\"name\\\":\\\"Discord\\\"} open_app{\\\"name\\\":\\\"Spo\"},\"done_reason\":\"length\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[" + longOllamaCalls + "]},\"done_reason\":\"stop\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"Opened all eight.\"},\"done_reason\":\"stop\"}",
+                                        "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"open_app{\\\"name\\\":\\\"Discord\\\"}\\nopen_app{\\\"name\\\":\\\"Spo\"},\"finish_reason\":\"length\"}]}",
+                                        "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[" + longLocalCalls + "]},\"finish_reason\":\"tool_calls\"}]}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"So basically, choom, the thing about that is\"},\"done_reason\":\"length\"}"
+                                    }, longAsked, out longFake);
+                                    Brain.Ollama = longUrl;
+                                    try
+                                    {
+                                        System.Collections.Generic.List<string> longOpened = new System.Collections.Generic.List<string>();
+                                        Brain longBrain = new Brain();
+                                        longBrain.Model = "long-test";
+                                        longBrain.Act = delegate(string name, ToolArguments args) { longOpened.Add(args.Name); return "Opened " + args.Name + "."; };
+                                        string longReply = longBrain.Ask("open discord, spotify, steam, roblox, blender, notepad, paint and obs");
+                                        Brain longLocal = new Brain();
+                                        System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> longLocalRan = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>>();
+                                        longLocal.Complete(longUrl, "long-local-test", new System.Collections.Generic.List<ChatMessage> { new ChatMessage("system", Hands.Prompt), new ChatMessage("user", "open all eight") }, true, longLocalRan, null, 120, -1, true);
+                                        string longLocalNames = string.Join(",", longLocalRan.ConvertAll(longCall => longCall.Value.Name).ToArray());
+                                        Brain rambler = new Brain();
+                                        rambler.Model = "ramble-test";
+                                        rambler.Act = delegate(string name, ToolArguments args) { longOpened.Add("ramble"); return "Wrong."; };
+                                        bool rambleStopped = false;
+                                        try { rambler.Ask("tell me about your day"); }
+                                        catch (BrainException) { rambleStopped = true; }
+                                        string[] longSent;
+                                        lock (longAsked) longSent = longAsked.ToArray();
+                                        if (longReply != "Opened all eight." || string.Join(",", longOpened.ToArray()) != string.Join(",", longApps) || longLocalNames != string.Join(",", longApps) || !rambleStopped || longSent.Length != 6
+                                            || longSent[0].IndexOf("\"num_predict\":120", StringComparison.Ordinal) < 0 || longSent[1].IndexOf("\"num_predict\":2000", StringComparison.Ordinal) < 0
+                                            || longSent[3].IndexOf("\"max_tokens\":120", StringComparison.Ordinal) < 0 || longSent[4].IndexOf("\"max_tokens\":2000", StringComparison.Ordinal) < 0 || longSent[5].IndexOf("\"num_predict\":120", StringComparison.Ordinal) < 0)
+                                            throw new Exception("A long ask on a local brain didn't get room for every call: " + longReply + " / " + string.Join(",", longOpened.ToArray()) + " / local " + longLocalNames + " / ramble stopped " + rambleStopped + " / " + longSent.Length + " requests");
+                                    }
+                                    finally { Brain.Ollama = splitOllama; longFake.Stop(); }
+                                    checks.Add("PASS long asks on local brains: eight apps in one ask run past routing's 120-token reply on Ollama and local brains, so it's asked again with room for 2000 and all eight open; a cut-off ramble isn't asked again");
+
                                     System.Collections.Generic.List<string> followAsked = new System.Collections.Generic.List<string>();
                                     System.Net.Sockets.TcpListener followFake;
                                     Brain.Ollama = FakeServer(new string[]

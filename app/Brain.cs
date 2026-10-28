@@ -1288,6 +1288,12 @@ namespace CapriDesktop
                 if (chat.Error != null) throw new BrainException(chat.Error);
                 if (chat.Message != null && chat.Message.Calls == null && Garbled(chat.Message.Content)) throw new BrainException(Gibberish, true);
             }
+            if (routing && chat.Stopped == "length" && thinker != thinking && limit < LongAsk && chat.Message != null && CutCalls(chat.Message.Content, chat.Message.Calls != null))
+            {
+                asking.Options.Limit = LongAsk;
+                chat = Send<ChatReply>(Ollama + "/api/chat", asking, 180000, listed, null, null, ticket);
+                if (chat.Error != null) throw new BrainException(chat.Error);
+            }
             if (routing && chat.Stopped == "length") throw new BrainException("Couldn't finish that request. Try again.");
             if (chat.Message == null) return null;
             if (chat.Message.Calls != null) foreach (ToolCall call in chat.Message.Calls) if (call != null && call.Function != null) calls.Add(new KeyValuePair<string, ToolArguments>(call.Function.Name, call.Function.Arguments));
@@ -1330,9 +1336,22 @@ namespace CapriDesktop
                 reply = Send<CompletionReply>(address + "/v1/chat/completions", asking, 180000, listed, null, parts, ticket);
                 choice = reply.Choices != null && reply.Choices.Length > 0 ? reply.Choices[0] : null;
             }
+            CompletionMessage cut = choice != null ? choice.Message : null;
+            if (routing && choice != null && choice.Stopped == "length" && thinker != thinking && limit < LongAsk && cut != null && CutCalls(cut.Content, cut.Calls != null))
+            {
+                asking.Limit = LongAsk;
+                reply = Send<CompletionReply>(address + "/v1/chat/completions", asking, 180000, listed, null, parts, ticket);
+                choice = reply.Choices != null && reply.Choices.Length > 0 ? reply.Choices[0] : null;
+            }
             if (routing && choice != null && choice.Stopped == "length") throw new BrainException("Couldn't finish that request. Try again.");
             return Read(reply, calls);
         }
+
+        // Routing's short reply fits four or five tool calls. A longer list, like six apps at once, is cut off partway through
+        // its calls, so it's asked again with room for all of them, as much as cloud brains get. A cut-off ramble isn't.
+        private const int LongAsk = 2000;
+
+        private static bool CutCalls(string content, bool called) { return called || Regex.IsMatch(content ?? "", @"\{|<tool_call>|<\|tool"); }
 
         private static string Read(CompletionReply reply, List<KeyValuePair<string, ToolArguments>> calls)
         {
