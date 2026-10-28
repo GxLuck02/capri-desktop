@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using SkiaSharp;
 
 namespace CapriDesktop
@@ -12,9 +13,37 @@ namespace CapriDesktop
         // A whole-screen picture's file bytes, or null when no tool here could take one. The smoke test hands in its own.
         internal static Func<byte[]> Shoot = delegate { return Screenshot(Tools(OperatingSystem.IsMacOS(), Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP"))); };
         // The same for Watch my screen, with only the tools that don't flash, play a shutter sound or ask first.
-        internal static Func<byte[]> Peek = delegate { return Screenshot(QuietTools(OperatingSystem.IsMacOS(), Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP"))); };
+        internal static Func<byte[]> Peek = delegate { return Recordable() ? Screenshot(QuietTools(OperatingSystem.IsMacOS(), Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP"))) : null; };
 
-        internal const string Unwatchable = "I can't watch your screen quietly here: this desktop's screenshots flash or ask first. I'll still look whenever you ask me to check your screen. On X11, installing scrot or maim fixes it.";
+        internal static string Unwatchable
+        {
+            get
+            {
+                return OperatingSystem.IsMacOS()
+                    ? "I can't watch your screen yet. Allow Capri under System Settings > Privacy & Security > Screen Recording, then open me again."
+                    : "I can't watch your screen quietly here: this desktop's screenshots flash or ask first. I'll still look whenever you ask me to check your screen. On X11, installing scrot or maim fixes it.";
+            }
+        }
+
+        private const string Graphics = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
+        [DllImport(Graphics)] [return: MarshalAs(UnmanagedType.I1)] private static extern bool CGPreflightScreenCaptureAccess();
+        [DllImport(Graphics)] [return: MarshalAs(UnmanagedType.I1)] private static extern bool CGRequestScreenCaptureAccess();
+        private static bool askedToRecord;
+
+        // Without Screen Recording a Mac screenshot is just the wallpaper, so she'd skip every glance without saying why. The first
+        // time, Mac asks them; until they allow it and open her again, she says once that she can't watch.
+        private static bool Recordable()
+        {
+            if (!OperatingSystem.IsMacOS()) return true;
+            try
+            {
+                if (CGPreflightScreenCaptureAccess()) return true;
+                if (askedToRecord) return false;
+                askedToRecord = true;
+                return CGRequestScreenCaptureAccess();
+            }
+            catch (Exception) { return true; }
+        }
 
         internal static string Missing
         {
