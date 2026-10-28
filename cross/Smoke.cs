@@ -256,11 +256,16 @@ namespace CapriDesktop
                 checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing and turns the volume on Mac and Linux; Windows-only shortcuts say so");
                 pet.ShowBrains(new[] { "gemma4:e4b", "qwen3:8b" });
                 int brains = pet.BrainChoices;
+                pet.Brain.Remember("what's up?", "Not much, choom.");
+                int chatBeforePick = pet.Brain.History.Count;
                 pet.PickBrain("qwen3:8b");
+                int chatAfterPick = pet.Brain.History.Count;
                 bool picked = pet.Brain.Model == "qwen3:8b" && pet.Saved.Model == "qwen3:8b";
+                pet.Brain.Forget();
                 pet.ShowBrains(null);
                 if (brains != 2 || !picked || pet.BrainChoices != 1) throw new Exception("The Brain menu didn't list or pick models.");
-                checks.Add("PASS settings menu: wander, dance, language, reply length, chat memory and the brain picker change her and show which is picked");
+                if (chatBeforePick < 2 || chatAfterPick != chatBeforePick) throw new Exception("Picking another model wiped her chat: " + chatBeforePick + " then " + chatAfterPick);
+                checks.Add("PASS settings menu: wander, dance, language, reply length, chat memory and the brain picker change her and show which is picked, and picking another model keeps the chat");
                 pet.AskNickname();
                 bool askedName = pet.Talk.Typing && pet.Talk.Reply != null && pet.Talk.Reply.StartsWith("What should I call you?", StringComparison.Ordinal);
                 pet.Talk.Submit("  Lachy!!  ");

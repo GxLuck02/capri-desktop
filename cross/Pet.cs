@@ -1085,8 +1085,8 @@ namespace CapriDesktop
         {
             if (string.IsNullOrEmpty(model) || model == Brain.Model) return;
             Brain.Cancel();
+            // Her chat carries on with the new model, so changing brains never wipes what she was doing.
             Brain.Model = model;
-            Brain.Forget();
             Saved.Model = model;
             Save();
         }

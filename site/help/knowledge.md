@@ -223,7 +223,7 @@ The wave starts voice chat. With FREE VOICE picked (or no ElevenLabs key) it's f
 It depends on how long the reply is (4 seconds plus a bit per letter, up to 14 seconds). Mainframe > Settings > BRAIN > Bubble changes it: Quick, Normal or Long.
 
 ### Does she remember what we talked about?
-Yes. She keeps the chat for up to a week, even after a restart. Mainframe > Settings > Memory sets how many recent messages she keeps in mind: Short (8), Medium (16) or Long (32). Changing her model or language starts a fresh chat.
+Yes. She keeps the chat for up to a week, even after a restart. Mainframe > Settings > Memory sets how many recent messages she keeps in mind: Short (8), Medium (16) or Long (32). Changing her language starts a fresh chat; changing her model carries on the same one, on Mac and Linux too.
 
 She also keeps in mind what she saw on your screen in the last 3 hours, so "what did you see?" gets a real answer instead of a guess (section 16).
 
