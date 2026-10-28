@@ -2737,11 +2737,17 @@ namespace CapriDesktop
         // A bound mouse button is checked about 30 times a second, only while one of her keys is a mouse button.
         private readonly System.Windows.Forms.Timer mouseKeys = new System.Windows.Forms.Timer { Interval = 30 };
         private readonly bool[] mouseHeld = new bool[5];
-        internal static Func<int, bool> KeyHeld = delegate(int vk) { return (Native.GetAsyncKeyState(vk) & 0x8000) != 0; };
+        // A mouse button also counts when it went down and back up between two checks (the low bit), so a quick tap isn't missed.
+        internal static Func<int, bool> KeyHeld = delegate(int vk) { return (Native.GetAsyncKeyState(vk) & (ByMouse(vk) ? 0x8001 : 0x8000)) != 0; };
 
         private void WatchMouse()
         {
-            if (!testing && (ByMouse(preferences.TalkVk) || ByMouse(preferences.MuteVk) || ByMouse(preferences.TypeVk) || ByMouse(preferences.HideVk) || ByMouse(preferences.QuietVk))) mouseKeys.Start();
+            if (!testing && (ByMouse(preferences.TalkVk) || ByMouse(preferences.MuteVk) || ByMouse(preferences.TypeVk) || ByMouse(preferences.HideVk) || ByMouse(preferences.QuietVk)))
+            {
+                // A click from before she started watching doesn't count.
+                if (!mouseKeys.Enabled) foreach (int vk in new[] { 0x04, 0x05, 0x06 }) Native.GetAsyncKeyState(vk);
+                mouseKeys.Start();
+            }
             else mouseKeys.Stop();
         }
 
@@ -2752,10 +2758,13 @@ namespace CapriDesktop
             int[] bound = { preferences.TalkMods, preferences.TalkVk, preferences.MuteMods, preferences.MuteVk, preferences.TypeMods, preferences.TypeVk, preferences.HideMods, preferences.HideVk, preferences.QuietMods, preferences.QuietVk };
             int[] ids = { TalkKeyId, MuteKeyId, TypeKeyId, HideKeyId, QuietKeyId };
             int mods = (KeyHeld(0x12) ? 1 : 0) | (KeyHeld(0x11) ? 2 : 0) | (KeyHeld(0x10) ? 4 : 0) | (KeyHeld(0x5B) || KeyHeld(0x5C) ? 8 : 0);
+            // Each button is read once a check: reading it clears its quick-tap bit, so a second key on the same button would miss the tap.
+            System.Collections.Generic.Dictionary<int, bool> buttons = new System.Collections.Generic.Dictionary<int, bool>();
             for (int slot = 0; slot < ids.Length; slot++)
             {
                 int vk = bound[slot * 2 + 1];
-                bool down = ByMouse(vk) && KeyHeld(vk);
+                bool down = false;
+                if (ByMouse(vk) && !buttons.TryGetValue(vk, out down)) { down = KeyHeld(vk); buttons[vk] = down; }
                 bool pressed = down && !mouseHeld[slot] && mods == bound[slot * 2];
                 mouseHeld[slot] = down;
                 if (!pressed || (slot == 1 && !muteKey) || mainframe.Picking) continue;
@@ -12188,6 +12197,7 @@ namespace CapriDesktop
                             System.Collections.Generic.List<int> fakeHeld = new System.Collections.Generic.List<int>();
                             bool mouseStart = hidden;
                             string mouseFlips = "";
+                            int buttonReads = 0;
                             try
                             {
                                 KeyHeld = delegate(int heldVk) { return fakeHeld.Contains(heldVk); };
@@ -12210,12 +12220,19 @@ namespace CapriDesktop
                                 mouseTick();
                                 fakeHeld.Add(0x06);
                                 mouseTick();
+                                // Two keys on one button read it once a check, so a quick tap's bit reaches both.
+                                int typeModsWas = preferences.TypeMods, typeVkWas = preferences.TypeVk;
+                                preferences.TypeMods = 2;
+                                preferences.TypeVk = 0x06;
+                                KeyHeld = delegate(int heldVk) { if (heldVk == 0x06) buttonReads++; return false; };
+                                try { WatchMouseKeys(); }
+                                finally { preferences.TypeMods = typeModsWas; preferences.TypeVk = typeVkWas; }
                             }
                             finally { KeyHeld = keyHeldWas; }
                             if (!middleTaken || !sideTaken || sideNote != "Mouse 5 still does its own job in other apps too. Confirm to keep it." || sideSaved != "Saved. Mouse 5 hides or shows her. It still does its own job in other apps too." || !mouseFive
-                                || mouseFlips != "011111110" || hidden != mouseStart || KeyName(2, 0x04) != "Ctrl + Middle click" || KeyName(0, 0x05) != "Mouse 4" || !Bindable(0, 0x04) || Bindable(0, 0x01) || Bindable(0, 0x02))
-                                throw new Exception("Mouse buttons as keys went wrong: middle " + middleTaken + ", side " + sideTaken + " / " + sideNote + " / " + sideSaved + " / saved " + mouseFive + " / presses " + mouseFlips);
-                            checks.Add("PASS mouse buttons as keys: middle click, Mouse 4 and Mouse 5 can be picked on the Mainframe and save by name; a held press fires once, Ctrl + Mouse 5 isn't Mouse 5, nothing fires while a key is being picked, and left or right click never counts");
+                                || mouseFlips != "011111110" || hidden != mouseStart || buttonReads != 1 || KeyName(2, 0x04) != "Ctrl + Middle click" || KeyName(0, 0x05) != "Mouse 4" || !Bindable(0, 0x04) || Bindable(0, 0x01) || Bindable(0, 0x02))
+                                throw new Exception("Mouse buttons as keys went wrong: middle " + middleTaken + ", side " + sideTaken + " / " + sideNote + " / " + sideSaved + " / saved " + mouseFive + " / presses " + mouseFlips + " / reads " + buttonReads);
+                            checks.Add("PASS mouse buttons as keys: middle click, Mouse 4 and Mouse 5 can be picked on the Mainframe and save by name; a held press fires once, Ctrl + Mouse 5 isn't Mouse 5, nothing fires while a key is being picked, left or right click never counts, and two keys on one button read it once a check so a quick tap reaches both");
                             // Windows itself takes them: no modifier at all (F8, and F23, which nothing else uses), Ctrl with Shift, and Win with Alt.
                             int[,] probes = { { 0, 0x77 }, { 0, 0x86 }, { 6, 0x4B }, { 9, 0x4A } };
                             System.Collections.Generic.List<string> registered = new System.Collections.Generic.List<string>(), heldElsewhere = new System.Collections.Generic.List<string>();
