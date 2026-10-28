@@ -8100,12 +8100,12 @@ namespace CapriDesktop
                             bool bypassWas = Computer.Bypass;
                             Job payJob = new Job("play lofi on youtube"), sendingJob = new Job("message Sam hi on Discord");
                             Computer.Bypass = false;
-                            bool checksPay = !Computer.Needless("Should I pay $5 for it?") && !Computer.Needless("It's $4.99. Buy it?") && payJob.Needs("buy") && !sendingJob.Needs("send") && Computer.Allowing(Computer.Prompt) == Computer.Prompt
+                            bool checksPay = !Computer.Needless("Should I pay $5 for it?") && !Computer.Needless("It's $4.99. Buy it?") && !Computer.Needless("Book the 7:30 table at Nobu?") && !Computer.Needless("Reserve it?") && !Computer.Needless("Place bid?") && payJob.Needs("buy") && !sendingJob.Needs("send") && Computer.Allowing(Computer.Prompt) == Computer.Prompt
                                 && Computer.Barred("ctrl+shift+esc") && (Computer.Tools + Computer.ClaudeTools + Computer.Listing).Split(new[] { "before a step that buys or pays" }, StringSplitOptions.None).Length == 4;
                             Computer.Bypass = true;
                             // Her ask tool's own description stops telling her to ask before buying, and a bare "Buy it?" never reaches them.
                             string bypassTools = Computer.Tools + Computer.ClaudeTools + Computer.Listing;
-                            bool paysAhead = Computer.Needless("Should I pay $5 for it?") && Computer.Needless("It's $4.99. Buy it?") && Computer.Needless("Place the order for $12?") && !Computer.Needless("Which size do you want?")
+                            bool paysAhead = Computer.Needless("Should I pay $5 for it?") && Computer.Needless("It's $4.99. Buy it?") && Computer.Needless("Place the order for $12?") && Computer.Needless("Book the 7:30 table at Nobu?") && !Computer.Needless("Which size do you want?")
                                 && bypassTools.IndexOf("buys or pays", StringComparison.Ordinal) < 0 && bypassTools.Split(new[] { "never ask before buying" }, StringSplitOptions.None).Length == 4
                                 && !payJob.Needs("buy") && !payJob.Needs("delete") && !Computer.Barred("ctrl+shift+esc") && !Computer.Barred("win+r");
                             string bypassPrompt = Computer.Allowing(Computer.Prompt), bypassSeeing = Computer.Allowing(Computer.Seeing);
@@ -8115,7 +8115,7 @@ namespace CapriDesktop
                                 || bypassPrompt.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("needs their OK", StringComparison.Ordinal) >= 0
                                 || bypassPrompt.IndexOf("use the email and password their job gives you", StringComparison.Ordinal) < 0)
                                 throw new Exception("Blackwall mode went wrong: checks " + checksPay + ", ahead " + paysAhead);
-                            checks.Add("PASS Blackwall mode: off, she still checks before paying and skips password boxes; on, she never stops to ask, even to buy, send or delete (her ask tool says so too, so \"It's $4.99. Buy it?\" never reaches them), types passwords and card numbers and presses any key");
+                            checks.Add("PASS Blackwall mode: off, she still checks before paying or booking (\"Book the 7:30 table?\" reaches them) and skips password boxes; on, she never stops to ask, even to buy, send or delete (her ask tool says so too, so \"It's $4.99. Buy it?\" never reaches them), types passwords and card numbers and presses any key");
                             bool cursorShown = mainframe.JobsStatus == "cursor | -";
                             ToggleBypass();
                             bool bypassShown = mainframe.JobsStatus == "cursor | bypass" && Computer.Bypass;

@@ -186,6 +186,8 @@ namespace CapriDesktop
         private static readonly Regex Costly = new Regex(@"\b(buy|purchase|pay|payment|checkout|check out|order|subscribe|donate|card|password|transfer|money|nitro)\b|[$\u00a3\u20ac]|\bor\b", RegexOptions.IgnoreCase);
         // "Buy it?" or "Send it now?" is a bare yes or no about a step, not a question only they can answer like "Send it to who?".
         private static readonly Regex Bare = new Regex(@"^\W*(buy|purchase|pay|order|checkout|check out|subscribe|donate|send|post|publish|tweet|reply|delete|remove|erase|trash|install|uninstall|submit|place|book|reserve|join|leave|end|hang up|close)\b(?![^?]*\b(who|whom|whose|which|what|where|when|how)\b)[^?]*\?\W*$", RegexOptions.IgnoreCase);
+        // Booking or placing something can spend their money like buying, so with Blackwall off a bare "Book it?" still reaches them.
+        private static readonly Regex Booking = new Regex(@"^\W*(book|reserve|place)\b", RegexOptions.IgnoreCase);
         private static readonly Regex Chatty =new Regex(@"\b(message|chat|reply|comment|post|tweet|dm|whisper|channel)\b", RegexOptions.IgnoreCase);
         // Cookie banners: she takes the privacy-preserving way out, so nothing is agreed to on their behalf.
         private static readonly Regex Refusing = new Regex(@"^\W*(reject|decline|deny|refuse|disagree|only (necessary|essential|required)|(use )?(necessary|essential|required|strictly necessary) (cookies )?only|continue without (accepting|agreeing))\b", RegexOptions.IgnoreCase);
@@ -697,7 +699,7 @@ namespace CapriDesktop
         {
             if (!Bypass && Costly.IsMatch(question ?? "")) return false;
             // "Typed it. Want me to send it?" asks too, so every sentence counts.
-            foreach (string sentence in Regex.Split((question ?? "").Trim(), @"(?<=[.!?])\s+")) if (Checking.IsMatch(sentence) || Bare.IsMatch(sentence)) return true;
+            foreach (string sentence in Regex.Split((question ?? "").Trim(), @"(?<=[.!?])\s+")) if (Checking.IsMatch(sentence) || (Bare.IsMatch(sentence) && (Bypass || !Booking.IsMatch(sentence)))) return true;
             return false;
         }
 
