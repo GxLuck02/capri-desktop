@@ -451,7 +451,8 @@ namespace CapriDesktop
             @"^(?:un-?mute|unsilence)(?:\s+" + Thing + @")?$|^(?:turn|switch|put|set)\s+(?:the\s+)?mute\s+off$|^(?:turn|switch)\s+off\s+(?:the\s+)?mute$|^(?:take|get)\s+(?:" + Thing + @"\s+)?off\s+(?:of\s+)?mute$|^mute off$", "unmute", "",
             @"^(?:turn|switch|put|bring)\s+" + Sound + @"\s+(?:back\s+)?on$|^(?:turn|switch)\s+(?:back\s+)?on\s+" + Sound + @"$|^(?:sound|volume|audio)\s+(?:back\s+)?on$|^bring\s+(?:back\s+)?" + Sound + @"(?:\s+back)?$", "unmute", "",
             @"^(?:quita(?:le)? el silencio|desmutea(?:r)?|activa el (?:sonido|audio|volumen)|pon el (?:sonido|audio|volumen)|enciende el (?:sonido|audio|volumen)|devu[e\u00e9]lveme el sonido)$|^(?:remets|r[\u00e9e]active|rallume) le son$|^enl[e\u00e8]ve la sourdine$", "unmute", "",
-            @"^(?:mute|silence|hush)(?:\s+" + Thing + @")?$|^(?:kill|cut)\s+" + Sound + @"$|^(?:turn|switch|shut)\s+off\s+" + Sound + @"$|^(?:turn|switch|shut)\s+" + Sound + @"\s+off$", "mute", "",
+            // "Hush" is said to her, not the PC, so it goes to her brain like any chat.
+            @"^(?:mute|silence)(?:\s+" + Thing + @")?$|^(?:kill|cut)\s+" + Sound + @"$|^(?:turn|switch|shut)\s+off\s+" + Sound + @"$|^(?:turn|switch|shut)\s+" + Sound + @"\s+off$", "mute", "",
             @"^(?:turn|switch|put|set)\s+(?:on\s+)?(?:the\s+)?mute(?:\s+on)?$|^(?:put|set)\s+(?:" + Thing + @"\s+)?on mute$|^(?:mute on|sound off|volume off|audio off|no sound)$", "mute", "",
             @"^(?:silencia(?:r)?|mutea(?:r)?|quita(?:le)? el (?:sonido|volumen|audio)|pon(?:lo)? en silencio|apaga el (?:sonido|volumen|audio))(?:\s+(?:el|la)\s+(?:volumen|sonido|audio|pc|computadora|ordenador|compu))?$|^(?:coupe(?:r)?|couper) (?:le )?(?:son|volume)$|^mets(?: le pc| l'ordi)? en sourdine$", "mute", "",
             // Up and down. "A bit", "a lot" or "by 20" say how far.
