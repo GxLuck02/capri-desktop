@@ -1410,6 +1410,10 @@ namespace CapriDesktop
 
         internal void PickService(string name) { sheet.Choose(name); }
 
+        internal void TakeModel(string path) { sheet.Take(path); }
+
+        internal string ServerFields { get { return sheet.Fields; } }
+
         internal void PressServer(string button) { sheet.Press(button); }
 
         internal Form ServerPanel { get { return sheet; } }
@@ -1920,11 +1924,16 @@ namespace CapriDesktop
             private readonly Label hint;
             private readonly Key service;
             private readonly ContextMenuStrip services;
+            private readonly Label place;
             private readonly Entry url;
+            private readonly Label modelName;
             private readonly Entry model;
+            private readonly Label voiceName;
             private readonly Entry speaker;
+            private readonly Label keyName;
             private readonly Entry key;
             private readonly Key forget;
+            private readonly Key browse;
             private readonly Key test;
             private readonly Label note;
             private VoiceServer.Service picked = VoiceServer.Services[0];
@@ -1963,18 +1972,21 @@ namespace CapriDesktop
                 service = Make(picked.Name, 28, 132, 328, 28, delegate { services.Show(service, new Point(0, service.Height)); });
                 service.Chevron = true;
                 service.AccessibleName = "Voice from";
-                Caption("Address", 28, 168, Font, Look.Dim);
-                url = Input(28, 188, 328, VoiceServer.Address, "Voice server address");
+                place = Caption("Address", 28, 168, Font, Look.Dim);
+                url = Input(28, 188, 328, VoiceServer.Address, "Voice server address, or a voice model's folder");
                 url.Box.TextChanged += delegate { Kept(); };
-                Caption("Model", 28, 224, Font, Look.Dim);
+                modelName = Caption("Model", 28, 224, Font, Look.Dim);
                 model = Input(28, 244, 160, "Optional", "Model name, optional");
-                Caption("Voice", 196, 224, Font, Look.Dim);
+                voiceName = Caption("Voice", 196, 224, Font, Look.Dim);
                 speaker = Input(196, 244, 160, "Optional", "Voice name or ID, optional");
-                Caption("Key", 28, 280, Font, Look.Dim);
+                keyName = Caption("Key", 28, 280, Font, Look.Dim);
                 key = Input(28, 300, 244, "Optional", "Key. It goes only to this server, as a Bearer key");
                 key.Box.UseSystemPasswordChar = true;
                 forget = Make("Forget", 280, 300, 76, 28, delegate { owner.capri.ForgetServerKey(); savedTail = null; Kept(); Say("Key forgotten.", false); });
                 forget.Accent = Look.Red;
+                // A model file has no key; Browse takes its place.
+                browse = Make("Browse...", 28, 300, 150, 28, delegate { Browse(); });
+                browse.Visible = false;
                 test = Make("Test", 28, 344, 84, 28, delegate { Try(); });
                 Key use = Make("Use this server", 120, 344, 150, 28, delegate { Use(); });
                 use.Accent = Look.Cyan;
@@ -2002,12 +2014,21 @@ namespace CapriDesktop
                 Say("", false);
             }
 
-            // A ready-made choice fills in its address, model and voice. The last one, any server, keeps what's typed.
+            // A ready-made choice fills in its address, model and voice. The last one, any server, keeps what's typed. A model file
+            // asks for its folder, a Kokoro model's language and a speaker number instead, and has no key.
             private void Pick(VoiceServer.Service choice, bool fill)
             {
+                bool file = choice.Api == VoiceServer.Files;
                 picked = choice;
                 service.Text = choice.Name;
-                hint.Text = choice.Hint + " It only gets the words she says.";
+                hint.Text = choice.Hint + (file ? "" : " It only gets the words she says.");
+                place.Text = file ? "Model folder" : "Address";
+                url.Cue = file ? "Browse to a voice model" : VoiceServer.Address;
+                modelName.Text = file ? "Language" : "Model";
+                model.Cue = file ? "Kokoro only, like es" : "Optional";
+                voiceName.Text = file ? "Speaker" : "Voice";
+                keyName.Visible = key.Visible = !file;
+                browse.Visible = file;
                 speaker.Cue = choice.VoiceCue;
                 if (fill && choice.Url != null)
                 {
@@ -2023,6 +2044,46 @@ namespace CapriDesktop
             {
                 foreach (ToolStripItem item in services.Items) if (item.Text == name) { item.PerformClick(); return; }
                 throw new InvalidOperationException("The voice model panel has no " + name + " to pick.");
+            }
+
+            private void Browse()
+            {
+                using (OpenFileDialog dialog = new OpenFileDialog())
+                {
+                    dialog.Title = "Pick a voice model: its .tar.bz2, or the .onnx in its folder";
+                    dialog.Filter = "Voice models (*.tar.bz2;*.zip;*.onnx)|*.tar.bz2;*.zip;*.onnx|All files (*.*)|*.*";
+                    if (dialog.ShowDialog(this) == DialogResult.OK) Take(dialog.FileName);
+                }
+            }
+
+            // An .onnx is used where it is. An archive is unpacked into her models folder first, off the UI thread.
+            internal void Take(string path)
+            {
+                if (path.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase))
+                {
+                    url.Box.Text = System.IO.Path.GetDirectoryName(path);
+                    Say(ModelFile.Kind(url.Box.Text) == null ? ModelFile.Missing : "", ModelFile.Kind(url.Box.Text) == null);
+                    return;
+                }
+                browse.Enabled = false;
+                Say("Unpacking " + System.IO.Path.GetFileName(path) + "...", false);
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    string folder = null, problem = null;
+                    try { folder = ModelFile.Unpack(path); }
+                    catch (VoiceException error) { problem = error.Message; }
+                    catch (Exception error) { problem = Voice.Short("Couldn't unpack that: " + error.Message); }
+                    try
+                    {
+                        BeginInvoke(new MethodInvoker(delegate
+                        {
+                            browse.Enabled = true;
+                            if (folder != null) url.Box.Text = folder;
+                            Say(folder != null ? "Unpacked. Press Test to hear it." : problem, folder == null);
+                        }));
+                    }
+                    catch (InvalidOperationException) { }
+                });
             }
 
             private void Kept()
@@ -2057,6 +2118,8 @@ namespace CapriDesktop
             }
 
             internal string Showing { get { return picked.Name + " | " + url.Box.Text + " | " + model.Box.Text + " | " + speaker.Box.Text + " | " + key.Cue + " | " + (forget.Visible ? "Forget" : "-") + " | " + note.Text; } }
+
+            internal string Fields { get { return place.Text + " | " + modelName.Text + " | " + voiceName.Text + " | " + (key.Visible ? "Key" : "no key") + " | " + (browse.Visible ? browse.Text : "-"); } }
 
             internal void Type(string address, string name, string voice, string secret)
             {

@@ -581,18 +581,19 @@ If a clip doesn't work, the note under VOICE says why, in red:
 
 Her other free voice styles (Her own, Bright, Sly and Sharp) are set voices and can't copy yours. With one of them picked, the note under VOICE says "Your voice only works with HD." For ElevenLabs, clone your voice on elevenlabs.io instead (Voice Creation > Instant Voice Clone, needs Starter or above, the same steps as cloning her below), then paste its Voice ID under VOICE.
 
-### Any voice model: Fish Audio, OpenAI or your own (from 0.7.5)
-Her voice can come from Fish Audio's cloud, OpenAI, or any speech model you run yourself. Windows only for now.
+### Any voice model: Fish Audio, OpenAI, a model file or your own server (from 0.7.5)
+Her voice can come from Fish Audio's cloud, OpenAI, a voice model file she runs herself, or any speech model you run behind a server. Windows only for now.
 1. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "Any voice model...".
 2. Under "Voice from", pick where her voice comes from. It fills in the address, model and voice:
    - Fish Audio · cloud (https://fish.audio): make an API key on fish.audio and paste it under Key. Under Voice, paste a voice's link or ID from Fish Audio's voice library (a link like https://fish.audio/m/ followed by its ID works as it is). Model s2.1-pro-free is Fish Audio's free developer tier; with credit on your account, type s2.1-pro, s2-pro or s1 instead.
+   - Voice model file · on your PC: a Piper, Kokoro or Kitten model made for sherpa-onnx (https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models), run by her free voice's engine with no server and nothing else to install. Piper voices come in 40+ languages, like vits-piper-en_US-amy-medium.tar.bz2 or vits-piper-fr_FR-siwis-medium.tar.bz2. Download one, press Browse and pick the .tar.bz2 (she unpacks it into her own folder), or the .onnx inside a folder you unpacked yourself. Language is for Kokoro models only, like es or fr-fr (en-us if blank). Speaker picks a voice in models with several, counting from 0; past the last one she uses the first. It needs her free voice installed.
    - Fish Speech · on your PC (https://github.com/fishaudio/fish-speech): start its server with `python tools/api_server.py --listen 0.0.0.0:8080` plus its model paths. Address: http://127.0.0.1:8080. Voice: a reference ID you added to it (POST /v1/references/add), or blank.
    - OpenAI · cloud: your OpenAI API key. Model gpt-4o-mini-tts; voices marin, cedar, coral, alloy and more.
    - Kokoro · on your PC (https://github.com/remsky/Kokoro-FastAPI): `docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest`, or on an NVIDIA card `docker run --gpus all -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-gpu:latest`. Voice: af_heart, or another Kokoro voice like af_bella.
    - Any OpenAI-style server: anything that speaks OpenAI's speech API (POST /v1/audio/speech), like openedai-speech, AllTalk, LocalAI, or Qwen3-TTS through vLLM-Omni (NVIDIA graphics card, Linux or WSL; https://github.com/vllm-project/vllm-omni/blob/main/recipes/Qwen/Qwen3-TTS.md): from the vLLM-Omni folder, `vllm serve Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice --deploy-config vllm_omni/deploy/qwen3_tts.yaml --omni --port 8091`. Address: http://localhost:8091/v1. Voice: vivian, or another of its speakers.
 3. Model, Voice and Key are optional for servers on your PC: leave them blank to use the server's own defaults. A key goes only to the server it was typed for, as a Bearer key, and Capri keeps it encrypted on your PC like her other keys. Switching to another server with Key left blank drops the old key, so it never reaches the new one. Forget removes it.
 4. Press Test. She says "Voice link online. Miss me, choom?" through it, and the panel says how long it took. Nothing is saved yet.
-5. Press Use this server. The menu shows "Free voice: Fish Audio" (or "OpenAI", or "Your server"), and she says the line again.
+5. Press Use this server. The menu shows "Free voice: Fish Audio" (or "OpenAI", a model file's name like "en_US-amy-medium", or "Your server"), and she says the line again.
 
 What it gets: only the words she says out loud (with "choom" respelled "chewm" so it's said right), plus the model and voice you picked. Never your chats, notes, screen or other keys. She asks for WAV; MP3, or any other sound Windows can play, works too. Long replies go a few sentences at a time.
 
@@ -606,6 +607,7 @@ If your server can't say a line, her free voice says that line instead, and the 
 - "Your voice server said HTTP 500: ..." with the server's own words.
 - Fish Audio and OpenAI go by name: "Fish Audio turned down its key (HTTP 401).", "Can't reach Fish Audio. Check your internet connection."
 - "Fish Audio wants credit for s2.1-pro (HTTP 402). For its free tier, set Model to s2.1-pro-free." Fish Audio's paid models need credit on your Fish Audio account.
+- Model files: "That's no voice model Capri can run. Pick a Piper, Kokoro or Kitten model for sherpa-onnx: its .tar.bz2, or the .onnx in its folder.", "Voice model files run on her free voice. Get free voice under VOICE first." or "That voice model wouldn't start. Check it's a Piper, Kokoro or Kitten model for sherpa-onnx."
 
 Without her free voice installed, she types that line instead.
 

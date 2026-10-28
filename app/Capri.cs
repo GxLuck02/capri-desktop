@@ -939,6 +939,8 @@ namespace CapriDesktop
             engine = new Engine(data);
             kokoro = new LocalVoice(data);
             qwen = new QwenVoice(data);
+            ModelFile.Engine = LocalVoice.Folder(data);
+            ModelFile.Shelf = Path.Combine(Path.Combine(data, "voice"), "models");
             parakeet = new LocalEars(data);
             presence = new Presence(Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
             preferences = smoke ? new Preferences() : LoadPreferences();
@@ -962,7 +964,7 @@ namespace CapriDesktop
             VoiceFx.ServerRobot = Math.Max(0, Math.Min(100, preferences.ServerRobot));
             VoiceFx.ServerGlitch = Math.Max(0, Math.Min(100, preferences.ServerGlitch));
             server.Url = preferences.ServerUrl ?? VoiceServer.Address;
-            server.Api = preferences.ServerApi == VoiceServer.Fish ? VoiceServer.Fish : VoiceServer.OpenAi;
+            server.Api = VoiceServer.Known(preferences.ServerApi);
             server.Model = preferences.ServerModel;
             server.Speaker = preferences.ServerSpeaker;
             server.Key = Voice.Unprotect(preferences.ServerKey);
@@ -4547,18 +4549,18 @@ namespace CapriDesktop
 
         internal string ServerKeyTail { get { return server.Key == null ? null : Voice.Tail(server.Key); } }
 
-        private static string ServerAddress(string url, string api) { return Typed(url) ?? (api == VoiceServer.Fish ? VoiceServer.FishCloud : VoiceServer.Address); }
+        private static string ServerAddress(string url, string api) { return Typed(url) ?? (api == VoiceServer.Fish ? VoiceServer.FishCloud : api == VoiceServer.Files ? "" : VoiceServer.Address); }
 
-        // Their own voice server, or Fish Audio or OpenAI, picked from the free voice menu: HD steps aside, and she says her check
-        // line through it.
+        // Their own voice server, a voice model file, or Fish Audio or OpenAI, picked from the free voice menu: HD steps aside, and
+        // she says her check line through it.
         internal void UseVoiceServer(string url, string model, string speaker, string key, string api)
         {
-            api = api == VoiceServer.Fish ? VoiceServer.Fish : VoiceServer.OpenAi;
+            api = VoiceServer.Known(api);
             string address = ServerAddress(url, api);
             bool same = VoiceServer.Same(server.Url, server.Api, address, api);
             preferences.ServerUrl = server.Url = address;
             server.Api = api;
-            preferences.ServerApi = api == VoiceServer.Fish ? api : null;
+            preferences.ServerApi = api == VoiceServer.OpenAi ? null : api;
             preferences.ServerModel = server.Model = Typed(model);
             preferences.ServerSpeaker = server.Speaker = Typed(speaker);
             // A blank key box keeps the key that's saved, for the server it was saved for. A key never goes to another server.
@@ -4602,7 +4604,7 @@ namespace CapriDesktop
         internal void TestVoiceServer(string url, string model, string speaker, string key, string api, Action<string, bool> done)
         {
             VoiceServer trial = new VoiceServer();
-            trial.Api = api == VoiceServer.Fish ? VoiceServer.Fish : VoiceServer.OpenAi;
+            trial.Api = VoiceServer.Known(api);
             trial.Url = ServerAddress(url, trial.Api);
             trial.Model = Typed(model);
             trial.Speaker = Typed(speaker);
@@ -4770,7 +4772,7 @@ namespace CapriDesktop
             if (!note) return;
             string name = "custom voice";
             if (voices != null) foreach (VoiceEntry entry in voices.Voices) if (entry.Id == voice.VoiceId && entry.Name != null) name = entry.Name;
-            mainframe.VoiceNote(voice.Key == null ? (served ? VoiceServer.Name(server.Url, server.Api) + " at " + VoiceServer.Where(server.Url, server.Api) + "." + (ready ? " Her free voice fills in if it's down." : "") : hd && settingUpHd ? "Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop." : hd && qwen.Installed ? (yours ? "HD voice from your clip, on your graphics card. Games get her free voice." : "HD voice on your graphics card. Games get her free voice.") : ready ? (yours ? "Free voice, runs on your PC. Your voice only works with HD." : "Free voice, runs on your PC.") : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
+            mainframe.VoiceNote(voice.Key == null ? (served ? (server.Api == VoiceServer.Files ? "Voice model " + VoiceServer.Label(server.Url, server.Api) + ", on your PC." : VoiceServer.Name(server.Url, server.Api) + " at " + VoiceServer.Where(server.Url, server.Api) + ".") + (ready ? " Her free voice fills in if it's down." : "") : hd && settingUpHd ? "Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop." : hd && qwen.Installed ? (yours ? "HD voice from your clip, on your graphics card. Games get her free voice." : "HD voice on your graphics card. Games get her free voice.") : ready ? (yours ? "Free voice, runs on your PC. Your voice only works with HD." : "Free voice, runs on your PC.") : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
         }
 
         private float TalkScale()
@@ -13329,6 +13331,37 @@ namespace CapriDesktop
                                 || vsBody.IndexOf("\r\nAuthorization: Bearer fish-test-4321\r\n", StringComparison.Ordinal) < 0 || vsBody.IndexOf("\r\nmodel: " + VoiceServer.FishFree + "\r\n", StringComparison.Ordinal) < 0
                                 || !vsBody.EndsWith("\r\n\r\n{\"text\":\"Hey chewm, this is Fish.\",\"reference_id\":\"0123456789abcdef0123456789abcdef\",\"format\":\"wav\"}", StringComparison.Ordinal))
                                 throw new Exception("Fish Audio's API got the wrong request: " + string.Join(" / ", vsNotes.ToArray()) + " / " + vsFished.Length + " samples / " + vsBody);
+                            // Voice model files: what a folder holds, its name on her button, and archives unpacked into her models folder.
+                            string vsModels = Path.Combine(Path.GetDirectoryName(settingsPath), "models-test");
+                            if (Directory.Exists(vsModels)) Directory.Delete(vsModels, true);
+                            string vsPiper = Path.Combine(vsModels, "vits-piper-en_US-test-medium"), vsKitten = Path.Combine(vsModels, "kitten-nano-en-v0_2-fp16"), vsKokoroFiles = Path.Combine(vsModels, "kokoro-multi-lang-v1_0"), vsNothing = Path.Combine(vsModels, "not-a-model");
+                            foreach (string vsMade in new[] { Path.Combine(vsPiper, "en_US-test-medium.onnx"), Path.Combine(vsPiper, "en_US-test-medium.onnx.json"), Path.Combine(vsPiper, "tokens.txt"), Path.Combine(Path.Combine(vsPiper, "espeak-ng-data"), "phontab"),
+                                Path.Combine(vsKitten, "model.fp16.onnx"), Path.Combine(vsKitten, "voices.bin"), Path.Combine(vsKitten, "tokens.txt"), Path.Combine(vsKokoroFiles, "model.onnx"), Path.Combine(vsKokoroFiles, "voices.bin"), Path.Combine(vsKokoroFiles, "tokens.txt"), Path.Combine(vsNothing, "readme.txt") })
+                            {
+                                Directory.CreateDirectory(Path.GetDirectoryName(vsMade));
+                                File.WriteAllBytes(vsMade, new byte[] { 1 });
+                            }
+                            string vsKinds = ModelFile.Kind(vsPiper) + " " + ModelFile.Kind(vsKitten) + " " + ModelFile.Kind(vsKokoroFiles) + " " + (ModelFile.Kind(vsNothing) ?? "none") + " " + (ModelFile.Kind(Path.Combine(vsModels, "gone")) ?? "none") + " " + ModelFile.Name(vsPiper + "\\");
+                            string vsShelfWas = ModelFile.Shelf, vsShelf = Path.Combine(vsModels, "shelf"), vsUnpacked, vsZipped, vsRefused = null;
+                            ModelFile.Shelf = vsShelf;
+                            try
+                            {
+                                string vsTar = Path.Combine(vsModels, "vits-piper-en_US-test-medium.tar.bz2");
+                                using (Process vsPacking = Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe"), "-cjf \"" + vsTar + "\" -C \"" + vsModels + "\" vits-piper-en_US-test-medium") { UseShellExecute = false, CreateNoWindow = true }))
+                                    if (!vsPacking.WaitForExit(30000) || vsPacking.ExitCode != 0) throw new Exception("Couldn't make the test voice model archive with tar.");
+                                vsUnpacked = ModelFile.Unpack(vsTar);
+                                string vsZip = Path.Combine(vsModels, "kitten-test.zip"), vsEmpty = Path.Combine(vsModels, "empty.zip");
+                                System.IO.Compression.ZipFile.CreateFromDirectory(vsKitten, vsZip);
+                                vsZipped = ModelFile.Unpack(vsZip);
+                                System.IO.Compression.ZipFile.CreateFromDirectory(vsNothing, vsEmpty);
+                                try { ModelFile.Unpack(vsEmpty); }
+                                catch (VoiceException vsError) { vsRefused = vsError.Message; }
+                            }
+                            finally { ModelFile.Shelf = vsShelfWas; }
+                            if (vsKinds != "vits kitten kokoro none none en_US-test-medium" || vsUnpacked != Path.Combine(vsShelf, "vits-piper-en_US-test-medium") || ModelFile.Kind(vsUnpacked) != "vits"
+                                || !File.Exists(Path.Combine(vsUnpacked, "en_US-test-medium.onnx")) || vsZipped != Path.Combine(vsShelf, "kitten-test") || ModelFile.Kind(vsZipped) != "kitten"
+                                || vsRefused != ModelFile.Missing || Directory.GetDirectories(vsShelf).Length != 2)
+                                throw new Exception("Voice model files weren't told apart or unpacked right: " + vsKinds + " / " + vsUnpacked + " / " + vsZipped + " / " + vsRefused + " / " + string.Join(", ", Directory.GetDirectories(vsShelf)));
                             // Her pitch lifts it without changing its length; its own robot and glitch change it, and her other voices' robot doesn't.
                             int vsPitchWas = VoiceFx.Pitch, vsRobotWas = VoiceFx.Robot;
                             short[] vsPitched, vsShared, vsRoboted, vsGlitched;
@@ -13412,7 +13445,7 @@ namespace CapriDesktop
                             // Her check line is up with its sound handed to her speaker. Still playing would be too narrow: one slow DoEvents can outlast it.
                             Func<bool> vsTalking = delegate { return reply == TestLine && voiceUntil > 0; };
                             string vsMenu, vsOpened, vsKokoro, vsTyped, vsTested, vsUsedNote, vsUsedStatus, vsUsedMenu, vsSliders, vsPage, vsFellNote, vsFellState, vsOnceNote, vsKept, vsForgot, vsSly, vsTestBody, vsUseBody;
-                            string vsHostBody, vsFishStatus, vsFishNote, vsFishMenu, vsHostTest = null;
+                            string vsHostBody, vsFishStatus, vsFishNote, vsFishMenu, vsFileShown, vsFileTaken, vsHostTest = null;
                             bool vsTestSpoke, vsTestUnsaved, vsUseSpoke, vsFellSpoke, vsOnceSpoke, vsSealed, vsRound, vsOldRound, vsSlyOff, vsHdOff, vsHostDropped;
                             int vsAskedBefore;
                             test.Stop();
@@ -13446,8 +13479,18 @@ namespace CapriDesktop
                                     vsFresh.DrawToBitmap(vsPicture, new Rectangle(Point.Empty, vsFresh.Size));
                                     vsPicture.Save(Path.Combine(output, "mainframe-voice-model-fish.png"), ImageFormat.Png);
                                 }
+                                // A voice model file asks for its folder, language and speaker instead, with Browse in place of a key.
+                                mainframe.PickService("Voice model file · on your PC");
+                                vsFileShown = mainframe.ServerShown + " / " + mainframe.ServerFields;
+                                mainframe.TakeModel(Path.Combine(vsKitten, "model.fp16.onnx"));
+                                vsFileTaken = mainframe.ServerShown;
+                                using (Bitmap vsPicture = new Bitmap(vsFresh.Width, vsFresh.Height))
+                                {
+                                    vsFresh.DrawToBitmap(vsPicture, new Rectangle(Point.Empty, vsFresh.Size));
+                                    vsPicture.Save(Path.Combine(output, "mainframe-voice-model-file.png"), ImageFormat.Png);
+                                }
                                 mainframe.PickService("Kokoro · on your PC");
-                                vsKokoro = mainframe.ServerShown;
+                                vsKokoro = mainframe.ServerShown + " / " + mainframe.ServerFields;
                                 mainframe.TypeServer(vsUrl, " kokoro ", "af_heart", "sk-panel-test-9876");
                                 vsTyped = mainframe.ServerShown;
                                 vsAskedBefore = vsCount();
@@ -13595,10 +13638,12 @@ namespace CapriDesktop
                             string vsMenuEnd = ", -, " + Mainframe.ServerChoice;
                             string vsPanelUsual = "Fish Audio · cloud | " + VoiceServer.FishCloud + " | " + VoiceServer.FishFree + " |  | Paste your Fish Audio key | - | ";
                             if (!vsMenu.EndsWith(vsMenuEnd, StringComparison.Ordinal) || !vsMenu.StartsWith("Her own (picked), Bright, Sly, Sharp, -, HD ", StringComparison.Ordinal) || vsOpened != vsPanelUsual
-                                || vsKokoro != "Kokoro · on your PC | " + VoiceServer.Address + " | kokoro | af_heart | Optional | - | "
+                                || vsKokoro != "Kokoro · on your PC | " + VoiceServer.Address + " | kokoro | af_heart | Optional | - |  / Address | Model | Voice | Key | -"
+                                || vsFileShown != "Voice model file · on your PC |  |  |  | Optional | - |  / Model folder | Language | Speaker | no key | Browse..."
+                                || vsFileTaken != "Voice model file · on your PC | " + vsKitten + " |  |  | Optional | - | "
                                 || vsTyped != "Kokoro · on your PC | " + vsUrl + " |  kokoro  | af_heart | Optional | - | " || !vsTested.StartsWith("Kokoro · on your PC | " + vsUrl + " |  kokoro  | af_heart | Optional | - | It works. Your server said that in ", StringComparison.Ordinal) || !vsTestSpoke || !vsTestUnsaved
                                 || vsTestBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || !vsTestBody.EndsWith("{\"model\":\"kokoro\",\"input\":\"Voice link online. Miss me, chewm?\",\"voice\":\"af_heart\",\"response_format\":\"wav\"}", StringComparison.Ordinal))
-                                throw new Exception("Their voice server's panel didn't open or test right: " + vsMenu + " / " + vsOpened + " / " + vsKokoro + " / " + vsTyped + " / " + vsTested + " / spoke " + vsTestSpoke + ", unsaved " + vsTestUnsaved);
+                                throw new Exception("Their voice server's panel didn't open or test right: " + vsMenu + " / " + vsOpened + " / " + vsFileShown + " / " + vsFileTaken + " / " + vsKokoro + " / " + vsTyped + " / " + vsTested + " / spoke " + vsTestSpoke + ", unsaved " + vsTestUnsaved);
                             if (!vsUseSpoke || !vsSealed || vsUseBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || vsUsedNote != "Your voice server at " + vsWhere + "." + (kokoro.Installed ? " Her free voice fills in if it's down." : "")
                                 || !vsUsedStatus.StartsWith("Free voice: " + VoiceServer.Style + " | ", StringComparison.Ordinal) || !vsUsedMenu.EndsWith(vsMenuEnd + " (picked)", StringComparison.Ordinal) || vsUsedMenu.IndexOf("Her own (picked)", StringComparison.Ordinal) >= 0)
                                 throw new Exception("Use this server didn't keep it and speak through it: spoke " + vsUseSpoke + ", sealed " + vsSealed + " / " + vsUsedNote + " / " + vsUsedStatus + " / " + vsUsedMenu);
@@ -13624,7 +13669,7 @@ namespace CapriDesktop
                             catch (VoiceException vsError) { vsAlone = vsError.Message; }
                             if (vsGone != vsStandIn || vsGoneNote != "Can't reach your voice server at " + vsWhere + ". Is it running?" + VoiceServer.Filling || vsAlone != "Can't reach your voice server at " + vsWhere + ". Is it running?" || vsNotes.Count != 5)
                                 throw new Exception("A voice server that isn't running didn't say so: " + vsGoneNote + " / " + vsAlone + " / " + vsNotes.Count + " notes");
-                            checks.Add("PASS any voice model: Any voice model... in the free voice menu opens a panel that starts on Fish Audio's cloud with its free tier's model, and fills in Fish Speech on your PC, OpenAI, Kokoro or any OpenAI-style server; Test speaks through it before anything's saved and Use this server keeps it, the key sealed like her other keys (a blank box keeps it for that server only, Forget drops it); she POSTs only the words to /v1/audio/speech with a Bearer key when there is one, and to Fish Audio's /v1/tts with the voice's ID from its fish.audio link and its model in a header; a picked Fish Audio shows by name; a 16-bit 22 kHz WAV, a float WAV streamed in chunks" + (vsMp3 != null ? " and an MP3" : "") + " become her 24 kHz voice; her pitch moves it and its own robot and glitch (saved apart, shown as · server) change it; a 404, a 500, a refused key, no answer within its 20 s (0.8 s here) or no server at all hand the line to her free voice and say why once; picking one of her own styles or HD turns it off and keeps it saved");
+                            checks.Add("PASS any voice model: Any voice model... in the free voice menu opens a panel that starts on Fish Audio's cloud with its free tier's model, and fills in a voice model file, Fish Speech on your PC, Kokoro, OpenAI or any OpenAI-style server; a voice model file (Piper, Kokoro or Kitten for sherpa-onnx, told apart by its files) asks for its folder, language and speaker with Browse in place of a key, and a .tar.bz2 or .zip of one is unpacked into her models folder (one with no model is refused in plain words); Test speaks through it before anything's saved and Use this server keeps it, the key sealed like her other keys (a blank box keeps it for that server only, Forget drops it); she POSTs only the words to /v1/audio/speech with a Bearer key when there is one, and to Fish Audio's /v1/tts with the voice's ID from its fish.audio link and its model in a header; a picked Fish Audio shows by name; a 16-bit 22 kHz WAV, a float WAV streamed in chunks" + (vsMp3 != null ? " and an MP3" : "") + " become her 24 kHz voice; her pitch moves it and its own robot and glitch (saved apart, shown as · server) change it; a 404, a 500, a refused key, no answer within its 20 s (0.8 s here) or no server at all hand the line to her free voice and say why once; picking one of her own styles or HD turns it off and keeps it saved");
                             string earsRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "ears-test");
                             if (Directory.Exists(earsRoot)) Directory.Delete(earsRoot, true);
                             string earsSource = Path.Combine(earsRoot, "source");
