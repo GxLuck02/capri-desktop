@@ -150,7 +150,7 @@ namespace CapriDesktop
         private readonly Clip mouth = new Clip("mouth", 5, 12, 1.11);
         private readonly Clip walk = new Clip("walk", 12, 12, 1.11);
         private readonly Clip dance = new Clip("dance", 16, 16, 1.11);
-        private readonly Clip perchDance = new Clip("perch_dance", 16, 16, 1);
+        private readonly Clip perchDance = new Clip("perch_music", 60, 30, 1, PerchShiftX, PerchShiftY);
         private readonly Clip arrive = new Clip("arrive", 14, 15, 1.11);
         private readonly Clip leave = new Clip("leave", 12, 15, 1.11);
         private readonly Clip perchArrive = new Clip("perch_arrive", 14, 15, 1, PerchShiftX, PerchShiftY);
