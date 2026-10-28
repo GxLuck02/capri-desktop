@@ -13369,13 +13369,15 @@ namespace CapriDesktop
                             string vsModels = Path.Combine(Path.GetDirectoryName(settingsPath), "models-test");
                             if (Directory.Exists(vsModels)) Directory.Delete(vsModels, true);
                             string vsPiper = Path.Combine(vsModels, "vits-piper-en_US-test-medium"), vsKitten = Path.Combine(vsModels, "kitten-nano-en-v0_2-fp16"), vsKokoroFiles = Path.Combine(vsModels, "kokoro-multi-lang-v1_0"), vsNothing = Path.Combine(vsModels, "not-a-model");
+                            string vsPocket = Path.Combine(vsModels, "sherpa-onnx-pocket-tts-int8-2026-01-26");
                             foreach (string vsMade in new[] { Path.Combine(vsPiper, "en_US-test-medium.onnx"), Path.Combine(vsPiper, "en_US-test-medium.onnx.json"), Path.Combine(vsPiper, "tokens.txt"), Path.Combine(Path.Combine(vsPiper, "espeak-ng-data"), "phontab"),
-                                Path.Combine(vsKitten, "model.fp16.onnx"), Path.Combine(vsKitten, "voices.bin"), Path.Combine(vsKitten, "tokens.txt"), Path.Combine(vsKokoroFiles, "model.onnx"), Path.Combine(vsKokoroFiles, "voices.bin"), Path.Combine(vsKokoroFiles, "tokens.txt"), Path.Combine(vsNothing, "readme.txt") })
+                                Path.Combine(vsKitten, "model.fp16.onnx"), Path.Combine(vsKitten, "voices.bin"), Path.Combine(vsKitten, "tokens.txt"), Path.Combine(vsKokoroFiles, "model.onnx"), Path.Combine(vsKokoroFiles, "voices.bin"), Path.Combine(vsKokoroFiles, "tokens.txt"), Path.Combine(vsNothing, "readme.txt"),
+                                Path.Combine(vsPocket, "lm_flow.int8.onnx"), Path.Combine(vsPocket, "lm_main.int8.onnx"), Path.Combine(vsPocket, "encoder.onnx"), Path.Combine(vsPocket, "decoder.int8.onnx"), Path.Combine(vsPocket, "text_conditioner.onnx"), Path.Combine(vsPocket, "vocab.json"), Path.Combine(vsPocket, "token_scores.json") })
                             {
                                 Directory.CreateDirectory(Path.GetDirectoryName(vsMade));
                                 File.WriteAllBytes(vsMade, new byte[] { 1 });
                             }
-                            string vsKinds = ModelFile.Kind(vsPiper) + " " + ModelFile.Kind(vsKitten) + " " + ModelFile.Kind(vsKokoroFiles) + " " + (ModelFile.Kind(vsNothing) ?? "none") + " " + (ModelFile.Kind(Path.Combine(vsModels, "gone")) ?? "none") + " " + ModelFile.Name(vsPiper + "\\");
+                            string vsKinds = ModelFile.Kind(vsPiper) + " " + ModelFile.Kind(vsKitten) + " " + ModelFile.Kind(vsKokoroFiles) + " " + (ModelFile.Kind(vsNothing) ?? "none") + " " + (ModelFile.Kind(Path.Combine(vsModels, "gone")) ?? "none") + " " + ModelFile.Name(vsPiper + "\\") + " " + ModelFile.Kind(vsPocket) + " " + ModelFile.Name(vsPocket);
                             string vsShelfWas = ModelFile.Shelf, vsShelf = Path.Combine(vsModels, "shelf"), vsUnpacked, vsZipped, vsRefused = null;
                             ModelFile.Shelf = vsShelf;
                             try
@@ -13392,7 +13394,7 @@ namespace CapriDesktop
                                 catch (VoiceException vsError) { vsRefused = vsError.Message; }
                             }
                             finally { ModelFile.Shelf = vsShelfWas; }
-                            if (vsKinds != "vits kitten kokoro none none en_US-test-medium" || vsUnpacked != Path.Combine(vsShelf, "vits-piper-en_US-test-medium") || ModelFile.Kind(vsUnpacked) != "vits"
+                            if (vsKinds != "vits kitten kokoro none none en_US-test-medium pocket pocket-tts-int8-2026-01-26" || vsUnpacked != Path.Combine(vsShelf, "vits-piper-en_US-test-medium") || ModelFile.Kind(vsUnpacked) != "vits"
                                 || !File.Exists(Path.Combine(vsUnpacked, "en_US-test-medium.onnx")) || vsZipped != Path.Combine(vsShelf, "kitten-test") || ModelFile.Kind(vsZipped) != "kitten"
                                 || vsRefused != ModelFile.Missing || Directory.GetDirectories(vsShelf).Length != 2)
                                 throw new Exception("Voice model files weren't told apart or unpacked right: " + vsKinds + " / " + vsUnpacked + " / " + vsZipped + " / " + vsRefused + " / " + string.Join(", ", Directory.GetDirectories(vsShelf)));
@@ -13479,7 +13481,7 @@ namespace CapriDesktop
                             // Her check line is up with its sound handed to her speaker. Still playing would be too narrow: one slow DoEvents can outlast it.
                             Func<bool> vsTalking = delegate { return reply == TestLine && voiceUntil > 0; };
                             string vsMenu, vsOpened, vsKokoro, vsTyped, vsTested, vsUsedNote, vsUsedStatus, vsUsedMenu, vsSliders, vsPage, vsFellNote, vsFellState, vsOnceNote, vsKept, vsForgot, vsSly, vsTestBody, vsUseBody;
-                            string vsHostBody, vsFishStatus, vsFishNote, vsFishMenu, vsFileShown, vsFileTaken, vsFishList, vsListBody, vsFishPicked, vsCloned, vsClonedBody, vsHostTest = null;
+                            string vsHostBody, vsFishStatus, vsFishNote, vsFishMenu, vsFileShown, vsFileTaken, vsFishList, vsListBody, vsFishPicked, vsCloned, vsClonedBody, vsFileClip, vsHostTest = null;
                             bool vsTestSpoke, vsTestUnsaved, vsUseSpoke, vsFellSpoke, vsOnceSpoke, vsSealed, vsRound, vsOldRound, vsSlyOff, vsHdOff, vsHostDropped;
                             int vsAskedBefore;
                             test.Stop();
@@ -13543,6 +13545,9 @@ namespace CapriDesktop
                                     vsFresh.DrawToBitmap(vsPicture, new Rectangle(Point.Empty, vsFresh.Size));
                                     vsPicture.Save(Path.Combine(output, "mainframe-voice-model-file.png"), ImageFormat.Png);
                                 }
+                                // Its Voice arrow picks a clip for a Pocket TTS model to copy.
+                                mainframe.TakeVoiceClip(vsClip);
+                                vsFileClip = mainframe.ServerShown;
                                 mainframe.PickService("Kokoro · on your PC");
                                 vsKokoro = mainframe.ServerShown + " / " + mainframe.ServerFields;
                                 mainframe.TypeServer(vsUrl, " kokoro ", "af_heart", "sk-panel-test-9876");
@@ -13693,8 +13698,9 @@ namespace CapriDesktop
                             string vsPanelUsual = "Fish Audio · cloud | " + VoiceServer.FishCloud + " | " + VoiceServer.FishFree + " |  | Paste your Fish Audio key | - | ";
                             if (!vsMenu.EndsWith(vsMenuEnd, StringComparison.Ordinal) || !vsMenu.StartsWith("Her own (picked), Bright, Sly, Sharp, -, HD ", StringComparison.Ordinal) || vsOpened != vsPanelUsual
                                 || vsKokoro != "Kokoro · on your PC | " + VoiceServer.Address + " | kokoro | af_heart | Optional | - |  / Address | Model | Voice | Key | -"
-                                || vsFileShown != "Voice model file · on your PC |  |  |  | Optional | - |  / Model folder | Language | Speaker | no key | Browse..."
+                                || vsFileShown != "Voice model file · on your PC |  |  |  | Optional | - |  / Model folder | Language | Speaker or clip | no key | Browse..."
                                 || vsFileTaken != "Voice model file · on your PC | " + vsKitten + " |  |  | Optional | - | "
+                                || vsFileClip != "Voice model file · on your PC | " + vsKitten + " |  | " + Path.Combine(vsModels, "clip.wav") + " | Optional | - | Pocket TTS models copy this clip's voice. Press Test to hear it."
                                 || vsFishList != "Capri (Nox), Night City, -, " + "New voice from a clip..." || vsListBody.IndexOf("GET /model?self=true&page_size=100&page_number=1 HTTP/1.1\r\n", StringComparison.Ordinal) != 0
                                 || vsCloned != "Fish Audio · cloud | " + vsUrl + " | " + VoiceServer.FishFree + " | abcdefabcdefabcdefabcdefabcdef12 | Paste your Fish Audio key | - | Made your Fish Audio voice. Press Test to hear it."
                                 || vsClonedBody.IndexOf("POST /model HTTP/1.1\r\n", StringComparison.Ordinal) != 0 || vsClonedBody.IndexOf("\r\nAuthorization: Bearer fish-list-key\r\n", StringComparison.Ordinal) < 0
@@ -13705,7 +13711,7 @@ namespace CapriDesktop
                                 || vsFishPicked != "Fish Audio · cloud | " + vsUrl + " | " + VoiceServer.FishFree + " | 0123456789abcdef0123456789abcdef | Paste your Fish Audio key | - | "
                                 || vsTyped != "Kokoro · on your PC | " + vsUrl + " |  kokoro  | af_heart | Optional | - | " || !vsTested.StartsWith("Kokoro · on your PC | " + vsUrl + " |  kokoro  | af_heart | Optional | - | It works. Your server said that in ", StringComparison.Ordinal) || !vsTestSpoke || !vsTestUnsaved
                                 || vsTestBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || !vsTestBody.EndsWith("{\"model\":\"kokoro\",\"input\":\"Voice link online. Miss me, chewm?\",\"voice\":\"af_heart\",\"response_format\":\"wav\"}", StringComparison.Ordinal))
-                                throw new Exception("Their voice server's panel didn't open or test right: " + vsMenu + " / " + vsOpened + " / " + vsFishList + " / " + vsFishPicked + " / " + vsCloned + " / " + (vsClonedBody.Length > 600 ? vsClonedBody.Substring(0, 600) : vsClonedBody) + " / " + vsListBody + " / " + vsFileShown + " / " + vsFileTaken + " / " + vsKokoro + " / " + vsTyped + " / " + vsTested + " / spoke " + vsTestSpoke + ", unsaved " + vsTestUnsaved);
+                                throw new Exception("Their voice server's panel didn't open or test right: " + vsMenu + " / " + vsOpened + " / " + vsFishList + " / " + vsFishPicked + " / " + vsCloned + " / " + vsFileClip + " / " + (vsClonedBody.Length > 600 ? vsClonedBody.Substring(0, 600) : vsClonedBody) + " / " + vsListBody + " / " + vsFileShown + " / " + vsFileTaken + " / " + vsKokoro + " / " + vsTyped + " / " + vsTested + " / spoke " + vsTestSpoke + ", unsaved " + vsTestUnsaved);
                             if (!vsUseSpoke || !vsSealed || vsUseBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || vsUsedNote != "Your voice server at " + vsWhere + "." + (kokoro.Installed ? " Her free voice fills in if it's down." : "")
                                 || !vsUsedStatus.StartsWith("Free voice: " + VoiceServer.Style + " | ", StringComparison.Ordinal) || !vsUsedMenu.EndsWith(vsMenuEnd + " (picked)", StringComparison.Ordinal) || vsUsedMenu.IndexOf("Her own (picked)", StringComparison.Ordinal) >= 0)
                                 throw new Exception("Use this server didn't keep it and speak through it: spoke " + vsUseSpoke + ", sealed " + vsSealed + " / " + vsUsedNote + " / " + vsUsedStatus + " / " + vsUsedMenu);

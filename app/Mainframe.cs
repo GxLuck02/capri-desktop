@@ -1422,6 +1422,8 @@ namespace CapriDesktop
 
         internal void MakeFishVoice(string clip) { sheet.MakeVoice(clip); }
 
+        internal void TakeVoiceClip(string clip) { sheet.TakeClip(clip); }
+
         internal void PressServer(string button) { sheet.Press(button); }
 
         internal Form ServerPanel { get { return sheet; } }
@@ -1988,9 +1990,9 @@ namespace CapriDesktop
                 model = Input(28, 244, 160, "Optional", "Model name, optional");
                 voiceName = Caption("Voice", 196, 224, Font, Look.Dim);
                 speaker = Input(196, 244, 160, "Optional", "Voice name or ID, optional");
-                // Fish Audio's cloud lists their own voices under the Voice box's arrow.
+                // Fish Audio's cloud lists their own voices under the Voice box's arrow. A model file's arrow picks a clip for Pocket TTS.
                 voices = owner.Dropdown();
-                speaker.Drop += delegate { ListVoices(); };
+                speaker.Drop += delegate { if (picked.Api == VoiceServer.Files) PickClip(); else ListVoices(); };
                 keyName = Caption("Key", 28, 280, Font, Look.Dim);
                 key = Input(28, 300, 244, "Optional", "Key. It goes only to this server, as a Bearer key");
                 key.Box.UseSystemPasswordChar = true;
@@ -2038,11 +2040,11 @@ namespace CapriDesktop
                 url.Cue = file ? "Browse to a voice model" : VoiceServer.Address;
                 modelName.Text = file ? "Language" : "Model";
                 model.Cue = file ? "Kokoro only, like es" : "Optional";
-                voiceName.Text = file ? "Speaker" : "Voice";
+                voiceName.Text = file ? "Speaker or clip" : "Voice";
                 keyName.Visible = key.Visible = !file;
                 browse.Visible = file;
                 speaker.Cue = choice.VoiceCue;
-                speaker.Chevron = choice.Api == VoiceServer.Fish && choice.Url == VoiceServer.FishCloud;
+                speaker.Chevron = file || (choice.Api == VoiceServer.Fish && choice.Url == VoiceServer.FishCloud);
                 if (fill && choice.Url != null)
                 {
                     url.Box.Text = choice.Url;
@@ -2123,6 +2125,23 @@ namespace CapriDesktop
             }
 
             internal void DropVoices() { ListVoices(); }
+
+            // The clip whose voice a Pocket TTS model copies.
+            private void PickClip()
+            {
+                using (OpenFileDialog dialog = new OpenFileDialog())
+                {
+                    dialog.Title = "Pick a clip of the voice to copy, with their OK";
+                    dialog.Filter = "Voice clips (*.wav;*.mp3;*.m4a;*.flac)|*.wav;*.mp3;*.m4a;*.flac|All files (*.*)|*.*";
+                    if (dialog.ShowDialog(this) == DialogResult.OK) TakeClip(dialog.FileName);
+                }
+            }
+
+            internal void TakeClip(string clip)
+            {
+                speaker.Box.Text = clip;
+                Say("Pocket TTS models copy this clip's voice. Press Test to hear it.", false);
+            }
 
             private void Browse()
             {

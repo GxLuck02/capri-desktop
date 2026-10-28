@@ -1823,6 +1823,7 @@ namespace CapriDesktop
         [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] internal static extern IntPtr SherpaOnnxOfflineTtsGenerate(IntPtr tts, IntPtr text, int speaker, float speed);
         [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] internal static extern void SherpaOnnxDestroyOfflineTtsGeneratedAudio(IntPtr audio);
         [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] internal static extern int SherpaOnnxOfflineTtsNumSpeakers(IntPtr tts);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] internal static extern IntPtr SherpaOnnxOfflineTtsGenerateWithConfig(IntPtr tts, IntPtr text, ref Asking config, IntPtr callback, IntPtr arg);
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct Vits { internal IntPtr Model, Lexicon, Tokens, Data; internal float Noise, NoiseW, Length; internal IntPtr Dict; }
@@ -1871,25 +1872,37 @@ namespace CapriDesktop
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct Generated { internal IntPtr Samples; internal int Count, Rate; }
+
+        // How to say a line, for models that copy a voice: Pocket TTS takes the clip whose voice it copies.
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct Asking { internal float Silence, Speed; internal int Speaker; internal IntPtr Clip; internal int ClipLength, ClipRate; internal IntPtr ClipText; internal int Steps; internal IntPtr Extra; }
     }
 
     // A voice model file they downloaded, run on her free voice's sherpa-onnx with no server: Piper and other VITS voices,
-    // Kokoro and Kitten, as sherpa-onnx's tts-models releases pack them. One stays open at a time.
+    // Kokoro, Kitten and Pocket TTS, as sherpa-onnx's tts-models releases pack them. One stays open at a time.
     internal static class ModelFile
     {
-        internal const string Missing = "That's no voice model Capri can run. Pick a Piper, Kokoro or Kitten model for sherpa-onnx: its .tar.bz2, or the .onnx in its folder.";
+        internal const string Missing = "That's no voice model Capri can run. Pick a Piper, Kokoro, Kitten or Pocket TTS model for sherpa-onnx: its .tar.bz2, or the .onnx in its folder.";
         // Her free voice's folder, where sherpa-onnx is, and the folder models from an archive are unpacked into. Set at startup.
         internal static string Engine;
         internal static string Shelf;
         private static readonly object gate = new object();
         private static IntPtr tts;
         private static string opened;
+        private static string openKind;
+        // The clip Pocket TTS last copied, kept read until it changes.
+        private static string clipFrom;
+        private static float[] clipSound;
+        private static int clipRate;
 
-        // What a folder holds: "kokoro", "kitten" or "vits", or null when it's no model she can run.
+        // What a folder holds: "kokoro", "kitten", "pocket" or "vits", or null when it's no model she can run.
         internal static string Kind(string folder)
         {
             string model = Model(folder);
-            if (model == null || !File.Exists(Path.Combine(folder, "tokens.txt"))) return null;
+            if (model == null) return null;
+            // Pocket TTS keeps its words in vocab.json rather than tokens.txt.
+            if (Part(folder, "lm_main") != null && Part(folder, "lm_flow") != null && File.Exists(Path.Combine(folder, "vocab.json"))) return "pocket";
+            if (!File.Exists(Path.Combine(folder, "tokens.txt"))) return null;
             if (!File.Exists(Path.Combine(folder, "voices.bin"))) return "vits";
             string named = Path.GetFileName(folder.TrimEnd('\\', '/')) + " " + Path.GetFileName(model);
             return named.IndexOf("kitten", StringComparison.OrdinalIgnoreCase) >= 0 ? "kitten" : "kokoro";
@@ -1915,10 +1928,18 @@ namespace CapriDesktop
             return best;
         }
 
-        // Its name on her free voice button: its folder's, without sherpa-onnx's "vits-piper-" in front.
+        // One of Pocket TTS's models, its int8 one where there are both: it's quicker on a CPU.
+        private static string Part(string folder, string name)
+        {
+            foreach (string file in new[] { name + ".int8.onnx", name + ".onnx" })
+                if (File.Exists(Path.Combine(folder, file))) return Path.Combine(folder, file);
+            return null;
+        }
+
+        // Its name on her free voice button: its folder's, without sherpa-onnx's "vits-piper-" or "sherpa-onnx-" in front.
         internal static string Name(string folder)
         {
-            string name = Regex.Replace(Path.GetFileName((folder ?? "").Trim().TrimEnd('\\', '/')), "^vits-(piper-)?", "", RegexOptions.IgnoreCase);
+            string name = Regex.Replace(Path.GetFileName((folder ?? "").Trim().TrimEnd('\\', '/')), "^(vits-(piper-)?|sherpa-onnx-)", "", RegexOptions.IgnoreCase);
             return name.Length == 0 ? "Voice model" : name;
         }
 
@@ -1958,19 +1979,24 @@ namespace CapriDesktop
             return target;
         }
 
-        // Its sound for the words at its own rate. `lang` is a Kokoro model's language, like en-us or es. A speaker number past
-        // its last speaker gets its first.
-        internal static short[] Speak(string folder, string lang, int speaker, string text, out int rate)
+        // Its sound for the words at its own rate. `lang` is a Kokoro model's language, like en-us or es. `voice` is a speaker
+        // number, where one past its last speaker gets its first, or for Pocket TTS the clip whose voice it copies.
+        internal static short[] Speak(string folder, string lang, string voice, string text, out int rate)
         {
             lock (gate)
             {
-                Open(folder, lang);
-                if (speaker < 0 || speaker >= LocalVoice.SherpaOnnxOfflineTtsNumSpeakers(tts)) speaker = 0;
+                string kind = Open(folder, lang);
                 IntPtr words = LocalVoice.Utf8(text);
                 IntPtr audio = IntPtr.Zero;
                 try
                 {
-                    audio = LocalVoice.SherpaOnnxOfflineTtsGenerate(tts, words, speaker, 1f);
+                    if (kind == "pocket") audio = Copy(words, voice);
+                    else
+                    {
+                        int speaker;
+                        if (!int.TryParse((voice ?? "").Trim(), out speaker) || speaker < 0 || speaker >= LocalVoice.SherpaOnnxOfflineTtsNumSpeakers(tts)) speaker = 0;
+                        audio = LocalVoice.SherpaOnnxOfflineTtsGenerate(tts, words, speaker, 1f);
+                    }
                     if (audio == IntPtr.Zero) throw new VoiceException("Your voice model glitched.");
                     LocalVoice.Generated made = (LocalVoice.Generated)Marshal.PtrToStructure(audio, typeof(LocalVoice.Generated));
                     float[] samples = new float[Math.Max(0, made.Count)];
@@ -1988,11 +2014,61 @@ namespace CapriDesktop
             }
         }
 
-        private static void Open(string folder, string lang)
+        // Pocket TTS says the words in the voice of their clip, or of her HD voice's own clip when there's none.
+        private static IntPtr Copy(IntPtr words, string voice)
+        {
+            string path = (voice ?? "").Trim().Trim('"');
+            int number;
+            if (int.TryParse(path, out number)) path = "";
+            string from = path.Length == 0 ? "" : path + "|" + File.GetLastWriteTimeUtc(path).Ticks;
+            if (clipSound == null || clipFrom != from)
+            {
+                if (path.Length == 0)
+                {
+                    using (Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream("Capri.Voice.reference.wav"))
+                    using (MemoryStream copy = new MemoryStream())
+                    {
+                        if (source == null) throw new VoiceException("Capri is missing her HD voice's clip. Pick a clip under Voice.");
+                        source.CopyTo(copy);
+                        clipSound = YourVoice.Wav(copy.ToArray(), out clipRate);
+                    }
+                }
+                else
+                {
+                    short[] pcm = YourVoice.Read(path);
+                    clipSound = new float[pcm.Length];
+                    for (int i = 0; i < pcm.Length; i++) clipSound[i] = pcm[i] / 32768f;
+                    clipRate = YourVoice.Rate;
+                }
+                clipFrom = from;
+            }
+            GCHandle pinned = GCHandle.Alloc(clipSound, GCHandleType.Pinned);
+            // Its first 10 seconds are enough, and the same seed says a line the same way each time.
+            IntPtr extra = LocalVoice.Utf8("{\"max_reference_audio_len\": 10.0, \"seed\": 42}");
+            try
+            {
+                LocalVoice.Asking asking = new LocalVoice.Asking();
+                asking.Silence = 0.2f;
+                asking.Speed = 1f;
+                asking.Clip = pinned.AddrOfPinnedObject();
+                asking.ClipLength = clipSound.Length;
+                asking.ClipRate = clipRate;
+                asking.Extra = extra;
+                return LocalVoice.SherpaOnnxOfflineTtsGenerateWithConfig(tts, words, ref asking, IntPtr.Zero, IntPtr.Zero);
+            }
+            finally
+            {
+                pinned.Free();
+                Marshal.FreeHGlobal(extra);
+            }
+        }
+
+        // Opens the model, unless it's open already, and says what kind it is.
+        private static string Open(string folder, string lang)
         {
             lang = string.IsNullOrEmpty(lang) ? "en-us" : lang.Trim().ToLowerInvariant();
             string key = folder + "|" + lang;
-            if (tts != IntPtr.Zero && opened == key) return;
+            if (tts != IntPtr.Zero && opened == key) return openKind;
             if (IntPtr.Size != 8) throw new VoiceException("Voice model files need 64-bit Windows.");
             if (Engine == null || !File.Exists(Path.Combine(Engine, "sherpa-onnx-c-api.dll"))) throw new VoiceException("Voice model files run on her free voice. Get free voice under VOICE first.");
             string kind = Kind(folder);
@@ -2022,6 +2098,17 @@ namespace CapriDesktop
                     config.Model.Kitten.Tokens = keep(inside("tokens.txt"));
                     config.Model.Kitten.Data = keep(inside("espeak-ng-data"));
                 }
+                else if (kind == "pocket")
+                {
+                    config.Model.Pocket.Flow = keep(Part(folder, "lm_flow"));
+                    config.Model.Pocket.Main = keep(Part(folder, "lm_main"));
+                    config.Model.Pocket.Encoder = keep(Part(folder, "encoder"));
+                    config.Model.Pocket.Decoder = keep(Part(folder, "decoder"));
+                    config.Model.Pocket.Conditioner = keep(Part(folder, "text_conditioner"));
+                    config.Model.Pocket.Vocab = keep(inside("vocab.json"));
+                    config.Model.Pocket.Scores = keep(inside("token_scores.json"));
+                    config.Model.Pocket.Cache = 50;
+                }
                 else
                 {
                     // Kokoro's word lists: every one but the other English's.
@@ -2044,8 +2131,10 @@ namespace CapriDesktop
                 tts = LocalVoice.SherpaOnnxCreateOfflineTts(ref config);
             }
             finally { foreach (IntPtr pointer in held) Marshal.FreeHGlobal(pointer); }
-            if (tts == IntPtr.Zero) throw new VoiceException("That voice model wouldn't start. Check it's a Piper, Kokoro or Kitten model for sherpa-onnx.");
+            if (tts == IntPtr.Zero) throw new VoiceException("That voice model wouldn't start. Check it's a Piper, Kokoro, Kitten or Pocket TTS model for sherpa-onnx.");
             opened = key;
+            openKind = kind;
+            return kind;
         }
 
         private static void Close()
@@ -2054,6 +2143,7 @@ namespace CapriDesktop
             LocalVoice.SherpaOnnxDestroyOfflineTts(tts);
             tts = IntPtr.Zero;
             opened = null;
+            openKind = null;
         }
     }
 
@@ -2423,8 +2513,8 @@ namespace CapriDesktop
         {
             new Service("Fish Audio · cloud", Fish, FishCloud, FishFree, "", "Voice ID or fish.audio link", "Paste your Fish Audio key",
                 "Fish Audio's voices. Paste a key from fish.audio and a voice's link or ID from its library. " + FishFree + " is its free tier."),
-            new Service("Voice model file · on your PC", Files, "", "", "", "Number, optional", "Optional",
-                "A Piper, Kokoro or Kitten model for sherpa-onnx, run by her free voice with no server. Browse to its .tar.bz2, or the .onnx in its folder."),
+            new Service("Voice model file · on your PC", Files, "", "", "", "Number or clip, optional", "Optional",
+                "A Piper, Kokoro, Kitten or Pocket TTS model for sherpa-onnx, run with no server. Browse to its .tar.bz2 or .onnx. Pocket TTS copies a voice clip, or her HD voice if blank."),
             new Service("Fish Speech · on your PC", Fish, "http://127.0.0.1:8080", "", "", "Reference ID, optional", "Optional",
                 "Fish Speech running on your PC with tools/api_server.py. Voice is a reference ID you added to it, or blank."),
             new Service("Kokoro · on your PC", OpenAi, Address, "kokoro", "af_heart", "Optional", "Optional",
@@ -2685,9 +2775,10 @@ namespace CapriDesktop
             List<short> said = new List<short>();
             if (api == Files)
             {
-                // A model file says it all on this PC, its voice picked by speaker number and a Kokoro model's language by Model.
-                int number, rate;
-                short[] made = ModelFile.Speak((url ?? "").Trim(), model, int.TryParse((speaker ?? "").Trim(), out number) ? number : 0, Voice.Sayable(text), out rate);
+                // A model file says it all on this PC, its voice picked by speaker number (or Pocket TTS's clip) and a Kokoro
+                // model's language by Model.
+                int rate;
+                short[] made = ModelFile.Speak((url ?? "").Trim(), model, speaker, Voice.Sayable(text), out rate);
                 said.AddRange(rate == YourVoice.Rate || made.Length == 0 ? made : VoiceFx.Resample(made, rate / (double)YourVoice.Rate));
             }
             Uri endpoint = api == Files ? null : Endpoint(url, api);
