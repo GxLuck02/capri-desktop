@@ -814,7 +814,7 @@ Mainframe > Settings > Sounds sets her sound effects (arrive, leave, hops, click
 
 ## 15. What she can do on your PC (Windows)
 
-Just ask her, in text or voice chat. English, Spanish and French requests work ("abre Spotify", "¿me pones música?", "ouvre Discord"). In other languages, if she answers instead of doing it, ask in English.
+Just ask her, in text or voice chat. Requests work in English, Spanish, French, German, Portuguese, Italian, Polish, Dutch and Russian ("abre Spotify", "ouvre Discord", "öffne Spotify", "coloca uma música", "открой Spotify"). In other languages, if she answers instead of doing it, ask in English.
 
 If her reply says she can't open, play or access something she can do (like "I don't have access to your Spotify"), she tries it with her tools before giving you that answer.
 

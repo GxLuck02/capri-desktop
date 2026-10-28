@@ -143,7 +143,14 @@ namespace CapriDesktop
             @"|^(tu vois|qu'est-ce que (tu vois|je fais)|c'est quoi (cette|la) (chanson|musique)|quelle (chanson|musique)|qu'est-ce qu'il y a sur mon [ée]cran)\b" +
             // Spanish: "abre Spotify", "pon Bohemian Rhapsody", "¿me puedes buscar...?" go to her hands too, instead of a chat reply saying she can't.
             @"|^(abr[aeií]r?|[aá]bre(me|lo|la)|inicia(r|lo)?|inicie|lanza(r)?|ejecuta(r|lo)?|arranca(r)?|enciende|prende|activa(r)?|desactiva(r)?|apaga(r)?|cierra|ci[eé]rra(me|lo|la)|cerrar|minimiza(r|lo)?|busca(r)?|b[uú]sca(me|lo)|pon(me|lo|la|le|er)?|reproduce|reproducir|reprod[uú]ce(me|lo)|toca(r)?|t[oó]ca(me|la)|pausa|reanuda|salta|silencia|quita(le)?|sube|s[uú]bele|subir|baja|b[aá]jale|bajar|mu[eé]stra(me)?|ens[eé][ñn]a(me)?|escribe|escr[ií]be(le|me)|manda|m[aá]nda(le|me)|env[ií]a(le|me)?|responde|contesta|ve al?|vete al?|ir al?|entra (al?|en)|haz clic|dale clic|pulsa|presiona|googlea|quiero que (me )?(abras|pongas|reproduzcas|toques|busques|cierres|inicies|lances|mandes|env[ií]es|escribas)|(me )?(abres|pones|pondr[ií]as|abrir[ií]as|buscas|cierras|quitas|subes|bajas|pasas))\b" +
-            @"|^(ves|qu[eé] (ves|hay en (mi|la) pantalla|estoy haciendo|est[aá] sonando)|mira (mi pantalla|esto|eso)|qu[eé] (canci[oó]n|m[uú]sica|tema) (es|suena)|(cu[aá]l es|c[oó]mo se llama) (esta|esa) canci[oó]n)\b", RegexOptions.IgnoreCase);
+            @"|^(ves|qu[eé] (ves|hay en (mi|la) pantalla|estoy haciendo|est[aá] sonando)|mira (mi pantalla|esto|eso)|qu[eé] (canci[oó]n|m[uú]sica|tema) (es|suena)|(cu[aá]l es|c[oó]mo se llama) (esta|esa) canci[oó]n)\b" +
+            // A new install talks in Windows' language, so German, Portuguese, Italian, Polish, Dutch and Russian requests reach her hands too.
+            @"|^(([öo]ffne|[öo]ffnen|starte|spiele?|schlie(ß|ss)e?|suche?|zeig(e|\s+mir)?|pausiere|schalte)\b|mach(e)? .+ (auf|an|aus|lauter|leiser)$|(kannst|k[öo]nntest|w[üu]rdest) du\b.*\b([öo]ffnen|starten|spielen|abspielen|schlie(ß|ss)en|suchen|zeigen|anmachen|aufmachen|ausmachen|pausieren)\b)" +
+            @"|^(abra|abrir|toque|tocar|coloca|coloque|p[õo]e|bota|fecha|feche|fechar|procura|procure|pesquisa|pesquise|mostra|mostre|pula|pule|aumenta|diminui|(voc[eê] |vc )?(pode|poderia|consegue)s? (me )?(abrir|tocar|colocar|p[ôo]r|fechar|procurar|pesquisar|mostrar|iniciar|pausar))\b" +
+            @"|^(apri|aprire|avvia|avviare|lancia|metti|mettimi|riproduci|suona|chiudi|chiudere|cerca|cercare|mostrami|fammi (vedere|sentire)|alza|abbassa|(puoi|potresti|riesci a) (aprire|avviare|mettere|riprodurre|chiudere|cercare|mostrarmi|suonare|alzare|abbassare))\b" +
+            @"|^(otw[óo]rz|uruchom|w[łl][aą]cz|pu[śs][ćc]|zamknij|wyszukaj|szukaj|znajd[źz]|poka[żz]|zatrzymaj|(mo[żz]esz|m[óo]g[łl]by[śs]|mog[łl]aby[śs]) (mi )?(otworzy[ćc]|uruchomi[ćc]|w[łl][aą]czy[ćc]|pu[śs]ci[ćc]|zamkn[aą][ćc]|wyszuka[ćc]|znale[źz][ćc]|pokaza[ćc]))(?!\w)" +
+            @"|^((speel|sluit|zoek|toon|laat (me )?zien|pauzeer)\b|zet .+ op$|(kun|kan|wil) je\b.*\b(openen|starten|spelen|afspelen|opzetten|sluiten|zoeken|laten zien)\b)" +
+            @"|^(открой|открыть|запусти|запустить|включи|включить|поставь|поставить|закрой|закрыть|найди|найти|покажи|показать|выключи|сделай (громче|тише)|(можешь|можете|мог бы|могла бы|не могла бы) (ты )?(открыть|запустить|включить|поставить|закрыть|найти|показать))(?!\w)", RegexOptions.IgnoreCase);
 
         private static readonly Regex Errands = new Regex(
             @"^(send|dm|pm|reply to|respond to)\b(?!\s+(me|us|help)\b)|^(message|msg|text|ping) (?!(is|was|are|were|from|looks|said|says|me|us)\b)\w|^(post|tweet) (this|that|it|a|an|my|our|something|on|in|to)\b" +
@@ -429,7 +436,13 @@ namespace CapriDesktop
             @"\bi (can'?t|cannot|can not|couldn'?t)\s+(\w+\s+){0,2}" + Able + @"|\bi('?m| am) (unable|not able) to\s+(\w+\s+){0,2}" + Able + @"|\bi (don'?t|do not) have (the )?(ability|permission|a way|any way) to\s+(\w+\s+){0,2}" + Able +
             @"|\b(don'?t|do not|can'?t|cannot) (have )?(any )?access (to )?((your|ur|the|their)\s+)?(apps?|spotify|youtube|discord|steam|music|pc|computer|programs?|browser|files|media player)\b" +
             @"|\bno (tengo|puedo) (acceso|abrir|reproducir|poner|controlar|acceder|usar|buscar|cerrar|tocar)\b|\bno tengo (forma|manera) de\b" +
-            @"|\bje ne (peux|sais) pas (ouvrir|lancer|jouer|contr[oô]ler|acc[ée]der|utiliser|chercher|fermer|mettre)\b|\bje n'ai pas acc[eè]s\b", RegexOptions.IgnoreCase);
+            @"|\bje ne (peux|sais) pas (ouvrir|lancer|jouer|contr[oô]ler|acc[ée]der|utiliser|chercher|fermer|mettre)\b|\bje n'ai pas acc[eè]s\b" +
+            @"|\bich kann (\w+\s+){0,3}nicht\s+([öo]ffnen|abspielen|starten|steuern|spielen|zugreifen|bedienen|aufrufen)\b|\bkeinen? zugriff\b" +
+            @"|\bn[ãa]o (consigo|posso|tenho como) (abrir|tocar|acessar|controlar|reproduzir|colocar|iniciar)\b|\bn[ãa]o tenho acesso\b" +
+            @"|\bnon (posso|riesco a) (aprire|riprodurre|accedere|controllare|avviare|mettere|suonare)\b|\bnon ho accesso\b" +
+            @"|\bnie (mog[ęe]|jestem w stanie) (otworzy[ćc]|odtworzy[ćc]|uruchomi[ćc]|w[łl][aą]czy[ćc]|pu[śs]ci[ćc])(?!\w)|\bnie mam dost[ęe]pu\b" +
+            @"|\bik kan (\w+\s+){0,3}niet\s+(openen|afspelen|starten|bedienen|spelen)\b|\bik heb geen toegang\b" +
+            @"|\bне могу (открыть|включить|запустить|воспроизвести|поставить|получить доступ)(?!\w)|\bу меня нет доступа(?!\w)", RegexOptions.IgnoreCase);
         private const string Able = @"(open|launch|start|run|play|pause|resume|skip|control|access|use|search|google|close|mute|unmute|put on|turn (up|down|on|off)|change)\b";
 
         internal static bool Refused(string reply) { return Refusal.IsMatch((reply ?? "").Replace('’', '\'')); }
@@ -439,7 +452,7 @@ namespace CapriDesktop
         {
             string text = (said ?? "").Trim();
             if (!Regex.IsMatch(text, @"\?\s*$")) return true;
-            return Regex.IsMatch(Regex.Replace(Opener.Replace(text, ""), @"^[\s¿¡]+", ""), @"^((hey|yo|ok|okay|oye|hola)[\s,]+)?(capri[\s,]+)?((can|could|would|will) (you|u)|(me )?(puedes|podr[ií]as|pones|abres)|(est-ce que )?tu (peux|pourrais)|peux-tu|pourrais-tu)\b", RegexOptions.IgnoreCase);
+            return Regex.IsMatch(Regex.Replace(Opener.Replace(text, ""), @"^[\s¿¡]+", ""), @"^((hey|yo|ok|okay|oye|hola|hallo|ol[aá]|ciao|cze[śs][ćc]|hoi|привет)[\s,]+)?(capri[\s,]+)?((can|could|would|will) (you|u)|(me )?(puedes|podr[ií]as|pones|abres)|(est-ce que )?tu (peux|pourrais)|peux-tu|pourrais-tu|kannst du|k[öo]nntest du|w[üu]rdest du|(voc[eê] |vc )?(pode|poderia|consegue)s?|puoi|potresti|riesci a|mo[żz]esz|m[óo]g[łl]by[śs]|mog[łl]aby[śs]|(kun|kan|wil) je|можешь|можете|мог бы|могла бы|не могла бы)(?!\w)", RegexOptions.IgnoreCase);
         }
 
         private static readonly Regex Chatter = new Regex(@"^(play (with|along|around|dead|dumb|nice|fair|a game with|a joke)|open up (to|about)|start (a story|a joke|an argument)|run (a mile|a race)|kill (the boss|me|time)|look (at it this way|forward)|show me (how|why)|check my (spelling|grammar)|rate my joke|mets-toi)\b", RegexOptions.IgnoreCase);
