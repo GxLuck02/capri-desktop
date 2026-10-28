@@ -53,6 +53,8 @@ namespace CapriDesktop
             if (File.Exists(Path.Combine(folder, "me.md"))) File.Delete(Path.Combine(folder, "me.md"));
             foreach (string old in new[] { Brain.PersonalityPath, Brain.PersonalityBackup }) if (old != null && File.Exists(old)) File.Delete(old);
             Brain.MakePersonality();
+            foreach (string name in new[] { "nvidia", "paid", "smoke" }) Keys.Forget(name);
+            pet.ForgetVoice();
         }
 
         internal void Tick(double now)
@@ -60,7 +62,7 @@ namespace CapriDesktop
             if (finished) return;
             if (started < 0) started = now;
             if (stepStart < 0) stepStart = now;
-            if (now - started > 150) { Finish("Timed out at step " + step + "."); return; }
+            if (now - started > 200) { Finish("Timed out at step " + step + "."); return; }
             if (now - stepStart > 15) { checks.Add("INFO " + Seen()); Finish("Step " + step + " took longer than 15 seconds."); return; }
             try
             {
@@ -506,7 +508,7 @@ namespace CapriDesktop
             if (step == 18)
             {
                 if (pet.Talk.Reply == null) return false;
-                if (pet.Talk.Reply != Voice.RejectedNew || pet.VoiceStatus != "no key | no voice | quiet" || File.Exists(Path.Combine(folder, "voice-key")) || pet.Talk.Typer.Secret) throw new Exception("A rejected ElevenLabs key wasn't explained, or was kept: " + pet.Talk.Reply + " | " + pet.VoiceStatus);
+                if (pet.Talk.Reply != Voice.RejectedNew || pet.VoiceStatus != "no key | no voice | quiet" || Keys.Read("voice") != null || pet.Talk.Typer.Secret) throw new Exception("A rejected ElevenLabs key wasn't explained, or was kept: " + pet.Talk.Reply + " | " + pet.VoiceStatus);
                 pet.AskVoiceKey();
                 pet.Talk.Submit("good-key-1234");
                 return true;
@@ -515,16 +517,17 @@ namespace CapriDesktop
             {
                 if (pet.Talk.Reply == null) return false;
                 string keyPath = Path.Combine(folder, "voice-key");
+                string savedKey = Keys.Read("voice");
                 string[] asked;
                 lock (voiceAsked) asked = voiceAsked.ToArray();
                 int voiced;
                 lock (spoken) voiced = spoken.Count;
-                bool shut = OperatingSystem.IsWindows() || File.GetUnixFileMode(keyPath) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                bool shut = !OperatingSystem.IsLinux() || File.GetUnixFileMode(keyPath) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
                 string last = asked.Length == 0 ? "" : asked[asked.Length - 1];
-                if (pet.Talk.Reply != "Key saved. I'll talk as Capri Test. Change it under Settings > Voice." || !File.Exists(keyPath) || File.ReadAllText(keyPath) != "good-key-1234" || !shut || pet.VoiceStatus != "key 1234 | Capri Test | speaking" || voiced != 1 || !last.StartsWith("POST /v1/text-to-speech/v1?", StringComparison.Ordinal) || last.IndexOf(" good-key-1234 ", StringComparison.Ordinal) < 0) throw new Exception("Saving a good ElevenLabs key went wrong: " + pet.Talk.Reply + " | " + pet.VoiceStatus + " | " + voiced + " | " + string.Join(" / ", asked));
+                if (pet.Talk.Reply != "Key saved. I'll talk as Capri Test. Change it under Settings > Voice." || savedKey != "good-key-1234" || !shut || (OperatingSystem.IsMacOS() && File.Exists(keyPath)) || pet.VoiceStatus != "key 1234 | Capri Test | speaking" || voiced != 1 || !last.StartsWith("POST /v1/text-to-speech/v1?", StringComparison.Ordinal) || last.IndexOf(" good-key-1234 ", StringComparison.Ordinal) < 0) throw new Exception("Saving a good ElevenLabs key went wrong: " + pet.Talk.Reply + " | " + pet.VoiceStatus + " | " + voiced + " | " + string.Join(" / ", asked));
                 string voiceMenu = pet.VoiceMenu;
                 if (voiceMenu != "*Use ElevenLabs | - | *Capri Test | Adam | - | New key... | Remove key ending 1234") throw new Exception("The Voice menu listed the wrong things: " + voiceMenu);
-                checks.Add("PASS voice key: Settings > Voice asks for the key in a hidden box, explains and drops a rejected key, keeps a good one in a private file and picks their own voice first");
+                checks.Add("PASS voice key: Settings > Voice asks for the key in a hidden box, explains and drops a rejected key, keeps a good one in " + (OperatingSystem.IsMacOS() ? "Keychain" : "a private file") + " and picks their own voice first");
                 if (pet.TypingSound) throw new Exception("Typing sound stayed on while her ElevenLabs voice works.");
                 pet.Think = delegate(string words) { return "Preem question, choom."; };
                 pet.Hear("talk to me");
@@ -550,9 +553,34 @@ namespace CapriDesktop
                 lock (spoken) voiced = spoken.Count;
                 if (voiced != 2 || pet.VoiceStatus != "key 1234 | Capri Test | quiet" || !pet.TypingSound) throw new Exception("Speak replies off still spoke, or typing stayed off: " + voiced + " | " + pet.VoiceStatus);
                 pet.ForgetVoice();
-                if (File.Exists(Path.Combine(folder, "voice-key")) || pet.VoiceStatus != "no key | v1 | quiet" || pet.VoiceMenu != "Add ElevenLabs key...") throw new Exception("Remove key didn't remove it: " + pet.VoiceStatus + " | " + pet.VoiceMenu);
-                checks.Add("PASS voice: replies are spoken through ElevenLabs and type out at the voice's pace, Use ElevenLabs off keeps her quiet, and Remove key deletes the file");
+                if (Keys.Read("voice") != null || pet.VoiceStatus != "no key | v1 | quiet" || pet.VoiceMenu != "Add ElevenLabs key...") throw new Exception("Remove key didn't remove it: " + pet.VoiceStatus + " | " + pet.VoiceMenu);
+                checks.Add("PASS voice: replies are spoken through ElevenLabs and type out at the voice's pace, Use ElevenLabs off keeps her quiet, and Remove key deletes it");
                 fakeVoice.Stop();
+                return true;
+            }
+            if (step == 22)
+            {
+                Keys.Save("smoke", "abc-1234");
+                string kept = Keys.Read("smoke");
+                bool shut = !OperatingSystem.IsLinux() || File.GetUnixFileMode(Path.Combine(folder, "smoke-key")) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                Keys.Forget("smoke");
+                if (kept != "abc-1234" || !shut || Keys.Read("smoke") != null || Keys.Problem != null) throw new Exception("Keys didn't save, read back and forget a key: " + kept + " | " + shut + " | " + Keys.Problem);
+                if (OperatingSystem.IsMacOS())
+                {
+                    string old = Path.Combine(folder, "voice-key");
+                    File.WriteAllText(old, "old-key-9876");
+                    Keys.Broken = true;
+                    bool refused = false;
+                    try { Keys.Migrate(); }
+                    catch (Exception) { refused = true; }
+                    Keys.Broken = false;
+                    if (!refused || !File.Exists(old)) throw new Exception("A failed move into Keychain lost the old voice-key file.");
+                    Keys.Migrate();
+                    string moved = Keys.Read("voice");
+                    Keys.Forget("voice");
+                    if (File.Exists(old) || moved != "old-key-9876") throw new Exception("The old voice-key file didn't move into Keychain: " + moved);
+                }
+                checks.Add("PASS keys: API keys save, read back and are forgotten " + (OperatingSystem.IsMacOS() ? "in Keychain, and the old voice-key file moves in and is deleted only once it's safely there" : "in a file only they can read"));
                 Send(shelf, "quit");
                 Finish(null);
                 return true;

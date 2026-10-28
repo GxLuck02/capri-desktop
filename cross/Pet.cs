@@ -237,7 +237,11 @@ namespace CapriDesktop
             if (Program.Smoke == null) Sfx.Out = Limbs.Sound;
             if (Program.Smoke == null) Brain.Load(Path.Combine(folder, "chat.json"));
             Limbs.Attach(Brain);
-            voice.Key = ReadVoiceKey();
+            Keys.Folder = Program.Smoke ?? folder;
+            if (Program.Smoke != null) Keys.Service = "capri-smoke";
+            try { Keys.Migrate(); }
+            catch (Exception error) { Brain.Log(Path.Combine(Keys.Folder, "voice-key"), -1, "Couldn't move the voice key into Keychain: " + error.Message); }
+            voice.Key = Keys.Read("voice");
             voice.VoiceId = string.IsNullOrEmpty(Saved.VoiceId) ? null : Saved.VoiceId;
             if (Program.Smoke == null) { Voice.Playback = Limbs.Speak; Voice.Silence = Limbs.Hush; }
             if (Program.Smoke == null)
@@ -1345,34 +1349,14 @@ namespace CapriDesktop
 
         private static string Mac(string problem) { return problem == Voice.Rejected ? "ElevenLabs rejected the key. Settings > Voice > New key." : problem; }
 
-        private string KeyFile { get { return Path.Combine(Program.Smoke ?? folder, "voice-key"); } }
-
-        private string ReadVoiceKey()
-        {
-            try
-            {
-                string key = File.ReadAllText(KeyFile).Trim();
-                return key.Length == 0 ? null : key;
-            }
-            catch (Exception) { return null; }
-        }
-
         private void WriteVoiceKey(string key)
         {
-            string path = KeyFile;
             try
             {
-                if (key == null) { File.Delete(path); return; }
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-                FileStreamOptions options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
-                if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-                using (FileStream stream = new FileStream(path, options))
-                {
-                    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(stream.SafeFileHandle, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-                    using (StreamWriter writer = new StreamWriter(stream)) writer.Write(key);
-                }
+                if (key == null) Keys.Forget("voice");
+                else Keys.Save("voice", key);
             }
-            catch (Exception error) { Brain.Log(path, -1, "Couldn't save the voice key: " + error.Message); }
+            catch (Exception error) { Brain.Log(Keys.Folder, -1, "Couldn't save the voice key: " + error.Message); }
         }
 
         internal void AskVoiceKey()
