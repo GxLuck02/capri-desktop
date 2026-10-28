@@ -296,6 +296,9 @@ namespace CapriDesktop
         private int clicks;
         // Tells the tray menu whether to offer Hide her or Show her, since a pop-in or Talk to her brings her out too.
         internal Action AwayChanged;
+        // Settings > Start at login. Off until they tick it; the file is the setting.
+        internal readonly string LoginFile;
+        private MenuItem loginItem;
         private readonly DispatcherTimer frames = new DispatcherTimer();
         private readonly Stopwatch clock = Stopwatch.StartNew();
         private readonly Random random = new Random();
@@ -327,6 +330,9 @@ namespace CapriDesktop
             this.desktop = desktop;
             folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Capri");
             Saved = Program.Smoke != null ? new Settings() : Load();
+            LoginFile = Program.Smoke != null ? Path.Combine(Program.Smoke, OperatingSystem.IsMacOS() ? "capri.plist" : "capri.desktop") : Limbs.LoginFile();
+            // A copy that moved since they ticked it takes the login entry over, so it doesn't point at the old place.
+            if (Program.Smoke == null && File.Exists(LoginFile)) Limbs.SetLogin(LoginFile, Environment.ProcessPath, true, OperatingSystem.IsMacOS());
             Brain.LogPath = Path.Combine(Program.Smoke ?? folder, "errors.txt");
             Brain.BrainMenu = "in my right-click menu under Brain";
             Brain.FreeKeyHow = "right-click me > Brain > Get a free NVIDIA key";
@@ -1190,6 +1196,9 @@ namespace CapriDesktop
                 pops.Items.Add(pick);
             }
             settings.Items.Add(pops);
+            loginItem = new MenuItem { Header = "Start at login", ToggleType = MenuItemToggleType.CheckBox };
+            loginItem.Click += delegate { SetLogin(!StartsAtLogin); };
+            settings.Items.Add(loginItem);
             discordItem = new MenuItem { Header = "Show on Discord", ToggleType = MenuItemToggleType.CheckBox };
             discordItem.Click += delegate { SetDiscord(Saved.NoDiscord); };
             settings.Items.Add(discordItem);
@@ -1247,6 +1256,16 @@ namespace CapriDesktop
             memoriesItem.IsChecked = !Saved.NoMemories;
             checkInsItem.IsChecked = !Saved.NoCheckIns;
             for (int i = 0; i < popPicks.Count; i++) popPicks[i].IsChecked = i == PopPace;
+            loginItem.IsChecked = StartsAtLogin;
+        }
+
+        internal bool StartsAtLogin { get { return File.Exists(LoginFile); } }
+        internal bool LoginShown { get { return loginItem.IsChecked; } }
+
+        internal void SetLogin(bool on)
+        {
+            if (!Limbs.SetLogin(LoginFile, Environment.ProcessPath, on, OperatingSystem.IsMacOS())) Talk.Answer("(start at login)", "Couldn't change that, choom. I need to be able to write " + LoginFile + ".");
+            Sync();
         }
 
         internal bool DiscordShown { get { return discordItem.IsChecked == true; } }

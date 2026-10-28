@@ -261,6 +261,40 @@ namespace CapriDesktop
             catch (Exception) { return false; }
         }
 
+        // Start at login: a LaunchAgent on Mac, an XDG autostart entry on Linux. Either one starts this copy of Capri.
+        internal static string LoginFile()
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (OnMac) return Path.Combine(home, "Library", "LaunchAgents", "com.lachydotmcg.capri.plist");
+            string config = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+            return Path.Combine(string.IsNullOrEmpty(config) ? Path.Combine(home, ".config") : config, "autostart", "capri.desktop");
+        }
+
+        internal static string LoginEntry(string program, bool mac)
+        {
+            if (mac)
+                return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>Label</key>\n\t<string>com.lachydotmcg.capri</string>\n\t<key>ProgramArguments</key>\n\t<array>\n\t\t<string>" + System.Security.SecurityElement.Escape(program) + "</string>\n\t</array>\n\t<key>RunAtLoad</key>\n\t<true/>\n</dict>\n</plist>\n";
+            // The Exec line quotes the path and escapes what the desktop entry spec reserves; a backslash takes four.
+            string quoted = "\"" + program.Replace("\\", "\\\\\\\\").Replace("\"", "\\\"").Replace("`", "\\`").Replace("$", "\\$").Replace("%", "%%") + "\"";
+            return "[Desktop Entry]\nType=Application\nName=Capri\nComment=Capri, your desktop companion\nExec=" + quoted + "\nTerminal=false\nX-GNOME-Autostart-enabled=true\n";
+        }
+
+        internal static bool SetLogin(string file, string program, bool on, bool mac)
+        {
+            try
+            {
+                if (!on)
+                {
+                    if (File.Exists(file)) File.Delete(file);
+                    return true;
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(file));
+                File.WriteAllText(file, LoginEntry(program, mac));
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
         // Cyberpunk 2077 running: the Mac game, or the Windows one under Proton or Wine on Linux.
         internal static bool CyberpunkRunning() { return Music.Run("pgrep", new[] { "-i", "-f", "[/\\\\]cyberpunk ?2077(\\.exe)?( |$)" }) != null; }
 

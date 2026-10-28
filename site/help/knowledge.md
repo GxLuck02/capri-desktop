@@ -1092,6 +1092,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Shut down, restart, sleep, lock and sign out ("lock my PC", "shut down my PC in 10 minutes"; say cancel to stop a wait)
 - "Take a screenshot" (screencapture on Mac; flameshot, spectacle, gnome-screenshot or your desktop's own screenshot window on Linux), "open task manager" (Activity Monitor, or your system monitor) and, on Linux, "show desktop". Shortcuts that press keys, like Discord mute or Game Bar, are Windows-only.
 - "Playing Capri" on your Discord profile, with Show on Discord in Settings
+- Start at login: right-click her > Settings > Start at login. It's off until you tick it. On Mac it adds a login item (macOS says Capri added a background item; manage it in System Settings > General > Login Items). On Linux it adds ~/.config/autostart/capri.desktop. It starts the copy you ticked it in; if you move Capri, open the new copy once.
 - Right-click her > Help > Copy error details, with your system, desktop and her brain at the top
 - "Check my screen": she looks when you ask (see "Check my screen on Mac and Linux" below)
 - Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings)
@@ -1109,7 +1110,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
-- Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Check in on me, Pop-ins (Rarely, Sometimes, Often), Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Check in on me, Pop-ins (Rarely, Sometimes, Often), Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
 - Get Capri X, only when a new version is out

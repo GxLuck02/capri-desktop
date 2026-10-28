@@ -51,6 +51,7 @@ namespace CapriDesktop
             Hands.PleaseRoll = delegate { return 1; };
             Directory.CreateDirectory(folder);
             if (File.Exists(Path.Combine(folder, "me.md"))) File.Delete(Path.Combine(folder, "me.md"));
+            if (File.Exists(pet.LoginFile)) File.Delete(pet.LoginFile);
             foreach (string old in new[] { Brain.PersonalityPath, Brain.PersonalityBackup }) if (old != null && File.Exists(old)) File.Delete(old);
             Brain.MakePersonality();
         }
@@ -187,6 +188,15 @@ namespace CapriDesktop
                 pet.SetPopPace(1);
                 if (!checkInsNew || !popsOften || popSoonest < 180 || popLatest > 480 || !popsRarely || !checkInsOff || !pet.CheckIns || pet.PopsPicked != "Sometimes") throw new Exception("Check in on me settings went wrong: new " + checkInsNew + ", often " + popsOften + " " + popSoonest.ToString("0") + "-" + popLatest.ToString("0") + " s, rarely " + popsRarely + ", off " + checkInsOff);
                 checks.Add("PASS Check in on me settings: on by default at Pop-ins Sometimes, Often waits 3 to 8 minutes and Rarely 20 to 40, and turning it off sticks");
+                bool loginNew = !pet.StartsAtLogin;
+                pet.SetLogin(true);
+                string loginText = File.Exists(pet.LoginFile) ? File.ReadAllText(pet.LoginFile) : "";
+                bool loginOn = pet.StartsAtLogin && pet.LoginShown && loginText.Contains(Environment.ProcessPath);
+                pet.SetLogin(false);
+                bool loginOff = !File.Exists(pet.LoginFile) && !pet.LoginShown;
+                string linuxLogin = Limbs.LoginEntry("/home/me/My Apps/Capri", false), macLogin = Limbs.LoginEntry("/Applications/Capri.app/Contents/MacOS/Capri", true);
+                if (!loginNew || !loginOn || !loginOff || !linuxLogin.Contains("\nExec=\"/home/me/My Apps/Capri\"\n") || !macLogin.Contains("<string>/Applications/Capri.app/Contents/MacOS/Capri</string>") || !macLogin.Contains("<key>RunAtLoad</key>")) throw new Exception("Start at login went wrong: new " + loginNew + ", on " + loginOn + ", off " + loginOff + " | " + loginText);
+                checks.Add("PASS start at login: off until ticked, then a LaunchAgent on Mac or an autostart entry on Linux that starts this copy, gone again when unticked");
                 string homeFirst = pet.Cheer(true, false, 100, true), homeStill = pet.Cheer(true, false, 115, true);
                 pet.Cheer(false, false, 130, true);
                 string homeSoon = pet.Cheer(true, false, 145, true), homeBusy = pet.Cheer(true, true, 160, false);
