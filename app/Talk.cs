@@ -191,6 +191,29 @@ namespace CapriDesktop
             return cells;
         }
 
+        // True when the first letter is Arabic, Urdu, Persian or Hebrew, so the line reads right to left. Digits and
+        // punctuation don't decide it.
+        internal static bool RightToLeft(string text)
+        {
+            foreach (char c in text ?? "")
+            {
+                if ((c >= 0x0590 && c <= 0x08FF) || (c >= 0xFB1D && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFE)) return true;
+                if (char.IsLetter(c)) return false;
+            }
+            return false;
+        }
+
+        // Right-to-left lines sit against the bubble's right edge and never wrap inside it.
+        internal static readonly StringFormat Leftward = Mirrored();
+
+        private static StringFormat Mirrored()
+        {
+            StringFormat format = (StringFormat)StringFormat.GenericTypographic.Clone();
+            // Arabic fonts can stand taller than her line, and a line that doesn't fully fit the box would otherwise not draw.
+            format.FormatFlags = (format.FormatFlags | StringFormatFlags.DirectionRightToLeft | StringFormatFlags.NoWrap) & ~StringFormatFlags.LineLimit;
+            return format;
+        }
+
         // The longest start of the text that fits in that many columns.
         internal static string Cut(string text, int columns)
         {
@@ -212,7 +235,7 @@ namespace CapriDesktop
                 string word = piece;
                 if (word.Length > 0 && Cells(word[0]) == 2 && line.Length > 0 && Cells(line) + 1 + Cells(word) > columns)
                 {
-                    string start = Cut(word, columns - Cells(line) - 1);
+                    string start = Kept(word, Cut(word, columns - Cells(line) - 1));
                     if (start.Length > 0) { line += " " + start; word = word.Substring(start.Length); }
                     lines.Add(line);
                     line = "";
@@ -220,7 +243,7 @@ namespace CapriDesktop
                 while (Cells(word) > columns)
                 {
                     if (line.Length > 0) { lines.Add(line); line = ""; }
-                    string cut = Cut(word, columns);
+                    string cut = Kept(word, Cut(word, columns));
                     if (cut.Length == 0) cut = word.Substring(0, 1);
                     lines.Add(cut);
                     word = word.Substring(cut.Length);
@@ -231,6 +254,15 @@ namespace CapriDesktop
             }
             if (line.Length > 0 || lines.Count == 0) lines.Add(line);
             return lines;
+        }
+
+        // Chinese and Japanese never start a line with closing punctuation, so the character before it moves down with it.
+        private const string Closing = "，。、！？：；）」』】〕〉》｝’”…,.!?:;)";
+
+        private static string Kept(string word, string cut)
+        {
+            while (cut.Length > 1 && cut.Length < word.Length && Closing.IndexOf(word[cut.Length]) >= 0) cut = cut.Substring(0, cut.Length - 1);
+            return cut;
         }
 
         // How much of each line shows once `revealed` characters of the text are out. A break between words used up spaces,
@@ -2072,13 +2104,26 @@ namespace CapriDesktop
                     using (Brush red = new SolidBrush(Look.Red))
                     using (Brush ink = new SolidBrush(Look.Neon))
                     {
+                        float right = x + columns * cw;
                         for (int i = 0; i < lines.Count && takes[i] > 0; i++)
                         {
                             string shown = lines[i].Substring(0, takes[i]);
                             int name = i == 0 ? Math.Min(takes[i], Speaker.Length - 1) : 0;
                             if (name > 0) graphics.DrawString(shown.Substring(0, name), bold, red, x, row2, StringFormat.GenericTypographic);
-                            graphics.DrawString(shown.Substring(name), text, ink, x + name * cw, row2 + i * line, StringFormat.GenericTypographic);
-                            caret = new PointF(x + Look.Cells(shown) * cw, row2 + i * line);
+                            string words = shown.Substring(name);
+                            float from = x + name * cw;
+                            // An Arabic, Urdu, Persian or Hebrew line grows leftwards from the right edge as she types it. The whole
+                            // line decides, so it doesn't flip sides partway through.
+                            if (Look.RightToLeft(lines[i].Substring(name)))
+                            {
+                                graphics.DrawString(words, text, ink, new RectangleF(from, row2 + i * line, right - from, line), Look.Leftward);
+                                caret = new PointF(right - graphics.MeasureString(words, text, PointF.Empty, Look.Leftward).Width - cw - 2 * s, row2 + i * line);
+                            }
+                            else
+                            {
+                                graphics.DrawString(words, text, ink, from, row2 + i * line, StringFormat.GenericTypographic);
+                                caret = new PointF(x + Look.Cells(shown) * cw, row2 + i * line);
+                            }
                         }
                         if (cursorOn) graphics.FillRectangle(ink, caret.X + s, caret.Y + s, cw * 0.85f, line - 5 * s);
                     }

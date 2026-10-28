@@ -11593,8 +11593,8 @@ namespace CapriDesktop
                             foreach (int take in hanziTakes) hanziShown += take;
                             System.Collections.Generic.List<string> latinLines = Look.Wrap("CAPRI: " + new string('a', 40), 34);
                             int[] latinTakes = Look.Takes(latinLines, "CAPRI: " + new string('a', 40), 47);
-                            bool hanziFit = hanziLines.TrueForAll(delegate(string wideRow) { return Look.Cells(wideRow) <= 34; });
-                            if (!hanziFit || hanziLines.Count != 4 || Look.Cells(hanziLines[0]) != 33 || hanziShown != 63 || latinLines.Count != 3 || latinTakes[2] != 6 || Look.Cells(hanzi) != 28 || Look.Cut(hanzi, 5) != hanzi.Substring(0, 2)
+                            bool hanziFit = hanziLines.TrueForAll(delegate(string wideRow) { return Look.Cells(wideRow) <= 34 && "，。！？".IndexOf(wideRow[0]) < 0; });
+                            if (!hanziFit || hanziLines.Count != 4 || Look.Cells(hanziLines[0]) != 31 || hanziShown != 63 || latinLines.Count != 3 || latinTakes[2] != 6 || Look.Cells(hanzi) != 28 || Look.Cut(hanzi, 5) != hanzi.Substring(0, 2)
                                 || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12).ToArray()) != "CAPRI: hey|choom, long|day?" || SpeechBox.Fit(hanziReply) != 34 || SpeechBox.Fit(hanziReply + hanziReply) != 44 || Brain.Languages[20, 0] != "简体中文")
                                 throw new Exception("Chinese didn't fit her bubble: " + string.Join(" | ", hanziLines.ToArray()) + " / shown " + hanziShown + " / long word " + latinTakes[latinTakes.Length - 1]);
                             using (SpeechBox hanziBox = new SpeechBox())
@@ -11609,7 +11609,24 @@ namespace CapriDesktop
                                 hanziBox.Image.Save(Path.Combine(output, "talk-chinese.png"), ImageFormat.Png);
                                 hanziBox.Hide();
                             }
-                            checks.Add("PASS Chinese, Japanese and Korean in her bubble: each character takes two columns, a run with no spaces fills a line and carries on below, nothing passes the bubble's edge, and a whole reply shows every character, a long word too");
+                            checks.Add("PASS Chinese, Japanese and Korean in her bubble: each character takes two columns, a run with no spaces fills a line and carries on below, no line starts with closing punctuation, nothing passes the bubble's edge, and a whole reply shows every character, a long word too");
+                            string arabic = "مرحبا يا صديقي، كيف كان يومك؟";
+                            if (!Look.RightToLeft(arabic) || !Look.RightToLeft("2077 " + arabic) || Look.RightToLeft("Hey " + arabic) || Look.RightToLeft("") || Look.RightToLeft(hanzi)
+                                || Brain.LanguageCode("Arabic") != "ar" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ar-SA")) != "Arabic" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ur-PK")) != "Urdu" || Brain.SystemLanguage(new System.Globalization.CultureInfo("fa-IR")) != "Persian")
+                                throw new Exception("Arabic, Urdu or Persian were set up wrong.");
+                            using (SpeechBox arabicBox = new SpeechBox())
+                            {
+                                arabicBox.State = TalkState.Online;
+                                arabicBox.Heard = arabic.Substring(0, 5);
+                                arabicBox.Reply = arabic + " " + arabic + " " + arabic;
+                                arabicBox.Revealed = arabicBox.Reply.Length;
+                                Rectangle arabicArea = Screen.PrimaryScreen.WorkingArea;
+                                arabicBox.Update(clock.Elapsed.TotalSeconds, 1f, new Point(arabicArea.Left + arabicArea.Width / 2, arabicArea.Bottom - 120), new Point(arabicArea.Left + arabicArea.Width / 2, arabicArea.Bottom - 10), arabicArea);
+                                if (arabicBox.Image == null) throw new Exception("An Arabic reply drew no bubble.");
+                                arabicBox.Image.Save(Path.Combine(output, "talk-arabic.png"), ImageFormat.Png);
+                                arabicBox.Hide();
+                            }
+                            checks.Add("PASS Arabic, Urdu and Persian in her bubble: a line that starts in their script sits against the right edge and grows leftwards as she types, English lines stay on the left, and a new install picks them from Windows");
                             System.Collections.Generic.List<short[]> effectsHeard = new System.Collections.Generic.List<short[]>();
                             Action<short[]> soundOut = Sfx.Out;
                             Sfx.Out = delegate(short[] sound) { effectsHeard.Add(sound); };
