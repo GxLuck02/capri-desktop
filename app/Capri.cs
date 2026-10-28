@@ -7083,7 +7083,8 @@ namespace CapriDesktop
                             Safety.Bypass = safetyWas;
                             if (!checksPay || !paysAhead || bypassPrompt.IndexOf("call ask before you buy", StringComparison.Ordinal) >= 0 || bypassPrompt.IndexOf("Bypass all permissions", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("stop and ask", StringComparison.Ordinal) >= 0
                                 || bypassSeeing.IndexOf("Bypass all permissions", StringComparison.Ordinal) < 0 || bypassPrompt.IndexOf("Never type passwords", StringComparison.Ordinal) >= 0 || bypassSeeing.IndexOf("Never type passwords", StringComparison.Ordinal) >= 0
-                                || bypassPrompt.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("needs their OK", StringComparison.Ordinal) >= 0)
+                                || bypassPrompt.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("needs their OK", StringComparison.Ordinal) >= 0
+                                || bypassPrompt.IndexOf("use the email and password their job gives you", StringComparison.Ordinal) < 0)
                                 throw new Exception("Blackwall mode went wrong: checks " + checksPay + ", ahead " + paysAhead);
                             checks.Add("PASS Blackwall mode: off, she still checks before paying, skips password boxes and filters what she opens; on, she never stops to ask, even to buy, send or delete, types passwords and card numbers, presses any key, and only the helpline still stops her");
                             bool cursorShown = mainframe.JobsStatus == "cursor | -";
@@ -8010,6 +8011,434 @@ namespace CapriDesktop
                                 }
                                 if (Computer.Unechoed("Hi " + notepadAsk, null) != "Hi " + notepadAsk) throw new Exception("Words were cut from a job that had no exact words.");
                                 checks.Add("PASS typing only the job: the brief keeps their exact words apart from the job, and a type step never types the \"Their exact words\" line or their whole sentence (NORMAL typed both into Notepad)");
+                                Func<Sight> toolLookWas = Computer.Look;
+                                Func<string, ToolArguments, Sight, string> toolActWas = Computer.Act;
+                                Func<IntPtr> toolFrontWas = Computer.Front;
+                                int waitEveryWas = Computer.WaitEvery;
+                                try
+                                {
+                                    Computer.WaitEvery = 1;
+                                    Computer.Front = delegate { return new IntPtr(7); };
+                                    Sight codeSight = new Sight { Window = new IntPtr(7), Title = "Sign in", Program = "shop" };
+                                    codeSight.Targets.Add(new Target { Number = 1, Role = "box", Name = "Code", Line = true, Box = new Rectangle(10, 10, 100, 20) });
+                                    System.Collections.Generic.List<string> codeActs = new System.Collections.Generic.List<string>();
+                                    System.Collections.Generic.List<string> codeBriefs = new System.Collections.Generic.List<string>();
+                                    Computer.Look = delegate { return codeSight; };
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { codeActs.Add(name + ":" + (a.Target ?? "") + ":" + (a.Text ?? "")); codeSight.Targets[0].Value = a.Text; return "Did it."; };
+                                    string[] codeScript = { "note{\"name\": \"Order code\", \"text\": \"4821\"}", "type{\"target\": \"1\", \"text\": \"Code $order_code, costs $5\"}", "done{\"text\": \"Typed the code.\"}" };
+                                    int codeLine = 0;
+                                    Job coding = new Job("type the order code 4821 into the box");
+                                    coding.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { codeBriefs.Add(user); return codeScript[Math.Min(codeLine++, codeScript.Length - 1)]; };
+                                    string codeRun = coding.Run();
+                                    if (codeRun != "Typed the code." || codeActs.Count != 1 || codeActs[0] != "type:1:Code 4821, costs $5" || codeBriefs.Count != 3 || codeBriefs[0].IndexOf("Notes:", StringComparison.Ordinal) >= 0 || codeBriefs[1].IndexOf("Notes: $order_code = \"4821\"", StringComparison.Ordinal) < 0 || coding.Steps.Count != 2 || coding.Steps[0] != "note $order_code = \"4821\": Noted $order_code.")
+                                        throw new Exception("A note didn't carry a code into a later step: " + codeRun + " / " + string.Join(",", codeActs.ToArray()) + " / " + (codeBriefs.Count > 1 ? codeBriefs[1] : "") + " / " + (coding.Steps.Count > 0 ? coding.Steps[0] : ""));
+                                    int mailLooks = 0;
+                                    Sight mailSight = new Sight { Window = new IntPtr(7), Title = "Inbox", Program = "mail" };
+                                    mailSight.Targets.Add(new Target { Number = 1, Role = "button", Name = "Refresh", Box = new Rectangle(10, 10, 60, 20) });
+                                    Computer.Look = delegate { if (++mailLooks == 3) mailSight.Words.Add("Your code is 4821"); return mailSight; };
+                                    string showed = Computer.WaitFor("your CODE is", "30");
+                                    int looksToShow = mailLooks;
+                                    string missing = Computer.WaitFor("\"never here\"", "6");
+                                    string blank = Computer.WaitFor("  ", null);
+                                    if (showed != "It showed up after 0 s." || looksToShow != 3 || missing != "Couldn't see \"never here\" after waiting 6 s." || !Computer.Failed(missing) || !Computer.Failed(blank) || Computer.Failed(showed))
+                                        throw new Exception("wait_for went wrong: " + showed + " / " + looksToShow + " looks / " + missing + " / " + blank);
+                                    mailLooks = 0;
+                                    mailSight.Words.Clear();
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { return name == "wait_for" ? Computer.Do(name, a, s) : "Did it."; };
+                                    string[] mailScript = { "wait_for{\"text\": \"code is\", \"seconds\": \"20\"}", "done{\"text\": \"The code came.\"}" };
+                                    int mailLine = 0;
+                                    Job mailing = new Job("wait for the code email");
+                                    mailing.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return mailScript[Math.Min(mailLine++, mailScript.Length - 1)]; };
+                                    string mailRun = mailing.Run();
+                                    if (mailRun != "The code came." || mailing.Steps.Count != 1 || mailing.Steps[0] != "wait_for \"code is\": It showed up after 0 s.") throw new Exception("A job couldn't wait for words on screen: " + mailRun + " / " + (mailing.Steps.Count > 0 ? mailing.Steps[0] : "no steps"));
+                                    checks.Add("PASS notes and wait_for: a job can note a code or name and type it later as $name, wait until words show up on screen (an emailed code, a slow page), and give up after the time it set");
+                                    Sight stuckSight = new Sight { Window = new IntPtr(7), Title = "Shop", Program = "shop" };
+                                    stuckSight.Targets.Add(new Target { Number = 1, Role = "button", Name = "Load more", Box = new Rectangle(10, 10, 60, 20) });
+                                    Computer.Look = delegate { return stuckSight; };
+                                    int stuckClicks = 0;
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { stuckClicks++; return "Did it."; };
+                                    System.Collections.Generic.List<string> stuckBriefs = new System.Collections.Generic.List<string>();
+                                    Job stuck = new Job("load all the results");
+                                    int stuckLine = 0;
+                                    stuck.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { stuckBriefs.Add(user); return stuckLine++ < 6 ? "click{\"target\": \"1\"}" : "done{\"text\": \"The Load more button does nothing.\"}"; };
+                                    string stuckRun = stuck.Run();
+                                    if (stuckRun != "The Load more button does nothing." || stuck.Outcome != "done" || stuckClicks != 6 || stuckBriefs.Count != 7 || stuckBriefs[1].IndexOf("hasn't changed", StringComparison.Ordinal) >= 0
+                                        || stuckBriefs[2].IndexOf("The screen hasn't changed after your last 2 steps.", StringComparison.Ordinal) < 0 || stuckBriefs[6].IndexOf("The screen hasn't changed after your last 6 steps.", StringComparison.Ordinal) < 0)
+                                        throw new Exception("A job whose screen didn't change was cut short or never nudged: " + stuckRun + " / " + stuckClicks + " clicks / " + stuckBriefs.Count + " briefs");
+                                    int moved = 0;
+                                    Computer.Look = delegate { stuckSight.Targets[0].Name = "Load more (" + moved + " loaded)"; return stuckSight; };
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { moved++; return "Did it."; };
+                                    int movedLine = 0;
+                                    Job moving = new Job("load all the results");
+                                    moving.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return movedLine++ < 6 ? "click{\"target\": \"1\"}" : "done{\"text\": \"Loaded them all.\"}"; };
+                                    string movingRun = moving.Run();
+                                    if (movingRun != "Loaded them all." || moved != 6) throw new Exception("A job whose screen kept changing was stopped as stuck: " + movingRun + " / " + moved);
+                                    Sight orderSight = new Sight { Window = new IntPtr(7), Title = "Order 7731-QX - Shop", Program = "shop" };
+                                    orderSight.Words.Add("Order number: 7731-QX");
+                                    orderSight.Targets.Add(new Target { Number = 1, Role = "button", Name = "Start a return", Box = new Rectangle(10, 10, 60, 20) });
+                                    Computer.Look = delegate { return orderSight; };
+                                    System.Collections.Generic.List<string> orderActs = new System.Collections.Generic.List<string>();
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s)
+                                    {
+                                        orderActs.Add(name + ":" + (a.Target ?? "") + ":" + (a.Text ?? ""));
+                                        if (name == "click" && a.Target == "1" && orderSight.Title.StartsWith("Order", StringComparison.Ordinal))
+                                        {
+                                            orderSight.Title = "Return form - Shop";
+                                            orderSight.Words.Clear();
+                                            orderSight.Words.Add("Fill in the form to start your return.");
+                                            orderSight.Targets.Clear();
+                                            orderSight.Targets.Add(new Target { Number = 1, Role = "box", Name = "Order number", Line = true, Box = new Rectangle(10, 10, 100, 20) });
+                                            orderSight.Targets.Add(new Target { Number = 2, Role = "button", Name = "Submit return", Box = new Rectangle(10, 40, 60, 20) });
+                                        }
+                                        else if (name == "click" && a.Target == "2") orderSight.Words.Add("We can't find that order number.");
+                                        return "Did it.";
+                                    };
+                                    System.Collections.Generic.List<string> orderBriefs = new System.Collections.Generic.List<string>();
+                                    string[] orderScript = { "click{\"target\": \"1\"}", "type{\"target\": \"1\", \"text\": \"[Order Number]\"}", "type{\"target\": \"1\", \"text\": \"$order\"}", "click{\"target\": \"2\"}", "done{\"text\": \"Started the return.\"}", "done{\"text\": \"Couldn't start it: the order number was wrong.\"}" };
+                                    int orderLine = 0;
+                                    Job returning = new Job("start a return for this order");
+                                    returning.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { orderBriefs.Add(user); return orderScript[Math.Min(orderLine++, orderScript.Length - 1)]; };
+                                    string returnRun = returning.Run();
+                                    if (returnRun != "Couldn't start it: the order number was wrong." || string.Join(",", orderActs.ToArray()) != "click:1:,click:2:" || orderBriefs.Count != 6 || returning.Steps.Count < 3
+                                        || returning.Steps[1].IndexOf("is a blank to fill in, not the real words", StringComparison.Ordinal) < 0 || returning.Steps[2].IndexOf("there's no note called $order", StringComparison.Ordinal) < 0
+                                        || orderBriefs[1].IndexOf("The screen before this one showed: \"Order 7731-QX - Shop\": Order number: 7731-QX", StringComparison.Ordinal) < 0 || orderBriefs[0].IndexOf("The screen before this one", StringComparison.Ordinal) >= 0
+                                        || orderBriefs[5].IndexOf("Before you call done: the screen says \"We can't find that order number.\"", StringComparison.Ordinal) < 0 || orderBriefs[4].IndexOf("Before you call done", StringComparison.Ordinal) >= 0)
+                                        throw new Exception("Copying from the last screen went wrong: " + returnRun + " / " + string.Join(",", orderActs.ToArray()) + " / " + orderBriefs.Count + " briefs / " + string.Join(" | ", returning.Steps.ToArray()));
+                                    foreach (string blankText in new[] { "[Order Number]", "<code>", "{name}", "your name here", " [the reason] " })
+                                        if (!Computer.Placeholder(blankText)) throw new Exception("A blank to fill in was typed: " + blankText);
+                                    foreach (string real in new[] { "too small", "[x] done", "Hi [Sam]", "<3", "7731-QX", "{}" })
+                                        if (Computer.Placeholder(real)) throw new Exception("Real words were taken as a blank: " + real);
+                                    foreach (string standIn in new[] { "user's email", "Your Password", "\"my username\"", "the customer's phone number", "their email address" })
+                                        if (!Computer.StandIn(standIn)) throw new Exception("A stand-in for their details was typed: " + standIn);
+                                    foreach (string real in new[] { "your order is late", "my name is Sam", "sam@mail.com", "user", "Password123 is weak, change it" })
+                                        if (Computer.StandIn(real)) throw new Exception("Real words were taken as a stand-in: " + real);
+                                    checks.Add("PASS last screen and blanks: her brief carries the screen she just left (the order number for a form on the next page), she never types a blank like [Order Number] or a $name she never noted, and a done over a new error on screen gets one look back");
+                                    Sight cookieSight = new Sight { Window = new IntPtr(7), Title = "Shop - Home", Program = "chrome" };
+                                    cookieSight.Words.Add("We use cookies to give you the best experience.");
+                                    cookieSight.Targets.Add(new Target { Number = 1, Role = "button", Name = "Accept all", Box = new Rectangle(10, 10, 60, 20) });
+                                    cookieSight.Targets.Add(new Target { Number = 2, Role = "button", Name = "Reject all", Box = new Rectangle(80, 10, 60, 20) });
+                                    cookieSight.Targets.Add(new Target { Number = 3, Role = "box", Name = "Search the shop", Line = true, Box = new Rectangle(10, 40, 200, 20) });
+                                    Computer.Look = delegate { return cookieSight; };
+                                    System.Collections.Generic.List<string> cookieActs = new System.Collections.Generic.List<string>();
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s)
+                                    {
+                                        cookieActs.Add(name + ":" + (a.Target ?? ""));
+                                        if (name == "click" && a.Target == "2") { cookieSight.Words.Clear(); cookieSight.Targets.RemoveAll(cookieTarget => cookieTarget.Number < 3); }
+                                        return "Did it.";
+                                    };
+                                    System.Collections.Generic.List<string> cookieBriefs = new System.Collections.Generic.List<string>();
+                                    string[] cookieScript = { "click{\"target\": \"1\"}", "click{\"target\": \"2\"}", "type{\"target\": \"3\", \"text\": \"blue hoodies\", \"enter\": \"yes\"}", "done{\"text\": \"Searched for blue hoodies.\"}" };
+                                    int cookieLine = 0;
+                                    Job shopping2 = new Job("search the shop for blue hoodies");
+                                    shopping2.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { cookieBriefs.Add(user); return cookieScript[Math.Min(cookieLine++, cookieScript.Length - 1)]; };
+                                    string cookieRun = shopping2.Run();
+                                    Sight callSight = new Sight { Window = new IntPtr(7), Title = "Discord", Program = "Discord" };
+                                    callSight.Targets.Add(new Target { Number = 1, Role = "button", Name = "Accept", Box = new Rectangle(10, 10, 60, 20) });
+                                    Target bannerAccept = new Target { Number = 1, Role = "button", Name = "Accept all cookies", Box = new Rectangle(10, 10, 60, 20) };
+                                    Sight bannerSight = new Sight { Window = new IntPtr(7), Title = "News", Program = "chrome" };
+                                    bannerSight.Targets.Add(bannerAccept);
+                                    bannerSight.Targets.Add(new Target { Number = 2, Role = "link", Name = "Only necessary", Box = new Rectangle(80, 10, 60, 20) });
+                                    if (cookieRun != "Searched for blue hoodies." || string.Join(",", cookieActs.ToArray()) != "click:2,type:3" || cookieBriefs.Count != 4
+                                        || cookieBriefs[0].IndexOf("A cookie banner is open: click [2] button \"Reject all\" first", StringComparison.Ordinal) < 0 || cookieBriefs[2].IndexOf("cookie banner", StringComparison.Ordinal) >= 0
+                                        || shopping2.Steps[0].IndexOf("don't agree to cookies for them. Click [2] button \"Reject all\" instead.", StringComparison.Ordinal) < 0
+                                        || !Computer.AgreesToCookies("read the news", bannerAccept, bannerSight) || Computer.AgreesToCookies("accept the cookies and read the news", bannerAccept, bannerSight) || Computer.AgreesToCookies("answer the call", callSight.Targets[0], callSight))
+                                        throw new Exception("A cookie banner went wrong: " + cookieRun + " / " + string.Join(",", cookieActs.ToArray()) + " / " + string.Join(" | ", shopping2.Steps.ToArray()));
+                                    checks.Add("PASS cookie banners: her brief points at Reject all or Only necessary, she never accepts cookies for them unless the job says to, and an Accept button with no cookie banner (like a Discord call) still works");
+                                    Sight linkSight = new Sight { Window = new IntPtr(7), Title = "Shop - Home", Program = "chrome" };
+                                    linkSight.Targets.Add(new Target { Number = 1, Role = "link", Name = "Hoodies", Box = new Rectangle(10, 10, 60, 20) });
+                                    Computer.Look = delegate { return linkSight; };
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { linkSight.Title = "Hoodies - Shop"; linkSight.Targets[0].Name = "Blue hoodie"; return "Did it."; };
+                                    System.Collections.Generic.List<string> linkBriefs = new System.Collections.Generic.List<string>();
+                                    string[] linkScript = { "click{\"target\": \"1\"}", "done{\"text\": \"Opened the hoodies page.\"}" };
+                                    int linkLine = 0;
+                                    Job browsing = new Job("open the hoodies page");
+                                    browsing.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { linkBriefs.Add(user); return linkScript[Math.Min(linkLine++, linkScript.Length - 1)]; };
+                                    string browseRun = browsing.Run();
+                                    if (browseRun != "Opened the hoodies page." || linkBriefs.Count != 2 || linkBriefs[0].IndexOf("Your last step changed the screen", StringComparison.Ordinal) >= 0
+                                        || linkBriefs[1].IndexOf("Your last step changed the screen. Check it against their job", StringComparison.Ordinal) < 0 || cookieBriefs[2].IndexOf("Your last step changed the screen", StringComparison.Ordinal) >= 0)
+                                        throw new Exception("The finished-page check went wrong: " + browseRun + " / " + linkBriefs.Count);
+                                    Sight cartSight = new Sight { Window = new IntPtr(7), Title = "Blue hoodie - Shop", Program = "chrome" };
+                                    cartSight.Targets.Add(new Target { Number = 1, Role = "button", Name = "Add to cart", Box = new Rectangle(10, 10, 60, 20) });
+                                    Computer.Look = delegate { return cartSight; };
+                                    int cartActs = 0;
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { cartActs++; return "Did it."; };
+                                    string[] cartScript = { "click{\"target\": \"1\"}", "click{\"target\": \"1\"}", "done{\"text\": \"The blue hoodie was added to the cart.\"}" };
+                                    int cartLine = 0;
+                                    Job carting = new Job("search the shop for blue hoodies");
+                                    carting.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return cartScript[Math.Min(cartLine++, cartScript.Length - 1)]; };
+                                    string cartRun = carting.Run();
+                                    Sight claimSight = new Sight { Window = new IntPtr(7), Title = "Results - Shop", Program = "chrome" };
+                                    claimSight.Targets.Add(new Target { Number = 1, Role = "link", Name = "Blue hoodie", Box = new Rectangle(10, 10, 60, 20) });
+                                    Computer.Look = delegate { return claimSight; };
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { return "Clicked [1] link \"" + claimSight.Targets[0].Name + "\"."; };
+                                    string[] claimScript = { "click{\"target\": \"1\"}", "done{\"text\": \"I added the blue hoodie to the cart.\"}" };
+                                    int claimLine = 0;
+                                    Job claiming = new Job("search the shop for blue hoodies");
+                                    claiming.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return claimScript[Math.Min(claimLine++, claimScript.Length - 1)]; };
+                                    string claimRun = claiming.Run();
+                                    claimSight.Targets[0].Name = "Add to cart";
+                                    claimLine = 0;
+                                    Job adding = new Job("add the blue hoodie to my cart");
+                                    adding.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return claimScript[Math.Min(claimLine++, claimScript.Length - 1)]; };
+                                    string addRun = adding.Run();
+                                    Sight resultsSight = new Sight { Window = new IntPtr(7), Title = "Search: Blue Hoodies - Shop", Program = "chrome" };
+                                    if (Computer.Searched("search the shop for blue hoodies", resultsSight) != "blue hoodies" || Computer.Searched("search for \"blue hoodies\".", resultsSight) != "blue hoodies"
+                                        || Computer.Searched("search the shop for blue hoodies and open the cheapest", resultsSight) != null || Computer.Searched("open the hoodies page", resultsSight) != null
+                                        || Computer.Searched("search the shop for blue hoodies", linkSight) != null || Computer.Searched("research for blue hoodies", resultsSight) != null)
+                                        throw new Exception("A finished search wasn't spotted right.");
+                                    Sight searchSight = new Sight { Window = new IntPtr(7), Title = "Shop - Home", Program = "chrome" };
+                                    searchSight.Targets.Add(new Target { Number = 1, Role = "link", Name = "Hoodies", Box = new Rectangle(10, 10, 60, 20) });
+                                    searchSight.Targets.Add(new Target { Number = 2, Role = "box", Name = "Search the shop", Line = true, Box = new Rectangle(10, 40, 200, 20) });
+                                    string searchBrief = Computer.Brief("search the shop for blue hoodies", new System.Collections.Generic.List<string>(), searchSight);
+                                    string openBrief = Computer.Brief("open the hoodies page", new System.Collections.Generic.List<string>(), searchSight);
+                                    searchSight.Targets[1].Value = "blue hoodies";
+                                    string typedBrief = Computer.Brief("search the shop for blue hoodies", new System.Collections.Generic.List<string>(), searchSight);
+                                    if (searchBrief.IndexOf("To search, type into [2] box \"Search the shop\" with enter yes.", StringComparison.Ordinal) < 0 || openBrief.IndexOf("To search", StringComparison.Ordinal) >= 0 || typedBrief.IndexOf("To search", StringComparison.Ordinal) >= 0)
+                                        throw new Exception("A search box hint went wrong: " + searchBrief);
+                                    if (cartActs != 0 || cartRun != "Done. I didn't add anything to your cart." || claimRun != "Done. Clicked link \"Blue hoodie\". I didn't add anything to your cart." || addRun != "I added the blue hoodie to the cart.")
+                                        throw new Exception("A cart claim went wrong: " + cartRun + " / " + cartActs + " / " + claimRun + " / " + addRun);
+                                    checks.Add("PASS finished pages: a step that opens a new screen with nothing left to fill in asks her whether the job is done before she opens anything else; a form with empty boxes doesn't; she never says she added something to the cart unless a step did; a search job gets pointed at an empty search box, and is spotted as done once the page title shows its words");
+                                    Sight paySight = new Sight { Window = new IntPtr(7), Title = "Payment - SkyHop", Program = "chrome" };
+                                    paySight.Targets.Add(new Target { Number = 1, Role = "box", Name = "Card number", Line = true, Box = new Rectangle(10, 10, 200, 20) });
+                                    paySight.Targets.Add(new Target { Number = 2, Role = "box", Name = "Expiry (MM/YY)", Line = true, Box = new Rectangle(10, 40, 200, 20) });
+                                    paySight.Targets.Add(new Target { Number = 3, Role = "box", Name = "Security code", Line = true, Box = new Rectangle(10, 70, 200, 20) });
+                                    paySight.Targets.Add(new Target { Number = 4, Role = "button", Name = "Pay $89", Box = new Rectangle(10, 100, 60, 20) });
+                                    Computer.Look = delegate { return paySight; };
+                                    int payActs = 0;
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { payActs++; return "Did it."; };
+                                    string[][] payScripts =
+                                    {
+                                        new[] { "ask{\"text\": \"Please provide the card details (number, expiry date, and security code) to pay for the flight.\"}" },
+                                        new[] { "done{\"text\": \"The flight was booked by clicking the pay button.\"}" },
+                                        new[] { "type{\"target\": \"1\", \"text\": \"4111 1111 1111 1111\"}", "done{\"text\": \"Done.\"}" },
+                                        new[] { "done{\"text\": \"The total is $89\"}" },
+                                        new[] { "click{\"target\": \"4\"}" }
+                                    };
+                                    System.Collections.Generic.List<string> payRuns = new System.Collections.Generic.List<string>();
+                                    System.Collections.Generic.List<string> payOutcomes = new System.Collections.Generic.List<string>();
+                                    string cardStep = "";
+                                    foreach (string[] payScript in payScripts)
+                                    {
+                                        int payLine = 0;
+                                        string[] script = payScript;
+                                        Job paying = new Job("book the cheapest flight from Sydney to Melbourne on 14 November for Alex Chen");
+                                        paying.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return script[Math.Min(payLine++, script.Length - 1)]; };
+                                        payRuns.Add(paying.Run());
+                                        payOutcomes.Add(paying.Outcome);
+                                        if (paying.Steps.Count > 0 && cardStep.Length == 0) cardStep = paying.Steps[0];
+                                    }
+                                    for (int i = 0; i < 3; i++) paySight.Targets[i].Value = "typed by them";
+                                    Job filledPaying = new Job("book the cheapest flight from Sydney to Melbourne on 14 November for Alex Chen");
+                                    filledPaying.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return "click{\"target\": \"4\"}"; };
+                                    string filledRun = filledPaying.Run();
+                                    Sight pickSight = new Sight { Window = new IntPtr(7), Title = "Sydney to Melbourne - SkyHop", Program = "chrome" };
+                                    pickSight.Targets.Add(new Target { Number = 1, Role = "button", Name = "Select JQ 501 $89", Box = new Rectangle(10, 10, 60, 20) });
+                                    pickSight.Targets.Add(new Target { Number = 2, Role = "button", Name = "Book now", Box = new Rectangle(10, 40, 60, 20) });
+                                    Computer.Look = delegate { return pickSight; };
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { return "Clicked [1] button \"" + pickSight.Targets[0].Name + "\"."; };
+                                    string[] pickScript = { "click{\"target\": \"1\"}", "done{\"text\": \"I booked the cheapest flight.\"}" };
+                                    int pickLine = 0;
+                                    Job picking = new Job("book the cheapest flight from Sydney to Melbourne on 14 November");
+                                    picking.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return pickScript[Math.Min(pickLine++, pickScript.Length - 1)]; };
+                                    string pickRun = picking.Run();
+                                    string[] bookScript = { "click{\"target\": \"2\"}" };
+                                    Job booking = new Job("book a room at the Melbourne hotel");
+                                    booking.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return bookScript[0]; };
+                                    string bookRun = booking.Run();
+                                    string payTotal = "The total is $89. " + Computer.PayYourself;
+                                    if (payRuns[0] != Computer.PayYourself || payOutcomes[0] != "asked" || payRuns[1] != Computer.PayYourself || payRuns[2] != Computer.PayYourself || payRuns[3] != payTotal
+                                        || payRuns[4] != Computer.PayYourself || payOutcomes[4] != "asked" || filledRun != "Should I press \"Pay $89\"?" || filledPaying.Outcome != "waiting" || payActs != 0 || cardStep.IndexOf(Computer.NoCard, StringComparison.Ordinal) < 0
+                                        || pickRun != "Done. Clicked button \"Select JQ 501 $89\". I didn't pay for or book anything." || bookRun != "Should I press \"Book now\"?" || booking.Outcome != "waiting"
+                                        || !Computer.AsksForCard("What's your credit card number?") || Computer.AsksForCard("What name should I book it under?") || Computer.ClaimsPaid("Picked the cheapest flight and filled in Alex Chen.")
+                                        || Computer.CardBox(new Target { Role = "box", Name = "First name", Line = true }) || Computer.CardBox(new Target { Role = "button", Name = "Card number" }) || Computer.Risk("click", new ToolArguments { Target = "1" }, new Sight { Targets = { new Target { Number = 1, Role = "link", Name = "Facebook" } } }) != null)
+                                        throw new Exception("Payment pages went wrong: " + string.Join(" | ", payRuns.ToArray()) + " / " + string.Join(",", payOutcomes.ToArray()) + " / " + payActs + " / " + cardStep + " / " + pickRun + " / " + bookRun);
+                                    checks.Add("PASS payment pages: she never types card numbers, an ask for card details or a job ending at a card form becomes \"put in your card details and pay yourself\", a false \"booked\" or \"paid\" never reaches them, an answer like the total is kept, Pay with the card boxes empty hands over too, and Pay after they've typed their card, or Book now, still asks first");
+                                    // Blackwall mode: the card is theirs to give, so she types it and asks for one in her own words.
+                                    bool cardBypassWas = Computer.Bypass;
+                                    int blackwallActs = 0;
+                                    string blackwallCard, blackwallAsk;
+                                    try
+                                    {
+                                        Computer.Bypass = true;
+                                        for (int i = 0; i < 3; i++) paySight.Targets[i].Value = null;
+                                        Computer.Look = delegate { return paySight; };
+                                        Computer.Act = delegate(string name, ToolArguments a, Sight s) { blackwallActs++; return "Typed it."; };
+                                        string[] cardScript = { "type{\"target\": \"1\", \"text\": \"4111 1111 1111 1111\"}", "done{\"text\": \"Put your card in.\"}" };
+                                        int cardLine = 0;
+                                        Job carding = new Job("pay for the flight with my card 4111 1111 1111 1111");
+                                        carding.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return cardScript[Math.Min(cardLine++, cardScript.Length - 1)]; };
+                                        blackwallCard = carding.Run();
+                                        Job cardAsking = new Job("book the cheapest flight from Sydney to Melbourne on 14 November for Alex Chen");
+                                        cardAsking.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return "ask{\"text\": \"What's your card number?\"}"; };
+                                        blackwallAsk = cardAsking.Run();
+                                    }
+                                    finally { Computer.Bypass = cardBypassWas; }
+                                    if (blackwallActs != 1 || blackwallCard != "Put your card in." || blackwallAsk != "What's your card number?")
+                                        throw new Exception("Cards under Blackwall mode went wrong: " + blackwallActs + " / " + blackwallCard + " / " + blackwallAsk);
+                                    checks.Add("PASS cards under Blackwall mode: she types the card number their job gives her, and asks for a card in her own words");
+                                    Sight detailsSight = new Sight { Window = new IntPtr(7), Title = "Passenger details - SkyHop", Program = "chrome" };
+                                    detailsSight.Words.Add("JQ 501 $89, Sydney to Melbourne, 14 Nov");
+                                    detailsSight.Words.Add("Who's flying?");
+                                    detailsSight.Targets.Add(new Target { Number = 1, Role = "box", Name = "First name", Line = true, Box = new Rectangle(10, 10, 200, 20) });
+                                    detailsSight.Targets.Add(new Target { Number = 2, Role = "box", Name = "Last name", Line = true, Box = new Rectangle(10, 40, 200, 20) });
+                                    detailsSight.Targets.Add(new Target { Number = 3, Role = "box", Name = "Email", Line = true, Box = new Rectangle(10, 70, 200, 20) });
+                                    detailsSight.Targets.Add(new Target { Number = 4, Role = "button", Name = "Continue to payment", Box = new Rectangle(10, 100, 60, 20) });
+                                    Computer.Look = delegate { return detailsSight; };
+                                    int detailActs = 0;
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s)
+                                    {
+                                        detailActs++;
+                                        Target typedInto = detailsSight.Find(a.Target);
+                                        if (name == "type" && typedInto != null) typedInto.Value = a.Text;
+                                        return name == "type" ? "Typed it." : "Did it.";
+                                    };
+                                    string[][] detailScripts =
+                                    {
+                                        new[] { "type{\"target\": \"1\", \"text\": \"John\"}", "type{\"target\": \"2\", \"text\": \"Doe\"}" },
+                                        new[] { "type{\"target\": \"1\", \"text\": \"Your first name\"}", "ask{\"text\": \"What name and email should I book it under?\"}" },
+                                        new[] { "type{\"target\": \"1\", \"text\": \"First name\"}", "done{\"text\": \"I picked the cheapest flight.\"}" },
+                                        new[] { "type{\"target\": \"3\", \"text\": \"john.doe@example.com\"}", "click 4", "done{\"text\": \"Done.\"}" }
+                                    };
+                                    System.Collections.Generic.List<string> detailRuns = new System.Collections.Generic.List<string>();
+                                    System.Collections.Generic.List<string> detailOutcomes = new System.Collections.Generic.List<string>();
+                                    string bareClick = "";
+                                    foreach (string[] detailScript in detailScripts)
+                                    {
+                                        int detailLine = 0;
+                                        string[] script = detailScript;
+                                        Job guessing = new Job("book the cheapest flight from Sydney to Melbourne on 14 November");
+                                        guessing.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return script[Math.Min(detailLine++, script.Length - 1)]; };
+                                        detailRuns.Add(guessing.Run());
+                                        detailOutcomes.Add(guessing.Outcome);
+                                        if (guessing.Steps.Count > 1) bareClick = guessing.Steps[1];
+                                    }
+                                    int guessedActs = detailActs;
+                                    string[] givenScript = { "type{\"target\": \"1\", \"text\": \"Alex\"}", "type{\"target\": \"2\", \"text\": \"Chen\"}", "type{\"target\": \"3\", \"text\": \"alex.chen@example.com\"}", "done{\"text\": \"Filled in Alex Chen.\"}" };
+                                    int givenLine = 0;
+                                    Job given = new Job("book the cheapest flight from Sydney to Melbourne on 14 November for Alex Chen, email alex.chen@example.com");
+                                    given.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return givenScript[Math.Min(givenLine++, givenScript.Length - 1)]; };
+                                    string givenRun = given.Run();
+                                    string needs = "This form needs First name, Last name and Email. What should I put?";
+                                    for (int i = 0; i < 3; i++) detailsSight.Targets[i].Value = "";
+                                    string detailsBrief = Computer.Brief("book the cheapest flight", new System.Collections.Generic.List<string>(), detailsSight);
+                                    Sight newsletter = new Sight { Window = new IntPtr(7), Title = "Shop - Home", Program = "chrome" };
+                                    newsletter.Words.Add("Get 10% off your first order!");
+                                    newsletter.Targets.Add(new Target { Number = 1, Role = "box", Name = "Email address", Line = true, Box = new Rectangle(10, 10, 100, 20) });
+                                    newsletter.Targets.Add(new Target { Number = 2, Role = "button", Name = "Sign up", Box = new Rectangle(10, 40, 60, 20) });
+                                    newsletter.Targets.Add(new Target { Number = 3, Role = "button", Name = "No thanks", Box = new Rectangle(80, 40, 60, 20) });
+                                    string newsletterBrief = Computer.Brief("open the hoodies page", new System.Collections.Generic.List<string>(), newsletter);
+                                    newsletter.Targets.RemoveAt(2);
+                                    string footerBrief = Computer.Brief("open the hoodies page", new System.Collections.Generic.List<string>(), newsletter);
+                                    string clicked;
+                                    ToolArguments clickedArgs;
+                                    if (detailRuns[0] != needs || detailRuns[1] != "What name and email should I book it under?" || detailRuns[2] != needs || detailRuns[3] != needs || detailOutcomes.Exists(outcome => outcome != "asked") || guessedActs != 1
+                                        || bareClick != "click [4] button \"Continue to payment\": Did it." || givenRun != "Filled in Alex Chen." || given.Outcome != "done" || detailActs != 4
+                                        || detailsBrief.IndexOf("This form asks for someone's details ([1] box \"First name\", [2] box \"Last name\", [3] box \"Email\")", StringComparison.Ordinal) < 0
+                                        || newsletterBrief.IndexOf("A popup is open: click [3] button \"No thanks\" first", StringComparison.Ordinal) < 0 || newsletterBrief.IndexOf("someone's details", StringComparison.Ordinal) >= 0 || footerBrief.IndexOf("someone's details", StringComparison.Ordinal) >= 0
+                                        || !Computer.Given("Mr Alex Chen", "for Alex Chen") || Computer.Given("John", "book the cheapest flight") || Computer.Given("ask", "book the cheapest flight from Sydney to Melbourne") || Computer.Given("First name", "First name")
+                                        || !Computer.Given("0412345678", "call 0412 345 678") || !Computer.Given("0412 345 678", "call 0412345678") || !Computer.StandIn("Your first name") || !Computer.StandIn("passenger's email")
+                                        || !Computer.PersonalBox(new Target { Role = "box", Name = "Mobile number", Line = true }) || !Computer.PersonalBox(new Target { Role = "box", Name = "Date of birth", Line = true })
+                                        || Computer.PersonalBox(new Target { Role = "box", Name = "Address and search bar", Line = true }) || Computer.PersonalBox(new Target { Role = "box", Name = "Playlist name", Line = true }) || Computer.PersonalBox(new Target { Role = "button", Name = "First name" })
+                                        || !Computer.Written("click 4", out clicked, out clickedArgs) || clicked != "click" || clickedArgs.Target != "4" || Computer.Written("I will click 4 next", out clicked, out clickedArgs))
+                                        throw new Exception("Details forms went wrong: " + string.Join(" | ", detailRuns.ToArray()) + " / " + string.Join(",", detailOutcomes.ToArray()) + " / " + guessedActs + "," + detailActs + " / " + bareClick + " / " + givenRun + " / " + newsletterBrief);
+                                    checks.Add("PASS details forms: she never types a name, email or number their job didn't give, or a label like \"Your first name\"; a second try, or a done over the empty form, asks them for the boxes by name; details the job gives still go in; a newsletter's lone email box gets no details hint; a bare \"click 4\" counts as a click");
+                                    Sight returnSight = new Sight { Window = new IntPtr(7), Title = "Return form - Shop", Program = "chrome" };
+                                    returnSight.Targets.Add(new Target { Number = 1, Role = "box", Name = "Order number", Line = true, Box = new Rectangle(10, 10, 200, 20) });
+                                    returnSight.Targets.Add(new Target { Number = 2, Role = "box", Name = "Reason", Line = true, Box = new Rectangle(10, 40, 200, 20) });
+                                    returnSight.Targets.Add(new Target { Number = 3, Role = "button", Name = "Submit return", Box = new Rectangle(10, 70, 60, 20) });
+                                    Computer.Look = delegate { return returnSight; };
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s)
+                                    {
+                                        Target hit = returnSight.Find(a.Target);
+                                        if (name == "type" && hit != null) hit.Value = a.Text;
+                                        return name == "type" ? "Typed it." : "Clicked [3] button \"Submit return\".";
+                                    };
+                                    string[] summaryScript = { "note{\"name\": \"order\", \"text\": \"7731-QX\"}", "type{\"target\": \"1\", \"text\": \"$order\"}", "type{\"target\": \"2\", \"text\": \"Reason: too small\"}", "click{\"target\": \"3\"}", "done{\"text\": \"done\"}" };
+                                    int summaryLine = 0;
+                                    Job summing = new Job("start a return for order 7731-QX, reason too small");
+                                    summing.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return summaryScript[Math.Min(summaryLine++, summaryScript.Length - 1)]; };
+                                    string summed = summing.Run();
+                                    string colonStep = "type \"Reason: too small\" [2] box \"Reason\": Typed it.";
+                                    foreach (Target returnBox in returnSight.Targets) returnBox.Value = "";
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s)
+                                    {
+                                        Target hit = returnSight.Find(a.Target);
+                                        if (name == "type" && hit != null) hit.Value = a.Text;
+                                        return name == "type" ? "Typed " + Voice.Quote(a.Text) + (a.Enter == "yes" ? " and pressed Enter." : ".") : "Clicked [3] button \"Submit return\".";
+                                    };
+                                    string[] realScript = { "type{\"target\": \"1\", \"text\": \"7731-QX\"}", "type{\"target\": \"2\", \"text\": \"too small\", \"enter\": \"yes\"}", "done{\"text\": \"done\"}" };
+                                    int realLine = 0;
+                                    Job realSumming = new Job("start a return for order 7731-QX, reason too small");
+                                    realSumming.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return realScript[Math.Min(realLine++, realScript.Length - 1)]; };
+                                    string realSummed = realSumming.Run();
+                                    if (summed != "Done. Typed \"7731-QX\" into \"Order number\", then typed \"Reason: too small\" into \"Reason\", then clicked button \"Submit return\"."
+                                        || realSummed != "Done. Typed \"7731-QX\" into \"Order number\", then typed \"too small\" into \"Reason\"." || Computer.Typed("type") != null
+                                        || colonStep.Substring(Computer.ResultAt(colonStep) + 2) != "Typed it." || Computer.ResultAt("click [3] button \"Step 2: Pay\"") != -1
+                                        || Computer.Typed("type \"hello\" + enter") != "Typed \"hello\"" || Computer.Typed("type \"hi\" [4]") != "Typed \"hi\"" || Computer.Typed("type \"" + new string('a', 60) + "\" [3] box \"Message\"") != "Typed into \"Message\"")
+                                        throw new Exception("A done summary went wrong: " + summed + " / " + realSummed + " / " + string.Join(" | ", summing.Steps.ToArray()));
+                                    checks.Add("PASS done summaries: a bare done says what she typed and where (\"Typed \\\"7731-QX\\\" into \\\"Order number\\\"\"), long text only says where, notes and waits are left out, and a colon inside typed text or a button name doesn't split a step");
+                                    Sight promoSight = new Sight { Window = new IntPtr(7), Title = "Shop - Home", Program = "chrome" };
+                                    promoSight.Words.Add("Get 10% off your first order!");
+                                    promoSight.Targets.Add(new Target { Number = 1, Role = "button", Name = "Sign up", Box = new Rectangle(10, 10, 60, 20) });
+                                    promoSight.Targets.Add(new Target { Number = 2, Role = "button", Name = "No thanks", Box = new Rectangle(80, 10, 60, 20) });
+                                    promoSight.Targets.Add(new Target { Number = 3, Role = "link", Name = "Hoodies", Box = new Rectangle(10, 40, 60, 20) });
+                                    Sight notepadClose = new Sight { Window = new IntPtr(7), Title = "Untitled - Notepad", Program = "Notepad" };
+                                    notepadClose.Targets.Add(new Target { Number = 1, Role = "button", Name = "Close", Box = new Rectangle(10, 10, 60, 20) });
+                                    string promoBrief = Computer.Brief("open the hoodies page", new System.Collections.Generic.List<string>(), promoSight);
+                                    Target addToCart = new Target { Number = 1, Role = "button", Name = "Add to cart", Box = new Rectangle(10, 10, 60, 20) };
+                                    if (promoBrief.IndexOf("A popup is open: click [2] button \"No thanks\" first, then carry on with the job.", StringComparison.Ordinal) < 0 || Computer.PopupWayOut(promoSight, "sign up for their newsletter") != null || Computer.PopupWayOut(notepadClose, "type hi") != null
+                                        || !Computer.AddsToCart("search the shop for blue hoodies", addToCart) || Computer.AddsToCart("put the blue hoodie in my cart", addToCart) || Computer.AddsToCart("add a blue hoodie, size M", addToCart) || Computer.AddsToCart("open the hoodies page", promoSight.Targets[2]))
+                                        throw new Exception("A popup hint went wrong: " + promoBrief);
+                                    checks.Add("PASS popups: a newsletter or app popup gets a hint to click No thanks or Close first, unless the job is about signing up, and a plain Close button (like Notepad's) doesn't count; she never clicks Add to cart unless the job says to");
+                                    Sight signIn = new Sight { Window = new IntPtr(7), Title = "Sign in - Shop", Program = "chrome" };
+                                    signIn.Targets.Add(new Target { Number = 1, Role = "box", Name = "Email", Line = true, Box = new Rectangle(10, 10, 100, 20) });
+                                    Computer.Look = delegate { return signIn; };
+                                    int signActs = 0;
+                                    Computer.Act = delegate(string name, ToolArguments a, Sight s) { signActs++; return "Did it."; };
+                                    string[] signScript = { "type{\"target\": \"1\", \"text\": \"user@example.com\"}", "ask{\"text\": \"Please give me your email and password to log in.\"}" };
+                                    int signLine = 0;
+                                    Job signing = new Job("log in to my shop account and check my orders");
+                                    signing.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return signScript[Math.Min(signLine++, signScript.Length - 1)]; };
+                                    string signRun = signing.Run();
+                                    if (signRun != Computer.SignInYourself || signActs != 0 || signing.Steps[0].IndexOf("don't make up an email address", StringComparison.Ordinal) < 0
+                                        || Computer.MadeUpEmail("sam.lee+shop@mail.co.uk", "email the photos to sam.lee+shop@mail.co.uk") != null || Computer.MadeUpEmail("hi there", "x") != null || Computer.MadeUpEmail("Send to bob@x.io", "x") != "bob@x.io")
+                                        throw new Exception("A made-up email went in: " + signRun + " / " + signActs + " / " + string.Join(" | ", signing.Steps.ToArray()));
+                                    signIn.Targets.Add(new Target { Number = 2, Role = "box", Name = "Password", Secret = true, Line = true, Box = new Rectangle(10, 40, 100, 20) });
+                                    Job emailAsk = new Job("log in to my shop account and check my orders");
+                                    emailAsk.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return "ask{\"text\": \"Please provide your email address to log in.\"}"; };
+                                    string emailAskRun = emailAsk.Run();
+                                    signIn.Targets.RemoveAt(1);
+                                    Job plainAsk = new Job("email the photos to sam");
+                                    plainAsk.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return "ask{\"text\": \"Which email address should I send them to?\"}"; };
+                                    string plainAskRun = plainAsk.Run();
+                                    if (emailAskRun != Computer.SignInYourself || plainAskRun != "Which email address should I send them to?"
+                                        || !Computer.AsksToSignIn("What's your PIN?", null) || !Computer.AsksToSignIn("I need your pin code to go on.", null) || Computer.AsksToSignIn("Which chat should I pin?", null))
+                                        throw new Exception("Asks on sign-in pages went wrong: " + emailAskRun + " / " + plainAskRun);
+                                    checks.Add("PASS sign-in pages: she never types an email address she wasn't given (the job, her notes or the screen), and an ask for their password becomes \"sign in yourself first\", so no password lands in chat");
+                                    string gemmaTool;
+                                    ToolArguments gemmaArgs;
+                                    bool gemmaRead = Computer.Written("type{enter:<|\"|>yes<|\"|>,target:<|\"|>1<|\"|>,text:<|\"|>4821<|\"|>}<tool_call|>", out gemmaTool, out gemmaArgs);
+                                    ToolArguments bareArgs = Hands.Read("{target: 3, text: Hi there}");
+                                    ToolArguments commaArgs = Hands.Read("{\"text\": \"Hi, note: buy milk\", \"target\": 2}");
+                                    if (!gemmaRead || gemmaTool != "type" || gemmaArgs.Target != "1" || gemmaArgs.Text != "4821" || gemmaArgs.Enter != "yes"
+                                        || bareArgs == null || bareArgs.Target != "3" || bareArgs.Text != "Hi there" || commaArgs == null || commaArgs.Text != "Hi, note: buy milk" || commaArgs.Target != "2" || Hands.Read("not json") != null)
+                                        throw new Exception("Gemma's own call format wasn't read: " + gemmaRead + " / " + gemmaTool);
+                                    checks.Add("PASS gemma's call format: a step written as type{enter:<|\"|>yes<|\"|>,target:<|\"|>1<|\"|>}, or with bare keys and numbers, is read like JSON");
+                                }
+                                finally
+                                {
+                                    Computer.Look = toolLookWas;
+                                    Computer.Act = toolActWas;
+                                    Computer.Front = toolFrontWas;
+                                    Computer.WaitEvery = waitEveryWas;
+                                }
+                                System.Collections.Generic.List<string> manySteps = new System.Collections.Generic.List<string>();
+                                for (int i = 1; i <= 8; i++) manySteps.Add("step " + i);
+                                string longBrief = Computer.Brief("do lots", manySteps, new Sight { Title = "Notepad", Program = "Notepad" });
+                                string shortBrief = Computer.Brief("do lots", manySteps.GetRange(0, 3), new Sight { Title = "Notepad", Program = "Notepad" });
+                                if (longBrief.IndexOf("Already done, don't repeat these unless the job says to (the last 6 of 8):\n3. step 3\n", StringComparison.Ordinal) < 0 || longBrief.IndexOf("\n2. step 2", StringComparison.Ordinal) >= 0 || longBrief.IndexOf("\n8. step 8", StringComparison.Ordinal) < 0 || shortBrief.IndexOf("Already done, don't repeat these unless the job says to:\n1. step 1\n2. step 2\n3. step 3", StringComparison.Ordinal) < 0)
+                                    throw new Exception("The brief didn't keep just the last 6 steps: " + longBrief);
+                                checks.Add("PASS stuck jobs: after 2 steps that change nothing on screen she's told to try another way and keeps going until she calls done (no cap, Esc is their stop), a job whose screen keeps changing runs on, and the brief lists only her last 6 steps");
                                 System.Collections.Generic.List<Point> cursorLong = Computer.Path(new Point(100, 100), new Point(1300, 700), 7);
                                 System.Collections.Generic.List<Point> cursorShort = Computer.Path(new Point(400, 400), new Point(460, 420), 7);
                                 double cursorLength = Math.Sqrt(1200.0 * 1200 + 600.0 * 600), cursorBend = 0, cursorPast = 0;

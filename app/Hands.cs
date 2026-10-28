@@ -661,6 +661,14 @@ namespace CapriDesktop
         internal static ToolArguments Read(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return null;
+            ToolArguments args = Strict(json);
+            if (args != null) return args;
+            string loose = Loose(json);
+            return loose == json ? null : Strict(loose);
+        }
+
+        private static ToolArguments Strict(string json)
+        {
             try
             {
                 using (System.Xml.XmlDictionaryReader reader = JsonReaderWriterFactory.CreateJsonReader(Encoding.UTF8.GetBytes(json), System.Xml.XmlDictionaryReaderQuotas.Max))
@@ -671,6 +679,40 @@ namespace CapriDesktop
             }
             catch (SerializationException) { return null; }
             catch (System.Xml.XmlException) { return null; }
+        }
+
+        // Gemma sometimes writes its own call format as text: type{enter:<|"|>yes<|"|>,target:<|"|>1<|"|>}. Its quotes become
+        // JSON quotes, and bare keys and values (target:3) get quoted.
+        internal static string Loose(string json)
+        {
+            string text = (json ?? "").Replace("<|\"|>", "\"");
+            StringBuilder loose = new StringBuilder();
+            char last = ' ';
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '"')
+                {
+                    int end = i + 1;
+                    while (end < text.Length && text[end] != '"') end += text[end] == '\\' ? 2 : 1;
+                    loose.Append(text, i, Math.Min(end + 1, text.Length) - i);
+                    i = end;
+                    last = '"';
+                    continue;
+                }
+                if ((last == '{' || last == ',' || last == ':') && !char.IsWhiteSpace(c) && "{}[],:".IndexOf(c) < 0)
+                {
+                    int end = i;
+                    while (end < text.Length && text[end] != ',' && text[end] != '}' && (last == ':' || text[end] != ':')) end++;
+                    loose.Append('"').Append(text.Substring(i, end - i).Trim().Replace("\\", "\\\\").Replace("\"", "\\\"")).Append('"');
+                    i = end - 1;
+                    last = '"';
+                    continue;
+                }
+                loose.Append(c);
+                if (!char.IsWhiteSpace(c)) last = c;
+            }
+            return loose.ToString();
         }
 
         internal static bool Valid(string tool, ToolArguments args)

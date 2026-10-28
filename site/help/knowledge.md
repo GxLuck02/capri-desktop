@@ -750,9 +750,15 @@ For Discord she brings Discord to the front, presses the keys, then switches you
 - One job uses your mouse at a time. Ask for another while she's busy and it waits its turn.
 - With a Claude key she works from screenshots and checks what happened after each step.
 - "Send" sends the message. "Write", "type" or "draft" leaves it for you to send.
-- She asks first before buying or paying for anything, or before sending, posting, deleting or installing something you didn't ask for. Reply yes, or no ("Okay, I left it alone."). With Blackwall mode on (Settings > HABITS) she never asks, even for those.
-- She skips password boxes ("Won't type in a password box.") unless Blackwall mode is on. With it on, she types passwords and card numbers when the job needs them. Anything she types into a password box shows as dots (••••••••) in the steps box, in her reply and in her saved chat, and she says "the password" out loud instead.
+- She asks first before buying or paying for anything, or before sending, posting, deleting or installing something you didn't ask for. Reply yes, or no ("Okay, I left it alone."). Book now and Reserve count as paying. With Blackwall mode on (Settings > HABITS) she never asks, even for those.
+- She skips password boxes ("Won't type in a password box.") unless Blackwall mode is on. On a sign-in page she says: "You'll need to sign in yourself first. I don't type passwords. Tell me when you're in and I'll carry on."
+- She doesn't type card numbers unless Blackwall mode is on. A job that reaches a card form ends with: "It's at the payment page. You'll need to put in your card details and pay yourself. I don't type card numbers."
+- With Blackwall mode on, she types passwords and card numbers when your job gives them. Anything she types into a password box shows as dots (••••••••) in the steps box, in her reply and in her saved chat, and she says "the password" out loud instead.
 - Jobs have no step limit. Big models can work on one for as long as it takes; Esc stops her.
+- On forms she only types names, emails, phone numbers and addresses that your job, her notes or the screen gave her, never made-up ones like "John Doe". If your job doesn't give them, she asks: "This form needs First name, Last name and Email. What should I put?"
+- Cookie banners get Reject all or Only necessary unless your job says to accept cookies. Newsletter and app popups get No thanks or Close. She never clicks Add to cart unless your job says to.
+- She can remember a code or order number partway through a job and type it later, and wait for words to show up on screen, like an emailed code.
+- When she finishes with a plain "done", she says what she typed and where: 'Done. Typed "7731-QX" into "Order number".'
 - Bigger brain models handle jobs better. If she gets lost, pick a bigger model under BRAIN, or a Claude key under MAX INTELLIGENCE.
 
 ### Look things up
