@@ -1654,14 +1654,15 @@ namespace CapriDesktop
         {
             WebException web = error as WebException;
             if (web != null && web.Status == WebExceptionStatus.RequestCanceled) return null;
-            if (web != null && remote != null && web.Status == WebExceptionStatus.Timeout) return remote.Company + " didn't answer in time. Try again or pick another model under BRAIN in Capri Mainframe.";
+            if (web != null && remote != null && web.Status == WebExceptionStatus.Timeout) return remote.Company + " didn't answer in time. Try again or pick another model " + BrainMenu + ".";
             if (web != null && remote != null && web.Response == null) return "Can't reach " + remote.Company + ", choom. Check your internet, then try me again.";
-            if (web != null && web.Status == WebExceptionStatus.Timeout) return "Took too long to think, choom. My brain runs on your PC, so open games slow me down. Close one, or right-click me, open Capri Mainframe and press Free key.";
+            if (web != null && web.Status == WebExceptionStatus.Timeout) return "Took too long to think, choom. My brain runs on your PC, so open games slow me down. Close one, or " + FreeKeyHow + ".";
             if (web != null && web.Response == null) return Offline;
             return "[SIGNAL CORRUPTED] Something in my head just sparked. Try me again?";
         }
 
         internal static string BrainMenu = "under BRAIN in Capri Mainframe";
+        internal static string FreeKeyHow = "right-click me, open Capri Mainframe and press Free key";
         internal static string Bin = "Recycle Bin";
         private static readonly Regex Needs = new Regex(@"requires (more system memory \()?(?<need>[\d.]+) ?GiB\)?.*?(but only |than is available \()(?<free>[\d.]+) ?GiB", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         private static readonly Regex Spelled = new Regex(@"needs (?<need>[\d.]+) GB and only (?<free>[\d.]+) GB");

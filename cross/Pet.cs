@@ -280,6 +280,7 @@ namespace CapriDesktop
             Saved = Program.Smoke != null ? new Settings() : Load();
             Brain.LogPath = Path.Combine(Program.Smoke ?? folder, "errors.txt");
             Brain.BrainMenu = "in my right-click menu under Brain";
+            Brain.FreeKeyHow = "right-click me > Brain > Get a free NVIDIA key";
             Brain.Bin = OperatingSystem.IsMacOS() ? "Trash" : "trash";
             Brain.MemoryPath = Path.Combine(Program.Smoke ?? folder, "me.md");
             Brain.PersonalityPath = Path.Combine(Program.Smoke ?? folder, Brain.PersonalityName);
@@ -325,6 +326,8 @@ namespace CapriDesktop
             Play(idle);
             nextGlitch = 30 + random.NextDouble() * 30;
             ContextMenu = Menu();
+            // A saved key's models are read now, so a stuck NVIDIA model has others to hand over to.
+            if (Brain.Remote != null && Program.Smoke == null) ListCloud();
             Talk = new Talk(this);
             frames.Interval = TimeSpan.FromMilliseconds(33);
             frames.Tick += delegate { Tick(); };
@@ -1584,22 +1587,48 @@ namespace CapriDesktop
                 Reply(ticket, text, done);
                 return;
             }
-            Func<string, string> think = Think;
-            if (think == null)
-            {
-                if (Brain.Model == null) { Reply(ticket, text, Offline); FindBrain(); return; }
-                think = Brain.Ask;
-            }
+            if (Think == null && Brain.Model == null) { Reply(ticket, text, Offline); FindBrain(); return; }
             Talk.Thinking(text);
+            Ask(ticket, text, 0);
+        }
+
+        // Her brain answers on the thread pool. A stuck NVIDIA model hands the message to the next one, twice at most, like on Windows.
+        private void Ask(int ticket, string text, int switches)
+        {
+            Func<string, string> think = Think ?? Brain.Ask;
+            Cloud remote = Brain.Remote;
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string said;
+                bool stuck = false;
                 try { said = think(text); }
-                catch (BrainException error) { said = error.Message == Brain.Offline ? Offline : error.Told ? error.Message : "My brain couldn't answer: " + error.Message; }
-                catch (Exception error) { said = Brain.Explain(error) ?? "That reply was cancelled. Try again."; }
+                catch (BrainException error) { said = error.Message == Brain.Offline ? Offline : error.Told ? error.Message : "My brain couldn't answer: " + error.Message; stuck = Brain.Stalled(error); }
+                catch (Exception error) { said = Brain.Explain(error, remote) ?? "That reply was cancelled. Try again."; stuck = Brain.Stalled(error); }
                 if (string.IsNullOrWhiteSpace(said)) said = "My brain sent an empty reply. Try again.";
-                Dispatcher.UIThread.Post(delegate { if (ticket == asking) Reply(ticket, text, said); });
+                Dispatcher.UIThread.Post(delegate
+                {
+                    if (ticket != asking) return;
+                    if (stuck && switches < 2 && Hop(remote)) { Ask(ticket, text, switches + 1); return; }
+                    Reply(ticket, text, said);
+                });
             });
+        }
+
+        // NVIDIA models that got stuck since she started, so she never hands back to one.
+        private readonly List<string> stalled = new List<string>();
+
+        internal bool Hop(Cloud remote)
+        {
+            if (remote == null || remote.Kind != "nvidia" || Brain.Remote != remote) return false;
+            string old = remote.Model;
+            stalled.Add(old);
+            string next = Brain.Next(old, cloudModels, stalled);
+            if (next == null) return false;
+            Brain.Cancel();
+            remote.Model = next;
+            Brain.Model = next;
+            Brain.Log("NVIDIA", -1, old + " wasn't answering, so she switched to " + next + ".");
+            return true;
         }
 
         internal bool Speaks { get { return voice.Ready && !Saved.Silent; } }
