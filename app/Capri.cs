@@ -191,7 +191,7 @@ namespace CapriDesktop
         [DataMember] public int VoiceSpeed = 100;
         [DataMember] public int VoiceRobot;
         [DataMember] public int VoiceGlitch;
-        // Her HD voice keeps its own robot, a little out of the box, and its own glitch. Early 0.7.4 builds saved a 10% HD
+        // Her HD voice keeps its own robot and its own glitch, both Off out of the box. Early 0.7.4 builds saved a 10% HD
         // glitch as HdGlitch, so the new name starts it at Off.
         [DataMember] public int HdRobot = VoiceFx.HdRobotDefault;
         [DataMember] public int HdVoiceGlitch;
@@ -11012,7 +11012,7 @@ namespace CapriDesktop
                                 mainframe.ShowSettings(false);
                             }
                             mainframe.Sync();
-                            bool fxPerVoice = fxOwnShown == "Normal | Normal | 10% · HD | Off · HD" && fxOwnWidest == "Normal | Normal | 100% · HD | 100% · HD" && fxOwnPage == null && fxOwnMoved == "Normal | Normal | 5% · HD | 20% · HD"
+                            bool fxPerVoice = fxOwnShown == "Normal | Normal | Off · HD | Off · HD" && fxOwnWidest == "Normal | Normal | 100% · HD | 100% · HD" && fxOwnPage == null && fxOwnMoved == "Normal | Normal | 5% · HD | 20% · HD"
                                 && fxOwnRobot == 5 && preferences.HdRobot == 5 && fxOwnGlitch == 20 && preferences.HdVoiceGlitch == 20 && fxOwnSharedRobot == 0 && fxOwnShared == 0 && preferences.VoiceRobot == 0 && preferences.VoiceGlitch == 0
                                 && mainframe.VoiceStyleStatus == "Normal | Normal | Off | Off";
                             preferences.HdRobot = VoiceFx.HdRobot = VoiceFx.HdRobotDefault;
@@ -11119,7 +11119,7 @@ namespace CapriDesktop
                             bool fxChatStyled = fxChatPlain && fxChatArmed && !chatTail.Enabled && chatFx == null && fxNear(Fundamental(fxChatOut, 16000), 190 * Math.Sqrt(2)) && fxNear(fxChatOut.Length, fxChatSaid.Length);
                             if (!fxPlain || !fxPitched || !fxGlitches || !fxRobots || !fxKept || !fxClamped || !fxPerVoice || !fxPreviewed || !fxElevenStyled || !fxStreams || !fxChatStyled || mainframe.VoiceStyleStatus != "Normal | Normal | Off | Off")
                                 throw new Exception("Her voice's sliders went wrong: plain " + fxPlain + ", pitched " + fxPitched + " (" + fxBase.ToString("0") + " / " + Fundamental(fxUp, 24000).ToString("0") + " / " + Fundamental(fxDown, 24000).ToString("0") + " / " + Fundamental(fxHd, 24000).ToString("0") + " Hz, " + fxUp.Length + " / " + fxDown.Length + " / " + fxHd.Length + " / " + fxFast.Length + " / " + fxSlow.Length + "), glitches " + fxGlitches + " (" + fxLight + " / " + fxHeavy + "), robot " + fxRobots + " (" + fxSung.ToString("0") + " Hz, " + fxUnder.ToString("0.0") + " dB under her, peak " + fxRobotPeak + "), kept " + fxKept + " (" + fxShown + "), clamped " + fxClamped + ", HD robot and glitch " + fxPerVoice + " (" + fxOwnShown + " / " + fxOwnWidest + " / " + fxOwnMoved + " / " + fxOwnPage + " / " + fxOwnRobot + " / " + fxOwnGlitch + " / " + fxOwnSharedRobot + " / " + fxOwnShared + "), previewed " + fxPreviewed +" (" + fxFreeHeard + " / " + fxFreePaid + " / " + fxPaid + "), ElevenLabs " + fxElevenStyled + ", streams " + fxStreams + ", voice chat " + fxChatStyled + " (" + Fundamental(fxChatOut, 16000).ToString("0") + " Hz, " + fxChatOut.Length + " samples)");
-                            checks.Add("PASS voice sliders: Pitch (-6 to +6 semitones), Speed (0.7x to 1.5x), Robot (Off to 100%) and Glitch (Off to 100%) leave her free and ElevenLabs voices byte for byte the same at their defaults; her HD voice keeps its own robot, 10% out of the box, which the slider shows as 10% · HD, and its own glitch, Off out of the box, and moves them without touching her other voices; pitch moves her fundamental (200 Hz to 283 and 141 Hz) while Kokoro's own speed keeps her pace, and her HD and ElevenLabs voices keep their length through a time-stretch; robot puts a synth on the nearest note under her, singing 200 Hz on G (" + fxSung.ToString("0") + " Hz) at full and sitting " + fxUnder.ToString("0") + " dB under her at 10%, the same way every time; glitch adds stutters, crushed bits and skips that grow with the slider and repeat the same way for the same line; ElevenLabs voice chat is styled as it streams, the same as styling it whole, and its tail comes out once the stream goes quiet; the values save, load and clamp; and letting go of a slider has her say a line in the voice she's using");
+                            checks.Add("PASS voice sliders: Pitch (-6 to +6 semitones), Speed (0.7x to 1.5x), Robot (Off to 100%) and Glitch (Off to 100%) leave her free and ElevenLabs voices byte for byte the same at their defaults; her HD voice keeps its own robot and its own glitch, both Off out of the box so it sounds as dry as the clip it copies, which the sliders show as Off · HD, and moves them without touching her other voices; pitch moves her fundamental (200 Hz to 283 and 141 Hz) while Kokoro's own speed keeps her pace, and her HD and ElevenLabs voices keep their length through a time-stretch; robot puts a synth on the nearest note under her, singing 200 Hz on G (" + fxSung.ToString("0") + " Hz) at full and sitting " + fxUnder.ToString("0") + " dB under her at 10%, the same way every time; glitch adds stutters, crushed bits and skips that grow with the slider and repeat the same way for the same line; ElevenLabs voice chat is styled as it streams, the same as styling it whole, and its tail comes out once the stream goes quiet; the values save, load and clamp; and letting go of a slider has her say a line in the voice she's using");
                             checks.Add("PASS settings page: language, notes, volume, sounds, bubble time, wander, sleep delay, startup glitch-in, dancing, reply length and chat memory save, reach her prompt and voice, and nothing overlaps or pokes out of the page");
                             preferences.Watch = false;
                             mainframe.Sync();
@@ -11826,7 +11826,7 @@ namespace CapriDesktop
                             try { hdVoice.Speak("Hi."); throw new Exception("A sleeping HD voice spoke."); }
                             catch (VoiceException) { }
                             hdVoice.Attach(hdPort);
-                            // Her HD voice is a little robot out of the box; these checks hear it plain first, then full robot, then fully glitched.
+                            // Her HD voice starts dry; these checks hear it plain first, then full robot, then fully glitched.
                             int hdRobotWas = VoiceFx.HdRobot, hdGlitchWas = VoiceFx.HdGlitch;
                             VoiceFx.HdRobot = VoiceFx.HdGlitch = 0;
                             byte[] hdSaid =hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom, this is my HD voice.");

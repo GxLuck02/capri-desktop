@@ -527,13 +527,13 @@ namespace CapriDesktop
 
 #if !CROSS
     // Her voices' pitch, speed, robot and glitch from the Settings page. At their defaults nothing here touches a sample,
-    // except her HD voice, which is a little robot out of the box.
+    // her HD voice included: it starts dry, like the clip it copies.
     internal static class VoiceFx
     {
         internal const int MostPitch = 6;
         internal const int Slowest = 70;
         internal const int Fastest = 150;
-        internal const int HdRobotDefault = 10;
+        internal const int HdRobotDefault = 0;
         internal static volatile int Pitch;
         internal static volatile int Speed = 100;
         // Robot and glitch are kept per voice: one for her free voice styles and ElevenLabs, one for her HD voice.

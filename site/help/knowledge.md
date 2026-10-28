@@ -315,7 +315,7 @@ VOICE ("Every voice, ElevenLabs too" on the right of the heading)
 - Volume: Mute, 10% to 100%, 125%, 150%. Default 100%.
 - Pitch (from 0.7.5): -6 to +6 semitones. Default Normal. Higher or deeper, at the same speed.
 - Speed (from 0.7.5): 0.7x to 1.5x. Default Normal.
-- Robot (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off, except her HD voice, which starts at 10% and shows as "10% · HD". A smooth synth under her voice that follows her pitch on the nearest note, like a talk box. Low settings add a light robotic shimmer; 100% is all robot.
+- Robot (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off for every voice, HD too, which shows as "Off · HD" while HD is the voice she's using. A smooth synth under her voice that follows her pitch on the nearest note, like a talk box. Low settings add a light robotic shimmer; 100% is all robot.
 - Glitch (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off. Stutters, crushed bits and skips in her voice, more as it goes up.
 - Sounds: her sound effects. Off, or 10% to 100%. Default 60%.
 - Typing sound: "When she types". A soft typing sound while her text replies type out.
@@ -522,7 +522,7 @@ Mainframe > Settings > VOICE has four sliders. They change every voice she has: 
 - Robot: Off, 5%, 10%, 15%, then 20% to 100%. A synth sings under her voice, like a talk box or a vocoder: it follows her pitch, pulled toward the nearest note, and takes the shape of her words. Smooth and musical, with no stutters. Low settings add a light robotic shimmer; 100% is all robot.
 - Glitch: Off, 5%, 10%, 15%, then 20% to 100%. Short stutters, crushed bits and skips, like a glitchy chip. More of them as it goes up. The same line glitches the same way each time.
 
-Her HD voice keeps its own Robot and Glitch. Its Robot starts at 10%, so she sounds a little robotic out of the box, and its Glitch starts at Off. While HD is the voice she's using, those sliders show its values with HD after them ("10% · HD"), and moving them only changes HD. Her other voices share one Robot and one Glitch, which both start at Off.
+Her HD voice keeps its own Robot and Glitch. Both start at Off, so out of the box she sounds dry, just like the clip her HD voice copies. While HD is the voice she's using, those sliders show its values with HD after them ("Off · HD"), and moving them only changes HD. Her other voices share one Robot and one Glitch, which both start at Off.
 
 When you let go of a slider, she says "How do I sound now, choom?" in the voice she's using, so you can hear it. With ELEVENLABS she makes that line once (about 25 credits), then restyles the same audio on your PC, so moving the sliders again uses no more credits. If her HD voice is asleep (it rests after 10 quiet minutes), she says "One sec, waking my HD voice." first, then the line in HD. With her voice OFF she says "My voice is OFF, choom. Pick FREE VOICE to hear that." With no voice set up she says "Get my free voice under VOICE to hear that, choom."
 
