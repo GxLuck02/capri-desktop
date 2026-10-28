@@ -578,6 +578,12 @@ namespace CapriDesktop
         private static readonly string[] HomeSongLines = { "Wait, that's Night City. Turn it up.", "Ooh, my soundtrack. Preem taste.", "Now that's music. You're learning." };
         private bool homeBusy, homeGame, homeSong;
         private double homeAt = -HomeGap, gameCheered = -HomeGap, songCheered = -HomeGap;
+        // A PC stuck near full CPU for about a minute gets a joke from her, at most once every half hour, and never over a full-screen game (Zenni's idea).
+        private const double LagGap = 1800;
+        private static readonly string[] LagLines = { "Your CPU's cooking, choom. Careful, I might go cyberpsycho.", "Everything's lagging. One more tab and I go full cyberpsycho.", "[SIGNAL CORRUPTED] ...this lag is making me cyberpsycho. Close something." };
+        private long lagIdle, lagTotal;
+        private int lagHot;
+        private double lagAt = -LagGap, lagSaid = -LagGap;
         private readonly System.Windows.Forms.Timer frames;
         private readonly System.Windows.Forms.Timer signals;
         private readonly EventWaitHandle restore;
@@ -1060,6 +1066,7 @@ namespace CapriDesktop
                 if (!testing) CheckWander(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckMusic(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckHome(clock.Elapsed.TotalSeconds);
+                if (!testing) CheckLag(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckPopIn(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckNudge(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) presence.Show(preferences.NoDiscord ? null : Doing);
@@ -2737,6 +2744,30 @@ namespace CapriDesktop
         }
 
         internal static bool NightCity(string title) { return !string.IsNullOrEmpty(title) && NightCityMusic.IsMatch(title); }
+
+        private void CheckLag(double now)
+        {
+            if (now - lagAt < 15) return;
+            lagAt = now;
+            long idle, total;
+            if (!Native.CpuTimes(out idle, out total)) return;
+            double busy = lagTotal == 0 || total <= lagTotal ? 0 : 1 - (double)(idle - lagIdle) / (total - lagTotal);
+            lagIdle = idle;
+            lagTotal = total;
+            bool free = preferences.CheckIns && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null && !Native.Gaming();
+            string line = Lagging(busy, now, free);
+            if (line != null) Say(line);
+        }
+
+        // Her joke once the CPU has been over 90% busy four checks in a row, about a minute, while she's free, or null.
+        private string Lagging(double busy, double now, bool free)
+        {
+            lagHot = busy >= 0.9 ? lagHot + 1 : 0;
+            if (lagHot < 4 || !free || now - lagSaid < LagGap) return null;
+            lagHot = 0;
+            lagSaid = now;
+            return LagLines[random.Next(LagLines.Length)];
+        }
 
         // Her cheer when the game starts or a Night City song comes on and she's free, or null. One she misses while busy waits for the next time.
         private string Cheer(bool game, bool song, double now, bool free)
@@ -7677,6 +7708,20 @@ namespace CapriDesktop
                                 || !NightCity("SAMURAI - Chippin' In") || !NightCity("I Really Want to Stay at Your House - Rosa Walton - YouTube - Google Chrome") || !NightCity("Dawid Podsiadło - Let You Down") || NightCity("Chase Atlantic - Consume") || NightCity("Spotify Premium") || NightCity(null))
                                 throw new Exception("Her Night City cheer went wrong: " + homeFirst + " / " + homeStill + " / " + homeSoon + " / " + homeBusyLine + " / " + homeSongLine + " / " + homeLater);
                             checks.Add("PASS Night City: she cheers when Cyberpunk 2077 starts or a 2077 or Edgerunners song comes on in Spotify or YouTube, at most once every two hours for each, never while she's busy, and other songs don't count");
+                            string lagEarly = Lagging(0.95, 10, true) ?? Lagging(0.95, 25, true) ?? Lagging(0.95, 40, true), lagLine = Lagging(0.97, 55, true);
+                            string lagSoon = null, lagBusy = null, lagCooled = null, lagLater = null;
+                            for (int i = 0; i < 4; i++) lagSoon = lagSoon ?? Lagging(0.99, 70 + i * 15, true);
+                            for (int i = 0; i < 4; i++) lagBusy = lagBusy ?? Lagging(0.99, 2000 + i * 15, false);
+                            for (int i = 0; i < 4; i++) lagCooled = lagCooled ?? Lagging(i == 2 ? 0.4 : 0.99, 2100 + i * 15, true);
+                            for (int i = 0; i < 4; i++) lagLater = lagLater ?? Lagging(0.99, 2200 + i * 15, true);
+                            lagHot = 0;
+                            lagSaid = -LagGap;
+                            bool cpuRead;
+                            long cpuIdle, cpuTotal;
+                            cpuRead = Native.CpuTimes(out cpuIdle, out cpuTotal) && cpuTotal > 0 && cpuIdle >= 0 && cpuIdle <= cpuTotal;
+                            if (lagEarly != null || Array.IndexOf(LagLines, lagLine) < 0 || lagSoon != null || lagBusy != null || lagCooled != null || Array.IndexOf(LagLines, lagLater) < 0 || !cpuRead)
+                                throw new Exception("Her lag joke went wrong: " + lagEarly + " / " + lagLine + " / " + lagSoon + " / " + lagBusy + " / " + lagCooled + " / " + lagLater + " / read " + cpuRead);
+                            checks.Add("PASS lag joke: about a minute of the CPU over 90% gets her \"might go cyberpsycho\" line, at most once every half hour, not while she's busy, and a cool-down in between starts the count again");
                             DataContractJsonSerializer checkInsJson = new DataContractJsonSerializer(typeof(Preferences));
                             Preferences checkInsNew = new Preferences();
                             Preferences checkInsUpdated = (Preferences)checkInsJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"PopIns\":false,\"Size\":240}")));
@@ -13893,6 +13938,16 @@ namespace CapriDesktop
         [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr value);
         [DllImport("user32.dll", SetLastError = true)] private static extern bool UpdateLayeredWindow(IntPtr window, IntPtr screen, ref Point destination, ref Size size, IntPtr source, ref Point origin, int colorKey, ref Blend blend, int flags);
         [DllImport("shell32.dll")] private static extern int SHQueryUserNotificationState(out int state);
+        [DllImport("kernel32.dll")] private static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
+
+        // Every CPU's idle time and its total time so far, in 100 ns ticks. Kernel time counts idle time too.
+        internal static bool CpuTimes(out long idle, out long total)
+        {
+            long kernel, user;
+            bool read = GetSystemTimes(out idle, out kernel, out user);
+            total = kernel + user;
+            return read;
+        }
 
         internal static long IdleMilliseconds()
         {
