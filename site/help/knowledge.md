@@ -1104,7 +1104,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Sit here
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance
 - Size: Tiny, Small, Medium, Large, Huge, Giant
-- Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, and Forget the key and use Ollama.
+- Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
 - Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Show on Discord, Open her notes (me.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
@@ -1135,6 +1135,8 @@ No Ollama needed, and nothing to download.
 2. Make a key there (see "The free NVIDIA key" above) and copy it.
 3. Right-click her > Brain > Use an API key..., paste the key in her box and press Enter. It stays on this computer. (Her box closes if you click away, so copy the key first.)
 4. She says "Key saved. I'm thinking with X now. Change it under Brain in my right-click menu." Pick another model under Brain. Forget the key and use Ollama goes back to Ollama.
+
+If an NVIDIA model gets stuck, she switches to another one and answers. She goes back to your pick the next time she starts. To keep her on your model, tick Brain > Stay on my model; she then says what went wrong instead.
 
 An OpenAI, Claude or DeepSeek key works the same way: right-click her > Brain > Use an API key...
 - "That doesn't look like an NVIDIA, OpenAI, Claude or DeepSeek key. NVIDIA's start with nvapi-." You pasted something else.

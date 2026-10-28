@@ -38,6 +38,7 @@ namespace CapriDesktop
         [DataMember] internal bool NoDiscord;
         [DataMember] internal string CloudModel;
         [DataMember] internal string UpdateSeen;
+        [DataMember] internal bool StayOnModel;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -1309,6 +1310,12 @@ namespace CapriDesktop
                     brainMenu.Items.Add(pick);
                 }
             brainMenu.Items.Add(new Separator());
+            if (remote.Kind == "nvidia")
+            {
+                MenuItem stay = new MenuItem { Header = "Stay on my model", ToggleType = MenuItemToggleType.CheckBox, IsChecked = Saved.StayOnModel };
+                stay.Click += delegate { SetStay(!Saved.StayOnModel); };
+                brainMenu.Items.Add(stay);
+            }
             MenuItem back = new MenuItem { Header = "Forget the key and use Ollama" };
             back.Click += delegate { ForgetBrainKey(); };
             brainMenu.Items.Add(back);
@@ -1641,9 +1648,16 @@ namespace CapriDesktop
         // NVIDIA models that got stuck since she started, so she never hands back to one.
         private readonly List<string> stalled = new List<string>();
 
+        // Stay on my model: a stuck NVIDIA model says what went wrong instead of handing over.
+        internal void SetStay(bool on)
+        {
+            Saved.StayOnModel = on;
+            Save();
+        }
+
         internal bool Hop(Cloud remote)
         {
-            if (remote == null || remote.Kind != "nvidia" || Brain.Remote != remote) return false;
+            if (Saved.StayOnModel || remote == null || remote.Kind != "nvidia" || Brain.Remote != remote) return false;
             string old = remote.Model;
             stalled.Add(old);
             string next = Brain.Next(old, cloudModels, stalled);

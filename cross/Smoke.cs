@@ -289,6 +289,12 @@ namespace CapriDesktop
                 pet.UseCloud("nvapi-smoke-1234", "nvidia/nemotron-3.5-super-vl-120b-a12b", new List<string> { "nvidia/nemotron-3.5-super-vl-120b-a12b", "nvidia/nemotron-3.5-bolt-e4b" });
                 bool hopped = Brain.Stalled(new BrainException(Brain.Down, true)) && !Brain.Stalled(new BrainException("Something else.", true)) && pet.Hop(pet.Brain.Remote) && pet.Brain.Model == "nvidia/nemotron-3.5-bolt-e4b" && pet.Brain.Remote.Model == "nvidia/nemotron-3.5-bolt-e4b" && pet.Saved.CloudModel == "nvidia/nemotron-3.5-super-vl-120b-a12b";
                 bool hopsEnd = !pet.Hop(pet.Brain.Remote);
+                pet.SetStay(true);
+                pet.UseCloud("nvapi-smoke-1234", "nvidia/nemotron-3.5-super-vl-120b-a12b", new List<string> { "nvidia/nemotron-3.5-super-vl-120b-a12b", "nvidia/nemotron-3.5-bolt-e4b", "openai/gpt-oss-20b" });
+                pet.ShowBrains(null);
+                bool stayed = !pet.Hop(pet.Brain.Remote) && pet.Brain.Model == "nvidia/nemotron-3.5-super-vl-120b-a12b" && pet.BrainMenu.IndexOf(" | *Stay on my model | ", StringComparison.Ordinal) > 0;
+                pet.SetStay(false);
+                hopsEnd = hopsEnd && stayed;
                 File.WriteAllText(Path.Combine(folder, "brain-key"), "nvapi-smoke-1234");
                 pet.ForgetBrainKey();
                 bool cloudGone = pet.Brain.Remote == null && pet.Saved.CloudModel == null && !File.Exists(Path.Combine(folder, "brain-key"));
@@ -296,7 +302,7 @@ namespace CapriDesktop
                 pet.Talk.Dismiss();
                 if (ollamaMenu != "*qwen3:8b | - | Get a free NVIDIA key | " + Pet.KeyChoice) throw new Exception("The Brain menu didn't offer a cloud key: " + ollamaMenu);
                 if (freeKey != Pet.FreeKeySteps || !keyAsked || notKey != Pet.NotAKey || !keyHidden) throw new Exception("The key choices didn't say where to paste, ask in a hidden box or explain a bad key: " + freeKey + " | " + keyAsked + " | " + notKey + " | " + keyHidden);
-                if (cloudMenu != "NVIDIA key ending 1234 (off) | *meta/llama-3.3-70b-instruct | qwen/qwen3-235b-a22b | - | Forget the key and use Ollama" || !cloudPicked || !cloudGone || !cloudDetails || !hopped || !hopsEnd) throw new Exception("The cloud key's Brain menu went wrong: " + cloudMenu + " | " + cloudPicked + " | " + cloudGone + " | " + cloudDetails + " | " + hopped + " | " + hopsEnd);
+                if (cloudMenu != "NVIDIA key ending 1234 (off) | *meta/llama-3.3-70b-instruct | qwen/qwen3-235b-a22b | - | Stay on my model | Forget the key and use Ollama" || !cloudPicked || !cloudGone || !cloudDetails || !hopped || !hopsEnd) throw new Exception("The cloud key's Brain menu went wrong: " + cloudMenu + " | " + cloudPicked + " | " + cloudGone + " | " + cloudDetails + " | " + hopped + " | " + hopsEnd);
                 checks.Add("PASS cloud brain: Brain offers a free NVIDIA key or any API key in a hidden box, explains one that isn't a key, lists a key's models to pick from, and Forget goes back to Ollama");
                 // Updates: a newer finished release puts Get Capri X in her menu and she mentions it once; older releases, drafts and odd tags don't.
                 pet.Saved.UpdateSeen = null;
