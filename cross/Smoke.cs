@@ -337,6 +337,23 @@ namespace CapriDesktop
                 Snap(pet.Talk.Pill.Content as Control, "pill.png");
                 Scene("desktop.png", new Window[] { pet, bubble, pet.Talk.Pill }, new PixelRect[0]);
                 checks.Add("PASS chat: the typing box sends a line to her brain, the reply types out in a bubble above her head");
+                // Chinese takes two columns a character and wraps without spaces, a long link breaks across lines, and every
+                // letter still shows once she's done typing.
+                string hanziReply = "你好，朋友！今天过得怎么样？";
+                string wrapText = Sheet.Speaker + hanziReply + hanziReply + hanziReply + hanziReply + " https://example.com/a/very/long/link/that/needs/more/than/one/line ok";
+                List<string> wrapped = Look.Wrap(wrapText, Sheet.Columns);
+                int[] wrapTakes = Look.Takes(wrapped, wrapText, wrapText.Length);
+                int wrapShown = 0;
+                bool wrapFits = true;
+                for (int wrapAt = 0; wrapAt < wrapped.Count; wrapAt++)
+                {
+                    wrapShown += wrapTakes[wrapAt];
+                    if (Look.Cells(wrapped[wrapAt]) > Sheet.Columns || (wrapAt > 0 && wrapped[wrapAt].Length > 0 && "，！？".IndexOf(wrapped[wrapAt][0]) >= 0)) wrapFits = false;
+                }
+                if (!wrapFits || wrapShown != string.Join("", wrapped).Length || string.Join("", wrapped).Replace(" ", "") != wrapText.Replace(" ", "") || wrapped.Count < 5
+                    || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12)) != "CAPRI: hey|choom, long|day?" || !Look.RightToLeft("مرحبا 2077") || !Look.RightToLeft("2077 مرحبا") || Look.RightToLeft("Hey مرحبا"))
+                    throw new Exception("Her bubble wrapped wrong: " + string.Join(" | ", wrapped));
+                checks.Add("PASS bubble lines: Chinese, Japanese and Korean take two columns and wrap without spaces, never starting a line with closing punctuation, a long link breaks across lines without losing letters, and Arabic, Urdu, Persian and Hebrew lines read right to left");
                 pet.Talk.Dismiss();
                 PixelRect area = Work();
                 shelfAsked = new PixelRect(area.X + area.Width / 2 - Px(350), area.Y + area.Height / 2 - Px(140), Px(700), Px(360));

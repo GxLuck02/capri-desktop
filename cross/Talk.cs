@@ -71,22 +71,31 @@ namespace CapriDesktop
             double x = panel.Left + 24;
             double row2 = panel.Top + 12;
             string you = Prompt + (Heard ?? "");
-            if (you.Length > Columns) you = you.Substring(0, Columns - 3) + "...";
+            if (Look.Cells(you) > Columns) you = Look.Cut(you, Columns - 3) + "...";
             context.DrawText(Look.Text(you, Look.Italic, Type, Look.Dim), new Point(x, row2));
             row2 += Line;
             List<string> lines = Look.Wrap(Speaker + (Reply ?? ""), Columns);
-            int remaining = Speaker.Length + (Thinking ? 0 : Math.Max(0, Revealed));
+            int[] takes = Look.Takes(lines, Speaker + (Reply ?? ""), Speaker.Length + (Thinking ? 0 : Math.Max(0, Revealed)));
             Point caret = new Point(x, row2);
-            for (int i = 0; i < lines.Count && remaining > 0; i++)
+            double right = x + Columns * cw;
+            for (int i = 0; i < lines.Count && takes[i] > 0; i++)
             {
-                int take = Math.Min(lines[i].Length, remaining);
-                string shown = lines[i].Substring(0, take);
-                int name = i == 0 ? Math.Min(take, Speaker.Length - 1) : 0;
+                string shown = lines[i].Substring(0, takes[i]);
+                int name = i == 0 ? Math.Min(takes[i], Speaker.Length - 1) : 0;
                 if (name > 0) context.DrawText(Look.Text(shown.Substring(0, name), Look.Bold, Type, Look.Red), new Point(x, row2));
-                if (shown.Length > name) context.DrawText(Look.Text(shown.Substring(name), Look.Regular, Type, Look.Neon), new Point(x + name * cw, row2 + i * Line));
-                caret = new Point(x + take * cw, row2 + i * Line);
-                remaining -= take + 1;
-                if (remaining >= 0 && i + 1 < lines.Count) caret = new Point(x, row2 + (i + 1) * Line);
+                caret = new Point(x + Look.Cells(shown) * cw, row2 + i * Line);
+                if (shown.Length <= name) continue;
+                // An Arabic, Urdu, Persian or Hebrew line grows leftwards from the right edge as she types it. The whole line
+                // decides, so it doesn't flip sides partway through. Right-to-left marks at both ends keep a full stop or
+                // question mark at the line's own end.
+                if (Look.RightToLeft(lines[i].Substring(name)))
+                {
+                    FormattedText words = Look.Text("‏" + shown.Substring(name) + "‏", Look.Regular, Type, Look.Neon);
+                    double wide = words.WidthIncludingTrailingWhitespace;
+                    context.DrawText(words, new Point(right - wide, row2 + i * Line));
+                    caret = new Point(right - wide - cw - 2, row2 + i * Line);
+                }
+                else context.DrawText(Look.Text(shown.Substring(name), Look.Regular, Type, Look.Neon), new Point(x + name * cw, row2 + i * Line));
             }
             if (CursorOn) context.FillRectangle(new SolidColorBrush(Look.Neon), new Rect(caret.X + 1, caret.Y + 1, cw * 0.85, Line - 5));
         }

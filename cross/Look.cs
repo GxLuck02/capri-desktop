@@ -59,6 +59,46 @@ namespace CapriDesktop
             return geometry;
         }
 
+        // How many columns a character takes in her mono bubbles: Chinese, Japanese and Korean characters and full-width forms
+        // take two, everything else one. The same as on Windows.
+        internal static int Cells(char c)
+        {
+            return (c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0x303E) || (c >= 0x3041 && c <= 0x33FF) || (c >= 0x3400 && c <= 0x4DBF) || (c >= 0x4E00 && c <= 0x9FFF)
+                || (c >= 0xA000 && c <= 0xA4CF) || (c >= 0xA960 && c <= 0xA97F) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xF900 && c <= 0xFAFF) || (c >= 0xFE10 && c <= 0xFE19)
+                || (c >= 0xFE30 && c <= 0xFE6F) || (c >= 0xFF00 && c <= 0xFF60) || (c >= 0xFFE0 && c <= 0xFFE6) ? 2 : 1;
+        }
+
+        internal static int Cells(string text)
+        {
+            int cells = 0;
+            foreach (char c in text ?? "") cells += Cells(c);
+            return cells;
+        }
+
+        // True when the first letter is Arabic, Urdu, Persian or Hebrew, so the line reads right to left. Digits and
+        // punctuation don't decide it.
+        internal static bool RightToLeft(string text)
+        {
+            foreach (char c in text ?? "")
+            {
+                if ((c >= 0x0590 && c <= 0x08FF) || (c >= 0xFB1D && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFE)) return true;
+                if (char.IsLetter(c)) return false;
+            }
+            return false;
+        }
+
+        // The longest start of the text that fits in that many columns.
+        internal static string Cut(string text, int columns)
+        {
+            text = text ?? "";
+            int cells = 0, length = 0;
+            while (length < text.Length && cells + Cells(text[length]) <= columns) cells += Cells(text[length++]);
+            return text.Substring(0, length);
+        }
+
+        // Lines by columns, so Chinese, Japanese and Korean fit the bubble too. They have no spaces to break at, so a run of
+        // them fills the rest of a line and carries on below, the way they're written. Other words only break when they're
+        // longer than a whole line.
         internal static List<string> Wrap(string text, int columns)
         {
             List<string> lines = new List<string>();
@@ -66,18 +106,52 @@ namespace CapriDesktop
             foreach (string piece in (text ?? "").Split(' '))
             {
                 string word = piece;
-                while (word.Length > columns)
+                if (word.Length > 0 && Cells(word[0]) == 2 && line.Length > 0 && Cells(line) + 1 + Cells(word) > columns)
+                {
+                    string start = Kept(word, Cut(word, columns - Cells(line) - 1));
+                    if (start.Length > 0) { line += " " + start; word = word.Substring(start.Length); }
+                    lines.Add(line);
+                    line = "";
+                }
+                while (Cells(word) > columns)
                 {
                     if (line.Length > 0) { lines.Add(line); line = ""; }
-                    lines.Add(word.Substring(0, columns));
-                    word = word.Substring(columns);
+                    string cut = Kept(word, Cut(word, columns));
+                    if (cut.Length == 0) cut = word.Substring(0, 1);
+                    lines.Add(cut);
+                    word = word.Substring(cut.Length);
                 }
                 if (line.Length == 0) line = word;
-                else if (line.Length + 1 + word.Length <= columns) line += " " + word;
+                else if (Cells(line) + 1 + Cells(word) <= columns) line += " " + word;
                 else { lines.Add(line); line = word; }
             }
             if (line.Length > 0 || lines.Count == 0) lines.Add(line);
             return lines;
+        }
+
+        // Chinese and Japanese never start a line with closing punctuation, so the character before it moves down with it.
+        private const string Closing = "，。、！？：；）」』】〕〉》｝’”…,.!?:;)";
+
+        private static string Kept(string word, string cut)
+        {
+            while (cut.Length > 1 && cut.Length < word.Length && Closing.IndexOf(word[cut.Length]) >= 0) cut = cut.Substring(0, cut.Length - 1);
+            return cut;
+        }
+
+        // How much of each line shows once `revealed` characters of the text are out. A break between words used up spaces,
+        // which count as revealed too; a word or a run of Chinese broken across lines used none.
+        internal static int[] Takes(List<string> lines, string text, int revealed)
+        {
+            int[] takes = new int[lines.Count];
+            int at = 0;
+            for (int i = 0; i < lines.Count && revealed > 0; i++)
+            {
+                takes[i] = Math.Min(lines[i].Length, revealed);
+                revealed -= takes[i];
+                at += lines[i].Length;
+                while (at < text.Length && text[at] == ' ') { at++; revealed--; }
+            }
+            return takes;
         }
 
         internal static void Overlay(Window window, string title)
