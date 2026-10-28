@@ -14387,8 +14387,11 @@ namespace CapriDesktop
                             talkState = TalkState.Off;
                             brain.Model = null; paused(); brain.Model = brain.Remote.Model;
                             brain.Unsighted = brain.Model; paused(); brain.Unsighted = null;
+                            // The unsighted check above already moved her next glance on, so each check below starts it at now.
+                            nextGlance = 1000;
                             CheckGlance(1000, 600001);
                             if (captures != 0) throw new Exception("She glanced after they'd been away for over ten minutes.");
+                            nextGlance = 1000;
                             chatting = true;
                             ears.Muted = true;
                             CheckGlance(1000, 130000);
