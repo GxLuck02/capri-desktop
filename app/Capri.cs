@@ -11636,8 +11636,9 @@ namespace CapriDesktop
                             checks.Add("PASS Chinese, Japanese and Korean in her bubble: each character takes two columns, a run with no spaces fills a line and carries on below, no line starts with closing punctuation, nothing passes the bubble's edge, and a whole reply shows every character, a long word too");
                             string arabic = "مرحبا يا صديقي، كيف كان يومك؟";
                             if (!Look.RightToLeft(arabic) || !Look.RightToLeft("2077 " + arabic) || Look.RightToLeft("Hey " + arabic) || Look.RightToLeft("") || Look.RightToLeft(hanzi)
-                                || Brain.LanguageCode("Arabic") != "ar" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ar-SA")) != "Arabic" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ur-PK")) != "Urdu" || Brain.SystemLanguage(new System.Globalization.CultureInfo("fa-IR")) != "Persian")
-                                throw new Exception("Arabic, Urdu or Persian were set up wrong.");
+                                || Brain.LanguageCode("Arabic") != "ar" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ar-SA")) != "Arabic" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ur-PK")) != "Urdu" || Brain.SystemLanguage(new System.Globalization.CultureInfo("fa-IR")) != "Persian"
+                                || !Look.RightToLeft("שלום") || Brain.SystemLanguage(new System.Globalization.CultureInfo("he-IL")) != "Hebrew" || Brain.LanguageCode("Hebrew") != "he")
+                                throw new Exception("Arabic, Urdu, Persian or Hebrew were set up wrong.");
                             using (SpeechBox arabicBox = new SpeechBox())
                             {
                                 arabicBox.State = TalkState.Online;
@@ -11650,7 +11651,7 @@ namespace CapriDesktop
                                 arabicBox.Image.Save(Path.Combine(output, "talk-arabic.png"), ImageFormat.Png);
                                 arabicBox.Hide();
                             }
-                            checks.Add("PASS Arabic, Urdu and Persian in her bubble: a line that starts in their script sits against the right edge and grows leftwards as she types, English lines stay on the left, and a new install picks them from Windows");
+                            checks.Add("PASS Arabic, Urdu, Persian and Hebrew in her bubble: a line that starts in their script sits against the right edge and grows leftwards as she types, English lines stay on the left, and a new install picks them from Windows");
                             System.Collections.Generic.List<short[]> effectsHeard = new System.Collections.Generic.List<short[]>();
                             Action<short[]> soundOut = Sfx.Out;
                             Sfx.Out = delegate(short[] sound) { effectsHeard.Add(sound); };
