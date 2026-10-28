@@ -7973,11 +7973,15 @@ namespace CapriDesktop
                             checks.Add("PASS use her cursor: on by default she searches YouTube and picks a video, plays from Spotify's search and drags Spotify's volume slider with her own cursor when they say Spotify; plain volume uses the PC's volume keys even with Spotify open; a slider she can't reach falls back to the keys unless they stopped her; if her brain gets lost the quick tool still does it, and turning it off uses the quick tools");
                             bool bypassWas = Computer.Bypass;
                             Job payJob = new Job("play lofi on youtube"), sendingJob = new Job("message Sam hi on Discord");
-                            bool checksPay = !Computer.Needless("Should I pay $5 for it?") && payJob.Needs("buy") && !sendingJob.Needs("send") && Computer.Allowing(Computer.Prompt) == Computer.Prompt
-                                && Computer.Barred("ctrl+shift+esc");
+                            Computer.Bypass = false;
+                            bool checksPay = !Computer.Needless("Should I pay $5 for it?") && !Computer.Needless("It's $4.99. Buy it?") && payJob.Needs("buy") && !sendingJob.Needs("send") && Computer.Allowing(Computer.Prompt) == Computer.Prompt
+                                && Computer.Barred("ctrl+shift+esc") && (Computer.Tools + Computer.ClaudeTools + Computer.Listing).Split(new[] { "before a step that buys or pays" }, StringSplitOptions.None).Length == 4;
                             Computer.Bypass = true;
-                            bool paysAhead = Computer.Needless("Should I pay $5 for it?") && !payJob.Needs("buy") && !payJob.Needs("delete")
-                                && !Computer.Barred("ctrl+shift+esc") && !Computer.Barred("win+r");
+                            // Her ask tool's own description stops telling her to ask before buying, and a bare "Buy it?" never reaches them.
+                            string bypassTools = Computer.Tools + Computer.ClaudeTools + Computer.Listing;
+                            bool paysAhead = Computer.Needless("Should I pay $5 for it?") && Computer.Needless("It's $4.99. Buy it?") && Computer.Needless("Place the order for $12?") && !Computer.Needless("Which size do you want?")
+                                && bypassTools.IndexOf("buys or pays", StringComparison.Ordinal) < 0 && bypassTools.Split(new[] { "never ask before buying" }, StringSplitOptions.None).Length == 4
+                                && !payJob.Needs("buy") && !payJob.Needs("delete") && !Computer.Barred("ctrl+shift+esc") && !Computer.Barred("win+r");
                             string bypassPrompt = Computer.Allowing(Computer.Prompt), bypassSeeing = Computer.Allowing(Computer.Seeing);
                             Computer.Bypass = bypassWas;
                             if (!checksPay || !paysAhead || bypassPrompt.IndexOf("call ask before you buy", StringComparison.Ordinal) >= 0 || bypassPrompt.IndexOf("Bypass all permissions", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("stop and ask", StringComparison.Ordinal) >= 0
@@ -7985,7 +7989,7 @@ namespace CapriDesktop
                                 || bypassPrompt.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("needs their OK", StringComparison.Ordinal) >= 0
                                 || bypassPrompt.IndexOf("use the email and password their job gives you", StringComparison.Ordinal) < 0)
                                 throw new Exception("Blackwall mode went wrong: checks " + checksPay + ", ahead " + paysAhead);
-                            checks.Add("PASS Blackwall mode: off, she still checks before paying and skips password boxes; on, she never stops to ask, even to buy, send or delete, types passwords and card numbers and presses any key");
+                            checks.Add("PASS Blackwall mode: off, she still checks before paying and skips password boxes; on, she never stops to ask, even to buy, send or delete (her ask tool says so too, so \"It's $4.99. Buy it?\" never reaches them), types passwords and card numbers and presses any key");
                             bool cursorShown = mainframe.JobsStatus == "cursor | -";
                             ToggleBypass();
                             bool bypassShown = mainframe.JobsStatus == "cursor | bypass" && Computer.Bypass;
@@ -8737,7 +8741,8 @@ namespace CapriDesktop
                                     nagging.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { nagged++; return "ask{\"text\": \"Should I end the call?\"}"; };
                                     string naggingRun = nagging.Run();
                                     if (naggingRun != Computer.Stalled || nagged != 4) throw new Exception("Asking again and again reached them instead of stopping: " + naggingRun + " / " + nagged);
-                                    if (!Computer.Needless("Want me to hang up?") || !Computer.Needless("Are you sure you want me to leave the call?") || !Computer.Needless("Typed it in. Want me to send it?") || Computer.Needless("Which channel?") || Computer.Needless("Should I pay $5?") || Computer.Needless("What's the password?")) throw new Exception("Needless questions were read wrong.");
+                                    if (!Computer.Needless("Want me to hang up?") || !Computer.Needless("Are you sure you want me to leave the call?") || !Computer.Needless("Typed it in. Want me to send it?") || Computer.Needless("Which channel?") || Computer.Needless("Should I pay $5?") || Computer.Needless("What's the password?")
+                                        || !Computer.Needless("Send it?") || !Computer.Needless("Typed it. Send it now?") || !Computer.Needless("End the call?") || Computer.Needless("Send it to who?") || Computer.Needless("Buy it?")) throw new Exception("Needless questions were read wrong.");
                                     chatActs.Clear();
                                     string[] doneAskScript = { "type{\"target\": \"1\", \"text\": \"capri was here\"}", "done{\"text\": \"Typed it in. Want me to send it?\"}", "done{\"text\": \"Sent it.\"}" };
                                     int doneAskLine = 0;
@@ -8854,7 +8859,8 @@ namespace CapriDesktop
                                     Sight loginSight = new Sight { Window = new IntPtr(7), Title = "Sign in", Program = "game" };
                                     loginSight.Targets.Add(new Target { Number = 1, Role = "box", Name = "Password", Secret = true, Line = true, Box = new Rectangle(10, 10, 200, 20) });
                                     System.Collections.Generic.List<string> maskLabels = new System.Collections.Generic.List<string>();
-                                    string maskRun, maskSteps;
+                                    string maskRun, maskSteps, buyRun;
+                                    int buyLine = 0;
                                     try
                                     {
                                         Computer.Bypass = true;
@@ -8870,6 +8876,14 @@ namespace CapriDesktop
                                         login.Stepped = delegate(JobStep loginStep) { lock (maskLabels) maskLabels.Add(loginStep.Label); };
                                         maskRun = login.Run();
                                         maskSteps = string.Join(" | ", login.Steps.ToArray());
+                                        // Under Blackwall, "It's $4.99. Buy it?" never reaches them: she's told to carry on, and buys it.
+                                        Sight hatShop = new Sight { Window = new IntPtr(7), Title = "Cat hat", Program = "shop" };
+                                        hatShop.Targets.Add(new Target { Number = 1, Role = "button", Name = "Buy now", Box = new Rectangle(10, 40, 80, 20) });
+                                        Computer.Look = delegate { return hatShop; };
+                                        string[] buyScript = { "ask{\"text\": \"It's $4.99. Buy it?\"}", "click{\"target\": \"1\"}", "done{\"text\": \"Bought the cat hat.\"}" };
+                                        Job hatJob = new Job("buy the cat hat");
+                                        hatJob.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return buyScript[Math.Min(buyLine++, buyScript.Length - 1)]; };
+                                        buyRun = hatJob.Run();
                                     }
                                     finally
                                     {
@@ -8883,6 +8897,8 @@ namespace CapriDesktop
                                         || maskSaved != "my password is " + Computer.Dots || memberTyping != "Typing \"" + Computer.Dots + "\" and pressing Enter")
                                         throw new Exception("A password she typed under Bypass showed: " + maskShown + " / " + maskSteps + " / " + maskRun + " / " + maskSaved + " / " + memberTyping);
                                     checks.Add("PASS passwords under Bypass: what she types into a password box shows as dots in her task panel and steps, her summary and chat history, and she says \"the password\" out loud");
+                                    if (buyRun != "Bought the cat hat." || buyLine != 3) throw new Exception("Blackwall asked before buying: " + buyRun + " after " + buyLine + " steps");
+                                    checks.Add("PASS Blackwall buys: a job's \"It's $4.99. Buy it?\" never reaches them, she presses Buy now and says she bought it");
                                 }
                                 finally
                                 {

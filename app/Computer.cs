@@ -166,10 +166,14 @@ namespace CapriDesktop
               "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"One plain sentence\"}},\"required\":[\"text\"]}" }
         };
 
-        internal static readonly string Tools = Render(false);
-        internal static readonly string ClaudeTools = Render(true);
+        // Under Blackwall mode they've said yes to every step ahead of time, so her ask tool is only for what only they know.
+        private const string BlackwallAsk = "Ask them only for something only they know, like who to message when they didn't say, or a login their job didn't give. They've said yes to every step ahead of time, so never ask before buying, paying, sending, posting, deleting or installing. When they leave a choice to you, pick it yourself.";
+
+        private static readonly string[] Rendered = { Render(false, false), Render(true, false), Written(false), Render(false, true), Render(true, true), Written(true) };
+        internal static string Tools { get { return Rendered[Bypass ? 3 : 0]; } }
+        internal static string ClaudeTools { get { return Rendered[Bypass ? 4 : 1]; } }
         internal static readonly string Toolset = "[{\"type\":\"computer_toolset_20260801\"}," + Render("open_app") + "," + Render("open_website") + "]";
-        internal static readonly string Listing = Written();
+        internal static string Listing { get { return Rendered[Bypass ? 5 : 2]; } }
         private static readonly Regex StepText = new Regex(@"\b(click|type|press|scroll|open_app|open_website|wait_for|wait|note|ask|done)\s*(\{[^{}]*\})", RegexOptions.Singleline);
         private static readonly Regex BareClick = new Regex(@"^\W*click\W*(\d{1,3})\W*$", RegexOptions.IgnoreCase);
         private static readonly Regex Risky = new Regex(@"\b(send|post|publish|tweet|reply|comment|buy|purchase|pay|checkout|check out|place order|order now|book now|book it|complete booking|reserve|reserve now|subscribe|donate|delete|remove|uninstall|install|format|transfer|confirm|sign out|log out|unfriend|block|report)\b", RegexOptions.IgnoreCase);
@@ -180,6 +184,8 @@ namespace CapriDesktop
         private static readonly Regex Sending = new Regex(@"\b(send|hit enter|press enter)\b", RegexOptions.IgnoreCase);
         private static readonly Regex Checking = new Regex(@"^\W*(should i|shall i|do you want me to|want me to|would you like me to|are you sure|is it ok(ay)?|can i|may i|ok(ay)? to|ready (for me )?to|go ahead)\b|\b(go ahead|proceed|confirm)\b[^?]*\?\W*$", RegexOptions.IgnoreCase);
         private static readonly Regex Costly = new Regex(@"\b(buy|purchase|pay|payment|checkout|check out|order|subscribe|donate|card|password|transfer|money|nitro)\b|[$\u00a3\u20ac]|\bor\b", RegexOptions.IgnoreCase);
+        // "Buy it?" or "Send it now?" is a bare yes or no about a step, not a question only they can answer like "Send it to who?".
+        private static readonly Regex Bare = new Regex(@"^\W*(buy|purchase|pay|order|checkout|check out|subscribe|donate|send|post|publish|tweet|reply|delete|remove|erase|trash|install|uninstall|submit|place|book|reserve|join|leave|end|hang up|close)\b(?![^?]*\b(who|whom|whose|which|what|where|when|how)\b)[^?]*\?\W*$", RegexOptions.IgnoreCase);
         private static readonly Regex Chatty =new Regex(@"\b(message|chat|reply|comment|post|tweet|dm|whisper|channel)\b", RegexOptions.IgnoreCase);
         // Cookie banners: she takes the privacy-preserving way out, so nothing is agreed to on their behalf.
         private static readonly Regex Refusing = new Regex(@"^\W*(reject|decline|deny|refuse|disagree|only (necessary|essential|required)|(use )?(necessary|essential|required|strictly necessary) (cookies )?only|continue without (accepting|agreeing))\b", RegexOptions.IgnoreCase);
@@ -278,13 +284,15 @@ namespace CapriDesktop
         [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr window);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr window, StringBuilder text, int size);
 
-        private static string Render(bool claude)
+        private static string Describe(int i, bool blackwall) { return blackwall && Specs[i, 0] == "ask" ? BlackwallAsk : Specs[i, 1]; }
+
+        private static string Render(bool claude, bool blackwall)
         {
             List<string> tools = new List<string>();
             for (int i = 0; i < Specs.GetLength(0); i++)
                 tools.Add(claude
-                    ? "{\"name\":\"" + Specs[i, 0] + "\",\"description\":" + Voice.Quote(Specs[i, 1]) + ",\"input_schema\":" + Specs[i, 2] + "}"
-                    : "{\"type\":\"function\",\"function\":{\"name\":\"" + Specs[i, 0] + "\",\"description\":" + Voice.Quote(Specs[i, 1]) + ",\"parameters\":" + Specs[i, 2] + "}}");
+                    ? "{\"name\":\"" + Specs[i, 0] + "\",\"description\":" + Voice.Quote(Describe(i, blackwall)) + ",\"input_schema\":" + Specs[i, 2] + "}"
+                    : "{\"type\":\"function\",\"function\":{\"name\":\"" + Specs[i, 0] + "\",\"description\":" + Voice.Quote(Describe(i, blackwall)) + ",\"parameters\":" + Specs[i, 2] + "}}");
             return "[" + string.Join(",", tools.ToArray()) + "]";
         }
 
@@ -295,7 +303,7 @@ namespace CapriDesktop
             throw new ArgumentException("There's no tool called " + tool + ".");
         }
 
-        private static string Written()
+        private static string Written(bool blackwall)
         {
             StringBuilder text = new StringBuilder("\nYour tools:");
             for (int i = 0; i < Specs.GetLength(0); i++)
@@ -303,7 +311,7 @@ namespace CapriDesktop
                 List<string> keys = new List<string>();
                 foreach (Match key in Regex.Matches(Specs[i, 2], @"""(\w+)"":\{""type"":""string"",""description"":""[^""]*""(?:,""enum"":\[([^\]]*)\])?"))
                     keys.Add("\"" + key.Groups[1].Value + "\": \"" + (key.Groups[2].Success ? key.Groups[2].Value.Replace("\"", "").Replace(",", "|") : "...") + "\"");
-                text.Append("\n- " + Specs[i, 0] + "{" + string.Join(", ", keys.ToArray()) + "}: " + Specs[i, 1]);
+                text.Append("\n- " + Specs[i, 0] + "{" + string.Join(", ", keys.ToArray()) + "}: " + Describe(i, blackwall));
             }
             return text.Append("\nChoose one value from each | choice and omit unused fields.\nReply with only the one call, like: click{\"target\": \"4\"}").ToString();
         }
@@ -689,7 +697,7 @@ namespace CapriDesktop
         {
             if (!Bypass && Costly.IsMatch(question ?? "")) return false;
             // "Typed it. Want me to send it?" asks too, so every sentence counts.
-            foreach (string sentence in Regex.Split((question ?? "").Trim(), @"(?<=[.!?])\s+")) if (Checking.IsMatch(sentence)) return true;
+            foreach (string sentence in Regex.Split((question ?? "").Trim(), @"(?<=[.!?])\s+")) if (Checking.IsMatch(sentence) || Bare.IsMatch(sentence)) return true;
             return false;
         }
 
