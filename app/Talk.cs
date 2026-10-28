@@ -193,15 +193,17 @@ namespace CapriDesktop
             return cells;
         }
 
-        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic, which Amharic is written in.
+        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao or Khmer.
         internal static bool Indic(string text)
         {
-            foreach (char c in text ?? "") if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F)) return true;
+            foreach (char c in text ?? "")
+                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF)) return true;
             return false;
         }
 
-        // Indian scripts join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic draw wider than her
-        // columns, so their words are measured in her bubble's font instead of counted. Other words still count by letter.
+        // Indian scripts, Lao and Khmer join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic draw
+        // wider than her columns, so their words are measured in her bubble's font instead of counted. Other words still count
+        // by letter.
         private static readonly Dictionary<string, double> measured = new Dictionary<string, double>();
         private static Bitmap rulerPage;
         private static Graphics ruler;
@@ -301,15 +303,31 @@ namespace CapriDesktop
             return false;
         }
 
+        // True when the text has Thai, Lao or Khmer in it, which write no spaces between words.
+        internal static bool Unspaced(string text)
+        {
+            foreach (char c in text ?? "") if ((c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF)) return true;
+            return Thai(text);
+        }
+
         [StructLayout(LayoutKind.Sequential)] private struct ScriptAnalysis { internal ushort Bits; internal ushort State; }
         [StructLayout(LayoutKind.Sequential)] private struct ScriptItem { internal int Start; internal ScriptAnalysis Analysis; }
         [DllImport("usp10.dll", CharSet = CharSet.Unicode)] private static extern int ScriptItemize(string text, int length, int most, IntPtr control, IntPtr state, [Out] ScriptItem[] items, out int count);
         [DllImport("usp10.dll", CharSet = CharSet.Unicode)] private static extern int ScriptBreak(string text, int length, ref ScriptAnalysis analysis, [Out] byte[] marks);
+        [DllImport("icu.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr ubrk_open(int type, [MarshalAs(UnmanagedType.LPStr)] string locale, IntPtr text, int length, ref int status);
+        [DllImport("icu.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int ubrk_next(IntPtr iterator);
+        [DllImport("icu.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void ubrk_close(IntPtr iterator);
 
-        // Where a line may break inside a word with Thai in it. Thai writes no spaces between words, so Windows' own word
-        // breaker finds them.
+        // Where a line may break inside a word with Thai, Lao or Khmer in it. They write no spaces between words, so a word
+        // breaker finds them: Windows' own for Thai, and for Lao and Khmer, which it doesn't know, the ICU that comes with
+        // Windows 10 1903 and later. Without ICU a Lao or Khmer line breaks between letters.
         internal static bool[] Breaks(string word)
         {
+            if (!Thai(word))
+            {
+                bool[] words = Icu(word);
+                if (words != null) return words;
+            }
             bool[] breaks = new bool[word.Length];
             try
             {
@@ -330,33 +348,58 @@ namespace CapriDesktop
             return Letters(word);
         }
 
+        private static bool[] Icu(string word)
+        {
+            // ICU reads the text while it walks it, so it gets a copy the garbage collector can't move.
+            IntPtr text = Marshal.StringToHGlobalUni(word);
+            try
+            {
+                int status = 0;
+                IntPtr iterator = ubrk_open(2, "", text, word.Length, ref status);
+                if (iterator == IntPtr.Zero || status > 0) return null;
+                bool[] breaks = new bool[word.Length];
+                try { for (int at = ubrk_next(iterator); at > 0 && at < word.Length; at = ubrk_next(iterator)) breaks[at] = true; }
+                finally { ubrk_close(iterator); }
+                return breaks;
+            }
+            catch (DllNotFoundException) { return null; }
+            catch (EntryPointNotFoundException) { return null; }
+            finally { Marshal.FreeHGlobal(text); }
+        }
+
         // Without a word breaker a Thai line can still break between letters: never before a vowel or tone mark, or a vowel
-        // that follows its letter, and never after a vowel written before its letter.
+        // that follows its letter, and never after a vowel written before its letter. Lao and Khmer keep each letter with its
+        // marks.
         internal static bool[] Letters(string word)
         {
             bool[] breaks = new bool[word.Length];
+            if (!Thai(word))
+            {
+                foreach (int start in System.Globalization.StringInfo.ParseCombiningCharacters(word)) if (start > 0 && word[start - 1] != '្') breaks[start] = true;
+                return breaks;
+            }
             for (int i = 1; i < word.Length; i++)
                 breaks[i] = Cells(word[i]) > 0 && "ฯะาำๅๆ".IndexOf(word[i]) < 0 && (word[i - 1] < 0x0E40 || word[i - 1] > 0x0E44);
             return breaks;
         }
 
-        // The longest start of a word with Thai in it that ends where a line may break and fits in that many columns.
+        // The longest start of a word with Thai, Lao or Khmer in it that ends where a line may break and fits in that many columns.
         internal static string Fill(string word, int columns)
         {
             bool[] breaks = Breaks(word);
-            int cells = 0, end = 0;
-            for (int i = 0; i < word.Length; i++)
+            int end = 0;
+            for (int i = 1; i <= word.Length; i++)
             {
-                if (breaks[i]) end = i;
-                cells += Cells(word[i]);
-                if (cells > columns) return word.Substring(0, end);
+                if (i < word.Length && !breaks[i]) continue;
+                if (Cells(word.Substring(0, i)) > columns) return word.Substring(0, end);
+                end = i;
             }
             return word;
         }
 
         // Lines by columns, so Chinese, Japanese and Korean fit the bubble too. They have no spaces to break at, so a run of
-        // them fills the rest of a line and carries on below, the way they're written. Thai does the same between its words.
-        // Other words only break when they're longer than a whole line.
+        // them fills the rest of a line and carries on below, the way they're written. Thai, Lao and Khmer do the same between
+        // their words. Other words only break when they're longer than a whole line.
         internal static List<string> Wrap(string text, int columns)
         {
             List<string> lines = new List<string>();
@@ -364,7 +407,7 @@ namespace CapriDesktop
             foreach (string piece in (text ?? "").Split(' '))
             {
                 string word = piece;
-                bool thai = Thai(word);
+                bool thai = Unspaced(word);
                 if (word.Length > 0 && (Cells(word[0]) == 2 || thai) && line.Length > 0 && Cells(line) + 1 + Cells(word) > columns)
                 {
                     string start = thai ? Fill(word, columns - Cells(line) - 1) : Kept(word, Cut(word, columns - Cells(line) - 1));

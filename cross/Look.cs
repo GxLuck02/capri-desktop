@@ -77,15 +77,16 @@ namespace CapriDesktop
             return cells;
         }
 
-        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic, which Amharic is written in.
+        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao or Khmer.
         internal static bool Indic(string text)
         {
-            foreach (char c in text ?? "") if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F)) return true;
+            foreach (char c in text ?? "")
+                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF)) return true;
             return false;
         }
 
-        // Indian scripts join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic draw wider than her
-        // columns, so their words are measured in her bubble's font instead of counted, the same as on Windows.
+        // Indian scripts, Lao and Khmer join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic draw
+        // wider than her columns, so their words are measured in her bubble's font instead of counted, the same as on Windows.
         private static readonly Dictionary<string, double> measured = new Dictionary<string, double>();
 
         private static double Span(string text)
@@ -153,34 +154,47 @@ namespace CapriDesktop
             return false;
         }
 
-        // Thai writes no spaces between words, and Mac and Linux have no word breaker she can call, so a Thai line breaks
-        // between letters: never before a vowel or tone mark, or a vowel that follows its letter, and never after a vowel
-        // written before its letter. Windows breaks between words.
+        // True when the text has Thai, Lao or Khmer in it, which write no spaces between words.
+        internal static bool Unspaced(string text)
+        {
+            foreach (char c in text ?? "") if ((c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF)) return true;
+            return Thai(text);
+        }
+
+        // Thai, Lao and Khmer write no spaces between words, and Mac and Linux have no word breaker she can call, so their
+        // lines break between letters. A Thai line never breaks before a vowel or tone mark, or a vowel that follows its
+        // letter, and never after a vowel written before its letter; Lao and Khmer keep each letter with its marks. Windows
+        // breaks between words.
         internal static bool[] Letters(string word)
         {
             bool[] breaks = new bool[word.Length];
+            if (!Thai(word))
+            {
+                foreach (int start in StringInfo.ParseCombiningCharacters(word)) if (start > 0 && word[start - 1] != '្') breaks[start] = true;
+                return breaks;
+            }
             for (int i = 1; i < word.Length; i++)
                 breaks[i] = Cells(word[i]) > 0 && "ฯะาำๅๆ".IndexOf(word[i]) < 0 && (word[i - 1] < 0x0E40 || word[i - 1] > 0x0E44);
             return breaks;
         }
 
-        // The longest start of a word with Thai in it that ends where a line may break and fits in that many columns.
+        // The longest start of a word with Thai, Lao or Khmer in it that ends where a line may break and fits in that many columns.
         internal static string Fill(string word, int columns)
         {
             bool[] breaks = Letters(word);
-            int cells = 0, end = 0;
-            for (int i = 0; i < word.Length; i++)
+            int end = 0;
+            for (int i = 1; i <= word.Length; i++)
             {
-                if (breaks[i]) end = i;
-                cells += Cells(word[i]);
-                if (cells > columns) return word.Substring(0, end);
+                if (i < word.Length && !breaks[i]) continue;
+                if (Cells(word.Substring(0, i)) > columns) return word.Substring(0, end);
+                end = i;
             }
             return word;
         }
 
         // Lines by columns, so Chinese, Japanese and Korean fit the bubble too. They have no spaces to break at, so a run of
-        // them fills the rest of a line and carries on below, the way they're written. Thai does the same. Other words only
-        // break when they're longer than a whole line.
+        // them fills the rest of a line and carries on below, the way they're written. Thai, Lao and Khmer do the same. Other
+        // words only break when they're longer than a whole line.
         internal static List<string> Wrap(string text, int columns)
         {
             List<string> lines = new List<string>();
@@ -188,7 +202,7 @@ namespace CapriDesktop
             foreach (string piece in (text ?? "").Split(' '))
             {
                 string word = piece;
-                bool thai = Thai(word);
+                bool thai = Unspaced(word);
                 if (word.Length > 0 && (Cells(word[0]) == 2 || thai) && line.Length > 0 && Cells(line) + 1 + Cells(word) > columns)
                 {
                     string start = thai ? Fill(word, columns - Cells(line) - 1) : Kept(word, Cut(word, columns - Cells(line) - 1));
