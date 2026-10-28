@@ -21,10 +21,12 @@ les sections VOICE/CAPRI du Mainframe (étapes 3 et 5), l'usage simultané de de
 - **Mac** : Trousseau via Security.framework en P/Invoke (`SecItemAdd`, `SecItemCopyMatching`,
   `SecItemUpdate`, `SecItemDelete`, mots de passe génériques). Service `capri` ; en mode `--smoke`,
   service `capri-smoke`. Pas d'appel à la commande `security`.
-- **Linux** : un fichier par clé dans le dossier de Capri, permissions `600`.
+- **Linux** : un fichier `<nom>-key` par clé dans le dossier de Capri, permissions `600` (la clé voix
+  reste donc dans `voice-key`, comme avant).
 - `Keys.Save` signale l'échec (exception) ; `Keys.Read` renvoie `null` si l'accès est refusé et
   expose la raison pour que l'appelant affiche un message.
-- **Migration** au démarrage : si l'ancien fichier `voice-key` (clé ElevenLabs en clair, cf.
+- `Keys.Broken` (test uniquement) fait échouer `Save`, pour tester la migration ratée.
+- **Migration** (Mac seulement) au démarrage : si l'ancien fichier `voice-key` (clé ElevenLabs en clair, cf.
   `Pet.KeyFile`) existe, il est copié dans le Trousseau sous `voice`, puis supprimé **uniquement** si
   la copie a réussi. Le code voix existant lit/écrit désormais via `Keys` au lieu de `KeyFile`.
 
