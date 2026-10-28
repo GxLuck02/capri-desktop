@@ -40,6 +40,8 @@ namespace CapriDesktop
         [DataMember] internal string UpdateSeen;
         [DataMember] internal bool StayOnModel;
         [DataMember] internal bool NoMemories;
+        [DataMember] internal bool NoCheckIns;
+        [DataMember] internal int? PopPace;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -250,6 +252,20 @@ namespace CapriDesktop
         private Action outro;
         private double outroAt;
         private double nextWander = -1;
+        // Check in on me, like on Windows and on by default: now and then she glitches in at the top of her screen to say hi,
+        // even when hidden, and hides again afterwards if she was. Pop-ins sets how often.
+        internal static readonly string[] PopLines = { "Boo. Just checking on you.", "Hi! Don't mind me.", "Peekaboo.", "Miss me? I missed you.", "Hey, you. Having fun?", "Surprise. I got bored without you." };
+        internal static readonly string[] PopNames = { "Rarely", "Sometimes", "Often" };
+        private static readonly double[,] PopPaces = { { 1200, 1200 }, { 480, 720 }, { 180, 300 } };
+        private const string PopHeard = "(pops in)";
+        private readonly List<MenuItem> popPicks = new List<MenuItem>();
+        private MenuItem checkInsItem;
+        private double nextPopIn = -1;
+        private double popOut = -1;
+        private int popAsked;
+        private bool popChecking;
+        // Tells the tray menu whether to offer Hide her or Show her, since a pop-in or Talk to her brings her out too.
+        internal Action AwayChanged;
         private readonly DispatcherTimer frames = new DispatcherTimer();
         private readonly Stopwatch clock = Stopwatch.StartNew();
         private readonly Random random = new Random();
@@ -445,7 +461,7 @@ namespace CapriDesktop
             Screen screen = Screens.Primary ?? ScreenHere();
             if (screen == null || quitting) return;
             Halt();
-            away = false;
+            SetAway(false);
             if (!IsVisible) Show();
             walking = false;
             seat = null;
@@ -457,10 +473,16 @@ namespace CapriDesktop
 
         internal bool Away { get { return away; } }
 
+        private void SetAway(bool on)
+        {
+            away = on;
+            if (AwayChanged != null) AwayChanged();
+        }
+
         internal void HideAway()
         {
             if (away || quitting) return;
-            away = true;
+            SetAway(true);
             Talk.Dismiss();
             GlitchOut(delegate { seat = null; walking = false; Hide(); });
         }
@@ -469,7 +491,7 @@ namespace CapriDesktop
         {
             if (!away || quitting) return;
             Halt();
-            away = false;
+            SetAway(false);
             if (!IsVisible) Show();
             walking = false;
             seat = null;
@@ -494,7 +516,12 @@ namespace CapriDesktop
             if (Program.Smoke == null && now >= nextUpdate) { nextUpdate = now + 6 * 3600; CheckUpdate(); }
             if (UpdateNews != null && !away && !dragging && Talk.Quiet) { Talk.Answer("(update)", UpdateNews); UpdateNews = null; }
             if (outro != null && now >= outroAt) { Action next = outro; outro = null; next(); }
-            if (away && !IsVisible) { if (smoke != null) smoke.Tick(now); return; }
+            if (away && !IsVisible)
+            {
+                if (now >= nextCheck && Program.Smoke == null) { nextCheck = now + 0.25; CheckPopIn(now); }
+                if (smoke != null) smoke.Tick(now);
+                return;
+            }
             if (!dragging)
             {
                 if (falling) Tumble(now);
@@ -507,6 +534,7 @@ namespace CapriDesktop
                 CheckSeat(now);
                 CheckWander(now);
                 CheckMusic(now);
+                if (Program.Smoke == null) CheckPopIn(now);
             }
             Advance(now);
             Talk.Update(now);
@@ -1114,6 +1142,19 @@ namespace CapriDesktop
             settings.Items.Add(sounds);
             voiceMenu = new MenuItem { Header = "Voice" };
             settings.Items.Add(voiceMenu);
+            checkInsItem = new MenuItem { Header = "Check in on me", ToggleType = MenuItemToggleType.CheckBox };
+            checkInsItem.Click += delegate { SetCheckIns(Saved.NoCheckIns); };
+            settings.Items.Add(checkInsItem);
+            MenuItem pops = new MenuItem { Header = "Pop-ins" };
+            for (int i = 0; i < PopNames.Length; i++)
+            {
+                int pace = i;
+                MenuItem pick = new MenuItem { Header = PopNames[i], ToggleType = MenuItemToggleType.Radio, GroupName = "pops" };
+                pick.Click += delegate { SetPopPace(pace); };
+                popPicks.Add(pick);
+                pops.Items.Add(pick);
+            }
+            settings.Items.Add(pops);
             discordItem = new MenuItem { Header = "Show on Discord", ToggleType = MenuItemToggleType.CheckBox };
             discordItem.Click += delegate { SetDiscord(Saved.NoDiscord); };
             settings.Items.Add(discordItem);
@@ -1169,6 +1210,8 @@ namespace CapriDesktop
             typingItem.IsChecked = TypingSound;
             discordItem.IsChecked = !Saved.NoDiscord;
             memoriesItem.IsChecked = !Saved.NoMemories;
+            checkInsItem.IsChecked = !Saved.NoCheckIns;
+            for (int i = 0; i < popPicks.Count; i++) popPicks[i].IsChecked = i == PopPace;
         }
 
         internal bool DiscordShown { get { return discordItem.IsChecked == true; } }
@@ -1604,6 +1647,88 @@ namespace CapriDesktop
             if (outro == null || quitting) return;
             outro = null;
             if (clip == leave || clip == perchLeave) Play(seat != null ? perch : idle);
+        }
+
+        internal void CheckPopIn(double now)
+        {
+            // Touching her, typing to her, opening her menu or asking her something while she's out from hiding keeps her out.
+            if (popOut >= 0 && (asking != popAsked || dragging || pressed || Talk.Typing || (ContextMenu != null && ContextMenu.IsOpen))) popOut = -1;
+            if (popOut >= 0 && now >= popOut && Talk.Quiet) { popOut = -1; HideAway(); }
+            if (Saved.NoCheckIns) { nextPopIn = -1; return; }
+            if (nextPopIn < 0) nextPopIn = now + PopGap();
+            if (now < nextPopIn || popChecking) return;
+            nextPopIn = now + PopGap();
+            if (!CanPop) return;
+            popChecking = true;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                double idle = -1;
+                try { idle = Limbs.IdleSeconds(); }
+                catch (Exception) { }
+                // Only while someone's at the computer, like on Windows. A desktop that doesn't say counts as someone there.
+                Dispatcher.UIThread.Post(delegate { popChecking = false; if (idle <= 60 && CanPop) PopIn(); });
+            });
+        }
+
+        private bool CanPop { get { return !quitting && !dragging && !pressed && !falling && outro == null && popOut < 0 && Talk.Quiet && (ContextMenu == null || !ContextMenu.IsOpen); } }
+
+        // She glitches out if she's showing, then in at a random spot along the top of her screen, says hi and drops onto a window.
+        internal void PopIn()
+        {
+            if (quitting) return;
+            bool hidden = away;
+            string line = PopLines[random.Next(PopLines.Length)];
+            Action arrive = delegate
+            {
+                Screen screen = ScreenHere();
+                if (screen == null || quitting) return;
+                SetAway(false);
+                if (!IsVisible) Show();
+                walking = false;
+                seat = null;
+                falling = false;
+                PixelRect area = screen.WorkingArea;
+                Move(new PixelPoint(area.X + random.Next(Math.Max(1, area.Width - Px(body.Size))), area.Y));
+                Arrive();
+                int ticket = ++asking;
+                Talk.Answer(PopHeard, line);
+                TypeAlong(line, ticket);
+                popAsked = asking;
+                popOut = hidden ? Now + 6 : -1;
+            };
+            if (hidden) arrive();
+            else GlitchOut(arrive);
+        }
+
+        internal double PopOut { get { return popOut; } }
+        internal bool CheckIns { get { return !Saved.NoCheckIns; } }
+        internal bool CheckInsShown { get { return checkInsItem.IsChecked; } }
+        internal int PopPace { get { return Math.Max(0, Math.Min(2, Saved.PopPace ?? 1)); } }
+        internal double PopGap() { return PopPaces[PopPace, 0] + random.NextDouble() * PopPaces[PopPace, 1]; }
+
+        internal string PopsPicked
+        {
+            get
+            {
+                foreach (MenuItem pick in popPicks) if (pick.IsChecked) return pick.Header.ToString();
+                return "";
+            }
+        }
+
+        internal void SetCheckIns(bool on)
+        {
+            Saved.NoCheckIns = !on;
+            nextPopIn = -1;
+            Save();
+            Sync();
+        }
+
+        internal void SetPopPace(int pace)
+        {
+            Saved.PopPace = Math.Max(0, Math.Min(2, pace));
+            nextPopIn = -1;
+            Save();
+            Sync();
         }
 
         internal static void Browse(string url)

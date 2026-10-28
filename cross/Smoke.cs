@@ -60,7 +60,7 @@ namespace CapriDesktop
             if (finished) return;
             if (started < 0) started = now;
             if (stepStart < 0) stepStart = now;
-            if (now - started > 150) { Finish("Timed out at step " + step + "."); return; }
+            if (now - started > 180) { Finish("Timed out at step " + step + "."); return; }
             if (now - stepStart > 15) { checks.Add("INFO " + Seen()); Finish("Step " + step + " took longer than 15 seconds."); return; }
             try
             {
@@ -168,6 +168,25 @@ namespace CapriDesktop
                 pet.SetSounds(60);
                 pet.Dancing = false;
                 if (Brain.Language != null || pet.Saved.Language != null || pet.Picked != "Stay put | English | Short | Short | Normal | Dance to music") throw new Exception("Menu settings didn't go back: " + pet.Picked);
+                bool checkInsNew = pet.CheckIns && pet.CheckInsShown && pet.PopPace == 1 && pet.PopsPicked == "Sometimes";
+                pet.SetPopPace(2);
+                bool popsOften = pet.Saved.PopPace == 2 && pet.PopsPicked == "Often";
+                double popSoonest = double.MaxValue, popLatest = 0;
+                for (int i = 0; i < 200; i++)
+                {
+                    double gap = pet.PopGap();
+                    popSoonest = Math.Min(popSoonest, gap);
+                    popLatest = Math.Max(popLatest, gap);
+                }
+                pet.SetPopPace(0);
+                double rareGap = pet.PopGap();
+                bool popsRarely = pet.Saved.PopPace == 0 && pet.PopsPicked == "Rarely" && rareGap >= 1200 && rareGap <= 2400;
+                pet.SetCheckIns(false);
+                bool checkInsOff = !pet.CheckIns && pet.Saved.NoCheckIns && !pet.CheckInsShown;
+                pet.SetCheckIns(true);
+                pet.SetPopPace(1);
+                if (!checkInsNew || !popsOften || popSoonest < 180 || popLatest > 480 || !popsRarely || !checkInsOff || !pet.CheckIns || pet.PopsPicked != "Sometimes") throw new Exception("Check in on me settings went wrong: new " + checkInsNew + ", often " + popsOften + " " + popSoonest.ToString("0") + "-" + popLatest.ToString("0") + " s, rarely " + popsRarely + ", off " + checkInsOff);
+                checks.Add("PASS Check in on me settings: on by default at Pop-ins Sometimes, Often waits 3 to 8 minutes and Rarely 20 to 40, and turning it off sticks");
                 Func<string, string[], string> runWas = Music.Run;
                 List<string> ran = new List<string>();
                 string status = "Playing";
@@ -782,6 +801,46 @@ namespace CapriDesktop
                 checks.Add("PASS voice: replies are spoken through ElevenLabs and type out at the voice's pace, Use ElevenLabs off keeps her quiet, and Remove key deletes the file");
                 fakeVoice.Stop();
                 Send(shelf, "quit");
+                pet.Talk.Dismiss();
+                pet.HideAway();
+                return true;
+            }
+            if (step == 22)
+            {
+                if (pet.IsVisible) return false;
+                arrivalsBefore = pet.Arrivals;
+                pet.PopIn();
+                string hello = pet.Talk.Reply;
+                if (!pet.IsVisible || pet.Away || !pet.Arriving || pet.Arrivals != arrivalsBefore + 1 || Array.IndexOf(Pet.PopLines, hello) < 0 || pet.PopOut < 0) throw new Exception("She didn't pop in from hiding with a hello: " + hello + " | away " + pet.Away + " | out " + pet.PopOut);
+                pet.Talk.Dismiss();
+                pet.CheckPopIn(pet.PopOut + 0.1);
+                if (!pet.Away || !pet.Leaving) throw new Exception("After popping in from hiding she didn't hide again.");
+                return true;
+            }
+            if (step == 23)
+            {
+                if (pet.IsVisible) return false;
+                checks.Add("PASS pop-ins: with Check in on me on she glitches in to say hi even when hidden, then hides again");
+                pet.ComeBack();
+                return true;
+            }
+            if (step == 24)
+            {
+                if (pet.Arriving || pet.Falling) return false;
+                pet.PopIn();
+                if (!pet.Leaving || pet.Away) throw new Exception("She didn't glitch out to pop in somewhere else.");
+                return true;
+            }
+            if (step == 25)
+            {
+                if (pet.Leaving) return false;
+                string hello = pet.Talk.Reply;
+                pet.SetCheckIns(false);
+                pet.Talk.Dismiss();
+                pet.CheckPopIn(pet.Now + 60);
+                pet.SetCheckIns(true);
+                if (!pet.IsVisible || pet.Away || pet.PopOut >= 0 || Array.IndexOf(Pet.PopLines, hello) < 0) throw new Exception("Popping in while she was out went wrong: " + hello + " | away " + pet.Away + " | out " + pet.PopOut);
+                checks.Add("PASS pop-ins while she's out: she glitches over to a new spot at the top of the screen, says hi and stays out");
                 Finish(null);
                 return true;
             }

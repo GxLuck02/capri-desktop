@@ -232,6 +232,25 @@ namespace CapriDesktop
             return (artist.Success ? artist.Groups[1].Value + " - " : "") + title.Groups[1].Value;
         }
 
+        // How long since they last touched the mouse or keyboard: macOS's HID idle time, GNOME's idle monitor (X11 and Wayland),
+        // or xprintidle on other X11 desktops. XWayland can't see Wayland input, so xprintidle isn't asked there. -1 when unknown.
+        internal static double IdleSeconds()
+        {
+            if (OnMac)
+            {
+                string hid = Music.Run("ioreg", new[] { "-c", "IOHIDSystem" });
+                Match nanoseconds = hid == null ? Match.Empty : Regex.Match(hid, "\"HIDIdleTime\"\\s*=\\s*(\\d+)");
+                return nanoseconds.Success ? long.Parse(nanoseconds.Groups[1].Value) / 1e9 : -1;
+            }
+            string gnome = Music.Run("dbus-send", new[] { "--session", "--print-reply", "--dest=org.gnome.Mutter.IdleMonitor", "/org/gnome/Mutter/IdleMonitor/Core", "org.gnome.Mutter.IdleMonitor.GetIdletime" });
+            Match idle = gnome == null ? Match.Empty : Regex.Match(gnome, @"uint64\s+(\d+)");
+            if (idle.Success) return long.Parse(idle.Groups[1].Value) / 1000.0;
+            if (Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") != null) return -1;
+            string x11 = Music.Run("xprintidle", new string[0]);
+            long milliseconds;
+            return x11 != null && long.TryParse(x11.Trim(), out milliseconds) ? milliseconds / 1000.0 : -1;
+        }
+
         // Her app_window tool. On Mac it's the apps in the Dock, through System Events; on Linux it's the windows wmctrl lists,
         // which on Wayland are only the apps running through XWayland.
         private static readonly Dictionary<string, string> Bundles = new Dictionary<string, string>();

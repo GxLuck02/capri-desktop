@@ -52,10 +52,10 @@ namespace CapriDesktop
                 {
                     if (pet.Away) pet.ComeBack();
                     else pet.HideAway();
-                    hide.Header = pet.Away ? "Show her" : "Hide her";
                 };
+                pet.AwayChanged = delegate { hide.Header = pet.Away ? "Show her" : "Hide her"; };
                 NativeMenuItem bring = new NativeMenuItem("Bring her back");
-                bring.Click += delegate { pet.Bring(); hide.Header = "Hide her"; };
+                bring.Click += delegate { pet.Bring(); };
                 NativeMenuItem quit = new NativeMenuItem("Quit Capri");
                 quit.Click += delegate { pet.Quit(); };
                 menu.Items.Add(talk);
