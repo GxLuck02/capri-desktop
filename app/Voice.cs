@@ -1883,6 +1883,7 @@ namespace CapriDesktop
     internal static class ModelFile
     {
         internal const string Missing = "That's no voice model Capri can run. Pick a Piper, Kokoro, Kitten or Pocket TTS model for sherpa-onnx: its .tar.bz2, or the .onnx in its folder.";
+        internal const string Unopened = "Capri can't open that clip. Press the arrow in the Speaker or clip box to pick it.";
         // Her free voice's folder, where sherpa-onnx is, and the folder models from an archive are unpacked into. Set at startup.
         internal static string Engine;
         internal static string Shelf;
@@ -2020,7 +2021,15 @@ namespace CapriDesktop
             string path = (voice ?? "").Trim().Trim('"');
             int number;
             if (int.TryParse(path, out number)) path = "";
-            string from = path.Length == 0 ? "" : path + "|" + File.GetLastWriteTimeUtc(path).Ticks;
+            string from = "";
+            if (path.Length > 0)
+            {
+                // The box takes typing, so it can hold something that's no path at all.
+                try { from = path + "|" + File.GetLastWriteTimeUtc(path).Ticks; }
+                catch (ArgumentException) { throw new VoiceException(Unopened); }
+                catch (NotSupportedException) { throw new VoiceException(Unopened); }
+                catch (PathTooLongException) { throw new VoiceException(Unopened); }
+            }
             if (clipSound == null || clipFrom != from)
             {
                 if (path.Length == 0)
