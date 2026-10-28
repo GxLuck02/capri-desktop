@@ -200,6 +200,7 @@ namespace CapriDesktop
                 int settleWas = Limbs.Settle;
                 Func<List<InstalledApp>> catalogWas = Hands.Catalog;
                 List<string> did = new List<string>();
+                bool noWindowTool = false;
                 string tempApps = Path.Combine(folder, "apps");
                 try
                 {
@@ -216,6 +217,10 @@ namespace CapriDesktop
                         if (line.Contains("Metadata")) return "   variant       array [\n         dict entry(\n            string \"xesam:artist\"\n            variant                array [\n                  string \"Chase Atlantic\"\n               ]\n         )\n         dict entry(\n            string \"xesam:title\"\n            variant                string \"Consume\"\n         )\n      ]\n";
                         if (file == "osascript" && line.Contains("current track")) return "Petite Meller - In Love With Myself\n";
                         if (file == "pactl") return null;
+                        if (file == "osascript" && line.Contains("background only is false")) return "Finder\tcom.apple.finder\nDiscord\tcom.hnc.Discord\nCapri\tmissing value\n";
+                        if (file == "osascript" && line.Contains("exists application process")) return "false\n";
+                        if (file == "wmctrl" && line == "wmctrl -lpx") return noWindowTool ? null : "0x01e00003 -1 0      N/A                    N/A Desktop\n0x03c00007  0 99999999 discord.discord  host #general | Discord\n0x04200001  0 99999998 Navigator.firefox  host YouTube — Mozilla Firefox\n";
+                        if (file == "wmctrl" && line == "wmctrl -l") return "0x04200001  0 host YouTube — Mozilla Firefox\n";
                         return "";
                     };
                     Directory.CreateDirectory(Path.Combine(tempApps, "Spotify.app"));
@@ -243,6 +248,26 @@ namespace CapriDesktop
                     if (!log.Contains("osascript -e tell application \"Spotify\" to next track") || !log.Contains("+ 2)") || !log.Contains("pactl set-sink-mute @DEFAULT_SINK@ toggle / amixer -q sset Master toggle")) throw new Exception("Mac or Linux media keys went wrong: " + log);
                     if (!log.Contains("play track \"spotify:track:2iyaHQlYrR8Eyr4wOmOT5D\"") || !log.Contains("OpenUri string:spotify:track:2iyaHQlYrR8Eyr4wOmOT5D") || log.Contains("launch open spotify:") || log.Contains("launch xdg-open spotify:")) throw new Exception("Spotify tracks didn't play directly: " + log);
                     if (macSong != "Petite Meller - In Love With Myself" || linuxSong != "Chase Atlantic - Consume") throw new Exception("Now playing was read wrong: " + macSong + " / " + linuxSong);
+                    // Closing, minimizing and switching apps: System Events on Mac, wmctrl on Linux, and her own window never counts.
+                    did.Clear();
+                    List<OpenWindow> macWindows = Limbs.Windows(true);
+                    OpenWindow macDiscord = macWindows.Find(delegate(OpenWindow shown) { return shown.Program == "Discord"; });
+                    bool macSteered = macDiscord != null && Limbs.Steer(macDiscord, "switch_to", true) && Limbs.Steer(macDiscord, "close", true) && Limbs.Steer(macDiscord, "minimize", true);
+                    List<OpenWindow> linuxWindows = Limbs.Windows(false);
+                    OpenWindow linuxDiscord = linuxWindows.Find(delegate(OpenWindow shown) { return shown.Program == "discord"; });
+                    bool linuxSteered = linuxDiscord != null && linuxWindows.Count == 2 && linuxWindows[1].Program == "firefox" && linuxWindows[1].Title == "YouTube — Mozilla Firefox"
+                        && Limbs.Steer(linuxDiscord, "close", false) && Limbs.Steer(linuxWindows[1], "minimize", false) && Limbs.Steer(linuxWindows[1], "switch_to", false);
+                    string closedDiscord = Hands.Do("app_window", new ToolArguments { Name = "discord", Action = "close" });
+                    noWindowTool = true;
+                    string noWmctrl = "";
+                    try { Limbs.Windows(false); }
+                    catch (InvalidOperationException error) { noWmctrl = error.Message; }
+                    noWindowTool = false;
+                    string windowLog = string.Join(" / ", did);
+                    if (!macSteered || macWindows.Count != 2 || macWindows.Exists(delegate(OpenWindow shown) { return shown.Program == "Capri"; }) || !windowLog.Contains("tell application id \"com.hnc.Discord\" to activate") || !windowLog.Contains("tell application id \"com.hnc.Discord\" to quit")
+                        || !windowLog.Contains("set visible of application process \"Discord\" to false") || !linuxSteered || !windowLog.Contains("wmctrl -i -c 0x03c00007") || !windowLog.Contains("xdotool windowminimize 0x04200001") || !windowLog.Contains("wmctrl -i -a 0x04200001")
+                        || closedDiscord != "Closed discord." || !noWmctrl.Contains("needs wmctrl"))
+                        throw new Exception("Closing and switching apps went wrong: " + closedDiscord + " / " + noWmctrl + " / " + windowLog);
                 }
                 finally
                 {
@@ -253,7 +278,7 @@ namespace CapriDesktop
                     Hands.Catalog = catalogWas;
                     Hands.Forget();
                 }
-                checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing and turns the volume on Mac and Linux; Windows-only shortcuts say so");
+                checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing and turns the volume on Mac and Linux, closes, minimizes and switches to apps (System Events on Mac, wmctrl on Linux, which says when it's missing); Windows-only shortcuts say so");
                 pet.ShowBrains(new[] { "gemma4:e4b", "qwen3:8b" });
                 int brains = pet.BrainChoices;
                 pet.Brain.Remember("what's up?", "Not much, choom.");

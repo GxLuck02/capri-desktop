@@ -1087,6 +1087,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Her personality file (personality.md), with Reset
 - Wander, dance to music, petting, sizes
 - Opening apps and websites, playing songs on Spotify, skipping tracks, what's playing, volume
+- Closing, minimizing and switching to apps ("close Discord"). Mac asks once to let Capri control System Events; press OK. Linux needs wmctrl (and xdotool to minimize), and on Wayland she only sees apps running through XWayland, like Discord and Spotify.
 - "Playing Capri" on your Discord profile, with Show on Discord in Settings
 - Right-click her > Help > Copy error details, with your system, desktop and her brain at the top
 - "Check my screen": she looks when you ask (see "Check my screen on Mac and Linux" below)
@@ -1096,7 +1097,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - No Mainframe. Everything is in her right-click menu.
 - No voice chat: "Voice chat isn't on Mac and Linux yet. Type to me for now, choom."
 - No built-in brain. Use Ollama or an API key.
-- No keyboard shortcuts, closing or switching windows, Watch my screen (she only looks when you ask) or mouse and keyboard jobs.
+- No keyboard shortcuts, Watch my screen (she only looks when you ask) or mouse and keyboard jobs.
 - No automatic updates. She says when a new version is out, and right-click her > Get Capri X opens its download page.
 
 ### Right-click menu

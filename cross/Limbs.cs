@@ -90,7 +90,8 @@ namespace CapriDesktop
             Hands.Press = delegate(byte key) { Key(key, OnMac); };
             Hands.Catalog = delegate { return OnMac ? MacApps(MacFolders()) : LinuxApps(LinuxFolders()); };
             Hands.NowPlaying = delegate { return Song(OnMac); };
-            Hands.Windows = delegate { return new List<OpenWindow>(); };
+            Hands.Windows = delegate { return Windows(OnMac); };
+            Hands.Steer = delegate(OpenWindow window, string action) { return Steer(window, action, OnMac); };
             Hands.Chord = delegate { throw new PlatformNotSupportedException("keyboard shortcuts only work on Windows for now"); };
             // A look is already in her transcript; anything else she did goes in as a job, like on Windows.
             brain.Act = delegate(string tool, ToolArguments args)
@@ -186,6 +187,95 @@ namespace CapriDesktop
             if (!title.Success) return "";
             return (artist.Success ? artist.Groups[1].Value + " - " : "") + title.Groups[1].Value;
         }
+
+        // Her app_window tool. On Mac it's the apps in the Dock, through System Events; on Linux it's the windows wmctrl lists,
+        // which on Wayland are only the apps running through XWayland.
+        private static readonly Dictionary<string, string> Bundles = new Dictionary<string, string>();
+
+        internal static Func<int, string> ProcessName = delegate(int id)
+        {
+            try { return id > 0 ? File.ReadAllText("/proc/" + id + "/comm").Trim() : ""; }
+            catch (Exception) { return ""; }
+        };
+
+        internal static List<OpenWindow> Windows(bool mac)
+        {
+            List<OpenWindow> found = new List<OpenWindow>();
+            if (mac)
+            {
+                string apps = Music.Run("osascript", new[] { "-e", "set out to \"\"", "-e", "tell application \"System Events\"", "-e", "repeat with p in (every application process whose background only is false)",
+                    "-e", "set out to out & (name of p as text) & tab & (bundle identifier of p as text) & linefeed", "-e", "end repeat", "-e", "end tell", "-e", "return out" });
+                if (apps == null) throw new InvalidOperationException("macOS didn't let me see your apps. Allow Capri to control System Events under System Settings > Privacy & Security > Automation, then ask again");
+                lock (Bundles)
+                {
+                    Bundles.Clear();
+                    foreach (string line in apps.Split('\n'))
+                    {
+                        string[] parts = line.TrimEnd('\r').Split('\t');
+                        string name = parts[0].Trim();
+                        if (name.Length == 0 || name == "Capri") continue;
+                        Bundles[name] = parts.Length > 1 && parts[1].Trim() != "missing value" ? parts[1].Trim() : "";
+                        found.Add(new OpenWindow(IntPtr.Zero, name, name));
+                    }
+                }
+                return found;
+            }
+            string windows = Music.Run("wmctrl", new[] { "-lpx" });
+            if (windows == null) throw new InvalidOperationException("closing and switching apps on Linux needs wmctrl. Install it (sudo apt install wmctrl, or your distro's package), then ask again");
+            foreach (string line in windows.Split('\n'))
+            {
+                Match window = Regex.Match(line.TrimEnd('\r'), @"^0x([0-9a-fA-F]+)\s+(-?\d+)\s+(\d+)\s+(\S+)\s+\S+ ?(.*)$");
+                if (!window.Success || window.Groups[2].Value == "-1") continue;
+                int id = int.Parse(window.Groups[3].Value);
+                if (id == Environment.ProcessId) continue;
+                // The process name, like Windows uses; without one, the window's class (discord.discord, Navigator.firefox).
+                string program = ProcessName(id);
+                if (program.Length == 0) program = window.Groups[4].Value.Substring(window.Groups[4].Value.LastIndexOf('.') + 1).ToLowerInvariant();
+                found.Add(new OpenWindow(new IntPtr(Convert.ToInt64(window.Groups[1].Value, 16)), window.Groups[5].Value.Trim(), program));
+            }
+            return found;
+        }
+
+        internal static bool Steer(OpenWindow window, string action, bool mac)
+        {
+            if (mac)
+            {
+                string name = Quoted(window.Program), bundle;
+                lock (Bundles) Bundles.TryGetValue(window.Program, out bundle);
+                string app = string.IsNullOrEmpty(bundle) ? "application \"" + name + "\"" : "application id \"" + Quoted(bundle) + "\"";
+                if (action == "minimize") return Music.Run("osascript", new[] { "-e", "tell application \"System Events\" to set visible of application process \"" + name + "\" to false" }) != null;
+                if (action == "close")
+                {
+                    if (Music.Run("osascript", new[] { "-e", "tell " + app + " to quit" }) == null) return false;
+                    for (int i = 0; i < 10; i++)
+                    {
+                        string open = Music.Run("osascript", new[] { "-e", "tell application \"System Events\" to exists application process \"" + name + "\"" });
+                        if (open != null && open.Trim() == "false") return true;
+                        Thread.Sleep(200);
+                    }
+                    return false;
+                }
+                if (Music.Run("osascript", new[] { "-e", "tell " + app + " to activate" }) == null) return false;
+                return action != "close_tab" || Music.Run("osascript", new[] { "-e", "tell application \"System Events\" to keystroke \"w\" using command down" }) != null;
+            }
+            string handle = "0x" + window.Handle.ToInt64().ToString("x8");
+            if (action == "minimize") return Music.Run("xdotool", new[] { "windowminimize", handle }) != null || Music.Run("wmctrl", new[] { "-i", "-r", handle, "-b", "add,hidden" }) != null;
+            if (action == "close")
+            {
+                if (Music.Run("wmctrl", new[] { "-i", "-c", handle }) == null) return false;
+                for (int i = 0; i < 10; i++)
+                {
+                    string open = Music.Run("wmctrl", new[] { "-l" });
+                    if (open != null && open.IndexOf(handle, StringComparison.OrdinalIgnoreCase) < 0) return true;
+                    Thread.Sleep(200);
+                }
+                return false;
+            }
+            if (Music.Run("wmctrl", new[] { "-i", "-a", handle }) == null) return false;
+            return action != "close_tab" || Music.Run("xdotool", new[] { "key", "--clearmodifiers", "ctrl+w" }) != null;
+        }
+
+        private static string Quoted(string text) { return (text ?? "").Replace("\\", "\\\\").Replace("\"", "\\\""); }
 
         internal static string[] MacFolders()
         {
