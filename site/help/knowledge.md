@@ -746,7 +746,7 @@ With Remember our chats on (Mainframe > Settings > HABITS, on by default), she r
 - memories.md follows the same rule as her notes: no addresses, schools, phone numbers, emails, passwords, full names, birthdays or bank details. Chat lines with them stay in your transcript but never go to her brain for folding, and "remember when" skips them.
 - transcripts\unfolded.txt holds the newest lines she hasn't folded in yet.
 
-Where they are: Mainframe > Settings > Open her memories shows them in File Explorer. On Windows it's %LOCALAPPDATA%\Capri\memories.md and %LOCALAPPDATA%\Capri\transcripts. They stay on your PC and are never uploaded.
+Where they are: Mainframe > Settings > Open her memories shows them in File Explorer. On Windows it's %LOCALAPPDATA%\Capri\memories.md and %LOCALAPPDATA%\Capri\transcripts. On Mac and Linux it's ~/.config/Capri/memories.md and ~/.config/Capri/transcripts, and right-click her > Settings > Open her memories opens memories.md. They stay on your computer and are never uploaded.
 
 What folding costs: with her built-in brain or Ollama it's free and runs on your PC. With an API key it's one small request each time, about 600 to 2,000 words in and up to 300 words out, which is usually well under a cent. The free NVIDIA key costs nothing. She folds about once every 10 to 15 messages (less often with a longer Memory setting) and once a day, and waits until the chat has been quiet for 20 seconds so she doesn't hold up a reply.
 
@@ -1090,6 +1090,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - "Playing Capri" on your Discord profile, with Show on Discord in Settings
 - Right-click her > Help > Copy error details, with your system, desktop and her brain at the top
 - "Check my screen": she looks when you ask (see "Check my screen on Mac and Linux" below)
+- Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings)
 
 ### Not yet
 - No Mainframe. Everything is in her right-click menu.
@@ -1097,7 +1098,6 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - No built-in brain. Use Ollama or an API key.
 - No keyboard shortcuts, closing or switching windows, Watch my screen (she only looks when you ask) or mouse and keyboard jobs.
 - No automatic updates. She says when a new version is out, and right-click her > Get Capri X opens its download page.
-- No transcripts or memories.md yet. She remembers the recent chat and her notes.
 
 ### Right-click menu
 - Talk to her
@@ -1105,7 +1105,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
-- Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Show on Discord, Open her notes (me.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
 - Get Capri X, only when a new version is out

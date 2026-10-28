@@ -39,6 +39,7 @@ namespace CapriDesktop
         [DataMember] internal string CloudModel;
         [DataMember] internal string UpdateSeen;
         [DataMember] internal bool StayOnModel;
+        [DataMember] internal bool NoMemories;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -235,6 +236,7 @@ namespace CapriDesktop
         // "Playing Capri" on their Discord profile, like on Windows. Off in the smoke test.
         private readonly Presence presence;
         private MenuItem discordItem;
+        private MenuItem memoriesItem;
         private double nextStatus;
         private MenuItem updateItem;
         private string updatePage;
@@ -284,6 +286,12 @@ namespace CapriDesktop
             Brain.FreeKeyHow = "right-click me > Brain > Get a free NVIDIA key";
             Brain.Bin = OperatingSystem.IsMacOS() ? "Trash" : "trash";
             Brain.MemoryPath = Path.Combine(Program.Smoke ?? folder, "me.md");
+            // Remember our chats, like on Windows: every chat goes in a daily transcript, and the brain they picked folds older
+            // lines into memories.md, which she reads every chat.
+            Brain.MemoriesPath = Path.Combine(Program.Smoke ?? folder, "memories.md");
+            Brain.TranscriptPath = Path.Combine(Program.Smoke ?? folder, "transcripts");
+            Brain.Keeping = !Saved.NoMemories;
+            if (Program.Smoke == null) Brain.Keeper = Brain;
             Brain.PersonalityPath = Path.Combine(Program.Smoke ?? folder, Brain.PersonalityName);
             Brain.MakePersonality();
             Brain.Language = Brain.LanguageCode(Saved.Language) == "en" ? null : Saved.Language;
@@ -1089,6 +1097,10 @@ namespace CapriDesktop
             sounds.Items.Add(typingItem);
             MenuItem notes = new MenuItem { Header = "Open her notes (me.md)" };
             notes.Click += delegate { OpenNotes(); };
+            memoriesItem = new MenuItem { Header = "Remember our chats", ToggleType = MenuItemToggleType.CheckBox };
+            memoriesItem.Click += delegate { SetRemembering(Saved.NoMemories); };
+            MenuItem memories = new MenuItem { Header = "Open her memories (memories.md)" };
+            memories.Click += delegate { OpenMemories(); };
             MenuItem personality = new MenuItem { Header = "Edit her personality (personality.md)" };
             personality.Click += delegate { OpenPersonality(); };
             MenuItem resetPersonality = new MenuItem { Header = "Reset her personality to default" };
@@ -1106,6 +1118,8 @@ namespace CapriDesktop
             discordItem.Click += delegate { SetDiscord(Saved.NoDiscord); };
             settings.Items.Add(discordItem);
             settings.Items.Add(notes);
+            settings.Items.Add(memoriesItem);
+            settings.Items.Add(memories);
             settings.Items.Add(personality);
             settings.Items.Add(resetPersonality);
             MenuItem sizes = new MenuItem { Header = "Size" };
@@ -1154,6 +1168,7 @@ namespace CapriDesktop
             for (int i = 0; i < soundPicks.Count; i++) soundPicks[i].IsChecked = SoundLevels[i] == Sfx.Level;
             typingItem.IsChecked = TypingSound;
             discordItem.IsChecked = !Saved.NoDiscord;
+            memoriesItem.IsChecked = !Saved.NoMemories;
         }
 
         internal bool DiscordShown { get { return discordItem.IsChecked == true; } }
@@ -1416,6 +1431,32 @@ namespace CapriDesktop
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 if (!File.Exists(path)) File.WriteAllText(path, Brain.NotesHead);
+            }
+            catch (Exception) { return null; }
+            if (Program.Smoke == null) Browse(path);
+            return path;
+        }
+
+        // Off, she stops writing transcripts, folding and reading memories.md. Nothing gets deleted.
+        internal void SetRemembering(bool on)
+        {
+            Saved.NoMemories = !on;
+            Brain.Keeping = on;
+            Save();
+            Sync();
+        }
+
+        internal bool Remembers { get { return memoriesItem.IsChecked; } }
+
+        // memories.md opens in their editor, made first if it isn't there yet. Her transcripts are in the folder beside it.
+        internal string OpenMemories()
+        {
+            string path = Brain.MemoriesPath;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                Directory.CreateDirectory(Brain.TranscriptPath);
+                if (!File.Exists(path)) File.WriteAllText(path, Brain.MemoriesHead);
             }
             catch (Exception) { return null; }
             if (Program.Smoke == null) Browse(path);

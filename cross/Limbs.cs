@@ -92,7 +92,13 @@ namespace CapriDesktop
             Hands.NowPlaying = delegate { return Song(OnMac); };
             Hands.Windows = delegate { return new List<OpenWindow>(); };
             Hands.Chord = delegate { throw new PlatformNotSupportedException("keyboard shortcuts only work on Windows for now"); };
-            brain.Act = Hands.Do;
+            // A look is already in her transcript; anything else she did goes in as a job, like on Windows.
+            brain.Act = delegate(string tool, ToolArguments args)
+            {
+                string done = Hands.Do(tool, args);
+                if (tool != "look_at_screen" && !string.IsNullOrEmpty(done)) Brain.Transcribe(null, "Job: " + done);
+                return done;
+            };
         }
 
         internal static void Open(string id, bool mac)

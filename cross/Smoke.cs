@@ -385,6 +385,19 @@ namespace CapriDesktop
                 string notesPath = pet.OpenNotes();
                 if (saved != "Saved to my notes: They love Hollow Knight." || kept != "- They love Hollow Knight" || forgot != "Forgot my note about hollow knight." || Brain.Notes() != "" || notesPath == null || !File.ReadAllText(notesPath).StartsWith("# What Capri remembers", StringComparison.Ordinal)) throw new Exception("Her notes didn't work: " + saved + " / " + kept + " / " + forgot);
                 checks.Add("PASS notes: remember and forget save to me.md here too, and Open her notes makes the file");
+                string today = Path.Combine(Brain.TranscriptPath, DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) + ".md");
+                Brain.Transcribe("You", "we finally beat the smoke boss");
+                bool transcribed = File.Exists(today) && File.ReadAllText(today).Contains("You:** we finally beat the smoke boss");
+                bool rememberedOn = pet.Remembers && Brain.Keeping && !pet.Saved.NoMemories;
+                pet.SetRemembering(false);
+                Brain.Transcribe("You", "this line stays out");
+                bool stoppedWriting = !File.ReadAllText(today).Contains("this line stays out") && !pet.Remembers && pet.Saved.NoMemories && !Brain.Keeping;
+                pet.SetRemembering(true);
+                string memoriesPath = pet.OpenMemories();
+                string recalledBoss = Brain.Recalled("remember when we beat the smoke boss?");
+                if (!transcribed || !rememberedOn || !stoppedWriting || !pet.Remembers || !Brain.Keeping || memoriesPath != Path.Combine(folder, "memories.md") || !File.Exists(memoriesPath) || !Directory.Exists(Brain.TranscriptPath) || recalledBoss.IndexOf("You: we finally beat the smoke boss", StringComparison.Ordinal) < 0)
+                    throw new Exception("Remember our chats went wrong: " + transcribed + " | " + rememberedOn + " | " + stoppedWriting + " | " + recalledBoss);
+                checks.Add("PASS remember our chats: on by default here too, a chat line goes in today's transcript, \"remember when\" finds it, off writes nothing, and Open her memories makes memories.md");
                 bool personalityMade = Brain.PersonalityPath == Path.Combine(folder, "personality.md") && File.ReadAllText(Brain.PersonalityPath) == Brain.PersonalityFile && Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Machinery;
                 File.Delete(Brain.PersonalityPath);
                 string personalityPath = pet.OpenPersonality();
