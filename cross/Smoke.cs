@@ -201,6 +201,16 @@ namespace CapriDesktop
                 pet.SetPopPace(1);
                 if (!checkInsNew || !popsOften || popSoonest < 180 || popLatest > 480 || !popsRarely || !checkInsOff || !pet.CheckIns || pet.PopsPicked != "Sometimes") throw new Exception("Check in on me settings went wrong: new " + checkInsNew + ", often " + popsOften + " " + popSoonest.ToString("0") + "-" + popLatest.ToString("0") + " s, rarely " + popsRarely + ", off " + checkInsOff);
                 checks.Add("PASS Check in on me settings: on by default at Pop-ins Sometimes, Often waits 3 to 8 minutes and Rarely 20 to 40, and turning it off sticks");
+                pet.Talk.Dismiss();
+                bool freeBefore = pet.Free;
+                pet.ToggleShush();
+                string hushed = pet.Talk.Reply;
+                bool quieted = pet.Shushed && pet.QuietShown && !pet.Free && hushed == "Going quiet. Right-click me > Quiet when you want me back.";
+                pet.ToggleShush();
+                bool unhushed = !pet.Shushed && !pet.QuietShown && pet.Talk.Reply == "I'm back, choom.";
+                pet.Talk.Dismiss();
+                if (!quieted || !unhushed || pet.Free != freeBefore) throw new Exception("Quiet went wrong: quiet " + quieted + " (" + hushed + "), back " + unhushed + ", free before " + freeBefore + " and after " + pet.Free);
+                checks.Add("PASS quiet: right-click > Quiet stops her pop-ins, check-ins, cheers, jokes and glances until it's turned off, and she says so both times");
                 bool loginNew = !pet.StartsAtLogin;
                 pet.SetLogin(true);
                 string loginText = File.Exists(pet.LoginFile) ? File.ReadAllText(pet.LoginFile) : "";

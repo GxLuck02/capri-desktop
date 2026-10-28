@@ -316,6 +316,10 @@ namespace CapriDesktop
         internal Func<double> Idle = Limbs.IdleSeconds;
         // Tells the tray menu whether to offer Hide her or Show her, since a pop-in or Talk to her brings her out too.
         internal Action AwayChanged;
+        private bool shushed;
+        private MenuItem quietItem;
+        // Ticks the tray's Quiet item when her own menu changes it.
+        internal Action ShushChanged;
         // Settings > Start at login. Off until they tick it; the file is the setting.
         internal readonly string LoginFile;
         private MenuItem loginItem;
@@ -1128,6 +1132,8 @@ namespace CapriDesktop
             ContextMenu menu = new ContextMenu();
             MenuItem talk = new MenuItem { Header = "Talk to her" };
             talk.Click += delegate { Talk.Open(); };
+            quietItem = new MenuItem { Header = "Quiet", ToggleType = MenuItemToggleType.CheckBox };
+            quietItem.Click += delegate { ToggleShush(); };
             MenuItem sit = new MenuItem { Header = "Sit here" };
             sit.Click += delegate { if (seat != null && seat.Free) StandUp(); else SitHere(); };
             MenuItem move = new MenuItem { Header = "Move" };
@@ -1264,6 +1270,7 @@ namespace CapriDesktop
             MenuItem quit = new MenuItem { Header = "Quit Capri" };
             quit.Click += delegate { Quit(); };
             menu.Items.Add(talk);
+            menu.Items.Add(quietItem);
             menu.Items.Add(sit);
             menu.Items.Add(move);
             menu.Items.Add(sizes);
@@ -1297,6 +1304,24 @@ namespace CapriDesktop
             watchItem.IsChecked = Saved.Watch;
             for (int i = 0; i < gapPicks.Count; i++) gapPicks[i].IsChecked = GlanceGaps[i] == GlanceGap;
             caughtUpItem.IsChecked = !Saved.NoCaughtUp;
+            quietItem.IsChecked = shushed;
+        }
+
+        internal bool Shushed { get { return shushed; } }
+        internal bool QuietShown { get { return quietItem.IsChecked; } }
+
+        // Quiet, like Windows' quiet key, for when they focus or game: she stops what she's saying and doesn't glance, pop in,
+        // check in, cheer or joke until it's turned off, but still answers when they talk to her. Starting her again ends it.
+        internal void ToggleShush()
+        {
+            shushed = !shushed;
+            nextPopIn = -1;
+            nextGlance = -1;
+            ForgetNudges();
+            if (shushed) voice.Stop();
+            Talk.Answer("(quiet)", shushed ? "Going quiet. Right-click me > Quiet when you want me back." : "I'm back, choom.");
+            Sync();
+            if (ShushChanged != null) ShushChanged();
         }
 
         internal bool StartsAtLogin { get { return File.Exists(LoginFile); } }
@@ -1748,7 +1773,7 @@ namespace CapriDesktop
             // Touching her, typing to her, opening her menu or asking her something while she's out from hiding keeps her out.
             if (popOut >= 0 && (asking != popAsked || dragging || pressed || Talk.Typing || (ContextMenu != null && ContextMenu.IsOpen))) popOut = -1;
             if (popOut >= 0 && now >= popOut && Talk.Quiet) { popOut = -1; HideAway(); }
-            if (Saved.NoCheckIns) { nextPopIn = -1; return; }
+            if (Saved.NoCheckIns || shushed) { nextPopIn = -1; return; }
             if (nextPopIn < 0) nextPopIn = now + PopGap();
             if (now < nextPopIn || popChecking) return;
             nextPopIn = now + PopGap();
@@ -1801,7 +1826,7 @@ namespace CapriDesktop
         }
 
         // Free for a line of her own: Check in on me on, showing, and not busy with them.
-        private bool Free { get { return !Saved.NoCheckIns && !away && CanPop; } }
+        internal bool Free { get { return !Saved.NoCheckIns && !shushed && !away && CanPop; } }
 
         private void CheckHome(double now)
         {
@@ -1902,7 +1927,7 @@ namespace CapriDesktop
                 }
                 return;
             }
-            if (Saved.NoCheckIns || away || nudgeChecking || now < nudgeLook || now - noticed < nudgeGap || !CanPop || (clip != idle && clip != perch) || (lastGlance >= 0 && now - lastGlance < 300)) return;
+            if (Saved.NoCheckIns || shushed || away || nudgeChecking || now < nudgeLook || now - noticed < nudgeGap || !CanPop || (clip != idle && clip != perch) || (lastGlance >= 0 && now - lastGlance < 300)) return;
             nudgeChecking = true;
             Func<double> read = Idle;
             ThreadPool.QueueUserWorkItem(delegate
@@ -2015,7 +2040,7 @@ namespace CapriDesktop
 
         private void CheckGlance(double now)
         {
-            if (!Saved.Watch || glancing) return;
+            if (!Saved.Watch || glancing || shushed) return;
             if (nextGlance < 0) nextGlance = now + Math.Min(20, GlanceGap);
             if (now < nextGlance || Brain.Model == null || away || dragging || pressed || !Talk.Quiet) return;
             nextGlance = now + GlanceGap * (0.8 + random.NextDouble() * 0.4);

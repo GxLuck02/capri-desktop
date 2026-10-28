@@ -1096,6 +1096,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Right-click her > Help > Copy error details, with your system, desktop and her brain at the top
 - "Check my screen": she looks when you ask (see "Check my screen on Mac and Linux" below)
 - Watch my screen: right-click her > Settings > Watch my screen. She glances now and then and comments when something's worth a line, like on Windows. Glance every sets how often (10 s to 10 min, default 2 min), and Keep her caught up keeps the glances she stays quiet about. Mac asks once for Screen Recording. Linux only watches with tools that don't flash: grim, Spectacle on KDE, ImageMagick's import, scrot or maim. GNOME on Wayland flashes every screenshot, so there she says so and only looks when you ask.
+- Quiet: right-click her, or the tray or menu bar icon, > Quiet. It's the same as Windows' quiet key (Ctrl + Alt + P): she stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her.
 - Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings)
 
 ### Not yet
@@ -1107,6 +1108,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 
 ### Right-click menu
 - Talk to her
+- Quiet: for when you focus or game. She stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her. It's in the tray or menu bar menu too. Starting her again ends it.
 - Sit here
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance
 - Size: Tiny, Small, Medium, Large, Huge, Giant
@@ -1117,7 +1119,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Get Capri X, only when a new version is out
 - Quit Capri
 
-Tray or menu bar icon: Talk to her, Hide her / Show her, Bring her back, Quit Capri.
+Tray or menu bar icon: Talk to her, Quiet, Hide her / Show her, Bring her back, Quit Capri.
 
 ### Her voice on Mac and Linux
 1. Right-click her > Settings > Voice > Add ElevenLabs key...

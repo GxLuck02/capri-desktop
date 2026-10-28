@@ -47,6 +47,9 @@ namespace CapriDesktop
                 NativeMenu menu = new NativeMenu();
                 NativeMenuItem talk = new NativeMenuItem("Talk to her");
                 talk.Click += delegate { pet.ComeBack(); pet.Talk.Open(); };
+                NativeMenuItem quiet = new NativeMenuItem("Quiet") { ToggleType = NativeMenuItemToggleType.CheckBox };
+                quiet.Click += delegate { pet.ToggleShush(); };
+                pet.ShushChanged = delegate { quiet.IsChecked = pet.Shushed; };
                 NativeMenuItem hide = new NativeMenuItem("Hide her");
                 hide.Click += delegate
                 {
@@ -59,6 +62,7 @@ namespace CapriDesktop
                 NativeMenuItem quit = new NativeMenuItem("Quit Capri");
                 quit.Click += delegate { pet.Quit(); };
                 menu.Items.Add(talk);
+                menu.Items.Add(quiet);
                 menu.Items.Add(hide);
                 menu.Items.Add(bring);
                 menu.Items.Add(new NativeMenuItemSeparator());
