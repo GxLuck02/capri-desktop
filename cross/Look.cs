@@ -77,19 +77,21 @@ namespace CapriDesktop
             return cells;
         }
 
-        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao, Khmer or Burmese.
+        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao, Khmer, Burmese,
+        // Georgian or Armenian.
         internal static bool Indic(string text)
         {
             foreach (char c in text ?? "")
-                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF) || Myanmar(c)) return true;
+                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF) || Myanmar(c)
+                    || (c >= 0x10A0 && c <= 0x10FF) || (c >= 0x1C90 && c <= 0x1CBF) || (c >= 0x0530 && c <= 0x058F)) return true;
             return false;
         }
 
         private static bool Myanmar(char c) { return (c >= 0x1000 && c <= 0x109F) || (c >= 0xA9E0 && c <= 0xA9FF) || (c >= 0xAA60 && c <= 0xAA7F); }
 
-        // Indian scripts, Lao, Khmer and Burmese join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic
-        // draw wider than her columns, so their words are measured in her bubble's font instead of counted, the same as on Windows.
-        // Burmese measures in whichever font the system draws it with.
+        // Indian scripts, Lao, Khmer and Burmese join letters and marks into one shape, and Tamil, Kannada, Malayalam, Ethiopic,
+        // Georgian and Armenian draw wider than her columns, so their words are measured in her bubble's font instead of counted,
+        // the same as on Windows. Burmese measures in whichever font the system draws it with.
         private static readonly Dictionary<string, double> measured = new Dictionary<string, double>();
 
         private static double Span(string text)

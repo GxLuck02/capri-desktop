@@ -193,11 +193,13 @@ namespace CapriDesktop
             return cells;
         }
 
-        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao, Khmer or Burmese.
+        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic (Amharic), Lao, Khmer, Burmese,
+        // Georgian or Armenian.
         internal static bool Indic(string text)
         {
             foreach (char c in text ?? "")
-                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF) || Myanmar(c)) return true;
+                if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F) || (c >= 0x0E80 && c <= 0x0EFF) || (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF) || Myanmar(c)
+                    || (c >= 0x10A0 && c <= 0x10FF) || (c >= 0x1C90 && c <= 0x1CBF) || (c >= 0x0530 && c <= 0x058F)) return true;
             return false;
         }
 
@@ -260,9 +262,9 @@ namespace CapriDesktop
 
         private static float Ascent(Font font) { return font.Size * font.FontFamily.GetCellAscent(font.Style) / font.FontFamily.GetEmHeight(font.Style); }
 
-        // Indian scripts, Lao and Khmer join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic draw
-        // wider than her columns, so their words are measured in her bubble's font instead of counted, and Burmese in Myanmar
-        // Text, which draws it. Other words still count by letter.
+        // Indian scripts, Lao and Khmer join letters and marks into one shape, and Tamil, Kannada, Malayalam, Ethiopic, Georgian
+        // and Armenian draw wider than her columns, so their words are measured in her bubble's font instead of counted, and
+        // Burmese in Myanmar Text, which draws it. Other words still count by letter.
         private static readonly Dictionary<string, double> measured = new Dictionary<string, double>();
         private static Bitmap rulerPage;
         private static Graphics ruler;

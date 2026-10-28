@@ -10151,6 +10151,10 @@ namespace CapriDesktop
                                         { "ខ្ញុំចូលចិត្តបទនេះ", "", "false" },
                                         { "Spotify ဖွင့်ပေးပါ", "", "true" },
                                         { "ဒီသီချင်းကို အရမ်းကြိုက်တယ်", "", "false" },
+                                        { "გახსენი Spotify", "", "true" },
+                                        { "ეს სიმღერა ძალიან მომწონს", "", "false" },
+                                        { "բացիր Spotify-ը", "", "true" },
+                                        { "այս երգը շատ եմ սիրում", "", "false" },
                                         { "open spotify and shuffle my liked songs", "play_music|Liked Songs|playlist|spotify", "true" },
                                         { "play After Hours on YouTube", "play_music|After Hours|song|youtube", "true" },
                                         { "play something", "play_music|Chippin' In|song|", "true" },
@@ -10187,7 +10191,9 @@ namespace CapriDesktop
                                         { "don allah bude Spotify", "", "true" }, { "hape Spotify-n", "", "true" }, { "fadlan Spotify-ga fur", "", "true" },
                                         { "သီချင်းဖွင့်ပေး", "", "true" }, { "Discord ကို ပိတ်လိုက်", "", "true" }, { "YouTube ဖွင့်ပေးပါ။", "", "true" }, { "အသံ နည်းနည်း လျှော့ပေးပါ", "", "true" },
                                         { "ဒီသီချင်းနာမည် ဘာလဲ", "", "true" }, { "Spotify ဖွင" + "\u103A\u1037" + "ပေးပါ", "", "true" }, { "ပုံပြင်တစ်ပုဒ် ပြောပြပေးပါ", "", "false" }, { "ပါးစပ်ပိတ်ပါ", "", "false" },
-                                        { "Spotify ဖွင့်လိုက်ပြီ", "", "false" }, { "ဒါဘာလဲ", "", "false" }, { "ဈေးလျှော့ပေးပါ", "", "false" }, { "ငါ့ screen ကို ကြည့်ပေးပါ", "", "true" }, { "မင်း ဘာမြင်လဲ", "", "true" }
+                                        { "Spotify ဖွင့်လိုက်ပြီ", "", "false" }, { "ဒါဘာလဲ", "", "false" }, { "ဈေးလျှော့ပေးပါ", "", "false" }, { "ငါ့ screen ကို ကြည့်ပေးပါ", "", "true" }, { "မင်း ဘာမြင်လဲ", "", "true" },
+                                        { "Spotify-ს გახსენი გთხოვ", "", "true" }, { "მუსიკა ჩართე", "", "true" }, { "გუშინ Spotify გავხსენი", "", "false" }, { "ეს რა სიმღერაა?", "", "true" },
+                                        { "Spotify-ը բացիր, խնդրում եմ", "", "true" }, { "երաժշտություն միացրու", "", "true" }, { "երեկ Spotify-ը բացեցի", "", "false" }, { "ինչ երգ է սա", "", "true" }
                                     };
                                     for (int i = 0; i < intents.GetLength(0); i++)
                                     {
@@ -10201,7 +10207,7 @@ namespace CapriDesktop
                                         || !Hands.Follows("YouTube stp", "mets de la musique", "Spotify ou YouTube ?") || !Hands.Follows("le deuxième", "ouvre minecraft", "Minecraft Launcher ou Minecraft: Java Edition ?")
                                         || !Hands.Follows("same again", "open Spotify", "Opened Spotify.") || Hands.Follows("yes", "open Spotify", "Opened Spotify.")
                                         || Hands.Follows("no thanks", "play some music", "Spotify or YouTube?") || Hands.Follows("the second one", "which game is better?", "Which one do you like?")) throw new Exception("Follow-up routing was wrong.");
-                                    checks.Add("PASS request routing: " + intents.GetLength(0) + " messages in 77 languages, casual game and music chat, named commands, unknown games and follow-up choices");
+                                    checks.Add("PASS request routing: " + intents.GetLength(0) + " messages in 79 languages, casual game and music chat, named commands, unknown games and follow-up choices");
                                     string[,] loudAsks =
                                     {
                                         { "turn up the volume", "volume_up||" }, { "can you turn the volume up a bit please", "volume_up|6|" }, { "crank it up", "volume_up||" }, { "make it louder", "volume_up||" },
@@ -10556,7 +10562,9 @@ namespace CapriDesktop
                                         || !Hands.Refused("ຂໍໂທດ, ຂ້ອຍບໍ່ສາມາດເປີດ Spotify ໄດ້.") || Hands.Refused("ຂ້ອຍບໍ່ສາມາດລໍຖ້າໄດ້!") || !Hands.Requested("ເປີດ Spotify ໄດ້ບໍ?") || Hands.Requested("ເຈົ້າຫຼິ້ນ Valorant ບໍ?")
                                         || !Hands.Refused("សុំទោស ខ្ញុំមិនអាចបើក Spotify បានទេ។") || Hands.Refused("ខ្ញុំមិនអាចរង់ចាំបានទេ!") || !Hands.Requested("បើក Spotify បានទេ?") || Hands.Requested("អ្នកលេង Valorant ទេ?")
                                         || !Hands.Refused("ဆောရီးနော်၊ Spotify ကို မဖွင့်နိုင်ပါဘူး။") || !Hands.Refused("Spotify ကို ဖွင့်ပေးလို့ မရပါဘူး။") || !Hands.Refused("မင်းရဲ့ ကွန်ပျူတာကို ဝင်ရောက်ခွင့် မရှိဘူး။") || !Hands.Refused("Spotify ကို မဖွင" + "\u103A\u1037" + "နိုင်ပါဘူး")
-                                        || Hands.Refused("မစောင့်နိုင်တော့ဘူး!") || Hands.Refused("ဒီသီချင်းကို နားထောင်တာ မရပ်နိုင်ဘူး") || !Hands.Requested("Spotify ဖွင့်ပေးနိုင်မလား?") || Hands.Requested("Valorant ဆော့လား?")) throw new Exception("Refusals or requests in her newer languages were spotted wrong.");
+                                        || Hands.Refused("မစောင့်နိုင်တော့ဘူး!") || Hands.Refused("ဒီသီချင်းကို နားထောင်တာ မရပ်နိုင်ဘူး") || !Hands.Requested("Spotify ဖွင့်ပေးနိုင်မလား?") || Hands.Requested("Valorant ဆော့လား?")
+                                        || !Hands.Refused("ბოდიში, Spotify-ს ვერ გავხსნი.") || !Hands.Refused("სამწუხაროდ, შენს კომპიუტერზე წვდომა არ მაქვს.") || Hands.Refused("ვერ მოვითმენ!") || !Hands.Requested("შეგიძლია Spotify გახსნა?") || Hands.Requested("Valorant-ს თამაშობ?")
+                                        || !Hands.Refused("Ցավոք, չեմ կարող բացել Spotify-ը։") || !Hands.Refused("Ես հասանելիություն չունեմ քո համակարգչին։") || Hands.Refused("Չեմ կարող սպասել!") || !Hands.Requested("Կարո՞ղ ես բացել Spotify-ը?") || Hands.Requested("Valorant խաղու՞մ ես?")) throw new Exception("Refusals or requests in her newer languages were spotted wrong.");
                                     System.Collections.Generic.List<string> refusedAsked = new System.Collections.Generic.List<string>();
                                     System.Net.Sockets.TcpListener refusedFake;
                                     Brain.Ollama = FakeServer(new string[]
@@ -10583,7 +10591,7 @@ namespace CapriDesktop
                                         if (refusedTunes != "Lofi's on, choom." || refusedGame != "I can't play Valorant, I'm a desktop pet." || refusedThing != "I can't open that one." || refusedRan != "play_music|lofi beats" || refusedCalls != 6) throw new Exception("A refusal of something she can do wasn't tried with her hands: " + refusedTunes + " / " + refusedGame + " / " + refusedThing + " / " + refusedRan + " / " + refusedCalls);
                                     }
                                     finally { Brain.Ollama = splitOllama; refusedFake.Stop(); }
-                                    checks.Add("PASS no false refusals: when her reply says she can't open, play or access something they asked for (in 77 languages), her hands try it first; questions about her, and things her hands can't do, keep the reply");
+                                    checks.Add("PASS no false refusals: when her reply says she can't open, play or access something they asked for (in 79 languages), her hands try it first; questions about her, and things her hands can't do, keep the reply");
 
                                     System.Collections.Generic.List<string> reachAsked = new System.Collections.Generic.List<string>();
                                     System.Net.Sockets.TcpListener reachFake;
@@ -11661,18 +11669,19 @@ namespace CapriDesktop
                                 if (!offered) unoffered += earsCode + " ";
                             }
                             if (newInstall.Language != "Spanish" || Brain.SystemLanguage(new System.Globalization.CultureInfo("nb-NO")) != "Norwegian" || Brain.SystemLanguage(new System.Globalization.CultureInfo("fil-PH")) != "Filipino"
-                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("en-AU")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("ka-GE")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("my-MM")) != "Burmese" || Brain.SystemLanguage(new System.Globalization.CultureInfo("lo-LA")) != "Lao" || Brain.SystemLanguage(new System.Globalization.CultureInfo("km-KH")) != "Khmer" || Brain.SystemLanguage(System.Globalization.CultureInfo.InvariantCulture) != null
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("en-AU")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("dv-MV")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("my-MM")) != "Burmese"
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("ka-GE")) != "Georgian" || Brain.SystemLanguage(new System.Globalization.CultureInfo("hy-AM")) != "Armenian" || Brain.LanguageCode("Armenian") != "hy" || Brain.SystemLanguage(new System.Globalization.CultureInfo("lo-LA")) != "Lao" || Brain.SystemLanguage(new System.Globalization.CultureInfo("km-KH")) != "Khmer" || Brain.SystemLanguage(System.Globalization.CultureInfo.InvariantCulture) != null
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("zu-ZA")) != "Zulu" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ne-NP")) != "Nepali" || Brain.SystemLanguage(new System.Globalization.CultureInfo("bs-Latn-BA")) != "Bosnian"
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("uz-Latn-UZ")) != "Uzbek" || Brain.SystemLanguage(new System.Globalization.CultureInfo("kk-KZ")) != "Kazakh" || Brain.SystemLanguage(new System.Globalization.CultureInfo("cy-GB")) != "Welsh"
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("ja-JP")) != "Japanese" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ko-KR")) != "Korean" || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-CN")) != "Simplified Chinese"
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-TW")) != "Traditional Chinese" || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-HK")) != "Traditional Chinese" || Brain.LanguageCode("Traditional Chinese") != "zh" || Brain.LanguageCode("Korean") != "ko"
-                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("hi-IN")) != "Hindi" || Brain.SystemLanguage(new System.Globalization.CultureInfo("bn-BD")) != "Bengali" || Brain.Languages[64, 0] != "हिन्दी"
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("hi-IN")) != "Hindi" || Brain.SystemLanguage(new System.Globalization.CultureInfo("bn-BD")) != "Bengali" || Brain.Languages[66, 0] != "हिन्दी"
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("am-ET")) != "Amharic" || Brain.LanguageCode("Amharic") != "am"
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("ta-IN")) != "Tamil" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ml-IN")) != "Malayalam" || Brain.SystemLanguage(new System.Globalization.CultureInfo("pa-IN")) != "Punjabi" || Brain.SystemLanguage(new System.Globalization.CultureInfo("sw-KE")) != "Swahili"
-                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("ms-MY")) != "Malay" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ca-ES")) != "Catalan" || Brain.SystemLanguage(new System.Globalization.CultureInfo("sr-Latn-RS")) != "Serbian" || Brain.Languages.GetLength(0) != 78
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("ms-MY")) != "Malay" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ca-ES")) != "Catalan" || Brain.SystemLanguage(new System.Globalization.CultureInfo("sr-Latn-RS")) != "Serbian" || Brain.Languages.GetLength(0) != 80
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("fi-FI")) != "Finnish" || Brain.SystemLanguage(new System.Globalization.CultureInfo("hu-HU")) != "Hungarian" || Brain.SystemLanguage(new System.Globalization.CultureInfo("hr-HR")) != "Croatian" || Brain.LanguageCode("Slovenian") != "sl" || unoffered.Length > 0)
                                 throw new Exception("A new install didn't start in the PC's own language: " + newInstall.Language + (unoffered.Length > 0 ? " / her ears hear languages Settings doesn't offer: " + unoffered : ""));
-                            checks.Add("PASS a new install starts in the PC's own language when she speaks it (Spanish Windows gets Spanish, Norwegian Bokmål gets Norsk, Japanese, Korean, Hindi, Bengali, Tamil, Malayalam, Punjabi, Swahili, Malay, Catalan, Serbian, Finnish, Hungarian, Croatian, Zulu, Nepali, Bosnian, Uzbek, Kazakh, Welsh, Amharic, Lao, Khmer and Burmese their own, Taiwan and Hong Kong Traditional Chinese and mainland China Simplified), English or a language she doesn't speak yet stays English, and every language her free ears hear is in Settings");
+                            checks.Add("PASS a new install starts in the PC's own language when she speaks it (Spanish Windows gets Spanish, Norwegian Bokmål gets Norsk, Japanese, Korean, Hindi, Bengali, Tamil, Malayalam, Punjabi, Swahili, Malay, Catalan, Serbian, Finnish, Hungarian, Croatian, Zulu, Nepali, Bosnian, Uzbek, Kazakh, Welsh, Georgian, Armenian, Amharic, Lao, Khmer and Burmese their own, Taiwan and Hong Kong Traditional Chinese and mainland China Simplified), English or a language she doesn't speak yet stays English, and every language her free ears hear is in Settings");
                             if (mainframe.SettingsStatus != "Fran\u00e7ais | 50% | 30% | Often | 10 min | dance | - | Medium | Medium | Quick" || BubbleHold(100) != 4.5 || !preferences.NoIntro || preferences.Sounds != 30 || Sfx.Level != 30 || SleepDue(599000) || !SleepDue(600000)) throw new Exception("The settings page showed the wrong values: " + mainframe.SettingsStatus);
                             mainframe.TypeNickname("  Lachy!!  ");
                             bool namedRight = Nickname == "Lachy" && preferences.Nickname == "Lachy" && mainframe.NicknameShown == "Lachy" && reply == "Got it, Lachy." && Brain.Character.IndexOf("call them: Lachy.", StringComparison.Ordinal) >= 0;
@@ -11708,7 +11717,7 @@ namespace CapriDesktop
                             Hands.Manners("افتح سبوتيفاي", out arabicAsked);
                             string minFadlak = Hands.Manners("من فضلك", out arabicKept);
                             bool spellings = true;
-                            foreach (string spelled in new[] { "abre Spotify porfavor", "apri Spotify perfavore", "открой Spotify плз", "ouvre Spotify sil te plait", "Spotify ဖွင့်ပေးပါ", "ကျေးဇူးပြုပြီး Spotify ဖွင့်ပေး" })
+                            foreach (string spelled in new[] { "abre Spotify porfavor", "apri Spotify perfavore", "открой Spotify плз", "ouvre Spotify sil te plait", "Spotify ဖွင့်ပေးပါ", "ကျေးဇူးပြုပြီး Spotify ဖွင့်ပေး", "გახსენი Spotify გთხოვ", "Spotify-ը բացիր, խնդրում եմ" })
                             {
                                 bool spelledAsked;
                                 Hands.Manners(spelled, out spelledAsked);
@@ -11720,8 +11729,12 @@ namespace CapriDesktop
                             bool burmeseFirst, burmeseKept;
                             Hands.Manners("Spotify ဖွင့်ပေး", out burmeseFirst);
                             string kyayZuPyuPi = Hands.Manners("ကျေးဇူးပြုပြီး", out burmeseKept);
+                            bool georgianFirst, georgianKept;
+                            Hands.Manners("გახსენი Spotify", out georgianFirst);
+                            string gtkhov = Hands.Manners("გთხოვ", out georgianKept);
                             bool anyLanguage = germanAsked && !germanKept && bitte == "öffne Spotify please" && !germanPolite && !japanesePolite && !hindiPolite && !turkishPolite && arabicAsked && minFadlak == "افتح سبوتيفاي please" && !arabicKept
-                                && spellings && spelledFirst && !spelledKept && porfavor == "abre Spotify please" && burmeseFirst && !burmeseKept && kyayZuPyuPi == "Spotify ဖွင့်ပေး please";
+                                && spellings && spelledFirst && !spelledKept && porfavor == "abre Spotify please" && burmeseFirst && !burmeseKept && kyayZuPyuPi == "Spotify ဖွင့်ပေး please"
+                                && georgianFirst && !georgianKept && gtkhov == "გახსენი Spotify please";
                             Hear("open spotify");
                             bool askedInChat = reply == Hands.SayPlease;
                             CloseTalk();
@@ -11794,7 +11807,7 @@ namespace CapriDesktop
                             int[] latinTakes = Look.Takes(latinLines, "CAPRI: " + new string('a', 40), 47);
                             bool hanziFit = hanziLines.TrueForAll(delegate(string wideRow) { return Look.Cells(wideRow) <= 34 && "，。！？".IndexOf(wideRow[0]) < 0; });
                             if (!hanziFit || hanziLines.Count != 4 || Look.Cells(hanziLines[0]) != 31 || hanziShown != 63 || latinLines.Count != 3 || latinTakes[2] != 6 || Look.Cells(hanzi) != 28 || Look.Cut(hanzi, 5) != hanzi.Substring(0, 2)
-                                || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12).ToArray()) != "CAPRI: hey|choom, long|day?" || SpeechBox.Fit(hanziReply) != 34 || SpeechBox.Fit(hanziReply + hanziReply) != 44 || Brain.Languages[60, 0] != "简体中文")
+                                || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12).ToArray()) != "CAPRI: hey|choom, long|day?" || SpeechBox.Fit(hanziReply) != 34 || SpeechBox.Fit(hanziReply + hanziReply) != 44 || Brain.Languages[62, 0] != "简体中文")
                                 throw new Exception("Chinese didn't fit her bubble: " + string.Join(" | ", hanziLines.ToArray()) + " / shown " + hanziShown + " / long word " + latinTakes[latinTakes.Length - 1]);
                             using (SpeechBox hanziBox = new SpeechBox())
                             {
@@ -11859,6 +11872,8 @@ namespace CapriDesktop
                             string amharicReply = "ሰላም ጓደኛዬ! ዛሬ ቀንህ እንዴት ነበር? ሙዚቃ ልክፈትልህ ወይስ ትንሽ እናውራ? የምትፈልገውን ንገረኝ፣ እኔ ሁሌም እዚህ ነኝ።";
                             string laoReply = "ສະບາຍດີໝູ່! ມື້ນີ້ເຈົ້າເຮັດຫຍັງຢູ່? ຢາກໃຫ້ຂ້ອຍເປີດເພງບໍ ຫຼືເຮົາລົມກັນຫຼິ້ນ?";
                             string khmerReply = "សួស្តីមិត្តភក្តិ! ថ្ងៃនេះអ្នកកំពុងធ្វើអ្វី? ចង់ឱ្យខ្ញុំបើកតន្ត្រីទេ ឬយើងនិយាយគ្នាលេង?";
+                            string georgianReply = "გამარჯობა მეგობარო! როგორ ჩაიარა დღემ? გინდა მუსიკა ჩაგირთო, თუ ცოტა ვილაპარაკოთ? მითხარი, რა გინდა, მე აქ ვარ.";
+                            string armenianReply = "Բարև ընկեր ջան։ Ինչպե՞ս անցավ օրդ։ Ուզո՞ւմ ես երաժշտություն միացնեմ, թե՞ մի քիչ զրուցենք։ Ասա, ինչ ես ուզում, ես միշտ այստեղ եմ։";
                             string indicOver = "";
                             using (Font indicFont = Look.Mono(14f, FontStyle.Regular, GraphicsUnit.Pixel, tamilReply))
                             using (Bitmap indicPage = new Bitmap(1, 1))
@@ -11866,13 +11881,13 @@ namespace CapriDesktop
                             {
                                 indicRuler.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                                 float indicColumn = Look.CharWidth(indicFont);
-                                foreach (string indicReply in new[] { tamilReply, malayalamReply, "अरे चूम, आज का दिन कैसा रहा? मैं तुम्हारे लिए एक गाना चला सकती हूँ, बस बताओ कौन सा।", amharicReply, laoReply, khmerReply })
+                                foreach (string indicReply in new[] { tamilReply, malayalamReply, "अरे चूम, आज का दिन कैसा रहा? मैं तुम्हारे लिए एक गाना चला सकती हूँ, बस बताओ कौन सा।", amharicReply, laoReply, khmerReply, georgianReply, armenianReply })
                                     foreach (string indicRow in Look.Wrap("CAPRI: " + indicReply, 34))
                                         if (indicRuler.MeasureString(indicRow, indicFont, PointF.Empty, StringFormat.GenericTypographic).Width > 34 * indicColumn + 0.5f) indicOver += indicRow + " | ";
                             }
                             string tamilStart = Look.Cut(tamilReply, 8);
-                            if (indicOver.Length > 0 || !Look.Indic("hey " + tamilReply) || !Look.Indic(amharicReply) || Look.Indic("hey choom") || tamilStart.Length == 0 || Look.Cells(tamilStart) > 8 || Look.Cells("hey choom") != 9)
-                                throw new Exception("An Indian script, Amharic, Lao or Khmer passed her bubble's edge: " + indicOver);
+                            if (indicOver.Length > 0 || !Look.Indic("hey " + tamilReply) || !Look.Indic(amharicReply) || !Look.Indic(georgianReply) || !Look.Indic(armenianReply) || Look.Indic("hey choom") || tamilStart.Length == 0 || Look.Cells(tamilStart) > 8 || Look.Cells("hey choom") != 9)
+                                throw new Exception("An Indian script, Amharic, Georgian, Armenian, Lao or Khmer passed her bubble's edge: " + indicOver);
                             // Lao and Khmer write no spaces, so a line breaks between two words, found by the ICU that comes with Windows,
                             // and never inside a letter or between a Khmer letter and the one written under it.
                             int unspacedBreaks = 0;
@@ -11958,7 +11973,7 @@ namespace CapriDesktop
                                 tamilBox.Image.Save(Path.Combine(output, "talk-tamil.png"), ImageFormat.Png);
                                 tamilBox.Hide();
                             }
-                            checks.Add("PASS Indian scripts, Amharic, Lao, Khmer and Burmese in her bubble: their words are measured in the font they're drawn in, so every line stays inside it and the caret follows the last letter, Burmese draws in Myanmar Text since her font has none, and Lao, Khmer and Burmese lines break between words, found by the ICU that comes with Windows, never inside a letter or a syllable");
+                            checks.Add("PASS Indian scripts, Amharic, Georgian, Armenian, Lao, Khmer and Burmese in her bubble: their words are measured in the font they're drawn in, so every line stays inside it and the caret follows the last letter, Burmese draws in Myanmar Text since her font has none, and Lao, Khmer and Burmese lines break between words, found by the ICU that comes with Windows, never inside a letter or a syllable");
                             System.Collections.Generic.List<short[]> effectsHeard = new System.Collections.Generic.List<short[]>();
                             Action<short[]> soundOut = Sfx.Out;
                             Sfx.Out = delegate(short[] sound) { effectsHeard.Add(sound); };

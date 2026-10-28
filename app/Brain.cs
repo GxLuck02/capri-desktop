@@ -435,7 +435,7 @@ namespace CapriDesktop
             { "Polski", "Polish", "pl" }, { "Čeština", "Czech", "cs" }, { "Slovenčina", "Slovak", "sk" }, { "Magyar", "Hungarian", "hu" }, { "Slovenščina", "Slovenian", "sl" },
             { "Hrvatski", "Croatian", "hr" }, { "Bosanski", "Bosnian", "bs" }, { "Srpski", "Serbian", "sr" }, { "Shqip", "Albanian", "sq" }, { "Română", "Romanian", "ro" },
             { "Gaeilge", "Irish", "ga" }, { "Cymraeg", "Welsh", "cy" }, { "Malti", "Maltese", "mt" }, { "Türkçe", "Turkish", "tr" }, { "Azərbaycanca", "Azerbaijani", "az" },
-            { "Oʻzbekcha", "Uzbek", "uz" }, { "Русский", "Russian", "ru" }, { "Українська", "Ukrainian", "uk" }, { "Беларуская", "Belarusian", "be" },
+            { "ქართული", "Georgian", "ka" }, { "Հայերեն", "Armenian", "hy" }, { "Oʻzbekcha", "Uzbek", "uz" }, { "Русский", "Russian", "ru" }, { "Українська", "Ukrainian", "uk" }, { "Беларуская", "Belarusian", "be" },
             { "Български", "Bulgarian", "bg" }, { "Македонски", "Macedonian", "mk" }, { "Қазақша", "Kazakh", "kk" }, { "Монгол", "Mongolian", "mn" }, { "Ελληνικά", "Greek", "el" },
             { "Tiếng Việt", "Vietnamese", "vi" }, { "Bahasa Indonesia", "Indonesian", "id" }, { "Bahasa Melayu", "Malay", "ms" }, { "Basa Jawa", "Javanese", "jv" },
             { "Filipino", "Filipino", "fil" }, { "Kiswahili", "Swahili", "sw" }, { "Hausa", "Hausa", "ha" }, { "Yorùbá", "Yoruba", "yo" }, { "Igbo", "Igbo", "ig" },
