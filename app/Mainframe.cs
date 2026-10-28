@@ -2038,7 +2038,7 @@ namespace CapriDesktop
                 if (choice != picked) key.Box.Text = "";
                 picked = choice;
                 service.Text = choice.Name;
-                hint.Text = choice.Hint + (file ? "" : " It only gets the words she says.");
+                hint.Text = choice.Hint;
                 place.Text = file ? "Model folder" : "Address";
                 url.Cue = file ? "Browse to a voice model" : VoiceServer.Address;
                 modelName.Text = file ? "Language" : "Model";
