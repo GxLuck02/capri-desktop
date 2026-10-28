@@ -10299,7 +10299,7 @@ namespace CapriDesktop
                                         rambler.Model = "ramble-test";
                                         rambler.Act = delegate(string name, ToolArguments args) { longOpened.Add("ramble"); return "Wrong."; };
                                         bool rambleStopped = false;
-                                        try { rambler.Ask("tell me about your day"); }
+                                        try { rambler.Ask("look at the game"); }
                                         catch (BrainException) { rambleStopped = true; }
                                         string[] longSent;
                                         lock (longAsked) longSent = longAsked.ToArray();
