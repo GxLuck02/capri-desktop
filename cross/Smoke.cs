@@ -459,7 +459,14 @@ namespace CapriDesktop
                 if (!wrapFits || wrapShown != string.Join("", wrapped).Length || string.Join("", wrapped).Replace(" ", "") != wrapText.Replace(" ", "") || wrapped.Count < 5
                     || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12)) != "CAPRI: hey|choom, long|day?" || !Look.RightToLeft("مرحبا 2077") || !Look.RightToLeft("2077 مرحبا") || Look.RightToLeft("Hey مرحبا"))
                     throw new Exception("Her bubble wrapped wrong: " + string.Join(" | ", wrapped));
-                checks.Add("PASS bubble lines: Chinese, Japanese and Korean take two columns and wrap without spaces, never starting a line with closing punctuation, a long link breaks across lines without losing letters, and Arabic, Urdu, Persian and Hebrew lines read right to left");
+                string thaiText = "CAPRI: เฮ้ เพื่อน วันนี้เหนื่อยไหม อยากให้ฉันเปิดเพลงเบาๆ ให้ฟังระหว่างทำงานหรือเปล่า บอกมาได้เลยนะ";
+                List<string> thaiLines = Look.Wrap(thaiText, 16);
+                bool thaiFits = thaiLines.TrueForAll(delegate(string thaiRow) { return Look.Cells(thaiRow) <= 16 && thaiRow.Length > 0 && Look.Cells(thaiRow[0]) > 0 && "ะาำๅๆ".IndexOf(thaiRow[0]) < 0; });
+                bool[] thaiLetters = Look.Letters("เปิดเพลง");
+                if (!thaiFits || string.Join("", thaiLines).Replace(" ", "") != thaiText.Replace(" ", "") || Look.Cells("วันนี้อากาศดีมาก") != 12 || !Look.Thai("hey วันนี้") || Look.Thai("hey choom")
+                    || thaiLetters[1] || thaiLetters[2] || !thaiLetters[3] || !thaiLetters[4] || thaiLetters[5])
+                    throw new Exception("Thai wrapped wrong: " + string.Join(" | ", thaiLines));
+                checks.Add("PASS bubble lines: Chinese, Japanese and Korean take two columns and wrap without spaces, never starting a line with closing punctuation, a long link breaks across lines without losing letters, Arabic, Urdu, Persian and Hebrew lines read right to left, and Thai breaks between letters, never before a vowel or tone mark");
                 pet.Talk.Dismiss();
                 PixelRect area = Work();
                 shelfAsked = new PixelRect(area.X + area.Width / 2 - Px(350), area.Y + area.Height / 2 - Px(140), Px(700), Px(360));

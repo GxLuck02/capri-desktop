@@ -11583,10 +11583,10 @@ namespace CapriDesktop
                                 if (!offered) unoffered += earsCode + " ";
                             }
                             if (newInstall.Language != "Spanish" || Brain.SystemLanguage(new System.Globalization.CultureInfo("nb-NO")) != "Norwegian" || Brain.SystemLanguage(new System.Globalization.CultureInfo("fil-PH")) != "Filipino"
-                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("en-AU")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("th-TH")) != null || Brain.SystemLanguage(System.Globalization.CultureInfo.InvariantCulture) != null
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("en-AU")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("sw-KE")) != null || Brain.SystemLanguage(System.Globalization.CultureInfo.InvariantCulture) != null
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("ja-JP")) != "Japanese" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ko-KR")) != "Korean" || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-CN")) != "Simplified Chinese"
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-TW")) != "Traditional Chinese" || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-HK")) != "Traditional Chinese" || Brain.LanguageCode("Traditional Chinese") != "zh" || Brain.LanguageCode("Korean") != "ko"
-                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("hi-IN")) != "Hindi" || Brain.SystemLanguage(new System.Globalization.CultureInfo("bn-BD")) != "Bengali" || Brain.Languages[34, 0] != "हिन्दी"
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("hi-IN")) != "Hindi" || Brain.SystemLanguage(new System.Globalization.CultureInfo("bn-BD")) != "Bengali" || Brain.Languages[35, 0] != "हिन्दी"
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("fi-FI")) != "Finnish" || Brain.SystemLanguage(new System.Globalization.CultureInfo("hu-HU")) != "Hungarian" || Brain.SystemLanguage(new System.Globalization.CultureInfo("hr-HR")) != "Croatian" || Brain.LanguageCode("Slovenian") != "sl" || unoffered.Length > 0)
                                 throw new Exception("A new install didn't start in the PC's own language: " + newInstall.Language + (unoffered.Length > 0 ? " / her ears hear languages Settings doesn't offer: " + unoffered : ""));
                             checks.Add("PASS a new install starts in the PC's own language when she speaks it (Spanish Windows gets Spanish, Norwegian Bokmål gets Norsk, Japanese, Korean, Hindi, Bengali, Finnish, Hungarian and Croatian their own, Taiwan and Hong Kong Traditional Chinese and mainland China Simplified), English or a language she doesn't speak yet stays English, and every language her free ears hear is in Settings");
@@ -11687,7 +11687,7 @@ namespace CapriDesktop
                             int[] latinTakes = Look.Takes(latinLines, "CAPRI: " + new string('a', 40), 47);
                             bool hanziFit = hanziLines.TrueForAll(delegate(string wideRow) { return Look.Cells(wideRow) <= 34 && "，。！？".IndexOf(wideRow[0]) < 0; });
                             if (!hanziFit || hanziLines.Count != 4 || Look.Cells(hanziLines[0]) != 31 || hanziShown != 63 || latinLines.Count != 3 || latinTakes[2] != 6 || Look.Cells(hanzi) != 28 || Look.Cut(hanzi, 5) != hanzi.Substring(0, 2)
-                                || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12).ToArray()) != "CAPRI: hey|choom, long|day?" || SpeechBox.Fit(hanziReply) != 34 || SpeechBox.Fit(hanziReply + hanziReply) != 44 || Brain.Languages[30, 0] != "简体中文")
+                                || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12).ToArray()) != "CAPRI: hey|choom, long|day?" || SpeechBox.Fit(hanziReply) != 34 || SpeechBox.Fit(hanziReply + hanziReply) != 44 || Brain.Languages[31, 0] != "简体中文")
                                 throw new Exception("Chinese didn't fit her bubble: " + string.Join(" | ", hanziLines.ToArray()) + " / shown " + hanziShown + " / long word " + latinTakes[latinTakes.Length - 1]);
                             using (SpeechBox hanziBox = new SpeechBox())
                             {
@@ -11720,6 +11720,31 @@ namespace CapriDesktop
                                 arabicBox.Hide();
                             }
                             checks.Add("PASS Arabic, Urdu, Persian and Hebrew in her bubble: a line that starts in their script sits against the right edge and grows leftwards as she types, English lines stay on the left, and a new install picks them from Windows");
+                            // Thai has no spaces between words: a line breaks between two of them, found by Windows' word breaker, and
+                            // the vowel and tone marks above and below a letter take no column.
+                            string thai = "วันนี้อากาศดีมาก";
+                            string thaiReply = "เฮ้ เพื่อน วันนี้เหนื่อยไหม อยากให้ฉันเปิดเพลงเบาๆ ให้ฟังระหว่างทำงานหรือเปล่า บอกมาได้เลยนะ";
+                            System.Collections.Generic.List<string> thaiLines = Look.Wrap("CAPRI: " + thaiReply, 16);
+                            bool thaiFit = thaiLines.TrueForAll(delegate(string thaiRow) { return Look.Cells(thaiRow) <= 16 && Look.Cells(thaiRow[0]) > 0; });
+                            bool[] thaiWords = Look.Breaks("เปิดเพลง"), thaiLetters = Look.Letters("เปิดเพลง");
+                            if (!thaiFit || Look.Cells(thai) != 12 || string.Join("|", Look.Wrap("CAPRI: " + thai, 14).ToArray()) != "CAPRI: วันนี้|อากาศดีมาก"
+                                || string.Join("", thaiLines.ToArray()).Replace(" ", "") != ("CAPRI: " + thaiReply).Replace(" ", "") || !thaiWords[4] || thaiWords[3] || thaiWords[5]
+                                || thaiLetters[1] || thaiLetters[2] || !thaiLetters[3] || !thaiLetters[4] || thaiLetters[5] || Look.Thai("hey choom") || !Look.Thai("hey " + thai)
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("th-TH")) != "Thai" || Brain.LanguageCode("Thai") != "th")
+                                throw new Exception("Thai didn't fit her bubble: " + string.Join(" | ", thaiLines.ToArray()));
+                            using (SpeechBox thaiBox = new SpeechBox())
+                            {
+                                thaiBox.State = TalkState.Online;
+                                thaiBox.Heard = thai.Substring(0, 6);
+                                thaiBox.Reply = thaiReply;
+                                thaiBox.Revealed = thaiReply.Length - 9;
+                                Rectangle thaiArea = Screen.PrimaryScreen.WorkingArea;
+                                thaiBox.Update(clock.Elapsed.TotalSeconds, 1f, new Point(thaiArea.Left + thaiArea.Width / 2, thaiArea.Bottom - 120), new Point(thaiArea.Left + thaiArea.Width / 2, thaiArea.Bottom - 10), thaiArea);
+                                if (thaiBox.Image == null) throw new Exception("A Thai reply drew no bubble.");
+                                thaiBox.Image.Save(Path.Combine(output, "talk-thai.png"), ImageFormat.Png);
+                                thaiBox.Hide();
+                            }
+                            checks.Add("PASS Thai in her bubble: a line breaks between two words, found by Windows' own word breaker, vowel and tone marks take no column, nothing passes the bubble's edge, every letter shows, and a new install on Thai Windows picks Thai");
                             System.Collections.Generic.List<short[]> effectsHeard = new System.Collections.Generic.List<short[]>();
                             Action<short[]> soundOut = Sfx.Out;
                             Sfx.Out = delegate(short[] sound) { effectsHeard.Add(sound); };

@@ -95,7 +95,14 @@ namespace CapriDesktop
                     context.DrawText(words, new Point(right - wide, row2 + i * Line));
                     caret = new Point(right - wide - cw - 2, row2 + i * Line);
                 }
-                else context.DrawText(Look.Text(shown.Substring(name), Look.Regular, Type, Look.Neon), new Point(x + name * cw, row2 + i * Line));
+                else
+                {
+                    string ink = shown.Substring(name);
+                    FormattedText words = Look.Text(ink, Look.Regular, Type, Look.Neon);
+                    context.DrawText(words, new Point(x + name * cw, row2 + i * Line));
+                    // Thai letters don't keep to her columns, so the caret follows what was drawn.
+                    if (Look.Thai(ink)) caret = new Point(x + name * cw + words.WidthIncludingTrailingWhitespace, row2 + i * Line);
+                }
             }
             if (CursorOn) context.FillRectangle(new SolidColorBrush(Look.Neon), new Rect(caret.X + 1, caret.Y + 1, cw * 0.85, Line - 5));
         }

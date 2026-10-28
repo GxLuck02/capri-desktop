@@ -435,7 +435,7 @@ namespace CapriDesktop
             { "Slovenčina", "Slovak", "sk" }, { "Magyar", "Hungarian", "hu" }, { "Slovenščina", "Slovenian", "sl" }, { "Hrvatski", "Croatian", "hr" },
             { "Română", "Romanian", "ro" }, { "Türkçe", "Turkish", "tr" }, { "Русский", "Russian", "ru" }, { "Українська", "Ukrainian", "uk" },
             { "Български", "Bulgarian", "bg" }, { "Ελληνικά", "Greek", "el" }, { "Malti", "Maltese", "mt" }, { "Tiếng Việt", "Vietnamese", "vi" },
-            { "Bahasa Indonesia", "Indonesian", "id" }, { "Filipino", "Filipino", "fil" },
+            { "Bahasa Indonesia", "Indonesian", "id" }, { "Filipino", "Filipino", "fil" }, { "ไทย", "Thai", "th" },
             { "简体中文", "Simplified Chinese", "zh" }, { "繁體中文", "Traditional Chinese", "zh" }, { "日本語", "Japanese", "ja" }, { "한국어", "Korean", "ko" },
             { "हिन्दी", "Hindi", "hi" }, { "বাংলা", "Bengali", "bn" }, { "العربية", "Arabic", "ar" }, { "اردو", "Urdu", "ur" }, { "فارسی", "Persian", "fa" }, { "עברית", "Hebrew", "he" }
         };

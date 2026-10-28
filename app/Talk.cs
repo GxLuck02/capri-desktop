@@ -176,9 +176,10 @@ namespace CapriDesktop
         }
 
         // How many columns a character takes in her mono bubbles: Chinese, Japanese and Korean characters and full-width forms
-        // take two, everything else one.
+        // take two, Thai vowel and tone marks (they sit above or below a letter) none, everything else one.
         internal static int Cells(char c)
         {
+            if (c == 0x0E31 || (c >= 0x0E34 && c <= 0x0E3A) || (c >= 0x0E47 && c <= 0x0E4E)) return 0;
             return (c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0x303E) || (c >= 0x3041 && c <= 0x33FF) || (c >= 0x3400 && c <= 0x4DBF) || (c >= 0x4E00 && c <= 0x9FFF)
                 || (c >= 0xA000 && c <= 0xA4CF) || (c >= 0xA960 && c <= 0xA97F) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xF900 && c <= 0xFAFF) || (c >= 0xFE10 && c <= 0xFE19)
                 || (c >= 0xFE30 && c <= 0xFE6F) || (c >= 0xFF00 && c <= 0xFF60) || (c >= 0xFFE0 && c <= 0xFFE6) ? 2 : 1;
@@ -206,6 +207,16 @@ namespace CapriDesktop
         // Right-to-left lines sit against the bubble's right edge and never wrap inside it.
         internal static readonly StringFormat Leftward = Mirrored();
 
+        // Measures a line with its trailing spaces, for the caret after Thai, whose letters run a little narrower than her columns.
+        internal static readonly StringFormat Spaced = Trailing();
+
+        private static StringFormat Trailing()
+        {
+            StringFormat format = (StringFormat)StringFormat.GenericTypographic.Clone();
+            format.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+            return format;
+        }
+
         private static StringFormat Mirrored()
         {
             StringFormat format = (StringFormat)StringFormat.GenericTypographic.Clone();
@@ -223,9 +234,69 @@ namespace CapriDesktop
             return text.Substring(0, length);
         }
 
+        // True when the text has Thai in it.
+        internal static bool Thai(string text)
+        {
+            foreach (char c in text ?? "") if (c >= 0x0E01 && c <= 0x0E5B) return true;
+            return false;
+        }
+
+        [StructLayout(LayoutKind.Sequential)] private struct ScriptAnalysis { internal ushort Bits; internal ushort State; }
+        [StructLayout(LayoutKind.Sequential)] private struct ScriptItem { internal int Start; internal ScriptAnalysis Analysis; }
+        [DllImport("usp10.dll", CharSet = CharSet.Unicode)] private static extern int ScriptItemize(string text, int length, int most, IntPtr control, IntPtr state, [Out] ScriptItem[] items, out int count);
+        [DllImport("usp10.dll", CharSet = CharSet.Unicode)] private static extern int ScriptBreak(string text, int length, ref ScriptAnalysis analysis, [Out] byte[] marks);
+
+        // Where a line may break inside a word with Thai in it. Thai writes no spaces between words, so Windows' own word
+        // breaker finds them.
+        internal static bool[] Breaks(string word)
+        {
+            bool[] breaks = new bool[word.Length];
+            try
+            {
+                ScriptItem[] items = new ScriptItem[word.Length + 1];
+                int count = 0;
+                bool found = word.Length > 0 && ScriptItemize(word, word.Length, word.Length, IntPtr.Zero, IntPtr.Zero, items, out count) == 0;
+                for (int k = 0; found && k < count; k++)
+                {
+                    string part = word.Substring(items[k].Start, items[k + 1].Start - items[k].Start);
+                    byte[] marks = new byte[part.Length];
+                    found = ScriptBreak(part, part.Length, ref items[k].Analysis, marks) == 0;
+                    for (int i = 0; found && i < part.Length; i++) breaks[items[k].Start + i] = (marks[i] & 1) != 0;
+                }
+                if (found) return breaks;
+            }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+            return Letters(word);
+        }
+
+        // Without a word breaker a Thai line can still break between letters: never before a vowel or tone mark, or a vowel
+        // that follows its letter, and never after a vowel written before its letter.
+        internal static bool[] Letters(string word)
+        {
+            bool[] breaks = new bool[word.Length];
+            for (int i = 1; i < word.Length; i++)
+                breaks[i] = Cells(word[i]) > 0 && "ฯะาำๅๆ".IndexOf(word[i]) < 0 && (word[i - 1] < 0x0E40 || word[i - 1] > 0x0E44);
+            return breaks;
+        }
+
+        // The longest start of a word with Thai in it that ends where a line may break and fits in that many columns.
+        internal static string Fill(string word, int columns)
+        {
+            bool[] breaks = Breaks(word);
+            int cells = 0, end = 0;
+            for (int i = 0; i < word.Length; i++)
+            {
+                if (breaks[i]) end = i;
+                cells += Cells(word[i]);
+                if (cells > columns) return word.Substring(0, end);
+            }
+            return word;
+        }
+
         // Lines by columns, so Chinese, Japanese and Korean fit the bubble too. They have no spaces to break at, so a run of
-        // them fills the rest of a line and carries on below, the way they're written. Other words only break when they're
-        // longer than a whole line.
+        // them fills the rest of a line and carries on below, the way they're written. Thai does the same between its words.
+        // Other words only break when they're longer than a whole line.
         internal static List<string> Wrap(string text, int columns)
         {
             List<string> lines = new List<string>();
@@ -233,9 +304,10 @@ namespace CapriDesktop
             foreach (string piece in (text ?? "").Split(' '))
             {
                 string word = piece;
-                if (word.Length > 0 && Cells(word[0]) == 2 && line.Length > 0 && Cells(line) + 1 + Cells(word) > columns)
+                bool thai = Thai(word);
+                if (word.Length > 0 && (Cells(word[0]) == 2 || thai) && line.Length > 0 && Cells(line) + 1 + Cells(word) > columns)
                 {
-                    string start = Kept(word, Cut(word, columns - Cells(line) - 1));
+                    string start = thai ? Fill(word, columns - Cells(line) - 1) : Kept(word, Cut(word, columns - Cells(line) - 1));
                     if (start.Length > 0) { line += " " + start; word = word.Substring(start.Length); }
                     lines.Add(line);
                     line = "";
@@ -243,7 +315,8 @@ namespace CapriDesktop
                 while (Cells(word) > columns)
                 {
                     if (line.Length > 0) { lines.Add(line); line = ""; }
-                    string cut = Kept(word, Cut(word, columns));
+                    string cut = thai ? Fill(word, columns) : "";
+                    if (cut.Length == 0) cut = Kept(word, Cut(word, columns));
                     if (cut.Length == 0) cut = word.Substring(0, 1);
                     lines.Add(cut);
                     word = word.Substring(cut.Length);
@@ -2122,7 +2195,7 @@ namespace CapriDesktop
                             else
                             {
                                 graphics.DrawString(words, text, ink, from, row2 + i * line, StringFormat.GenericTypographic);
-                                caret = new PointF(x + Look.Cells(shown) * cw, row2 + i * line);
+                                caret = new PointF(Look.Thai(words) ? from + graphics.MeasureString(words, text, PointF.Empty, Look.Spaced).Width : x + Look.Cells(shown) * cw, row2 + i * line);
                             }
                         }
                         if (cursorOn) graphics.FillRectangle(ink, caret.X + s, caret.Y + s, cw * 0.85f, line - 5 * s);
