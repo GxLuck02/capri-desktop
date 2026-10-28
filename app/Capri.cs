@@ -187,10 +187,17 @@ namespace CapriDesktop
         [DataMember] public bool QuickHands;
         [DataMember] public bool Bypass;
         [DataMember] public bool HdVoice;
+        [DataMember] public int VoicePitch;
+        [DataMember] public int VoiceSpeed = 100;
+        [DataMember] public int VoiceGlitch;
+        // Her HD voice keeps its own glitch, a little out of the box.
+        [DataMember] public int HdGlitch = VoiceFx.HdDefault;
 
         [OnDeserializing]
         private void Defaults(StreamingContext context)
         {
+            VoiceSpeed = 100;
+            HdGlitch = VoiceFx.HdDefault;
             Size = 240;
             Motion = true;
             OnTop = true;
@@ -728,6 +735,8 @@ namespace CapriDesktop
         private readonly LocalEars parakeet;
         private readonly Presence presence;
         private bool settingUpEars, settingUpHd, wakingHd, hdTest;
+        // A voice check she says once her HD voice wakes, in place of her usual one.
+        private string hdLine;
         private long voiceGot, voiceTotal, earsGot, earsTotal, hdGot, hdTotal, graphics = -1;
         private double hdRest = -1, hdUsed = -1, hdChecked = -1;
         private bool? hdFitsTest;
@@ -742,6 +751,9 @@ namespace CapriDesktop
         private readonly Speaker speaker;
         private readonly Speaker effects;
         private readonly Speaker typist;
+        private readonly System.Windows.Forms.Timer chatTail;
+        private VoiceFx.Live chatFx;
+        private int chatRate = 16000;
         private volatile bool voiceBroken;
         private volatile Agent agent;
         private bool chatting;
@@ -887,6 +899,10 @@ namespace CapriDesktop
             Brain.Recall = preferences.Recall == 16 || preferences.Recall == 32 ? preferences.Recall : 8;
             if (!smoke) brain.Load(Path.Combine(data, "chat.json"));
             Voice.Loudness = Math.Max(0, Math.Min(150, preferences.Volume));
+            VoiceFx.Pitch = Math.Max(-VoiceFx.MostPitch, Math.Min(VoiceFx.MostPitch, preferences.VoicePitch));
+            VoiceFx.Speed = Math.Max(VoiceFx.Slowest, Math.Min(VoiceFx.Fastest, preferences.VoiceSpeed));
+            VoiceFx.Glitch = Math.Max(0, Math.Min(100, preferences.VoiceGlitch));
+            VoiceFx.HdGlitch = Math.Max(0, Math.Min(100, preferences.HdGlitch));
             Sfx.Level = Math.Max(0, Math.Min(100, preferences.Sounds));
             Sfx.Out = delegate(short[] sound) { Post(delegate { Effect(sound); }); };
             Sfx.TypeOut = delegate(short[] sound) { if (IsDisposed) return; try { typist.Open(Sfx.Rate); typist.Play(sound); } catch (Exception) { } };
@@ -1008,6 +1024,9 @@ namespace CapriDesktop
             frames = new System.Windows.Forms.Timer();
             frames.Interval = 33;
             frames.Tick += delegate { Tick(); };
+            chatTail = new System.Windows.Forms.Timer();
+            chatTail.Interval = 120;
+            chatTail.Tick += delegate { ChatTail(); };
             signals = new System.Windows.Forms.Timer();
             signals.Interval = 250;
             signals.Tick += delegate
@@ -2400,6 +2419,37 @@ namespace CapriDesktop
         {
             Voice.Loudness = Math.Max(0, Math.Min(150, percent));
             preferences.Volume = Voice.Loudness;
+            SavePreferences();
+        }
+
+        internal int VoicePitch { get { return VoiceFx.Pitch; } }
+
+        internal int VoiceSpeed { get { return VoiceFx.Speed; } }
+
+        // Her HD voice keeps its own glitch; her other voices share one. The glitch slider shows the one for the voice she speaks with.
+        internal bool GlitchHd { get { return preferences.HdVoice && (preferences.Quiet || voiceBroke || (Speak == null && voice.Key == null)); } }
+
+        internal int VoiceGlitch { get { return GlitchHd ? VoiceFx.HdGlitch : VoiceFx.Glitch; } }
+
+        internal void SetVoicePitch(int semitones)
+        {
+            VoiceFx.Pitch = Math.Max(-VoiceFx.MostPitch, Math.Min(VoiceFx.MostPitch, semitones));
+            preferences.VoicePitch = VoiceFx.Pitch;
+            SavePreferences();
+        }
+
+        internal void SetVoiceSpeed(int percent)
+        {
+            VoiceFx.Speed = Math.Max(VoiceFx.Slowest, Math.Min(VoiceFx.Fastest, percent));
+            preferences.VoiceSpeed = VoiceFx.Speed;
+            SavePreferences();
+        }
+
+        internal void SetVoiceGlitch(int percent)
+        {
+            int glitch = Math.Max(0, Math.Min(100, percent));
+            if (GlitchHd) preferences.HdGlitch = VoiceFx.HdGlitch = glitch;
+            else preferences.VoiceGlitch = VoiceFx.Glitch = glitch;
             SavePreferences();
         }
 
@@ -4246,11 +4296,14 @@ namespace CapriDesktop
                 {
                     wakingHd = false;
                     bool test = hdTest;
+                    string line = hdLine;
                     hdTest = false;
+                    hdLine = null;
                     if (stopped) return;
                     if (!preferences.HdVoice) { qwen.Stop(); return; }
-                    if (problem != null) { HdTrouble(problem); return; }
-                    if (test) TestVoice();
+                    if (problem != null) HdTrouble(problem);
+                    if (line != null) CheckVoice(line, true);
+                    else if (test && problem == null) TestVoice();
                 });
             });
         }
@@ -4309,6 +4362,100 @@ namespace CapriDesktop
             Answer(++asking, "Voice link online. Miss me, choom?", TalkState.Talking);
         }
 
+        internal const string StyleLine = "How do I sound now, choom?";
+        internal const string StyleSilent = "My voice is OFF, choom. Pick FREE VOICE to hear that.";
+        internal const string StyleMissing = "Get my free voice under VOICE to hear that, choom.";
+
+        // Letting go of her pitch, speed or glitch slider: she says a line in the voice she's using, so they hear it.
+        // ElevenLabs makes the line once; after that its audio is restyled here, so dragging around spends no more credits.
+        internal void HearVoiceStyle()
+        {
+            bool paid = !preferences.Quiet && !voiceBroke && (Speak != null || voice.Ready);
+            bool free = FreeSpeak != null || kokoro.Installed || (preferences.HdVoice && qwen.Installed);
+            string line = preferences.Silent ? StyleSilent : paid || free ? StyleLine : StyleMissing;
+            if (line == StyleLine && GlitchHd && WakeFor(line)) return;
+            CheckVoice(line, false);
+        }
+
+        private void CheckVoice(string line, bool quiet)
+        {
+            if (hidden) SetHidden(false);
+            brain.Cancel();
+            heard = "voice check";
+            box.Prompt = "> sys: ";
+            Answer(++asking, line, TalkState.Talking, quiet);
+        }
+
+        internal const string HdWaking = "One sec, waking my HD voice.";
+
+        // Her HD voice sleeps after 10 quiet minutes. Rather than say a voice check in the free voice standing in for it,
+        // she wakes it and says the line once it's up.
+        private bool WakeFor(string line)
+        {
+            if (testing || !preferences.HdVoice || preferences.Silent || !qwen.Installed || qwen.Awake || Native.Gaming() || clock.Elapsed.TotalSeconds < hdRest) return false;
+            hdLine = line;
+            WakeHd();
+            if (hidden) SetHidden(false);
+            brain.Cancel();
+            voice.Stop();
+            heard = "voice check";
+            box.Prompt = "> sys: ";
+            Begin(++asking, HdWaking, TalkState.Talking, null);
+            return true;
+        }
+
+        internal const string YourLine = "Got it. I'll talk like you now, choom.";
+        internal const string HerLine = "Back to my own voice, choom.";
+
+        // Their own voice: a clip they pick is read, checked and cut on a worker thread, then saved where her HD voice looks for it.
+        internal void UseYourVoice(string path)
+        {
+            if (!HdFits) { mainframe.VoiceNote(YourVoiceCard, true); return; }
+            mainframe.VoiceNote("Reading your clip...", false);
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string problem;
+                short[] clip = YourVoice.Prepare(path, out problem);
+                Post(delegate { if (clip == null) mainframe.VoiceNote(problem, true); else KeepYourVoice(clip); });
+            });
+        }
+
+        internal const string YourVoiceCard = "Your voice uses her HD voice, and that needs a graphics card with 6 GB or more.";
+
+        internal void KeepYourVoice(short[] clip)
+        {
+            string problem = null;
+            try { YourVoice.Save(clip, qwen.Folder); }
+            catch (IOException error) { problem = error.Message; }
+            catch (UnauthorizedAccessException error) { problem = error.Message; }
+            if (problem != null) { mainframe.VoiceNote(Voice.Short("Couldn't save your voice: " + problem), true); return; }
+            HearClip(YourLine);
+        }
+
+        // One click back to the clip she's built with. Theirs stays beside it for Your voice (HD) in the free voice menu.
+        internal void UseHerVoice()
+        {
+            try { YourVoice.Shelve(qwen.Folder); }
+            catch (IOException error) { mainframe.VoiceNote(Voice.Short("Couldn't switch back: " + error.Message), true); return; }
+            HearClip(HerLine);
+        }
+
+        internal void UseKeptVoice()
+        {
+            try { YourVoice.Unshelve(qwen.Folder); }
+            catch (IOException error) { mainframe.VoiceNote(Voice.Short("Couldn't switch to your voice: " + error.Message), true); return; }
+            HearClip(YourLine);
+        }
+
+        // Her HD voice reads the clip on its next line, so she says one, waking it first if it's asleep. With HD off, picking it sets it up.
+        private void HearClip(string line)
+        {
+            if (!preferences.HdVoice) { ChooseVoiceStyle(QwenVoice.Style); return; }
+            ShowVoice();
+            if (!testing && !qwen.Installed) return;
+            if (!WakeFor(line)) CheckVoice(line, true);
+        }
+
         private void ListVoices(string key, bool connecting)
         {
             mainframe.VoiceNote(connecting ? "Checking key..." : "Loading voices...", false);
@@ -4336,12 +4483,12 @@ namespace CapriDesktop
         {
             bool ready = kokoro.Installed;
             mainframe.ShowVoice(voice.Key == null ? null : Voice.Tail(voice.Key), voice.VoiceId, voice.Model, voices);
-            bool hd = preferences.HdVoice;
-            mainframe.ShowFree(ready, hd ? QwenVoice.Style : kokoro.Style.Name, SettingUpVoice, HdFits);
+            bool hd = preferences.HdVoice, yours = YourVoice.Active(qwen.Folder);
+            mainframe.ShowFree(ready, hd ? QwenVoice.Style : kokoro.Style.Name, SettingUpVoice, HdFits, yours, YourVoice.Saved(qwen.Folder));
             if (!note) return;
             string name = "custom voice";
             if (voices != null) foreach (VoiceEntry entry in voices.Voices) if (entry.Id == voice.VoiceId && entry.Name != null) name = entry.Name;
-            mainframe.VoiceNote(voice.Key == null ? (hd && settingUpHd ? "Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop." : hd && qwen.Installed ? "HD voice on your graphics card. Games get her free voice." : ready ? "Free voice, runs on your PC." : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
+            mainframe.VoiceNote(voice.Key == null ? (hd && settingUpHd ? "Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop." : hd && qwen.Installed ? (yours ? "HD voice from your clip, on your graphics card. Games get her free voice." : "HD voice on your graphics card. Games get her free voice.") : ready ? (yours ? "Free voice, runs on your PC. Your voice only works with HD." : "Free voice, runs on your PC.") : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
         }
 
         private float TalkScale()
@@ -4354,6 +4501,22 @@ namespace CapriDesktop
         private Point Head() { return new Point(anchor.X + PaddingSize + (int)(preferences.Size * (facingLeft ? 0.48f : 0.52f)), anchor.Y + PaddingSize - 4); }
 
         private Point Feet() { return new Point(anchor.X + PaddingSize + (int)(preferences.Size * 0.58f), anchor.Y + PaddingSize + (int)(preferences.Size * 0.99f)); }
+
+        // A test sound's pitch in hertz: the first strong peak of its autocorrelation between 60 and 1000 Hz.
+        private static double Fundamental(short[] sound, int rate)
+        {
+            int from = sound.Length / 4, span = Math.Min(rate / 5, sound.Length / 2), least = rate / 1000, most = rate / 60;
+            double[] match = new double[most + 2];
+            double strongest = 0;
+            for (int lag = least; lag <= most + 1; lag++)
+            {
+                for (int i = from; i < from + span && i + lag < sound.Length; i++) match[lag] += (double)sound[i] * sound[i + lag];
+                if (lag <= most) strongest = Math.Max(strongest, match[lag]);
+            }
+            for (int lag = least + 1; lag <= most; lag++)
+                if (match[lag] >= 0.8 * strongest && match[lag] >= match[lag - 1] && match[lag] >= match[lag + 1]) return (double)rate / lag;
+            return 0;
+        }
 
         private static string FakeServer(string[] replies, System.Collections.Generic.List<string> asked, out System.Net.Sockets.TcpListener listener, int status = 200, int delay = 0, bool drip = false, int missing = 0)
         {
@@ -4869,20 +5032,53 @@ namespace CapriDesktop
                 Post(delegate
                 {
                     if (agent != opened || dropping) return;
-                    if (Unprompted()) { dropping = true; checkedIn = true; speaker.Clear(); return; }
+                    if (Unprompted()) { dropping = true; checkedIn = true; Hush(); return; }
                     stirred = Environment.TickCount;
-                    speaker.Play(samples);
+                    speaker.Play(ChatVoice(samples));
                     if (!frames.Enabled && !hidden) frames.Start();
                 });
             };
-            opened.Interrupted += delegate { Post(delegate { if (agent == opened) speaker.Clear(); }); };
+            opened.Interrupted += delegate { Post(delegate { if (agent == opened) Hush(); }); };
             opened.Closed += delegate(string problem) { Post(delegate { if (agent != opened) return; if (problem != null) ChatFailed(problem); else Rest(); }); };
             agent = opened;
             opened.Start(url, voiceId);
         }
 
+        // ElevenLabs voice chat streams its audio in, so her pitch, speed and glitch go on a chunk at a time.
+        // What the styling still holds back comes out once the stream has been quiet for a moment.
+        private short[] ChatVoice(short[] samples)
+        {
+            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, glitch = VoiceFx.Glitch;
+            if (chatFx != null && (chatFx.Pitch != pitch || chatFx.Speed != speed || chatFx.Glitch != glitch || chatFx.Rate != chatRate))
+            {
+                speaker.Play(chatFx.Flush());
+                chatFx = null;
+            }
+            if (chatFx == null && (pitch != 0 || speed != 100 || glitch > 0)) chatFx = new VoiceFx.Live(chatRate, pitch, speed, glitch, Environment.TickCount, true);
+            if (chatFx == null) return samples;
+            chatTail.Stop();
+            chatTail.Start();
+            return chatFx.Push(samples);
+        }
+
+        private void ChatTail()
+        {
+            chatTail.Stop();
+            if (chatFx != null && agent != null && !dropping) speaker.Play(chatFx.Flush());
+        }
+
+        private void Hush()
+        {
+            speaker.Clear();
+            chatTail.Stop();
+            chatFx = null;
+        }
+
         private void ChatOpened(int rate)
         {
+            chatRate = rate;
+            chatTail.Stop();
+            chatFx = null;
             try
             {
                 speaker.Open(rate);
@@ -4998,7 +5194,7 @@ namespace CapriDesktop
             string blocked = Safety.Stops(text);
             if (blocked == null) Brain.Learn(text);
             dropping = blocked != null;
-            if (blocked != null) { speaker.Clear(); Begin(ticket, blocked, TalkState.Talking, null); return; }
+            if (blocked != null) { Hush(); Begin(ticket, blocked, TalkState.Talking, null); return; }
             string tool;
             ToolArguments args;
             bool shortcut = Hands.Heard(text, out tool, out args);
@@ -5037,13 +5233,13 @@ namespace CapriDesktop
             checkedIn = !spoke;
             spoke = false;
             if (dropping) return;
-            if (checkedIn && Unprompted()) { dropping = true; speaker.Clear(); return; }
+            if (checkedIn && Unprompted()) { dropping = true; Hush(); return; }
             string spoken = Voice.Spoken(text);
             string said = Safety.Filter(spoken);
             if (said != spoken)
             {
                 dropping = true;
-                speaker.Clear();
+                Hush();
                 string ran;
                 lock (shortcutGate) ran = toolAsked ? toolDone ?? shortcutResult : null;
                 if (!string.IsNullOrEmpty(ran)) said = Did(new System.Collections.Generic.List<string> { ran });
@@ -5084,7 +5280,7 @@ namespace CapriDesktop
             ears.Muted = false;
             Hearing.Own = null;
             if (!testing) ThreadPool.QueueUserWorkItem(delegate { parakeet.Dispose(); });
-            speaker.Clear();
+            Hush();
             dropping = false;
             checkedIn = false;
             quietSince = -1;
@@ -5307,7 +5503,8 @@ namespace CapriDesktop
         private byte[] Voiced(Func<string, byte[]> speak, Func<string, byte[]> free, string words, out string problem)
         {
             problem = null;
-            try { return speak(words); }
+            // Her free voices style their own audio; ElevenLabs hands back a finished WAV, so its pitch, speed and glitch go on here.
+            try { return speak == free ? speak(words) : VoiceFx.Styled(speak(words), words); }
             catch (VoiceException error)
             {
                 problem = error.Message;
@@ -5763,6 +5960,7 @@ namespace CapriDesktop
             {
                 clickDelay.Dispose();
                 frames.Dispose();
+                chatTail.Dispose();
                 signals.Dispose();
                 tray.Dispose();
                 menu.Dispose();
@@ -10468,6 +10666,8 @@ namespace CapriDesktop
                             if (pageTabs != null) throw new Exception("Settings page keyboard: " + pageTabs);
                             string pageOverlap = mainframe.Overlap();
                             if (pageOverlap != null) throw new Exception("Settings controls overlap: " + pageOverlap);
+                            string pageOutside = mainframe.Outside();
+                            if (pageOutside != null) throw new Exception("A settings control pokes out of the page: " + pageOutside);
                             // personality.md: her default is 0.7.3's prompt byte for byte, and an edit reaches her chat and voice-chat prompts on her next reply.
                             const string todaysPersona = "895421eeceae91c9ce89fde770fa559ecfcd5ee7721d81882dbd820f34de1c0e";
                             Func<string, string> personaHash = delegate(string text) { using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(new System.Text.UTF8Encoding(false).GetBytes(text))).Replace("-", "").ToLowerInvariant(); };
@@ -10696,7 +10896,186 @@ namespace CapriDesktop
                             SetCharacterSize(sizeBefore);
                             if (sizeShown != "Huge+" || canvasAt500 != 500 + PaddingSize * 2 || sizeCapped != MaxSize || sizeFloored != MinSize || mainframe.SizeStatus != "Medium") throw new Exception("The size slider went wrong: " + sizeShown + " / " + canvasAt500 + " / " + sizeCapped + " / " + sizeFloored + " / " + mainframe.SizeStatus);
                             checks.Add("PASS size slider: ten steps from Tiny (140) to Giant (560), in-between sizes save and show, and sizes stay inside that range");
-                            checks.Add("PASS settings page: language, notes, volume, sounds, bubble time, wander, sleep delay, startup glitch-in, dancing, reply length and chat memory save, reach her prompt and voice, and nothing overlaps");
+                            short[] fxTone = new short[24000];
+                            for (int i = 0; i < fxTone.Length; i++) fxTone[i] = (short)(6000 * Math.Sin(2 * Math.PI * 200 * i / 24000.0) + 3000 * Math.Sin(2 * Math.PI * 400 * i / 24000.0) + 1500 * Math.Sin(2 * Math.PI * 600 * i / 24000.0));
+                            Func<short[], short[], bool> fxSame = delegate(short[] fxOne, short[] fxOther)
+                            {
+                                if (fxOne.Length != fxOther.Length) return false;
+                                for (int fxAt = 0; fxAt < fxOne.Length; fxAt++) if (fxOne[fxAt] != fxOther[fxAt]) return false;
+                                return true;
+                            };
+                            Func<double, double, bool> fxNear = delegate(double fxGot, double fxWanted) { return Math.Abs(fxGot - fxWanted) <= fxWanted * 0.03; };
+                            bool fxPlain = VoiceFx.Kokoro(fxTone, 24000, 0, 0, 1) == fxTone && VoiceFx.Restyled(fxTone, 24000, 0, 100, 0, 1) == fxTone && VoiceFx.Tempo(1.1f, 0, 100) == 1.1f && VoiceFx.Tempo(1.08f, 0, 100) == 1.08f
+                                && fxSame(Voice.Samples(Voice.Wave(VoiceFx.Kokoro(fxTone, 24000, 0, 0, 1), 24000), out loudRate), fxTone);
+                            short[] fxUp = VoiceFx.Kokoro(fxTone, 24000, 6, 0, 1), fxDown = VoiceFx.Kokoro(fxTone, 24000, -6, 0, 1);
+                            short[] fxHd = VoiceFx.Restyled(fxTone, 24000, 4, 100, 0, 1), fxFast = VoiceFx.Restyled(fxTone, 24000, 0, 150, 0, 1), fxSlow = VoiceFx.Restyled(fxTone, 24000, 0, 70, 0, 1);
+                            double fxBase = Fundamental(fxTone, 24000);
+                            bool fxPitched = fxNear(fxBase, 200) && fxNear(Fundamental(fxUp, 24000), 200 * Math.Sqrt(2)) && fxNear(Fundamental(fxDown, 24000), 200 / Math.Sqrt(2)) && Math.Abs(fxUp.Length - 16971) <= 1 && Math.Abs(fxDown.Length - 33941) <= 1
+                                && fxNear(Fundamental(fxHd, 24000), 200 * VoiceFx.Lift(4)) && fxNear(fxHd.Length, 24000) && fxNear(Fundamental(fxFast, 24000), 200) && fxNear(fxFast.Length, 16000) && fxNear(Fundamental(fxSlow, 24000), 200) && fxNear(fxSlow.Length, 34286)
+                                && fxNear(VoiceFx.Tempo(1.1f, 6, 100), 1.1 / Math.Sqrt(2)) && fxNear(VoiceFx.Tempo(1.1f, 0, 150), 1.65) && fxNear(VoiceFx.Tempo(1.1f, -6, 150), 1.65 * Math.Sqrt(2));
+                            short[] fxSpeech = new short[72000];
+                            for (int i = 0; i < fxSpeech.Length; i++) fxSpeech[i] = i % 6000 < 3600 ? (short)(6000 * Math.Sin(2 * Math.PI * 180 * i / 24000.0) + 2500 * Math.Sin(2 * Math.PI * 540 * i / 24000.0)) : (short)0;
+                            int fxLight, fxHeavy;
+                            short[] fxLightly = VoiceFx.Glitched(fxSpeech, 24000, 0.2, 99, out fxLight), fxHeavily = VoiceFx.Glitched(fxSpeech, 24000, 1, 99, out fxHeavy);
+                            bool fxGlitches = VoiceFx.Glitched(fxSpeech, 24000, 0, 99) == fxSpeech && fxLight >= 1 && fxHeavy > fxLight && !fxSame(fxLightly, fxSpeech) && !fxSame(fxHeavily, fxSpeech) && fxSame(VoiceFx.Glitched(fxSpeech, 24000, 1, 99), fxHeavily)
+                                && fxHeavily.Length > fxSpeech.Length / 2 && fxHeavily.Length < fxSpeech.Length * 2 && VoiceFx.Seed("Hey choom.") == VoiceFx.Seed("Hey choom.") && VoiceFx.Seed("Hey choom.") != VoiceFx.Seed("Hey choom!");
+                            SetVoicePitch(3);
+                            SetVoiceSpeed(120);
+                            SetVoiceGlitch(40);
+                            mainframe.Sync();
+                            string fxShown = mainframe.VoiceStyleStatus;
+                            DataContractJsonSerializer fxJson = new DataContractJsonSerializer(typeof(Preferences));
+                            Preferences fxLoaded;
+                            using (MemoryStream fxSaved = new MemoryStream())
+                            {
+                                fxJson.WriteObject(fxSaved, preferences);
+                                fxSaved.Position = 0;
+                                fxLoaded = (Preferences)fxJson.ReadObject(fxSaved);
+                            }
+                            Preferences fxOld = (Preferences)fxJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Volume\":80}")));
+                            bool fxKept = fxShown == "+3 | 1.2x | 40%" && VoiceFx.Pitch == 3 && VoiceFx.Speed == 120 && VoiceFx.Glitch == 40 && fxLoaded.VoicePitch == 3 && fxLoaded.VoiceSpeed == 120 && fxLoaded.VoiceGlitch == 40
+                                && fxOld.VoicePitch == 0 && fxOld.VoiceSpeed == 100 && fxOld.VoiceGlitch == 0 && new Preferences().VoiceSpeed == 100
+                                && fxLoaded.HdGlitch == VoiceFx.HdDefault && fxOld.HdGlitch == VoiceFx.HdDefault && new Preferences().HdGlitch == VoiceFx.HdDefault && VoiceFx.HdGlitch == VoiceFx.HdDefault;
+                            SetVoicePitch(40);
+                            SetVoiceSpeed(5);
+                            SetVoiceGlitch(-3);
+                            bool fxClamped = VoiceFx.Pitch == VoiceFx.MostPitch && VoiceFx.Speed == VoiceFx.Slowest && VoiceFx.Glitch == 0;
+                            SetVoicePitch(0);
+                            SetVoiceSpeed(100);
+                            mainframe.Sync();
+                            // Her HD voice keeps its own glitch, a little out of the box: with it picked, the glitch slider shows and moves that one, and her other voices keep theirs.
+                            bool fxOwnWas = preferences.HdVoice, fxOwnQuiet = preferences.Quiet;
+                            string fxOwnShown, fxOwnWidest, fxOwnPage, fxOwnMoved;
+                            int fxOwnGlitch, fxOwnShared;
+                            preferences.HdVoice = true;
+                            preferences.Quiet = true;
+                            mainframe.ShowSettings(true);
+                            try
+                            {
+                                fxOwnShown = mainframe.VoiceStyleStatus;
+                                mainframe.SlideVoice(2, 12);
+                                fxOwnWidest = mainframe.VoiceStyleStatus;
+                                fxOwnPage = mainframe.Overlap() ?? mainframe.Outside();
+                                snap("mainframe-settings-hd-glitch.png");
+                                mainframe.SlideVoice(2, 4);
+                                asking++;
+                                CloseTalk();
+                                fxOwnMoved = mainframe.VoiceStyleStatus;
+                                fxOwnGlitch = VoiceFx.HdGlitch;
+                                fxOwnShared = VoiceFx.Glitch;
+                            }
+                            finally
+                            {
+                                preferences.HdVoice = fxOwnWas;
+                                preferences.Quiet = fxOwnQuiet;
+                                mainframe.ShowSettings(false);
+                            }
+                            mainframe.Sync();
+                            bool fxPerVoice = fxOwnShown == "Normal | Normal | 10% · HD" && fxOwnWidest == "Normal | Normal | 100% · HD" && fxOwnPage == null && fxOwnMoved == "Normal | Normal | 20% · HD"
+                                && fxOwnGlitch == 20 && preferences.HdGlitch == 20 && fxOwnShared == 0 && preferences.VoiceGlitch == 0 && mainframe.VoiceStyleStatus == "Normal | Normal | Off";
+                            preferences.HdGlitch = VoiceFx.HdGlitch = VoiceFx.HdDefault;
+                            string fxHeard = null, fxPaid = null;
+                            bool fxQuietWas = preferences.Quiet;
+                            Func<string, byte[]> fxFreeWas = FreeSpeak, fxSpeakWas = Speak;
+                            FreeSpeak = delegate(string fxWords) { fxHeard = fxWords; return Voice.Wave(fxTone, 24000); };
+                            Speak = delegate(string fxWords) { fxPaid = fxWords; return Voice.Wave(fxTone, 24000); };
+                            int fxAsked, fxStill;
+                            string fxFreeHeard, fxFreePaid;
+                            try
+                            {
+                                // FREE VOICE picked: the line comes from her free voice.
+                                preferences.Quiet = true;
+                                mainframe.SlideVoice(0, 9);
+                                for (int fxTry = 0; fxTry < 150 && fxHeard == null; fxTry++) Thread.Sleep(20);
+                                fxFreeHeard = fxHeard;
+                                fxFreePaid = fxPaid;
+                                fxAsked = asking;
+                                mainframe.SlideVoice(0, 9);
+                                fxStill = asking;
+                                // ELEVENLABS picked: the line comes from ElevenLabs, with the sliders on its audio.
+                                fxHeard = null;
+                                preferences.Quiet = false;
+                                mainframe.SlideVoice(1, 5);
+                                for (int fxTry = 0; fxTry < 150 && fxPaid == null; fxTry++) Thread.Sleep(20);
+                            }
+                            finally
+                            {
+                                preferences.Quiet = fxQuietWas;
+                                FreeSpeak = fxFreeWas;
+                                Speak = fxSpeakWas;
+                            }
+                            bool fxPreviewed = fxFreeHeard == Voice.Spoken(StyleLine) && fxFreePaid == null && heard == "voice check" && fxAsked == fxStill && fxPaid == Voice.Spoken(StyleLine) && fxHeard == null
+                                && VoiceFx.Pitch == 3 && VoiceFx.Speed == 120 && preferences.VoicePitch == 3 && mainframe.VoiceStyleStatus == "+3 | 1.2x | Off";
+                            asking++;
+                            CloseTalk();
+                            SetVoicePitch(0);
+                            SetVoiceSpeed(100);
+                            mainframe.Sync();
+                            // ElevenLabs replies come back finished, so Voiced styles them; at the defaults they pass through untouched.
+                            byte[] fxElevenTone = Voice.Wave(fxTone, 24000);
+                            Func<string, byte[]> fxEleven = delegate(string fxWords) { return fxElevenTone; };
+                            string fxProblem;
+                            bool fxElevenPlain = Voiced(fxEleven, null, "Hey choom.", out fxProblem) == fxElevenTone;
+                            VoiceFx.Pitch = 6;
+                            int fxElevenRate;
+                            short[] fxElevenLifted;
+                            try { fxElevenLifted = Voice.Samples(Voiced(fxEleven, null, "Hey choom.", out fxProblem), out fxElevenRate); }
+                            finally { VoiceFx.Pitch = 0; }
+                            bool fxElevenStyled = fxElevenPlain && fxProblem == null && fxElevenRate == 24000 && fxNear(Fundamental(fxElevenLifted, 24000), 200 * Math.Sqrt(2)) && fxNear(fxElevenLifted.Length, 24000);
+                            // Streamed in chunks of any size, her voice comes out the same as styled whole.
+                            Random fxChunks = new Random(4);
+                            bool fxStreams = true;
+                            foreach (int[] fxSet in new[] { new[] { 24000, 4, 120, 50 }, new[] { 16000, -3, 80, 30 }, new[] { 16000, 0, 100, 60 } })
+                            {
+                                short[] fxSaid = new short[fxSet[0] * 3];
+                                for (int i = 0; i < fxSaid.Length; i++) fxSaid[i] = i % (fxSet[0] / 4) < fxSet[0] / 6 ? (short)(7000 * Math.Sin(2 * Math.PI * 170 * i / fxSet[0]) + 2000 * Math.Sin(2 * Math.PI * 510 * i / fxSet[0])) : (short)(fxChunks.Next(200) - 100);
+                                short[] fxWhole = new VoiceFx.Live(fxSet[0], fxSet[1], fxSet[2], fxSet[3], 77, true).All(fxSaid);
+                                VoiceFx.Live fxLive = new VoiceFx.Live(fxSet[0], fxSet[1], fxSet[2], fxSet[3], 77, true);
+                                System.Collections.Generic.List<short> fxPieces = new System.Collections.Generic.List<short>();
+                                for (int fxAt = 0; fxAt < fxSaid.Length; )
+                                {
+                                    short[] fxPiece = new short[Math.Min(fxSaid.Length - fxAt, 1 + fxChunks.Next(fxChunks.Next(3) == 0 ? 20 : 4000))];
+                                    Array.Copy(fxSaid, fxAt, fxPiece, 0, fxPiece.Length);
+                                    fxPieces.AddRange(fxLive.Push(fxPiece));
+                                    fxAt += fxPiece.Length;
+                                }
+                                fxPieces.AddRange(fxLive.Flush());
+                                fxStreams &= fxSame(fxPieces.ToArray(), fxWhole) && fxNear(Fundamental(fxWhole, fxSet[0]), 170 * VoiceFx.Lift(fxSet[1]));
+                            }
+                            // ElevenLabs voice chat: chunks go through ChatVoice, and the held tail comes out when the stream goes quiet.
+                            int fxRateWas = chatRate;
+                            short[] fxChatChunk = new short[320];
+                            for (int i = 0; i < fxChatChunk.Length; i++) fxChatChunk[i] = (short)(7000 * Math.Sin(2 * Math.PI * 190 * i / 16000.0));
+                            chatRate = 16000;
+                            bool fxChatPlain = ChatVoice(fxChatChunk) == fxChatChunk && chatFx == null;
+                            System.Collections.Generic.List<short> fxChatHeard = new System.Collections.Generic.List<short>();
+                            short[] fxChatSaid = new short[16000 * 2];
+                            for (int i = 0; i < fxChatSaid.Length; i++) fxChatSaid[i] = (short)(7000 * Math.Sin(2 * Math.PI * 190 * i / 16000.0));
+                            bool fxChatArmed;
+                            VoiceFx.Pitch = 6;
+                            try
+                            {
+                                for (int fxAt = 0; fxAt < fxChatSaid.Length; fxAt += 320)
+                                {
+                                    short[] fxPiece = new short[320];
+                                    Array.Copy(fxChatSaid, fxAt, fxPiece, 0, 320);
+                                    fxChatHeard.AddRange(ChatVoice(fxPiece));
+                                }
+                                fxChatArmed = chatTail.Enabled && chatFx != null && chatFx.Pitch == 6;
+                                fxChatHeard.AddRange(chatFx.Flush());
+                                Hush();
+                            }
+                            finally
+                            {
+                                VoiceFx.Pitch = 0;
+                                chatRate = fxRateWas;
+                            }
+                            short[] fxChatOut = fxChatHeard.ToArray();
+                            bool fxChatStyled = fxChatPlain && fxChatArmed && !chatTail.Enabled && chatFx == null && fxNear(Fundamental(fxChatOut, 16000), 190 * Math.Sqrt(2)) && fxNear(fxChatOut.Length, fxChatSaid.Length);
+                            if (!fxPlain || !fxPitched || !fxGlitches || !fxKept || !fxClamped || !fxPerVoice || !fxPreviewed || !fxElevenStyled || !fxStreams || !fxChatStyled || mainframe.VoiceStyleStatus != "Normal | Normal | Off")
+                                throw new Exception("Her voice's sliders went wrong: plain " + fxPlain + ", pitched " + fxPitched + " (" + fxBase.ToString("0") + " / " + Fundamental(fxUp, 24000).ToString("0") + " / " + Fundamental(fxDown, 24000).ToString("0") + " / " + Fundamental(fxHd, 24000).ToString("0") + " Hz, " + fxUp.Length + " / " + fxDown.Length + " / " + fxHd.Length + " / " + fxFast.Length + " / " + fxSlow.Length + "), glitches " + fxGlitches + " (" + fxLight + " / " + fxHeavy + "), kept " + fxKept + " (" + fxShown + "), clamped " + fxClamped + ", HD glitch " + fxPerVoice + " (" + fxOwnShown + " / " + fxOwnWidest + " / " + fxOwnMoved + " / " + fxOwnPage + " / " + fxOwnGlitch + " / " + fxOwnShared + "), previewed " + fxPreviewed +" (" + fxFreeHeard + " / " + fxFreePaid + " / " + fxPaid + "), ElevenLabs " + fxElevenStyled + ", streams " + fxStreams + ", voice chat " + fxChatStyled + " (" + Fundamental(fxChatOut, 16000).ToString("0") + " Hz, " + fxChatOut.Length + " samples)");
+                            checks.Add("PASS voice sliders: Pitch (-6 to +6 semitones), Speed (0.7x to 1.5x) and Glitch (Off to 100%) leave her free and ElevenLabs voices byte for byte the same at their defaults; her HD voice keeps its own glitch, 10% out of the box, which the slider shows as 10% · HD and moves without touching her other voices; pitch moves her fundamental (200 Hz to 283 and 141 Hz) while Kokoro's own speed keeps her pace, and her HD and ElevenLabs voices keep their length through a time-stretch; glitch adds stutters, crushed bits and skips that grow with the slider and repeat the same way for the same line; ElevenLabs voice chat is styled as it streams, the same as styling it whole, and its tail comes out once the stream goes quiet; the values save, load and clamp; and letting go of a slider has her say a line in the voice she's using");
+                            checks.Add("PASS settings page: language, notes, volume, sounds, bubble time, wander, sleep delay, startup glitch-in, dancing, reply length and chat memory save, reach her prompt and voice, and nothing overlaps or pokes out of the page");
                             preferences.Watch = false;
                             mainframe.Sync();
                             ShowTiers();
@@ -10787,7 +11166,7 @@ namespace CapriDesktop
                             });
                             string realHost = Voice.Host;
                             Voice.Host = "http://127.0.0.1:" + ((IPEndPoint)fake.LocalEndpoint).Port;
-                            byte[] fetched;
+                            byte[] fetched, fetchedAgain;
                             try
                             {
                                 Voice probe = new Voice();
@@ -10797,6 +11176,8 @@ namespace CapriDesktop
                                 try { probe.Speak("Hi \"choom\"."); throw new Exception("A 401 reply did not throw."); }
                                 catch (VoiceException error) { if (error.Status != 401 || error.Message != "ElevenLabs rejected the key. Press Forget, paste a new one.") throw new Exception("HTTP errors read wrong: " + error.Status + " " + error.Message); }
                                 fetched = probe.Speak("Hi \"choom\".");
+                                // The fake server answers twice, so a third request for the same line would fail.
+                                fetchedAgain = probe.Speak("Hi \"choom\".");
                             }
                             finally
                             {
@@ -10805,6 +11186,7 @@ namespace CapriDesktop
                             }
                             string sent;
                             lock (asked) sent = string.Join("\n", asked.ToArray());
+                            if (fetchedAgain != fetched) throw new Exception("The same ElevenLabs line twice in a row was paid for twice.");
                             if (fetched.Length != tone.Length || sent.IndexOf("POST /v1/text-to-speech/abc?output_format=wav_24000", StringComparison.Ordinal) < 0 || sent.IndexOf("xi-api-key: sk_test_capri_1234", StringComparison.OrdinalIgnoreCase) < 0 || sent.IndexOf("{\"text\":\"Hi \\\"chewm\\\".\",\"model_id\":\"eleven_v3\"}", StringComparison.Ordinal) < 0) throw new Exception("ElevenLabs request was wrong: " + sent);
                             if (Voice.Sayable("Yezzirrr! Choom, that's PREEM, chooms. Supreme.") != "Yessirrr! Chewm, that's PREME, chewms. Supreme." || Voice.Unsaid("Chewm, a preme rig. Supreme chewms.") != "Choom, a preem rig. Supreme chooms.") throw new Exception("Slang respelling is wrong: " + Voice.Sayable("Choom, that's PREEM, chooms. Supreme."));
                             string readOut = Voice.Sayable("Grab me at https://www.capri-desktop.com/download. Tell your chooms & me 100% \U0001F525 w/ hype -> now");
@@ -11136,6 +11518,175 @@ namespace CapriDesktop
                             ChooseVoiceStyle(LocalVoice.Styles[0].Name);
                             hdFitsTest = null;
                             checks.Add("PASS HD voice: off by default, offered under the free voice only with a 6 GB graphics card, picking it sticks, and picking another free voice turns it off");
+                            // Their own voice: a clip in any coding Windows reads becomes a 24 kHz mono 16-bit reference with its quiet ends cut, a bad clip
+                            // says why in plain words, and the free voice menu and the Her voice button switch between their clip and hers.
+                            string yvRoot = Path.Combine(output, "your-voice");
+                            Directory.CreateDirectory(yvRoot);
+                            int yvSource = 44100;
+                            short[] yvSaid = new short[yvSource * 8];
+                            for (int i = yvSource; i < yvSource * 7; i++) yvSaid[i] = (short)(9000 * Math.Sin(2 * Math.PI * 150 * i / yvSource) + 3000 * Math.Sin(2 * Math.PI * 450 * i / yvSource));
+                            Func<byte[], int, int, int, bool, byte[]> yvWav = delegate(byte[] yvData, int yvChannels, int yvBits, int yvFormat, bool yvExtensible)
+                            {
+                                int yvFmt = yvExtensible ? 40 : 16;
+                                using (MemoryStream yvStream = new MemoryStream())
+                                using (BinaryWriter yvWriter = new BinaryWriter(yvStream))
+                                {
+                                    yvWriter.Write(System.Text.Encoding.ASCII.GetBytes("RIFF"));
+                                    yvWriter.Write(4 + 12 + 8 + yvFmt + 8 + yvData.Length);
+                                    yvWriter.Write(System.Text.Encoding.ASCII.GetBytes("WAVELIST"));
+                                    yvWriter.Write(4);
+                                    yvWriter.Write(System.Text.Encoding.ASCII.GetBytes("INFOfmt "));
+                                    yvWriter.Write(yvFmt);
+                                    yvWriter.Write((ushort)(yvExtensible ? 0xFFFE : yvFormat));
+                                    yvWriter.Write((short)yvChannels);
+                                    yvWriter.Write(yvSource);
+                                    yvWriter.Write(yvSource * yvChannels * yvBits / 8);
+                                    yvWriter.Write((short)(yvChannels * yvBits / 8));
+                                    yvWriter.Write((short)yvBits);
+                                    if (yvExtensible)
+                                    {
+                                        yvWriter.Write((short)22);
+                                        yvWriter.Write((short)yvBits);
+                                        yvWriter.Write(yvChannels == 1 ? 4 : 3);
+                                        yvWriter.Write((short)yvFormat);
+                                        yvWriter.Write(new byte[] { 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71 });
+                                    }
+                                    yvWriter.Write(System.Text.Encoding.ASCII.GetBytes("data"));
+                                    yvWriter.Write(yvData.Length);
+                                    yvWriter.Write(yvData);
+                                    yvWriter.Flush();
+                                    return yvStream.ToArray();
+                                }
+                            };
+                            byte[] yvStereo = new byte[yvSaid.Length * 4], yvFloat = new byte[yvSaid.Length * 4], yv24 = new byte[yvSaid.Length * 3], yv8 = new byte[yvSaid.Length];
+                            for (int i = 0; i < yvSaid.Length; i++)
+                            {
+                                byte[] yvTwo = BitConverter.GetBytes(yvSaid[i]);
+                                yvTwo.CopyTo(yvStereo, i * 4);
+                                yvTwo.CopyTo(yvStereo, i * 4 + 2);
+                                BitConverter.GetBytes(yvSaid[i] / 32768f).CopyTo(yvFloat, i * 4);
+                                yv24[i * 3 + 1] = yvTwo[0];
+                                yv24[i * 3 + 2] = yvTwo[1];
+                                yv8[i] = (byte)(yvSaid[i] / 256 + 128);
+                            }
+                            // 1 s of quiet, 6 s of talking, 1 s of quiet: each comes back as the 6 s with 150 ms either side, at her 150 Hz.
+                            string[] yvNames = { "stereo-16bit.wav", "float-extensible.wav", "mono-24bit.wav", "mono-8bit.wav" };
+                            byte[][] yvFiles = { yvWav(yvStereo, 2, 16, 1, false), yvWav(yvFloat, 1, 32, 3, true), yvWav(yv24, 1, 24, 1, false), yvWav(yv8, 1, 8, 1, false) };
+                            short[] yvClip = null;
+                            for (int yvAt = 0; yvAt < yvNames.Length; yvAt++)
+                            {
+                                string yvPath = Path.Combine(yvRoot, yvNames[yvAt]), yvProblem;
+                                File.WriteAllBytes(yvPath, yvFiles[yvAt]);
+                                short[] yvGot = YourVoice.Prepare(yvPath, out yvProblem);
+                                if (yvGot == null || Math.Abs(yvGot.Length - 151200) > 1200 || Math.Abs(Fundamental(yvGot, 24000) - 150) > 4.5) throw new Exception("Their " + yvNames[yvAt] + " clip didn't come out right: " + (yvGot == null ? yvProblem : yvGot.Length + " samples, " + Fundamental(yvGot, 24000).ToString("0") + " Hz"));
+                                if (yvAt == 0) yvClip = yvGot;
+                            }
+                            // MP3 and M4A go through Windows' own decoders, off the UI thread as in the app. Windows makes the test clips here.
+                            System.Collections.Generic.List<string> yvPacked = new System.Collections.Generic.List<string>();
+                            foreach (string yvKind in new[] { "m4a", "mp3" })
+                            {
+                                string yvPath = Path.Combine(yvRoot, "clip." + yvKind), yvProblem = null, yvUnmade = null;
+                                short[] yvGot = null;
+                                ManualResetEvent yvDone = new ManualResetEvent(false);
+                                ThreadPool.QueueUserWorkItem(delegate
+                                {
+                                    try
+                                    {
+                                        using (FileStream yvIn = File.OpenRead(Path.Combine(yvRoot, yvNames[0])))
+                                        using (FileStream yvOut = File.Create(yvPath))
+                                        {
+                                            Windows.Media.MediaProperties.MediaEncodingProfile yvProfile = yvKind == "m4a" ? Windows.Media.MediaProperties.MediaEncodingProfile.CreateM4a(Windows.Media.MediaProperties.AudioEncodingQuality.Medium) : Windows.Media.MediaProperties.MediaEncodingProfile.CreateMp3(Windows.Media.MediaProperties.AudioEncodingQuality.Medium);
+                                            Windows.Media.Transcoding.PrepareTranscodeResult yvPrepared = new Windows.Media.Transcoding.MediaTranscoder().PrepareStreamTranscodeAsync(yvIn.AsRandomAccessStream(), yvOut.AsRandomAccessStream(), yvProfile).AsTask().Result;
+                                            if (yvPrepared.CanTranscode) yvPrepared.TranscodeAsync().AsTask().Wait();
+                                            else yvUnmade = yvPrepared.FailureReason.ToString();
+                                        }
+                                        if (yvUnmade == null) yvGot = YourVoice.Prepare(yvPath, out yvProblem);
+                                    }
+                                    catch (Exception yvError) { yvUnmade = yvError.GetBaseException().Message; }
+                                    finally { yvDone.Set(); }
+                                });
+                                if (!yvDone.WaitOne(60000)) throw new Exception("Windows took over a minute to make or read a test " + yvKind + " clip.");
+                                bool yvLetGo = true;
+                                try { File.Delete(yvPath); }
+                                catch (IOException) { yvLetGo = false; }
+                                if (yvUnmade != null) { checks.Add("LIMIT your voice: Windows on this PC couldn't make a test " + yvKind.ToUpperInvariant() + " clip (" + yvUnmade + "), so reading one wasn't checked"); continue; }
+                                if (yvGot == null || Math.Abs(yvGot.Length - 151200) > 2400 || Math.Abs(Fundamental(yvGot, 24000) - 150) > 4.5 || !yvLetGo) throw new Exception("Their " + yvKind + " clip didn't come through Windows' decoder: " + (yvGot == null ? yvProblem : yvGot.Length + " samples, " + Fundamental(yvGot, 24000).ToString("0") + " Hz") + (yvLetGo ? "" : ", and it stayed locked"));
+                                yvPacked.Add(yvKind.ToUpperInvariant());
+                            }
+                            string yvShort, yvLong, yvQuiet, yvMissing, yvJunk = null;
+                            short[] yvBrief = new short[24000 * 3], yvLengthy = new short[24000 * 40], yvHush = new short[24000 * 10];
+                            for (int i = 0; i < yvLengthy.Length; i++)
+                            {
+                                short yvWave = (short)(9000 * Math.Sin(i * 0.05));
+                                yvLengthy[i] = yvWave;
+                                if (i < yvBrief.Length) yvBrief[i] = yvWave;
+                                if (i < yvHush.Length) yvHush[i] = (short)(yvWave / 225);
+                            }
+                            YourVoice.Shape(yvBrief, out yvShort);
+                            YourVoice.Shape(yvLengthy, out yvLong);
+                            YourVoice.Shape(yvHush, out yvQuiet);
+                            YourVoice.Prepare(Path.Combine(yvRoot, "gone.wav"), out yvMissing);
+                            string yvJunkPath = Path.Combine(yvRoot, "not-audio.mp3");
+                            File.WriteAllText(yvJunkPath, "not audio at all");
+                            ManualResetEvent yvJunkDone = new ManualResetEvent(false);
+                            ThreadPool.QueueUserWorkItem(delegate { try { YourVoice.Prepare(yvJunkPath, out yvJunk); } finally { yvJunkDone.Set(); } });
+                            yvJunkDone.WaitOne(60000);
+                            if (yvShort != "That clip has only 3 seconds of talking. Pick 5 to 30 seconds of you talking." || yvLong != "That clip is 40 seconds long. Pick 5 to 30 seconds of you talking, or trim it." || yvQuiet != YourVoice.Silent || yvMissing != "That clip isn't there anymore. Pick it again." || yvJunk != YourVoice.Unreadable)
+                                throw new Exception("A bad clip of their voice said the wrong thing: " + yvShort + " / " + yvLong + " / " + yvQuiet + " / " + yvMissing + " / " + yvJunk);
+                            // Picking a clip turns her HD voice on with it; Her voice puts hers back and Your voice (HD) brings theirs back, and she says so.
+                            string yvFolder = qwen.Folder, yvHeard = null, yvCard, yvPicked, yvOverlap, yvHers, yvTheirs;
+                            Func<string, byte[]> yvFreeWas = FreeSpeak;
+                            FreeSpeak = delegate(string yvWords) { yvHeard = yvWords; return Voice.Wave(fxTone, 24000); };
+                            bool yvSavedRight, yvShelved, yvUnshelved;
+                            string yvHerLine, yvYourLine;
+                            try
+                            {
+                                hdFitsTest = false;
+                                UseYourVoice(Path.Combine(yvRoot, yvNames[0]));
+                                yvCard = mainframe.VoiceNoteText;
+                                hdFitsTest = true;
+                                KeepYourVoice(yvClip);
+                                byte[] yvReference = File.ReadAllBytes(Path.Combine(yvFolder, YourVoice.Using));
+                                int yvRate;
+                                yvSavedRight = preferences.HdVoice && Voice.Samples(yvReference, out yvRate).Length == yvClip.Length && yvRate == 24000 && BitConverter.ToInt16(yvReference, 22) == 1 && BitConverter.ToInt16(yvReference, 34) == 16 && !YourVoice.Saved(yvFolder);
+                                mainframe.ShowFree(true, QwenVoice.Style, false, true, true, false);
+                                yvPicked = mainframe.YourVoiceStatus;
+                                yvOverlap = mainframe.Overlap();
+                                snap("mainframe-your-voice.png");
+                                mainframe.ClickHerVoice();
+                                for (int yvTry = 0; yvTry < 150 && yvHeard == null; yvTry++) Thread.Sleep(20);
+                                yvHerLine = yvHeard;
+                                yvHers = mainframe.YourVoiceStatus;
+                                yvShelved = !YourVoice.Active(yvFolder) && YourVoice.Saved(yvFolder) && preferences.HdVoice;
+                                yvHeard = null;
+                                asking++;
+                                bool yvClicked = mainframe.PickFree("Your voice (HD)");
+                                for (int yvTry = 0; yvTry < 150 && yvHeard == null; yvTry++) Thread.Sleep(20);
+                                yvYourLine = yvHeard;
+                                yvTheirs = mainframe.YourVoiceStatus;
+                                yvUnshelved = yvClicked && YourVoice.Active(yvFolder) && !YourVoice.Saved(yvFolder) && preferences.HdVoice;
+                            }
+                            finally
+                            {
+                                FreeSpeak = yvFreeWas;
+                                hdFitsTest = true;
+                            }
+                            asking++;
+                            CloseTalk();
+                            File.Delete(Path.Combine(yvFolder, YourVoice.Using));
+                            File.Delete(Path.Combine(yvFolder, YourVoice.Kept));
+                            if (Directory.GetFileSystemEntries(yvFolder).Length == 0) Directory.Delete(yvFolder);
+                            ChooseVoiceStyle(LocalVoice.Styles[0].Name);
+                            asking++;
+                            CloseTalk();
+                            hdFitsTest = null;
+                            string yvMenu = "HD · her own voice, Your voice (HD) (picked), Pick a new clip of you...";
+                            if (yvCard != YourVoiceCard || !yvSavedRight || yvPicked != "Free voice: Your voice | Her voice | " + yvMenu || yvOverlap != null
+                                || yvHerLine != Voice.Spoken(HerLine) || !yvShelved || yvHers != "Free voice: HD | - | HD · her own voice (picked), Your voice (HD), Pick a new clip of you..."
+                                || yvYourLine != Voice.Spoken(YourLine) || !yvUnshelved || yvTheirs != "Free voice: Your voice | " + (kokoro.Installed ? "Her voice" : "-") + " | " + yvMenu
+                                || preferences.HdVoice || YourVoice.Active(yvFolder) || mainframe.HdChoice != "HD · graphics card, " + Engine.Amount(QwenVoice.PackSize))
+                                throw new Exception("Their voice didn't switch right: card " + yvCard + ", saved " + yvSavedRight + ", picked " + yvPicked + " (" + yvOverlap + "), hers " + yvHerLine + " / " + yvShelved + " / " + yvHers + ", theirs " + yvYourLine + " / " + yvUnshelved + " / " + yvTheirs + ", after " + preferences.HdVoice + " / " + mainframe.HdChoice);
+                            checks.Add("PASS your voice: a clip of them talking as a 16-bit stereo, 24-bit, 8-bit or float WAV" + (yvPacked.Count > 0 ? ", or an " + string.Join(" or an ", yvPacked.ToArray()) + " through Windows' own decoders," : "") + " becomes a 24 kHz mono 16-bit reference for her HD voice with its quiet ends cut; too short, too long, almost silent, unreadable and missing clips each say why in plain words; without a 6 GB graphics card it says Your voice needs HD; picking one turns her HD voice on with their clip; the Her voice button puts hers back and Your voice (HD) in the free voice menu brings theirs back without picking it again, and she says so each time; nothing overlaps");
                             Func<byte[], string> hash = delegate(byte[] bytes) { using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant(); };
                             byte[] hdZip;
                             using (MemoryStream zipped = new MemoryStream())
@@ -11230,7 +11781,10 @@ namespace CapriDesktop
                             try { hdVoice.Speak("Hi."); throw new Exception("A sleeping HD voice spoke."); }
                             catch (VoiceException) { }
                             hdVoice.Attach(hdPort);
-                            byte[] hdSaid = hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom, this is my HD voice.");
+                            // Her HD voice glitches a little out of the box; these checks hear it plain first, then fully glitched.
+                            int hdGlitchWas = VoiceFx.HdGlitch;
+                            VoiceFx.HdGlitch = 0;
+                            byte[] hdSaid =hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom, this is my HD voice.");
                             int hdRate;
                             short[] hdSamples = Voice.Samples(hdSaid, out hdRate);
                             string hdBody;
@@ -11245,6 +11799,33 @@ namespace CapriDesktop
                             short[] hdLongSamples = Voice.Samples(hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)(hdLong), out hdRate);
                             lock (hdAsked) hdCalls = hdAsked.Count - hdCalls;
                             if (hdPieces.Count != 2 || hdPieces[0].Length > QwenVoice.PieceLength || string.Join(" ", hdPieces.ToArray()) != hdLong || hdCalls != 2 || hdTrouble != null || hdLongSamples.Length != 2 * hdWave.Length) throw new Exception("Her HD voice didn't say a long reply a few sentences at a time: " + hdPieces.Count + " pieces / " + hdCalls + " calls / " + hdLongSamples.Length + " samples / " + hdTrouble);
+                            int hdPitchWas = VoiceFx.Pitch;
+                            short[] hdPitched;
+                            VoiceFx.Pitch = 6;
+                            try { hdPitched = Voice.Samples(hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom."), out hdRate); }
+                            finally { VoiceFx.Pitch = hdPitchWas; }
+                            double hdPlain = Fundamental(hdSamples, 24000), hdLifted = Fundamental(hdPitched, 24000);
+                            if (hdTrouble != null || hdPlain < 250 || hdPlain > 285 || Math.Abs(hdLifted - hdPlain * Math.Sqrt(2)) > hdPlain * Math.Sqrt(2) * 0.03 || Math.Abs(hdPitched.Length - hdWave.Length) > hdWave.Length / 50) throw new Exception("Her HD voice didn't follow the pitch slider: " + hdPlain.ToString("0") + " Hz to " + hdLifted.ToString("0") + " Hz, " + hdSamples.Length + " to " + hdPitched.Length + " samples / " + hdTrouble);
+                            short[] hdGlitched;
+                            VoiceFx.HdGlitch = 100;
+                            try { hdGlitched = Voice.Samples(hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)(hdLong), out hdRate); }
+                            finally { VoiceFx.HdGlitch = hdGlitchWas; }
+                            bool hdChanged = hdGlitched.Length != hdLongSamples.Length;
+                            for (int i = 0; !hdChanged && i < hdGlitched.Length; i++) hdChanged = hdGlitched[i] != hdLongSamples[i];
+                            if (hdTrouble != null || !hdChanged || hdGlitchWas != VoiceFx.HdDefault) throw new Exception("Her HD voice didn't follow its glitch slider: " + hdGlitchWas + "% out of the box, " + hdLongSamples.Length + " to " + hdGlitched.Length + " samples / " + hdTrouble);
+                            // Their voice: a saved clip goes out as her reference on the next line, and Her voice puts hers back.
+                            short[] hdTheirs = new short[24000 * 6];
+                            for (int i = 0; i < hdTheirs.Length; i++) hdTheirs[i] = (short)(8000 * Math.Sin(2 * Math.PI * 140 * i / 24000.0));
+                            YourVoice.Save(hdTheirs, hdVoice.Folder);
+                            string hdTheirsClip = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(hdVoice.Folder, YourVoice.Using)));
+                            hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom.");
+                            string hdTheirsBody, hdHersBody;
+                            lock (hdAsked) hdTheirsBody = hdAsked[hdAsked.Count - 1];
+                            YourVoice.Shelve(hdVoice.Folder);
+                            hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom.");
+                            lock (hdAsked) hdHersBody = hdAsked[hdAsked.Count - 1];
+                            if (hdTrouble != null || hdTheirsBody.IndexOf("\"speaker_ref_b64\":\"" + hdTheirsClip + "\"", StringComparison.Ordinal) < 0 || hdHersBody.IndexOf(hdTheirsClip, StringComparison.Ordinal) >= 0 || hdHersBody.IndexOf("\"speaker_ref_b64\":\"UklGR", StringComparison.Ordinal) < 0 || !YourVoice.Saved(hdVoice.Folder) || YourVoice.Active(hdVoice.Folder))
+                                throw new Exception("Her HD voice didn't clone their clip, or didn't go back to hers: " + hdTrouble);
                             hdServer.Stop();
                             byte[] hdBackup = hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Still there?");
                             if (hdBackup != hdTone || hdTrouble == null) throw new Exception("A dead HD voice didn't hand the line to her free voice: " + hdTrouble);
@@ -11275,7 +11856,7 @@ namespace CapriDesktop
                             string[] hdCrashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => LoggedSince(line, hdCrashFrom) && line.Contains(" | HD voice | ") && line.EndsWith(" | llama-server stopped while loading with exit code 0x00000003", StringComparison.Ordinal));
                             if (hdCrash != "Her HD voice crashed loading. Close games, then try again." || hdCrashLines.Length != 1 || hdStopped != "quiet" || hdVoice.Awake) throw new Exception("Her HD voice didn't handle a crash or a stop while waking: " + hdCrash + " / " + hdCrashLines.Length + " log lines / " + hdStopped);
                             Directory.Delete(hdRoot, true);
-                            checks.Add("PASS HD voice speech: a fake /tts server's float PCM becomes a 24 kHz WAV, the request carries her reference clip and respelled words, a long reply goes a few sentences per call so none hits the 41 s cap, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
+                            checks.Add("PASS HD voice speech: a fake /tts server's float PCM becomes a 24 kHz WAV, the request carries her reference clip and respelled words, a long reply goes a few sentences per call so none hits the 41 s cap, the pitch slider lifts it 6 semitones without changing its length, its own glitch (10% out of the box) glitches it, their saved clip goes out as her reference until Her voice puts hers back, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
                             checks.Add("LIMIT HD voice synthesis not run in the smoke test; it needs the 1.5 GB pack and a graphics card");
                             string earsRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "ears-test");
                             if (Directory.Exists(earsRoot)) Directory.Delete(earsRoot, true);
@@ -11422,7 +12003,7 @@ namespace CapriDesktop
                                 checks.Add("PASS free voice speech: " + kokoro.Style.Name + " said a line, " + freeLine.Length + " bytes of WAV");
                             }
                             else checks.Add("LIMIT free voice synthesis not run; the voice pack is not installed on this PC");
-                            checks.Add("PASS voice: key sealed with DPAPI, tags stripped, errors read, real HTTP round trips against a fake ElevenLabs (401 explained, audio fetched), WAV cleanup, mouth from the audio, listing parse, voice and model picks, a blank Voice ID asks for one, forget");
+                            checks.Add("PASS voice: key sealed with DPAPI, tags stripped, errors read, real HTTP round trips against a fake ElevenLabs (401 explained, audio fetched, the same line twice in a row fetched once), WAV cleanup, mouth from the audio, listing parse, voice and model picks, a blank Voice ID asks for one, forget");
                             mainframe.Close();
                             if (mainframe.IsDisposed || !mainframe.Visible || mainframe.WindowState != FormWindowState.Minimized) throw new Exception("Closing the Mainframe quit instead of minimizing.");
                             checks.Add("PASS Mainframe starts in the taskbar, a second launch opens it, it picks a model, and its close button minimizes it");

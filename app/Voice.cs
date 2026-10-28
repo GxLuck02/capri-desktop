@@ -286,8 +286,16 @@ namespace CapriDesktop
             body.Append(Quote(Sayable(text)));
             if (!string.IsNullOrEmpty(model)) body.Append(",\"model_id\":").Append(Quote(model));
             body.Append('}');
-            return Clean(Send(Open("/v1/text-to-speech/" + Uri.EscapeDataString(id) + "?output_format=wav_24000", key, "POST"), Encoding.UTF8.GetBytes(body.ToString())));
+            // The same line twice in a row, like the voice sliders' check line, plays the audio she already has instead of spending credits again.
+            string asked = key + "\n" + id + "\n" + body;
+            Tuple<string, byte[]> last = lastSaid;
+            if (last != null && last.Item1 == asked) return last.Item2;
+            byte[] wav = Clean(Send(Open("/v1/text-to-speech/" + Uri.EscapeDataString(id) + "?output_format=wav_24000", key, "POST"), Encoding.UTF8.GetBytes(body.ToString())));
+            lastSaid = Tuple.Create(asked, wav);
+            return wav;
         }
+
+        private volatile Tuple<string, byte[]> lastSaid;
 
         internal static string Quote(string value)
         {
@@ -518,6 +526,652 @@ namespace CapriDesktop
     }
 
 #if !CROSS
+    // Her voices' pitch, speed and glitch from the Settings page. At their defaults nothing here touches a sample,
+    // except her HD voice, which glitches a little out of the box.
+    internal static class VoiceFx
+    {
+        internal const int MostPitch = 6;
+        internal const int Slowest = 70;
+        internal const int Fastest = 150;
+        internal const int HdDefault = 10;
+        internal static volatile int Pitch;
+        internal static volatile int Speed = 100;
+        // Glitch is kept per voice: one for her free voice styles and ElevenLabs, one for her HD voice.
+        internal static volatile int Glitch;
+        internal static volatile int HdGlitch = HdDefault;
+
+        internal static double Lift(int semitones) { return Math.Pow(2, semitones / 12.0); }
+
+        // Kokoro talks slower or faster itself, so her free voice is made longer or shorter by the pitch's ratio and the resample brings it back.
+        internal static float Tempo(float style, int semitones, int speed)
+        {
+            if (semitones == 0 && speed == 100) return style;
+            return (float)Math.Max(0.5, Math.Min(3, style * speed / 100.0 / Lift(semitones)));
+        }
+
+        // Her free voice after Kokoro, which already took care of the speed.
+        internal static short[] Kokoro(short[] pcm, int rate, int semitones, int glitch, int seed)
+        {
+            if (semitones == 0 && glitch <= 0) return pcm;
+            return new Live(rate, semitones, 100, glitch, seed, false).All(pcm);
+        }
+
+        // Her HD and ElevenLabs voices have no pitch of their own, so a time-stretch keeps a pitch change from speeding her up or slowing her down.
+        internal static short[] Restyled(short[] pcm, int rate, int semitones, int speed, int glitch, int seed)
+        {
+            if (semitones == 0 && speed == 100 && glitch <= 0) return pcm;
+            return new Live(rate, semitones, speed, glitch, seed, true).All(pcm);
+        }
+
+        // A finished WAV, like an ElevenLabs reply, in her current pitch, speed and glitch.
+        internal static byte[] Styled(byte[] wav, string text)
+        {
+            int pitch = Pitch, speed = Speed, glitch = Glitch;
+            if (wav == null || (pitch == 0 && speed == 100 && glitch <= 0)) return wav;
+            int rate;
+            short[] samples = Voice.Samples(wav, out rate);
+            return samples.Length == 0 ? wav : Voice.Wave(Restyled(samples, rate, pitch, speed, glitch, Seed(text)), rate);
+        }
+
+        // The same line glitches the same way every time.
+        internal static int Seed(string text)
+        {
+            int hash = unchecked((int)2166136261u);
+            foreach (char letter in text ?? "") hash = unchecked((hash ^ letter) * 16777619);
+            return hash & 0x7fffffff;
+        }
+
+        // Plays the sound `factor` times faster: higher and shorter by that ratio.
+        internal static short[] Resample(short[] pcm, double factor)
+        {
+            Resampler resampler = new Resampler(factor);
+            return Join(resampler.Push(pcm), resampler.Flush());
+        }
+
+        internal static short[] Glitched(short[] pcm, int rate, double amount, int seed)
+        {
+            int events;
+            return Glitched(pcm, rate, amount, seed, out events);
+        }
+
+        internal static short[] Glitched(short[] pcm, int rate, double amount, int seed, out int events)
+        {
+            events = 0;
+            if (amount <= 0) return pcm;
+            Glitcher glitcher = new Glitcher(rate, amount, seed);
+            short[] made = Join(glitcher.Push(pcm), glitcher.Flush());
+            events = glitcher.Events;
+            return made;
+        }
+
+        private static short[] Join(short[] one, short[] two)
+        {
+            if (two.Length == 0) return one;
+            if (one.Length == 0) return two;
+            short[] both = new short[one.Length + two.Length];
+            Array.Copy(one, both, one.Length);
+            Array.Copy(two, 0, both, one.Length, two.Length);
+            return both;
+        }
+
+        private static short Clip(double value) { return (short)Math.Max(-32768, Math.Min(32767, Math.Round(value))); }
+
+        // Her voice styled as it streams in, a chunk at a time, for ElevenLabs voice chat. Each step holds back only what it still has
+        // to look ahead at, so any chunking sounds the same as styling the whole line at once. Flush lets out what's held at the end.
+        internal sealed class Live
+        {
+            internal readonly int Rate;
+            internal readonly int Pitch;
+            internal readonly int Speed;
+            internal readonly int Glitch;
+            private readonly Stretcher stretcher;
+            private readonly Resampler resampler;
+            private readonly Glitcher glitcher;
+
+            // `timed` is false for Kokoro, which already made the line longer or shorter for the pitch and speed.
+            internal Live(int rate, int semitones, int speed, int glitch, int seed, bool timed)
+            {
+                Rate = rate;
+                Pitch = semitones;
+                Speed = speed;
+                Glitch = glitch;
+                double lift = Lift(semitones), stretch = timed ? lift * 100 / Math.Max(1, speed) : 1;
+                if (Math.Abs(stretch - 1) > 0.001) stretcher = new Stretcher(rate, stretch);
+                if (semitones != 0) resampler = new Resampler(lift);
+                if (glitch > 0) glitcher = new Glitcher(rate, glitch / 100.0, seed);
+            }
+
+            internal short[] Push(short[] chunk)
+            {
+                if (stretcher != null) chunk = stretcher.Push(chunk);
+                if (resampler != null) chunk = resampler.Push(chunk);
+                if (glitcher != null) chunk = glitcher.Push(chunk);
+                return chunk;
+            }
+
+            // The rest of the line. Afterwards it starts over, ready for the next one.
+            internal short[] Flush()
+            {
+                short[] tail = stretcher != null ? stretcher.Flush() : new short[0];
+                if (resampler != null) tail = Join(resampler.Push(tail), resampler.Flush());
+                if (glitcher != null) tail = Join(glitcher.Push(tail), glitcher.Flush());
+                return tail;
+            }
+
+            internal short[] All(short[] pcm) { return Join(Push(pcm), Flush()); }
+        }
+
+        // A windowed sinc, so a higher voice doesn't alias. Output i reads the input around i × factor.
+        private sealed class Resampler
+        {
+            private const int Phases = 256;
+            private const int Reach = 16;
+            private readonly double factor;
+            private readonly int reach;
+            private readonly int taps;
+            private readonly double[] kernel;
+            private readonly List<short> held = new List<short>();
+            private long first;
+            private long made;
+
+            internal Resampler(double factor)
+            {
+                this.factor = factor;
+                double cutoff = Math.Min(1, 1 / factor);
+                reach = (int)Math.Ceiling(Reach / cutoff);
+                taps = 2 * reach;
+                kernel = new double[(Phases + 1) * taps];
+                for (int phase = 0; phase <= Phases; phase++)
+                {
+                    double fraction = (double)phase / Phases, total = 0;
+                    for (int k = 0; k < taps; k++)
+                    {
+                        double x = k - reach + 1 - fraction, t = x * cutoff;
+                        double weight = (Math.Abs(t) < 1e-9 ? 1 : Math.Sin(Math.PI * t) / (Math.PI * t)) * (Math.Abs(x) >= reach ? 0 : 0.5 + 0.5 * Math.Cos(Math.PI * x / reach));
+                        kernel[phase * taps + k] = weight;
+                        total += weight;
+                    }
+                    for (int k = 0; k < taps; k++) kernel[phase * taps + k] /= total;
+                }
+            }
+
+            internal short[] Push(short[] chunk)
+            {
+                held.AddRange(chunk);
+                List<short> output = new List<short>();
+                while ((long)Math.Floor(made * factor) + reach < first + held.Count) output.Add(Next());
+                int drop = (int)Math.Max(0, Math.Min(held.Count, (long)Math.Floor(made * factor) - reach + 1 - first));
+                held.RemoveRange(0, drop);
+                first += drop;
+                return output.ToArray();
+            }
+
+            internal short[] Flush()
+            {
+                List<short> output = new List<short>();
+                long count = (long)Math.Round((first + held.Count) / factor);
+                while (made < count) output.Add(Next());
+                held.Clear();
+                first = made = 0;
+                return output.ToArray();
+            }
+
+            private short Next()
+            {
+                double center = made * factor;
+                long whole = (long)Math.Floor(center);
+                int row = (int)Math.Round((center - whole) * Phases) * taps;
+                long start = whole - reach + 1 - first;
+                double value = 0;
+                for (int k = 0; k < taps; k++)
+                {
+                    long j = start + k;
+                    if (j >= 0 && j < held.Count) value += held[(int)j] * kernel[row + k];
+                }
+                made++;
+                return Clip(value);
+            }
+        }
+
+        // Makes the sound `stretch` times longer at the same pitch: 20 ms windows, each lined up with the one before it within 5 ms (WSOLA).
+        private sealed class Stretcher
+        {
+            private readonly double stretch;
+            private readonly int frame;
+            private readonly int hop;
+            private readonly int tolerance;
+            private readonly double[] window;
+            private readonly List<short> held = new List<short>();
+            private readonly List<double> sum = new List<double>();
+            private readonly List<double> weight = new List<double>();
+            private long first;
+            private long emitted;
+            private long placed;
+            private long previous = -1;
+
+            internal Stretcher(int rate, double stretch)
+            {
+                this.stretch = stretch;
+                frame = Math.Max(32, rate / 50) & ~1;
+                hop = frame / 2;
+                tolerance = Math.Max(1, rate / 200);
+                window = new double[frame];
+                for (int i = 0; i < frame; i++) window[i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / frame);
+            }
+
+            private long Received { get { return first + held.Count; } }
+
+            private long Nominal { get { return (long)Math.Round(placed * hop / stretch); } }
+
+            internal short[] Push(short[] chunk)
+            {
+                held.AddRange(chunk);
+                // A window waits until everything it might read has arrived.
+                while (Nominal + tolerance + frame <= Received && (previous < 0 || previous + hop + frame <= Received)) Place(Nominal, long.MaxValue);
+                return Emit(placed * hop);
+            }
+
+            internal short[] Flush()
+            {
+                long length = Received, count = (long)Math.Round(length * stretch), last = length - frame;
+                short[] made;
+                if (placed == 0 && (last < 2 * tolerance || count < frame)) made = held.ToArray();
+                else
+                {
+                    while (placed * hop < count) Place(Math.Min(last, Nominal), last);
+                    made = Emit(count);
+                }
+                held.Clear();
+                sum.Clear();
+                weight.Clear();
+                first = emitted = placed = 0;
+                previous = -1;
+                return made;
+            }
+
+            private void Place(long nominal, long last)
+            {
+                long best = nominal;
+                if (previous >= 0)
+                {
+                    long natural = Math.Min(last, previous + hop);
+                    double closest = double.MinValue;
+                    for (int shift = -tolerance; shift <= tolerance; shift++)
+                    {
+                        long candidate = nominal + shift;
+                        if (candidate < 0 || candidate > last) continue;
+                        double dot = 0, energy = 1;
+                        for (int j = 0; j < frame; j += 4)
+                        {
+                            double ahead = At(candidate + j);
+                            dot += At(natural + j) * ahead;
+                            energy += ahead * ahead;
+                        }
+                        double score = dot / Math.Sqrt(energy);
+                        if (score > closest) { closest = score; best = candidate; }
+                    }
+                }
+                long at = placed * hop;
+                while (emitted + sum.Count < at + frame) { sum.Add(0); weight.Add(0); }
+                for (int j = 0; j < frame; j++)
+                {
+                    int slot = (int)(at + j - emitted);
+                    sum[slot] += window[j] * At(best + j);
+                    weight[slot] += window[j];
+                }
+                previous = best;
+                placed++;
+            }
+
+            private double At(long index)
+            {
+                long j = index - first;
+                return j >= 0 && j < held.Count ? held[(int)j] : 0;
+            }
+
+            // Lets out the finished samples, then drops input no later window can read.
+            private short[] Emit(long upTo)
+            {
+                int count = (int)Math.Max(0, upTo - emitted);
+                short[] output = new short[count];
+                for (int i = 0; i < count && i < sum.Count; i++) output[i] = weight[i] > 1e-3 ? Clip(sum[i] / weight[i]) : (short)0;
+                int done = Math.Min(count, sum.Count);
+                sum.RemoveRange(0, done);
+                weight.RemoveRange(0, done);
+                emitted += count;
+                long keep = Math.Min(Math.Min(previous >= 0 ? previous + hop : Nominal, Nominal - tolerance), Received - frame - tolerance);
+                int drop = (int)Math.Max(0, Math.Min(held.Count, keep - first));
+                held.RemoveRange(0, drop);
+                first += drop;
+                return output;
+            }
+        }
+
+        // Her glitch: short stutters, crushed bits and skips, landing on sounds rather than silences, and more of them as the slider goes up.
+        private sealed class Glitcher
+        {
+            private readonly int rate;
+            private readonly int block;
+            private readonly int fade;
+            private readonly int reach;
+            private readonly double amount;
+            private readonly double perSecond;
+            private readonly Random random;
+            private readonly List<short> held = new List<short>();
+            private readonly List<double> peaks = new List<double>();
+            private long first;
+            private long peakBase;
+            private long peaked;
+            private long at;
+            private long next;
+            private double loudest;
+            internal int Events;
+
+            internal Glitcher(int rate, double amount, int seed)
+            {
+                this.rate = rate;
+                this.amount = amount;
+                block = Math.Max(1, rate / 100);
+                fade = Math.Max(1, rate / 400);
+                // The furthest an event reads past where it starts: a crush of up to 160 ms.
+                reach = (int)(rate * 0.16) + fade;
+                // About one every 10 seconds at 5%, one every 5 at 10%, three a second at 100%.
+                perSecond = amount * (2 + amount);
+                random = new Random(seed);
+                Restart();
+            }
+
+            private long Received { get { return first + held.Count; } }
+
+            private void Restart()
+            {
+                held.Clear();
+                peaks.Clear();
+                first = peakBase = peaked = at = 0;
+                loudest = 0;
+                next = (long)(rate * (0.1 + random.NextDouble() / perSecond));
+            }
+
+            internal short[] Push(short[] chunk)
+            {
+                held.AddRange(chunk);
+                List<short> output = new List<short>();
+                Run(output, -1);
+                return output.ToArray();
+            }
+
+            internal short[] Flush()
+            {
+                List<short> output = new List<short>();
+                long length = Received;
+                if (length / block >= 20) Run(output, length);
+                else Copy(output, length);
+                Restart();
+                return output.ToArray();
+            }
+
+            // An event waits until the sound it needs has arrived. Sound before the next place one could start goes straight out.
+            private void Run(List<short> output, long length)
+            {
+                bool ending = length >= 0;
+                long blocks = (ending ? length : Received) / block, end = ending ? length - rate / 10 : long.MaxValue;
+                for (; peaked < blocks; peaked++)
+                {
+                    loudest = Math.Max(loudest, Level(peaked));
+                    peaks.Add(loudest);
+                }
+                while (next < end)
+                {
+                    long from = next / block, to = Math.Min(blocks, from + 12);
+                    if (!ending && from + 12 > blocks) break;
+                    long found = -1;
+                    if (to > from)
+                    {
+                        // Loud means above 15% of the loudest block so far.
+                        double floor = 0.15 * peaks[(int)(to - 1 - peakBase)];
+                        for (long b = from; b < to; b++) if (Level(b) > floor) { found = b; break; }
+                    }
+                    if (found < 0) { next += block * 12; continue; }
+                    long start = Math.Max(at, found * block);
+                    if (ending ? start >= end : start + reach >= Received) break;
+                    Copy(output, start);
+                    Event(output, start, ending ? length : long.MaxValue);
+                }
+                Copy(output, ending ? length : Math.Max(at, Math.Min(Received, next / block * block)));
+                int drop = (int)Math.Max(0, Math.Min(held.Count, Math.Min(Math.Min(at, next / block * block), peaked * block) - first));
+                held.RemoveRange(0, drop);
+                first += drop;
+                int stale = (int)Math.Max(0, Math.Min(peaks.Count, next / block - peakBase));
+                peaks.RemoveRange(0, stale);
+                peakBase += stale;
+            }
+
+            private void Event(List<short> output, long start, long length)
+            {
+                double roll = random.NextDouble();
+                if (roll < 0.55)
+                {
+                    // A stutter: a 30 to 50 ms grain, up to 90 ms as the slider goes up, plays two to four times.
+                    int grain = (int)(rate * (0.03 + (0.02 + 0.04 * amount) * random.NextDouble()));
+                    int repeats = 1 + (random.NextDouble() < amount ? 1 : 0) + (random.NextDouble() < amount / 2 ? 1 : 0);
+                    for (int r = 0; r < repeats; r++)
+                        for (int i = 0; i < grain; i++) output.Add((short)(At(start + i) * Math.Min(1, Math.Min(r == 0 ? fade : i, grain - 1 - i) / (double)fade)));
+                    for (int i = 0; i < fade; i++) output.Add((short)(At(start + i) * i / (double)fade));
+                    at = start + fade;
+                }
+                else if (roll < 0.85)
+                {
+                    // Crushed: 40 to 80 ms, up to 160 ms as the slider goes up, held down to fewer, coarser samples.
+                    int span = (int)Math.Min(length - start, (long)(rate * (0.04 + (0.04 + 0.08 * amount) * random.NextDouble())));
+                    int hold = 3 + (int)(random.NextDouble() * (3 + 9 * amount)), coarse = 1 << (8 + (int)Math.Round(4 * amount)), kept = 0;
+                    for (int i = 0; i < span; i++)
+                    {
+                        if (i % hold == 0) kept = At(start + i) / coarse * coarse;
+                        double mix = Math.Min(1, Math.Min(i, span - 1 - i) / (double)fade);
+                        output.Add((short)(At(start + i) * (1 - mix) + kept * mix));
+                    }
+                    at = start + span;
+                }
+                else
+                {
+                    // A skip: 20 to 30 ms, up to 50 ms as the slider goes up, drops out like a scratched disc.
+                    int gap = (int)(rate * (0.02 + (0.01 + 0.02 * amount) * random.NextDouble()));
+                    for (int i = 0; i < fade; i++) output.Add((short)(At(start + i) * (1 - i / (double)fade) + At(start + gap + i) * i / (double)fade));
+                    at = start + gap + fade;
+                }
+                Events++;
+                next = at + (long)(rate * (0.6 + 0.8 * random.NextDouble()) / perSecond);
+            }
+
+            private double Level(long b)
+            {
+                double power = 0;
+                for (long i = b * block; i < (b + 1) * block; i++)
+                {
+                    double sample = At(i);
+                    power += sample * sample;
+                }
+                return Math.Sqrt(power / block);
+            }
+
+            private short At(long index)
+            {
+                long j = index - first;
+                return j >= 0 && j < held.Count ? held[(int)j] : (short)0;
+            }
+
+            private void Copy(List<short> output, long upTo)
+            {
+                for (long i = at; i < upTo; i++) output.Add(At(i));
+                at = Math.Max(at, upTo);
+            }
+        }
+    }
+
+    // Their own voice for her HD voice: a clip of them talking becomes the reference it clones, reference.wav in its folder.
+    // Kokoro's styles and ElevenLabs can't use it: Kokoro's voices are fixed, and ElevenLabs clones voices on its own site.
+    internal static class YourVoice
+    {
+        internal const int Rate = 24000;
+        internal const int Shortest = 5;
+        internal const int Longest = 30;
+        internal const string Using = "reference.wav";
+        internal const string Kept = "your-voice.wav";
+        internal const string Silent = "That clip is almost silent. Record yourself talking, closer to the mic, then pick it again.";
+        internal const string Unreadable = "Windows couldn't read that clip. Pick a WAV, MP3 or M4A of you talking.";
+
+        internal static bool Active(string folder) { return File.Exists(Path.Combine(folder, Using)); }
+
+        internal static bool Saved(string folder) { return File.Exists(Path.Combine(folder, Kept)); }
+
+        // The clip as 24 kHz mono 16-bit, its quiet ends cut and its level evened out, or null with what's wrong in plain words.
+        internal static short[] Prepare(string path, out string problem)
+        {
+            problem = null;
+            try { return Shape(Read(path), out problem); }
+            catch (VoiceException error) { problem = error.Message; return null; }
+        }
+
+        internal static short[] Read(string path)
+        {
+            FileInfo file = new FileInfo(path);
+            if (!file.Exists) throw new VoiceException("That clip isn't there anymore. Pick it again.");
+            bool wave = file.Extension.Equals(".wav", StringComparison.OrdinalIgnoreCase);
+            if (file.Length > (wave ? 64L << 20 : 16L << 20)) throw new VoiceException("That clip is too long. Pick " + Shortest + " to " + Longest + " seconds of you talking.");
+            int rate = 0;
+            float[] mono = null;
+            try { if (wave) mono = Wav(File.ReadAllBytes(path), out rate); }
+            catch (IOException) { throw new VoiceException("Couldn't open that clip. Close the app using it, then pick it again."); }
+            catch (UnauthorizedAccessException) { throw new VoiceException("Windows won't let Capri open that clip. Copy it to your Documents and pick it there."); }
+            // MP3, M4A and WAVs in other codings go through Windows' own decoders (Media Foundation), straight to 24 kHz mono.
+            if (mono == null) mono = Wav(Decode(file.FullName), out rate);
+            if (mono == null) throw new VoiceException(Unreadable);
+            short[] pcm = new short[mono.Length];
+            for (int i = 0; i < mono.Length; i++) pcm[i] = (short)Math.Max(-32768, Math.Min(32767, Math.Round(mono[i] * 32767)));
+            return rate == Rate ? pcm : VoiceFx.Resample(pcm, rate / (double)Rate);
+        }
+
+        // A WAV's sound mixed down to mono: 8, 16, 24 or 32-bit PCM, or 32-bit float. Null for any other coding.
+        internal static float[] Wav(byte[] wav, out int rate)
+        {
+            rate = 0;
+            if (wav.Length < 12 || Encoding.ASCII.GetString(wav, 0, 4) != "RIFF" || Encoding.ASCII.GetString(wav, 8, 4) != "WAVE") return null;
+            int format = 0, channels = 0, bits = 0, at = 12;
+            while (at + 8 <= wav.Length)
+            {
+                string chunk = Encoding.ASCII.GetString(wav, at, 4);
+                int size = BitConverter.ToInt32(wav, at + 4);
+                if (chunk == "fmt " && size >= 16 && at + 24 <= wav.Length)
+                {
+                    format = BitConverter.ToUInt16(wav, at + 8);
+                    channels = BitConverter.ToUInt16(wav, at + 10);
+                    rate = BitConverter.ToInt32(wav, at + 12);
+                    bits = BitConverter.ToUInt16(wav, at + 22);
+                    // WAVE_FORMAT_EXTENSIBLE keeps the real coding at the start of its sub-format GUID.
+                    if (format == 0xFFFE && size >= 40 && at + 34 <= wav.Length) format = BitConverter.ToUInt16(wav, at + 32);
+                }
+                if (chunk == "data")
+                {
+                    if ((format != 1 && format != 3) || channels < 1 || rate < 4000 || (format == 1 && bits != 8 && bits != 16 && bits != 24 && bits != 32) || (format == 3 && bits != 32)) return null;
+                    int available = wav.Length - at - 8, length = size > 0 && size <= available ? size : available, width = bits / 8;
+                    int frames = length / (width * channels);
+                    float[] mono = new float[frames];
+                    for (int f = 0; f < frames; f++)
+                    {
+                        double total = 0;
+                        for (int c = 0; c < channels; c++)
+                        {
+                            int o = at + 8 + (f * channels + c) * width;
+                            total += format == 3 ? BitConverter.ToSingle(wav, o) : bits == 8 ? (wav[o] - 128) / 128.0 : bits == 16 ? BitConverter.ToInt16(wav, o) / 32768.0 : bits == 24 ? (wav[o] | wav[o + 1] << 8 | (sbyte)wav[o + 2] << 16) / 8388608.0 : BitConverter.ToInt32(wav, o) / 2147483648.0;
+                        }
+                        mono[f] = (float)Math.Max(-1, Math.Min(1, total / channels));
+                    }
+                    return mono;
+                }
+                long following = (long)at + 8 + size + (size & 1);
+                if (size < 0 || following > wav.Length) break;
+                at = (int)following;
+            }
+            return null;
+        }
+
+        // Streams rather than files, so their clip isn't left locked once it's read.
+        private static byte[] Decode(string path)
+        {
+            try
+            {
+                using (FileStream input = File.OpenRead(path))
+                using (MemoryStream output = new MemoryStream())
+                {
+                    Windows.Media.MediaProperties.MediaEncodingProfile profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateWav(Windows.Media.MediaProperties.AudioEncodingQuality.High);
+                    profile.Audio = Windows.Media.MediaProperties.AudioEncodingProperties.CreatePcm(Rate, 1, 16);
+                    Windows.Media.Transcoding.PrepareTranscodeResult prepared = new Windows.Media.Transcoding.MediaTranscoder().PrepareStreamTranscodeAsync(input.AsRandomAccessStream(), output.AsRandomAccessStream(), profile).AsTask().Result;
+                    if (!prepared.CanTranscode) throw new VoiceException(Unreadable);
+                    prepared.TranscodeAsync().AsTask().Wait();
+                    return output.ToArray();
+                }
+            }
+            catch (VoiceException) { throw; }
+            catch (Exception) { throw new VoiceException(Unreadable); }
+        }
+
+        // Too quiet, too short or too long says why. Otherwise the clip comes back with its quiet ends cut and its loudest peak near full scale.
+        internal static short[] Shape(short[] clip, out string problem)
+        {
+            problem = null;
+            int block = Rate / 100, blocks = clip.Length / block;
+            double[] level = new double[blocks];
+            double loudest = 0;
+            for (int b = 0; b < blocks; b++)
+            {
+                double power = 0;
+                for (int i = b * block; i < (b + 1) * block; i++) power += (double)clip[i] * clip[i];
+                level[b] = Math.Sqrt(power / block);
+                loudest = Math.Max(loudest, level[b]);
+            }
+            if (loudest < 400) { problem = Silent; return null; }
+            double floor = Math.Max(120, loudest * 0.06);
+            int firstLoud = 0, lastLoud = blocks - 1;
+            while (level[firstLoud] < floor) firstLoud++;
+            while (level[lastLoud] < floor) lastLoud--;
+            int from = Math.Max(0, (firstLoud - 15) * block), to = Math.Min(clip.Length, (lastLoud + 16) * block);
+            double seconds = (to - from) / (double)Rate;
+            string said = seconds.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " seconds";
+            if (seconds < Shortest) { problem = "That clip has only " + said + " of talking. Pick " + Shortest + " to " + Longest + " seconds of you talking."; return null; }
+            if (seconds > Longest) { problem = "That clip is " + said + " long. Pick " + Shortest + " to " + Longest + " seconds of you talking, or trim it."; return null; }
+            int peak = 1;
+            for (int i = from; i < to; i++) peak = Math.Max(peak, Math.Abs((int)clip[i]));
+            double gain = Math.Min(8, 29000.0 / peak);
+            short[] shaped = new short[to - from];
+            for (int i = 0; i < shaped.Length; i++) shaped[i] = (short)Math.Max(-32767, Math.Min(32767, Math.Round(clip[from + i] * gain)));
+            return shaped;
+        }
+
+        // A new clip replaces any kept one; her HD voice reads reference.wav on its next line.
+        internal static void Save(short[] clip, string folder)
+        {
+            Directory.CreateDirectory(folder);
+            string target = Path.Combine(folder, Using), staging = target + ".new";
+            File.WriteAllBytes(staging, Voice.Wave(clip, Rate));
+            if (File.Exists(target)) File.Replace(staging, target, null);
+            else File.Move(staging, target);
+            string kept = Path.Combine(folder, Kept);
+            if (File.Exists(kept)) File.Delete(kept);
+        }
+
+        // Back to her own clip, with theirs kept beside it so it can come back without picking it again.
+        internal static void Shelve(string folder) { Move(Path.Combine(folder, Using), Path.Combine(folder, Kept)); }
+
+        internal static void Unshelve(string folder) { Move(Path.Combine(folder, Kept), Path.Combine(folder, Using)); }
+
+        private static void Move(string from, string to)
+        {
+            if (!File.Exists(from)) return;
+            if (File.Exists(to)) File.Delete(to);
+            File.Move(from, to);
+        }
+    }
+
     internal sealed class FreeStyle
     {
         internal readonly string Name;
@@ -604,6 +1258,7 @@ namespace CapriDesktop
         internal byte[] Speak(string text)
         {
             FreeStyle style = Style;
+            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, glitch = VoiceFx.Glitch;
             lock (gate)
             {
                 Open(style.British);
@@ -611,14 +1266,14 @@ namespace CapriDesktop
                 IntPtr audio = IntPtr.Zero;
                 try
                 {
-                    audio = SherpaOnnxOfflineTtsGenerate(tts, words, style.Speaker, style.Speed);
+                    audio = SherpaOnnxOfflineTtsGenerate(tts, words, style.Speaker, VoiceFx.Tempo(style.Speed, pitch, speed));
                     if (audio == IntPtr.Zero) throw new VoiceException("Her free voice glitched.");
                     Generated made = (Generated)Marshal.PtrToStructure(audio, typeof(Generated));
                     float[] samples = new float[Math.Max(0, made.Count)];
                     if (samples.Length > 0) Marshal.Copy(made.Samples, samples, 0, samples.Length);
                     short[] pcm = new short[samples.Length];
                     for (int i = 0; i < samples.Length; i++) pcm[i] = (short)Math.Max(-32767, Math.Min(32767, Math.Round(samples[i] * 32767)));
-                    return Voice.Wave(pcm, made.Rate);
+                    return Voice.Wave(VoiceFx.Kokoro(pcm, made.Rate, pitch, glitch, VoiceFx.Seed(text)), made.Rate);
                 }
                 finally
                 {
@@ -914,10 +1569,13 @@ namespace CapriDesktop
         {
             string code = Brain.LanguageCode(Brain.Language);
             string rest = ",\"lang\":\"" + (Array.IndexOf(Tongues, code) >= 0 ? code : "en") + "\",\"seed\":7,\"response_format\":\"pcm\",\"speaker_ref_b64\":\"" + Convert.ToBase64String(Clip()) + "\"}";
+            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, glitch = VoiceFx.HdGlitch;
             List<short> said = new List<short>();
             int hertz = 24000;
             foreach (string piece in Pieces(Voice.Sayable(text))) said.AddRange(Ask(number, "{\"input\":" + Voice.Quote(piece) + rest, out hertz));
-            byte[] wav = Voice.Wave(said.ToArray(), hertz);
+            short[] samples = said.ToArray();
+            if (pitch != 0 || speed != 100 || glitch > 0) samples = VoiceFx.Restyled(samples, hertz, pitch, speed, glitch, VoiceFx.Seed(text));
+            byte[] wav = Voice.Wave(samples, hertz);
             if (Voice.Seconds(wav) < 0.2) throw new VoiceException("Her HD voice made no sound.");
             return wav;
         }
@@ -1002,8 +1660,10 @@ namespace CapriDesktop
         // reference.wav in her HD voice folder replaces the clip she's built with, so a new reference can be tried without a rebuild.
         private byte[] Clip()
         {
-            string own = Path.Combine(folder, "reference.wav");
-            if (File.Exists(own)) return File.ReadAllBytes(own);
+            string own = Path.Combine(folder, YourVoice.Using);
+            // A clip being swapped this instant gives her own clip for one line rather than an error.
+            try { if (File.Exists(own)) return File.ReadAllBytes(own); }
+            catch (IOException) { }
             lock (gate)
             {
                 if (clip != null) return clip;

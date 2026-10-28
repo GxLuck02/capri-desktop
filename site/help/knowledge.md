@@ -204,7 +204,7 @@ Esc or clicking away closes the box. Your message shows as "> you:" and her repl
 The wave starts voice chat. With FREE VOICE picked (or no ElevenLabs key) it's free voice chat: you talk, she answers out loud. See section 12.
 
 ### How long do her bubbles stay up?
-It depends on how long the reply is (4 seconds plus a bit per letter, up to 14 seconds). Mainframe > Settings > Bubble changes it: Quick, Normal or Long.
+It depends on how long the reply is (4 seconds plus a bit per letter, up to 14 seconds). Mainframe > Settings > BRAIN > Bubble changes it: Quick, Normal or Long.
 
 ### Does she remember what we talked about?
 Yes. She keeps the chat for up to a week, even after a restart. Mainframe > Settings > Memory sets how many recent messages she keeps in mind: Short (8), Medium (16) or Long (32). Changing her model or language starts a fresh chat.
@@ -311,17 +311,21 @@ YOU
 - Edit personality: opens personality.md, who she is and how she talks. See "Make her yours" in section 13.
 - Reset: puts her default personality back straight away. Yours is kept as personality.backup.md.
 
-VOICE
+VOICE ("Every voice, ElevenLabs too" on the right of the heading)
 - Volume: Mute, 10% to 100%, 125%, 150%. Default 100%.
+- Pitch (from 0.7.5): -6 to +6 semitones. Default Normal. Higher or deeper, at the same speed.
+- Speed (from 0.7.5): 0.7x to 1.5x. Default Normal.
+- Glitch (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off, except her HD voice, which starts at 10% and shows as "10% · HD". Stutters, crushed bits and skips in her voice, more as it goes up.
 - Sounds: her sound effects. Off, or 10% to 100%. Default 60%.
-- Bubble: Quick, Normal or Long.
 - Typing sound: "When she types". A soft typing sound while her text replies type out.
+
+Pitch, Speed and Glitch change every voice she has: her free voice styles, HD, ElevenLabs and ElevenLabs voice chat. See "Pitch, speed and glitch" under Her voice.
 
 MOVES
 - Wander: Off, Rarely, Sometimes, Often or Restless.
 - Sleep: Never, 1 min, 2 min (default), 5 min, 10 min or 30 min.
-- Dance to music: "When songs play".
-- Glitch in at startup: "Tendrils + sound".
+- Dance to music: she dances when songs play.
+- Glitch in at startup: crimson tendrils and her sound when she starts. It sits beside Dance to music.
 
 Right column:
 
@@ -336,6 +340,7 @@ WATCH
 BRAIN
 - Replies: Short, Medium or Long.
 - Memory: Short, Medium or Long (how much of the chat she keeps in mind).
+- Bubble: Quick, Normal or Long (how long her replies stay up). It was under VOICE before 0.7.5.
 - Custom model name, then Use. "Any Ollama model you've pulled, or a model id on your key."
 
 HABITS
@@ -508,6 +513,39 @@ She has two voices. Pick one under VOICE in the Mainframe, or pick OFF (since 0.
 - Pick a style from the "Free voice: Her own" menu: Her own, Bright, Sly or Sharp.
 - It needs 64-bit Windows. The Mac and Linux preview doesn't have it yet.
 - Without her free voice and without an ElevenLabs key, she types her replies.
+
+### Pitch, speed and glitch (from 0.7.5)
+Mainframe > Settings > VOICE has three sliders. They change every voice she has: her free voice (any style), HD, ElevenLabs, and ElevenLabs voice chat.
+- Pitch: -6 to +6 semitones. Default Normal. Higher or deeper, without talking faster or slower.
+- Speed: 0.7x to 1.5x. Default Normal.
+- Glitch: Off, 5%, 10%, 15%, then 20% to 100%. Short stutters, crushed bits and skips, like a glitchy chip. More of them as it goes up. The same line glitches the same way each time.
+
+Her HD voice keeps its own Glitch, and it starts at 10%, so she glitches a little out of the box. While HD is the voice she's using, the slider shows it with HD after it ("10% · HD"), and moving it only changes HD. Her other voices share one Glitch, which starts at Off.
+
+When you let go of a slider, she says "How do I sound now, choom?" in the voice she's using, so you can hear it. With ELEVENLABS she makes that line once (about 25 credits), then restyles the same audio on your PC, so moving the sliders again uses no more credits. If her HD voice is asleep (it rests after 10 quiet minutes), she says "One sec, waking my HD voice." first, then the line in HD. With her voice OFF she says "My voice is OFF, choom. Pick FREE VOICE to hear that." With no voice set up she says "Get my free voice under VOICE to hear that, choom."
+
+In ElevenLabs voice chat the sliders change her as she talks. A slower Speed makes her replies take a little longer to finish.
+
+They're saved, so they stay after a restart or update. Normal, Normal and Off (10% for HD) is her usual voice.
+
+### Your voice (HD only, from 0.7.5)
+Her HD voice can talk in your voice. It copies the voice in a short clip of you.
+1. Record 5 to 30 seconds of yourself talking clearly, with no music or other people. A WAV, MP3 or M4A works. Windows' Sound Recorder saves M4A.
+2. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "Your voice (HD) · pick a clip of you...".
+3. Pick your clip. The menu shows "Free voice: Your voice", and she says "Got it. I'll talk like you now, choom." in your voice. If her HD voice was asleep, "One sec, waking my HD voice." comes first.
+
+She cuts the quiet off the start and end of the clip, evens out its level, and saves it for her HD voice (24 kHz mono). It needs her HD voice, so a graphics card with 6 GB or more. Without one, "Your voice (HD)" is greyed out in the menu, like HD. Picking a clip turns HD on, and gets it first if it isn't downloaded yet.
+
+Back to her own voice: press "Her voice" beside the menu, or pick "HD · her own voice" in the menu. She says "Back to my own voice, choom." Your clip is kept, so "Your voice (HD)" in the menu brings it back without picking it again. "Pick a new clip of you..." replaces it.
+
+If a clip doesn't work, the note under VOICE says why, in red:
+- "That clip has only X seconds of talking. Pick 5 to 30 seconds of you talking."
+- "That clip is X seconds long. Pick 5 to 30 seconds of you talking, or trim it."
+- "That clip is almost silent. Record yourself talking, closer to the mic, then pick it again."
+- "Windows couldn't read that clip. Pick a WAV, MP3 or M4A of you talking."
+- "That clip isn't there anymore. Pick it again."
+
+Her other free voice styles (Her own, Bright, Sly and Sharp) are set voices and can't copy yours. With one of them picked, the note under VOICE says "Your voice only works with HD." For ElevenLabs, clone your voice on elevenlabs.io instead (Voice Creation > Instant Voice Clone, needs Starter or above, the same steps as cloning her below), then paste its Voice ID under VOICE.
 
 ### Step 1: make an ElevenLabs account
 Sign up at https://elevenlabs.io. The free plan works.
@@ -695,7 +733,7 @@ If you don't touch the mouse or keyboard for a while, she falls asleep. Move the
 When she starts, crimson glitch tendrils tear out from behind her, different every time, while she beams in with her sound. Mainframe > Settings > Glitch in at startup turns all of it on or off. Off: she just appears.
 
 ### Sounds
-Mainframe > Settings > Sounds sets her sound effects (arrive, leave, hops, clicks). Volume sets her spoken voice. Typing sound turns the soft typing sound on or off.
+Mainframe > Settings > Sounds sets her sound effects (arrive, leave, hops, clicks). Volume sets her spoken voice. Pitch, Speed and Glitch change how all her voices sound. Typing sound turns the soft typing sound on or off.
 
 ---
 
