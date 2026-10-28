@@ -180,6 +180,8 @@ namespace CapriDesktop
         [DataMember] public int HideMods = 3;
         [DataMember] public int HideVk = 0x48;
         [DataMember] public int WanderPace = 1;
+        // How often she pops in while Check in on me is on: 0 rarely, 1 sometimes (every 8 to 20 minutes, as before), 2 often.
+        [DataMember] public int PopPace = 1;
         // Frames a second of her perch: 10, 15, 20, 30, 40, 50 or 60. 30 shows the art as drawn.
         [DataMember] public int PerchFps = 30;
         [DataMember] public string AgentPolyglot;
@@ -232,6 +234,7 @@ namespace CapriDesktop
             HideMods = 3;
             HideVk = 0x48;
             WanderPace = 1;
+            PopPace = 1;
             PerchFps = 30;
             CheckIns = true;
             CaughtUp = true;
@@ -952,6 +955,7 @@ namespace CapriDesktop
             Sfx.TypeOut = delegate(short[] sound) { if (IsDisposed) return; try { typist.Open(Sfx.Rate); typist.Play(sound); } catch (Exception) { } };
             Sfx.Untyped = delegate { try { typist.Clear(); } catch (Exception) { } };
             preferences.WanderPace = Math.Max(0, Math.Min(3, preferences.WanderPace));
+            preferences.PopPace = Math.Max(0, Math.Min(2, preferences.PopPace));
             clip = idle;
             nextGlitch = 30 + random.NextDouble() * 30;
             Text = "Capri";
@@ -1917,9 +1921,9 @@ namespace CapriDesktop
             if (popOut >= 0 && (clicks != popClicks || chatting || typer.Visible || talkState != TalkState.Off)) EndPopIn(false);
             if (popOut >= 0 && now >= popOut && speech == null) EndPopIn(true);
             if (!preferences.CheckIns) { nextPopIn = -1; return; }
-            if (nextPopIn < 0) nextPopIn = now + 480 + random.NextDouble() * 720;
+            if (nextPopIn < 0) nextPopIn = now + PopGap();
             if (now < nextPopIn) return;
-            nextPopIn = now + 480 + random.NextDouble() * 720;
+            nextPopIn = now + PopGap();
             if (quiet > 60000 || quitting || dragging || pressed || chatting || typer.Visible || menu.Visible || speech != null || talkState != TalkState.Off || outro != null || onPanel || popOut >= 0) return;
             PopIn(now);
         }
@@ -2350,6 +2354,19 @@ namespace CapriDesktop
         }
 
         private static readonly double[] WanderPaces = { 3, 1, 0.45, 0.18 };
+        // Seconds until her next pop-in at each pace: the shortest wait, then how much longer it can be. Rarely is 20 to 40 minutes, sometimes 8 to 20 and often 3 to 8.
+        private static readonly double[,] PopPaces = { { 1200, 1200 }, { 480, 720 }, { 180, 300 } };
+
+        internal int PopPace { get { return preferences.PopPace; } }
+
+        internal void SetPopPace(int pace)
+        {
+            preferences.PopPace = Math.Max(0, Math.Min(2, pace));
+            nextPopIn = -1;
+            SavePreferences();
+        }
+
+        internal double PopGap() { int pace = Math.Max(0, Math.Min(2, preferences.PopPace)); return PopPaces[pace, 0] + random.NextDouble() * PopPaces[pace, 1]; }
 
         internal int WanderLevel { get { return preferences.Wander ? preferences.WanderPace + 1 : 0; } }
 
@@ -11199,6 +11216,27 @@ namespace CapriDesktop
                             mainframe.SlidePerch(3);
                             if (perchFast != "60 fps | Perch over 30 fps uses more CPU" || perchSaved != 60 || perchOverlap != null || perchSlow != "10 fps | -" || perchLow != 10 || preferences.PerchFps != 30 || mainframe.PerchStatus != "30 fps | -") throw new Exception("The perch fps slider went wrong: " + perchFast + " / " + perchSaved + " / " + perchOverlap + " / " + perchSlow + " / " + perchLow + " / " + mainframe.PerchStatus);
                             checks.Add("PASS perch fps slider: under HABITS it shows 30 fps by default, slides from 10 to 60 fps, saves each pick, says when it uses more CPU, and fits the page with nothing overlapping");
+                            // Pop-ins sets how long Check in on me waits between visits; settings from before it start at Sometimes.
+                            Func<double[]> popSpread = delegate
+                            {
+                                double popLeast = double.MaxValue, popMost = 0;
+                                for (int popTry = 0; popTry < 40; popTry++) { double popWait = PopGap(); popLeast = Math.Min(popLeast, popWait); popMost = Math.Max(popMost, popWait); }
+                                return new[] { popLeast, popMost };
+                            };
+                            bool popsOpened = mainframe.PopsShown == "Sometimes" && preferences.PopPace == 1;
+                            double[] popsSometimes = popSpread();
+                            mainframe.SlidePops(1);
+                            bool popsOften = mainframe.PopsShown == "Often" && preferences.PopPace == 2 && File.ReadAllText(settingsPath).IndexOf("\"PopPace\":2", StringComparison.Ordinal) >= 0 && LoadPreferences().PopPace == 2;
+                            double[] popsFast = popSpread();
+                            string popsOverlap = mainframe.Overlap();
+                            mainframe.SlidePops(-2);
+                            bool popsRarely = mainframe.PopsShown == "Rarely" && preferences.PopPace == 0 && LoadPreferences().PopPace == 0;
+                            double[] popsSlow = popSpread();
+                            mainframe.SlidePops(1);
+                            Preferences popsOlder = (Preferences)new DataContractJsonSerializer(typeof(Preferences)).ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Size\":240}")));
+                            bool popsWaits = popsSometimes[0] >= 480 && popsSometimes[1] <= 1200 && popsFast[0] >= 180 && popsFast[1] <= 480 && popsSlow[0] >= 1200 && popsSlow[1] <= 2400;
+                            if (!popsOpened || !popsOften || !popsRarely || !popsWaits || popsOverlap != null || preferences.PopPace != 1 || mainframe.PopsShown != "Sometimes" || popsOlder.PopPace != 1 || new Preferences().PopPace != 1) throw new Exception("The Pop-ins slider went wrong: opened " + popsOpened + ", often " + popsOften + ", rarely " + popsRarely + ", waits " + string.Join("/", Array.ConvertAll(new[] { popsSometimes[0], popsSometimes[1], popsFast[0], popsFast[1], popsSlow[0], popsSlow[1] }, popSeconds => ((int)popSeconds).ToString())) + ", overlap " + popsOverlap + ", old settings " + popsOlder.PopPace + ", shown " + mainframe.PopsShown);
+                            checks.Add("PASS Pop-ins slider: under MOVES it shows Sometimes (every 8 to 20 minutes) by default; Often brings her every 3 to 8 minutes and Rarely every 20 to 40; each pick saves, settings from before it start at Sometimes, and nothing overlaps");
                             // A screen too short for Settings, like a 1080p laptop at 150%: the page fits the screen and scrolls, header and all.
                             int backTop = mainframe.BackTop;
                             mainframe.ShortScreen = 480;

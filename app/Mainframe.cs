@@ -22,7 +22,7 @@ namespace CapriDesktop
         // Settings opens a second column to the right, so every setting shows at once.
         private const int Column = 380;
         private const int Far = 30000;
-        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 484 }, new[] { 0, 494, 614 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 460 }, new[] { Column, 482, 652 }, new[] { 0, 674, 734 } };
+        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 484 }, new[] { 0, 494, 650 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 460 }, new[] { Column, 482, 652 }, new[] { 0, 674, 734 } };
         private static readonly string[] PerchNames = Array.ConvertAll(Companion.PerchRates, rate => rate + " fps");
         // Her voice's pitch in semitones, and her speed.
         private static readonly string[] PitchNames = { "-6", "-5", "-4", "-3", "-2", "-1", "Normal", "+1", "+2", "+3", "+4", "+5", "+6" };
@@ -37,6 +37,7 @@ namespace CapriDesktop
         private static readonly string[] SizeNames = { "Tiny", "Small", "Small+", "Medium", "Medium+", "Large", "Large+", "Huge", "Huge+", "Giant" };
         private static readonly int[] Sleeps = { 0, 60, 120, 300, 600, 1800 };
         private static readonly string[] SleepNames = { "Never", "1 min", "2 min", "5 min", "10 min", "30 min" };
+        private static readonly string[] PopNames = { "Rarely", "Sometimes", "Often" };
         private static readonly string[] BubbleNames = { "Quick", "Normal", "Long" };
         private static readonly string[] SoundNames = { "Off", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" };
         private static readonly string[] WanderNames = { "Off", "Rarely", "Sometimes", "Often", "Restless" };
@@ -182,6 +183,8 @@ namespace CapriDesktop
         private readonly Label soundsName;
         private readonly Slider wander;
         private readonly Label wanderName;
+        private readonly Slider pops;
+        private readonly Label popsName;
         private readonly Toggle dance;
         private readonly Slider replies;
         private readonly Label repliesName;
@@ -415,8 +418,13 @@ namespace CapriDesktop
             sleepAfter = PageSlider(SleepNames, 552, "How long until she falls asleep");
             sleepName = Caption("2 min", 292, 559, Font, Look.Ink);
             sleepAfter.Changed += delegate { if (syncing) return; sleepName.Text = SleepNames[sleepAfter.Value]; capri.SetSleepAfter(Sleeps[sleepAfter.Value]); };
-            dance = Check("Dance to music", 28, 588, 150, delegate { if (!syncing) capri.ToggleDance(); });
-            intro = Check("Glitch in at startup", 186, 588, 170, delegate { if (!syncing) capri.ToggleIntro(); });
+            // How often Check in on me brings her over to say hi.
+            Caption("Pop-ins", 28, 595, Font, Look.Dim);
+            pops = PageSlider(PopNames, 588, "How often she pops in to say hi");
+            popsName = Caption("Sometimes", 292, 595, Font, Look.Ink);
+            pops.Changed += delegate { if (syncing) return; popsName.Text = PopNames[pops.Value]; capri.SetPopPace(pops.Value); };
+            dance = Check("Dance to music", 28, 624, 150, delegate { if (!syncing) capri.ToggleDance(); });
+            intro = Check("Glitch in at startup", 186, 624, 170, delegate { if (!syncing) capri.ToggleIntro(); });
             const int c = Column;
             Caption("CAPRI >", 28 + c, 58, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
             Caption("Size", 28 + c, 87, Font, Look.Dim);
@@ -877,6 +885,8 @@ namespace CapriDesktop
             sleepName.Text = SleepNames[sleepAfter.Value];
             wander.Value = capri.WanderLevel;
             wanderName.Text = WanderNames[wander.Value];
+            pops.Value = Math.Max(0, Math.Min(PopNames.Length - 1, capri.PopPace));
+            popsName.Text = PopNames[pops.Value];
             dance.Checked = capri.Dancing;
             bubble.Value = capri.BubbleTime;
             bubbleName.Text = BubbleNames[bubble.Value];
@@ -921,6 +931,10 @@ namespace CapriDesktop
         internal string PerchStatus { get { return perchFpsName.Text + " | " + (perchNote.Text.Length > 0 ? perchNote.Text : "-"); } }
 
         internal void SlidePerch(int steps) { Press(perchFps, steps); }
+
+        internal string PopsShown { get { return popsName.Text; } }
+
+        internal void SlidePops(int steps) { Press(pops, steps); }
 
         // The HABITS row and KEYS fit inside the settings page.
         internal bool PerchFits { get { Rectangle page = PageArea; return page.Contains(perchFpsName.Bounds) && page.Contains(perchFps.Bounds) && page.Contains(hideKeys.Bounds); } }
