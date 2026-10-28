@@ -219,6 +219,18 @@ namespace CapriDesktop
                 pet.SetBubbleTime(1);
                 if (!bubbleLong || !bubbleQuick || pet.BubblePicked != "Normal" || Talk.Hold(100, pet.BubbleTime) != 9) throw new Exception("Bubble went wrong: long " + bubbleLong + ", quick " + bubbleQuick + ", picked " + pet.BubblePicked);
                 checks.Add("PASS bubble: Settings > Bubble keeps her replies up half as long on Quick and twice as long on Long, like Windows");
+                int loudnessWas = Voice.Loudness;
+                pet.SetVolume(50);
+                short[] volumeHalved = Voice.Louder(new short[] { 1000, -2000 });
+                bool volumeHalf = pet.VolumePicked == "50%" && volumeHalved[0] == 500 && volumeHalved[1] == -1000;
+                pet.SetVolume(150);
+                short[] volumeRaised = Voice.Louder(new short[] { 1000, 30000 });
+                bool volumeLoud = pet.VolumePicked == "150%" && volumeRaised[0] == 1500 && volumeRaised[1] == short.MaxValue;
+                pet.SetVolume(0);
+                bool volumeMuted = pet.VolumePicked == "Mute" && Voice.Louder(new short[] { 1000 })[0] == 0;
+                pet.SetVolume(loudnessWas);
+                if (!volumeHalf || !volumeLoud || !volumeMuted) throw new Exception("Volume went wrong: 50% " + volumeHalf + ", 150% " + volumeLoud + ", mute " + volumeMuted);
+                checks.Add("PASS volume: Settings > Volume sets her voice from Mute to 150%, like Windows");
                 bool loginNew = !pet.StartsAtLogin;
                 pet.SetLogin(true);
                 string loginText = File.Exists(pet.LoginFile) ? File.ReadAllText(pet.LoginFile) : "";

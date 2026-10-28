@@ -1114,7 +1114,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance, Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min)
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
-- Settings: What should she call you?, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Check in on me, Pop-ins (Rarely, Sometimes, Often), Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Check in on me, Pop-ins (Rarely, Sometimes, Often), Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
 - Get Capri X, only when a new version is out
@@ -1127,6 +1127,7 @@ Tray or menu bar icon: Talk to her, Quiet, Hide her / Show her, Bring her back, 
 2. Paste your key and press Enter. It stays on this computer.
 3. She says "Key saved. I'll talk as X. Change it under Settings > Voice."
 4. Pick another voice from the same menu. Use ElevenLabs in that menu turns her voice on or off. (Mac and Linux have no free voice yet.)
+5. Settings > Volume sets how loud she talks, from Mute to 150%, like Windows' Volume. Sounds is her sound effects.
 
 - "Key saved, but your ElevenLabs account has no voices yet. Add one at elevenlabs.io." Make a voice first (section 11).
 - "ElevenLabs rejected the key. Settings > Voice > New key."

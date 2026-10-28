@@ -47,6 +47,7 @@ namespace CapriDesktop
         [DataMember] internal bool NoCaughtUp;
         [DataMember] internal int? SleepAfter;
         [DataMember] internal int? Bubble;
+        [DataMember] internal int? Volume;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -339,6 +340,10 @@ namespace CapriDesktop
         // Settings > Bubble, like Windows: how long her replies stay up.
         internal static readonly string[] BubbleNames = { "Quick", "Normal", "Long" };
         private readonly List<MenuItem> bubblePicks = new List<MenuItem>();
+        // Settings > Volume, like Windows: her spoken voice, Mute to 150%. Her sound effects stay on Sounds.
+        internal static readonly int[] Volumes = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150 };
+        internal static readonly string[] VolumeNames = { "Mute", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%", "125%", "150%" };
+        private readonly List<MenuItem> volumePicks = new List<MenuItem>();
         private PixelPoint? sleptAt;
         private readonly DispatcherTimer frames = new DispatcherTimer();
         private readonly Stopwatch clock = Stopwatch.StartNew();
@@ -393,6 +398,7 @@ namespace CapriDesktop
             Brain.Recall = Saved.Recall == 16 || Saved.Recall == 32 ? Saved.Recall : 8;
             Saved.Wander = Math.Max(0, Math.Min(4, Saved.Wander));
             Sfx.Level = Math.Max(0, Math.Min(100, Saved.Sounds ?? 60));
+            Voice.Loudness = Math.Max(0, Math.Min(150, Saved.Volume ?? 100));
             if (Program.Smoke == null) Sfx.Out = Limbs.Sound;
             if (Program.Smoke == null) Brain.Load(Path.Combine(folder, "chat.json"));
             Limbs.Attach(Brain);
@@ -1263,6 +1269,16 @@ namespace CapriDesktop
             settings.Items.Add(sounds);
             voiceMenu = new MenuItem { Header = "Voice" };
             settings.Items.Add(voiceMenu);
+            MenuItem volume = new MenuItem { Header = "Volume" };
+            for (int i = 0; i < Volumes.Length; i++)
+            {
+                int percent = Volumes[i];
+                MenuItem pick = new MenuItem { Header = VolumeNames[i], ToggleType = MenuItemToggleType.Radio, GroupName = "volume" };
+                pick.Click += delegate { SetVolume(percent); };
+                volumePicks.Add(pick);
+                volume.Items.Add(pick);
+            }
+            settings.Items.Add(volume);
             checkInsItem = new MenuItem { Header = "Check in on me", ToggleType = MenuItemToggleType.CheckBox };
             checkInsItem.Click += delegate { SetCheckIns(Saved.NoCheckIns); };
             settings.Items.Add(checkInsItem);
@@ -1361,6 +1377,24 @@ namespace CapriDesktop
             for (int i = 0; i < sleepPicks.Count; i++) sleepPicks[i].IsChecked = Sleeps[i] == SleepAfter;
             sitItem.Header = SitChoice;
             for (int i = 0; i < bubblePicks.Count; i++) bubblePicks[i].IsChecked = i == BubbleTime;
+            for (int i = 0; i < volumePicks.Count; i++) volumePicks[i].IsChecked = Volumes[i] == Voice.Loudness;
+        }
+
+        internal string VolumePicked
+        {
+            get
+            {
+                for (int i = 0; i < volumePicks.Count; i++) if (volumePicks[i].IsChecked) return VolumeNames[i];
+                return null;
+            }
+        }
+
+        internal void SetVolume(int percent)
+        {
+            Voice.Loudness = Math.Max(0, Math.Min(150, percent));
+            Saved.Volume = Voice.Loudness;
+            Save();
+            Sync();
         }
 
         internal int BubbleTime { get { return Math.Max(0, Math.Min(2, Saved.Bubble ?? 1)); } }
