@@ -1052,12 +1052,14 @@ namespace CapriDesktop
             {
                 if (pet.Leaving) return false;
                 string hello = pet.Talk.Reply;
+                // Read before Check in on me is turned off and on, which starts her wait again.
+                double noticedAfter = pet.Noticed;
                 pet.SetCheckIns(false);
                 pet.Talk.Dismiss();
                 pet.CheckPopIn(pet.Now + 60);
                 pet.SetCheckIns(true);
                 if (!pet.IsVisible || pet.Away || pet.PopOut >= 0 || Array.IndexOf(Pet.PopLines, hello) < 0) throw new Exception("Popping in while she was out went wrong: " + hello + " | away " + pet.Away + " | out " + pet.PopOut);
-                if (noticedBefore < 0 || pet.Noticed != noticedBefore) throw new Exception("A pop-in restarted her 2-hour wait to ask for attention: " + noticedBefore + " then " + pet.Noticed);
+                if (noticedBefore < 0 || noticedAfter != noticedBefore) throw new Exception("A pop-in restarted her 2-hour wait to ask for attention: " + noticedBefore + " then " + noticedAfter);
                 checks.Add("PASS pop-ins while she's out: she glitches over to a new spot at the top of the screen, says hi and stays out, and her 2-hour wait to ask for attention keeps counting");
                 // Someone's at the computer, so her sulk is said; it comes once the idle time is read.
                 pet.Idle = delegate { return 0; };
