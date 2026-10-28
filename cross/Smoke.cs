@@ -927,12 +927,14 @@ namespace CapriDesktop
                 fakeVoice.Stop();
                 Send(shelf, "quit");
                 pet.Talk.Dismiss();
+                pet.Hear("still there?");
                 pet.HideAway();
                 return true;
             }
             if (step == 22)
             {
                 if (pet.IsVisible) return false;
+                if (!pet.Talk.Quiet) throw new Exception("A reply that came in after Hide her still showed a bubble: " + pet.Talk.Reply);
                 arrivalsBefore = pet.Arrivals;
                 pet.PopIn();
                 string hello = pet.Talk.Reply;

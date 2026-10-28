@@ -577,6 +577,10 @@ namespace CapriDesktop
         internal void HideAway()
         {
             if (away || quitting) return;
+            // A reply still on its way is dropped and her voice stops, so no bubble turns up with nobody under it to hold up her
+            // pop-ins. A job she's doing carries on.
+            ++asking;
+            voice.Stop();
             SetAway(true);
             Talk.Dismiss();
             GlitchOut(delegate { seat = null; walking = false; Hide(); });
