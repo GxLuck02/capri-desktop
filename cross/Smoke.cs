@@ -258,15 +258,17 @@ namespace CapriDesktop
                     bool linuxSteered = linuxDiscord != null && linuxWindows.Count == 2 && linuxWindows[1].Program == "firefox" && linuxWindows[1].Title == "YouTube — Mozilla Firefox"
                         && Limbs.Steer(linuxDiscord, "close", false) && Limbs.Steer(linuxWindows[1], "minimize", false) && Limbs.Steer(linuxWindows[1], "switch_to", false);
                     string closedDiscord = Hands.Do("app_window", new ToolArguments { Name = "discord", Action = "close" });
+                    // Without wmctrl, what's playing just sees no windows, and her window tool says what to install.
                     noWindowTool = true;
-                    string noWmctrl = "";
-                    try { Limbs.Windows(false); }
-                    catch (InvalidOperationException error) { noWmctrl = error.Message; }
+                    bool noneListed = Limbs.Windows(false).Count == 0;
+                    string noWmctrl = Hands.Unlisted() ?? "";
                     noWindowTool = false;
+                    Limbs.Windows(false);
+                    bool listedAgain = Hands.Unlisted() == null;
                     string windowLog = string.Join(" / ", did);
                     if (!macSteered || macWindows.Count != 2 || macWindows.Exists(delegate(OpenWindow shown) { return shown.Program == "Capri"; }) || !windowLog.Contains("tell application id \"com.hnc.Discord\" to activate") || !windowLog.Contains("tell application id \"com.hnc.Discord\" to quit")
                         || !windowLog.Contains("set visible of application process \"Discord\" to false") || !linuxSteered || !windowLog.Contains("wmctrl -i -c 0x03c00007") || !windowLog.Contains("xdotool windowminimize 0x04200001") || !windowLog.Contains("wmctrl -i -a 0x04200001")
-                        || closedDiscord != "Closed discord." || !noWmctrl.Contains("needs wmctrl"))
+                        || closedDiscord != "Closed discord." || !noWmctrl.Contains("needs wmctrl") || !noneListed || !listedAgain || Hands.Presses)
                         throw new Exception("Closing and switching apps went wrong: " + closedDiscord + " / " + noWmctrl + " / " + windowLog);
                     // Her power tool: a lock happens at once, a shutdown waits and cancel stops it. Only the pretend runner sees any of it.
                     did.Clear();

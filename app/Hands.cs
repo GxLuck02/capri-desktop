@@ -182,6 +182,10 @@ namespace CapriDesktop
         internal static Func<string, string> Fetch = Download;
         internal static Func<List<OpenWindow>> Windows = ReadWindows;
         internal static Func<OpenWindow, string, bool> Steer = Apply;
+        // Why open windows couldn't be listed just now, or null. Mac and Linux say so when their window tool is missing.
+        internal static Func<string> Unlisted = delegate { return null; };
+        // False where she can't press keys yet (Mac and Linux), so a Discord shortcut says so before Discord comes to the front.
+        internal static bool Presses = true;
         internal static Func<string, bool> PressPlay = ClickPlay;
         internal static Func<string> NowPlaying = SpotifyTitle;
         internal static Func<string, string, string> Work = delegate { return "Using the mouse and keyboard isn't ready on this PC yet."; };
@@ -1218,7 +1222,7 @@ namespace CapriDesktop
             string[] codes = Shortcuts[row, 2].Split(' ');
             byte[] keys = new byte[codes.Length];
             for (int i = 0; i < codes.Length; i++) keys[i] = Convert.ToByte(codes[i], 16);
-            if (Shortcuts[row, 1] != "discord") { Chord(keys); return Shortcuts[row, 3]; }
+            if (Shortcuts[row, 1] != "discord" || !Presses) { Chord(keys); return Shortcuts[row, 3]; }
             OpenWindow discord = FindDiscord();
             if (discord == null)
             {
@@ -1550,7 +1554,7 @@ namespace CapriDesktop
                 if (score > best) { best = score; top.Clear(); }
                 top.Add(window);
             }
-            if (top.Count == 0) return wanted + " isn't open.";
+            if (top.Count == 0) return Unlisted() ?? wanted + " isn't open.";
             // When several apps match, the one whose own name matches goes first, then the one nearest the front.
             OpenWindow first = top.Find(window => Score(Plain(window.Program), want) == best) ?? top[0];
             top = top.FindAll(window => window.Program == first.Program);

@@ -93,6 +93,8 @@ namespace CapriDesktop
             Hands.Windows = delegate { return Windows(OnMac); };
             Hands.Steer = delegate(OpenWindow window, string action) { return Steer(window, action, OnMac); };
             Hands.Power = delegate(string action, int seconds) { return Power(action, seconds, OnMac); };
+            Hands.Unlisted = delegate { return Blind; };
+            Hands.Presses = false;
             Hands.Chord = delegate { throw new PlatformNotSupportedException("keyboard shortcuts only work on Windows for now"); };
             // A look is already in her transcript; anything else she did goes in as a job, like on Windows.
             brain.Act = delegate(string tool, ToolArguments args)
@@ -192,6 +194,8 @@ namespace CapriDesktop
         // Her app_window tool. On Mac it's the apps in the Dock, through System Events; on Linux it's the windows wmctrl lists,
         // which on Wayland are only the apps running through XWayland.
         private static readonly Dictionary<string, string> Bundles = new Dictionary<string, string>();
+        // Why the last listing found nothing it could read, for her window tool to say; what's playing just sees no windows.
+        internal static volatile string Blind;
 
         internal static Func<int, string> ProcessName = delegate(int id)
         {
@@ -206,7 +210,8 @@ namespace CapriDesktop
             {
                 string apps = Music.Run("osascript", new[] { "-e", "set out to \"\"", "-e", "tell application \"System Events\"", "-e", "repeat with p in (every application process whose background only is false)",
                     "-e", "set out to out & (name of p as text) & tab & (bundle identifier of p as text) & linefeed", "-e", "end repeat", "-e", "end tell", "-e", "return out" });
-                if (apps == null) throw new InvalidOperationException("macOS didn't let me see your apps. Allow Capri to control System Events under System Settings > Privacy & Security > Automation, then ask again");
+                Blind = apps == null ? "macOS didn't let me see your apps. Allow Capri to control System Events under System Settings > Privacy & Security > Automation, then ask again." : null;
+                if (apps == null) return found;
                 lock (Bundles)
                 {
                     Bundles.Clear();
@@ -222,7 +227,8 @@ namespace CapriDesktop
                 return found;
             }
             string windows = Music.Run("wmctrl", new[] { "-lpx" });
-            if (windows == null) throw new InvalidOperationException("closing and switching apps on Linux needs wmctrl. Install it (sudo apt install wmctrl, or your distro's package), then ask again");
+            Blind = windows == null ? "Closing and switching apps on Linux needs wmctrl. Install it (sudo apt install wmctrl, or your distro's package), then ask again." : null;
+            if (windows == null) return found;
             foreach (string line in windows.Split('\n'))
             {
                 Match window = Regex.Match(line.TrimEnd('\r'), @"^0x([0-9a-fA-F]+)\s+(-?\d+)\s+(\d+)\s+(\S+)\s+\S+ ?(.*)$");
