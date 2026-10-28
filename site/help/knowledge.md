@@ -209,6 +209,8 @@ It depends on how long the reply is (4 seconds plus a bit per letter, up to 14 s
 ### Does she remember what we talked about?
 Yes. She keeps the chat for up to a week, even after a restart. Mainframe > Settings > Memory sets how many recent messages she keeps in mind: Short (8), Medium (16) or Long (32). Changing her model or language starts a fresh chat.
 
+She also keeps in mind what she saw on your screen in the last 3 hours, so "what did you see?" gets a real answer instead of a guess (section 16).
+
 For things she should never forget, use her notes (section 13).
 
 ### Clicking her
@@ -336,7 +338,8 @@ CAPRI
 - Always on top: keeps her above your other windows.
 
 WATCH
-- Watch my screen ("She comments now and then"), with an Every slider: 10 s, 15 s, 30 s, 1 min, 1.5 min, 2 min, 3 min, 5 min or 10 min. The default is 2 min.
+- Watch my screen: she comments now and then. With an Every slider: 10 s, 15 s, 30 s, 1 min, 1.5 min, 2 min, 3 min, 5 min or 10 min. The default is 2 min.
+- Keep her caught up (beside Watch my screen): on by default. Glances she keeps quiet about still go in her memory, so she knows what you've been up to. Turn it off to keep only the glances she comments on. It uses a little more of your API (section 16).
 
 BRAIN
 - Replies: Short, Medium or Long.
@@ -641,7 +644,7 @@ If you go quiet, she stays quiet too: she doesn't ask if you're still there. Aft
 Yes. Ask her to open apps, play music and so on, the same as in text. A job with her cursor (playing a song, searching YouTube, anything with clicks) can take a minute, so in ElevenLabs voice chat she says she's on it straight away and tells you how it went when it's done. Asking again while it runs doesn't start it twice. With no brain set up, she plays music and changes the volume with her quick tools instead.
 
 ### Does she comment on my screen during voice chat?
-No. Watch my screen pauses during voice chat. Ask her "check my screen" and she looks.
+No. Watch my screen pauses during voice chat. Ask her "check my screen" and she looks. She still remembers what she saw before the call.
 
 ### How does ElevenLabs voice chat work?
 Capri makes a voice agent called "Capri" in your own ElevenLabs account and talks through it. Your voice goes to ElevenLabs while it's on. Free voice chat with her own ears stays on your PC (Windows speech, used for languages her ears don't know, goes through Microsoft).
@@ -833,6 +836,16 @@ She skips a look when:
 
 So she may stay quiet even at 15 s. That's on purpose. A look is a screenshot every so often, not a video, and she doesn't hear your PC's sound.
 
+### Does she remember what she saw?
+Yes. Each glance gives her a short note of what's on screen (under 20 words) plus her line. What she comments on goes in her chat as "you glanced at their screen and saw: ...", and every "check my screen" is kept too. She keeps the last 3 hours of it in mind, in text and voice chat, and it carries over a restart. Ask "what did you see?" or "what was that game?" and she answers from what she really saw.
+
+### Keep her caught up
+Mainframe > Settings > WATCH > Keep her caught up. On by default.
+- On: glances she keeps quiet about go in her memory too.
+- Off: only the glances she comments on, and the looks you ask for.
+
+What it costs: each glance writes about 25 more words, and each chat message carries what she saw lately (up to about 300 words). With an API key that's a small extra next to the screenshot each glance already sends. With her built-in brain or Ollama it's free.
+
 ### Which brains can see?
 - Built-in Gemma brains: yes, after her eyes download (about 560 MB, automatic).
 - Built-in Qwen3 4B: no. "This brain can't see. Press Free key to fix."
@@ -927,14 +940,14 @@ Quit Capri, then delete the Capri folder you unpacked. Her settings are in ~/.co
 ### What stays on my PC
 - Her built-in brain and Ollama: your chats never leave your PC.
 - Her free voice, and her own ears in free voice chat (English and 24 other European languages).
-- Her notes (me.md), her personality (personality.md), chat history (chat.json, kept a week), settings and error log.
+- Her notes (me.md), her personality (personality.md), chat history and what she saw on your screen lately (chat.json, kept a week), settings and error log.
 - Your keys. On Windows they're locked to your Windows account. On Mac and Linux the ElevenLabs key is a file only your user can read.
 - Dancing: she listens to what your PC is playing to find the beat, in memory only. Nothing is recorded or sent.
 - Capri has no ads and no analytics.
 
 ### What goes to the services you pick
-- A brain key (NVIDIA, OpenAI, Claude, DeepSeek): your messages, her personality, her notes and recent chat go to that company. With Watch my screen on, or when you say "check my screen", so does the screenshot.
-- ElevenLabs: the text she says out loud. In ElevenLabs voice chat: your voice, your words, her personality and her notes.
+- A brain key (NVIDIA, OpenAI, Claude, DeepSeek): your messages, her personality, her notes, recent chat and what she saw on your screen lately go to that company. With Watch my screen on, or when you say "check my screen", so does the screenshot.
+- ElevenLabs: the text she says out loud. In ElevenLabs voice chat: your voice, your words, her personality, her notes and what she saw lately.
 - Free voice chat in a language other than English uses Windows speech, which goes through Microsoft.
 
 ### The help chat on the website

@@ -87,6 +87,7 @@ namespace CapriDesktop
         private int pendingVk;
         private int heldMods;
         private readonly Toggle watch;
+        private readonly Toggle caughtUp;
         private readonly Label voiceHead;
         private readonly Rung[] voiceRungs = new Rung[3];
         private bool off;
@@ -410,9 +411,10 @@ namespace CapriDesktop
             checkIns = Check("Check in on me", 28 + c, 116, 150, delegate { if (!syncing) capri.ToggleCheckIns(); });
             onTop = Check("Always on top", 186 + c, 116, 170, delegate { if (!syncing) capri.ToggleOnTop(); });
             Caption("WATCH >", 28 + c, 162, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
-            watch = Check("Watch my screen", 28 + c, 186, 328, delegate { if (!syncing) capri.ToggleWatch(); });
-            watch.Hint = "She comments now and then";
-            watch.HintFont = Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point);
+            watch = Check("Watch my screen", 28 + c, 186, 150, delegate { if (!syncing) capri.ToggleWatch(); });
+            watch.AccessibleName = "Watch my screen. She comments now and then";
+            caughtUp = Check("Keep her caught up", 186 + c, 186, 170, delegate { if (!syncing) capri.ToggleCaughtUp(); });
+            caughtUp.AccessibleName = "Keep her caught up on my screen. Glances she stays quiet about still go in her memory, which uses a little more of your API";
             Caption("Every", 28 + c, 223, Font, Look.Dim);
             gap = PageSlider(GapNames, 216, "Time between glances", c);
             gap.Changed += delegate { if (syncing) return; gapName.Text = GapNames[gap.Value]; capri.SetGlanceGap(Gaps[gap.Value]); };
@@ -741,6 +743,7 @@ namespace CapriDesktop
             cursor.Checked = capri.UsesCursor;
             bypass.Checked = capri.Bypassing;
             watch.Checked = capri.Watching;
+            caughtUp.Checked = capri.CaughtUp;
             VoiceTier();
             int chosen = Array.IndexOf(Gaps, capri.GlanceGap);
             gap.Value = chosen < 0 ? 5 : chosen;
@@ -820,6 +823,10 @@ namespace CapriDesktop
         internal string Status { get { return brainName.Text + " | " + brainNote.Text; } }
 
         internal bool WatchShown { get { return watch.Checked; } }
+
+        internal bool CaughtUpShown { get { return caughtUp.Checked; } }
+
+        internal void FlipCaughtUp() { caughtUp.Checked = !caughtUp.Checked; }
 
         internal bool ElevenShown { get { return voiceRungs[2].Checked && !voiceRungs[1].Checked && !voiceRungs[0].Checked; } }
 

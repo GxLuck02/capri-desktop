@@ -151,6 +151,8 @@ namespace CapriDesktop
         [DataMember] public bool Tiered;
         [DataMember] public bool Watch;
         [DataMember] public int GlanceGap;
+        // Keep her caught up is on by default: what she saw costs a few words per chat, next to the screenshot each glance already sends.
+        [DataMember] public bool CaughtUp = true;
         [DataMember] public bool Quiet;
         [DataMember] public bool Silent;
         [DataMember] public bool Wander;
@@ -220,6 +222,7 @@ namespace CapriDesktop
             WanderPace = 1;
             PerchFps = 30;
             CheckIns = true;
+            CaughtUp = true;
         }
     }
 
@@ -797,7 +800,7 @@ namespace CapriDesktop
         private double voiceUntil;
         private bool spoke;
         private bool checkedIn;
-        private const string GlanceLine = "(You glance at their screen while they do their thing. React in one short line, in character, to something specific you can see: tease them, cheer them on, or ask about it. A game scene, scoreboard, inventory or quiet moment is enough. Don't invent action from a still image, and never guess who a person is; name someone only if their name is written on screen. For a blank screen, a bare desktop or a loading screen, reply with just SKIP.)";
+        private const string GlanceLine = "(You glance at their screen while they do their thing. Reply in two parts, with the labels SAW: and SAY: written exactly like that. SAW: what's on their screen, in under 20 plain words: the game or app and what's happening. SAY: your reaction in one short line, in character, to something specific you can see: tease them, cheer them on, or ask about it. A game scene, scoreboard, inventory or quiet moment is enough. Don't invent action from a still image, and never guess who a person is; name someone only if their name is written on screen. If nothing's worth a line, still give the SAW part and make it SAY: SKIP. For a blank screen, a bare desktop or a loading screen, reply with just SKIP.)";
         private const string BlackScreen = "The screen capture is black. Try borderless or windowed mode.";
         internal static Func<Rectangle, Bitmap> Grab = GrabScreen;
         internal static Func<IntPtr, Rectangle> Display = delegate(IntPtr window) { return window == IntPtr.Zero ? Screen.FromPoint(Cursor.Position).Bounds : Screen.FromHandle(window).Bounds; };
@@ -2953,6 +2956,7 @@ namespace CapriDesktop
         internal int CharacterSize { get { return preferences.Size; } }
         internal bool CheckIns { get { return preferences.CheckIns; } }
         internal bool Watching { get { return preferences.Watch; } }
+        internal bool CaughtUp { get { return preferences.CaughtUp; } }
         internal bool Speaking { get { return !preferences.Quiet; } }
         internal bool Silent { get { return preferences.Silent; } }
 
@@ -3067,6 +3071,13 @@ namespace CapriDesktop
             }
         }
 
+        internal void ToggleCaughtUp()
+        {
+            preferences.CaughtUp = !preferences.CaughtUp;
+            SavePreferences();
+            mainframe.Sync();
+        }
+
         private string Unseeing()
         {
             Cloud remote = brain.Remote;
@@ -3116,7 +3127,9 @@ namespace CapriDesktop
                 if (unseen == null) throw;
                 return unseen;
             }
-            return seen.Length == 0 ? "You looked but couldn't make out their screen." : "You looked at their screen. You see: " + seen;
+            if (seen.Length == 0) return "You looked but couldn't make out their screen.";
+            brain.Saw(seen, null, true);
+            return "You looked at their screen. You see: " + seen;
         }
 
         private void CheckGlance(double now, long quiet)
@@ -3145,8 +3158,9 @@ namespace CapriDesktop
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string said = null;
+                string saw = null;
                 string problem = null;
-                try { said = GlanceReply(brain.See(shot, Brain.Persona + Brain.Speech(), ask, 90)); }
+                try { said = GlanceReply(brain.See(shot, Brain.Persona + Brain.Speech(), ask, 140), out saw); }
                 catch (Exception error)
                 {
                     // Talking to her cancels a glance; that isn't a problem to show. Anything else goes in errors.txt too.
@@ -3157,29 +3171,70 @@ namespace CapriDesktop
                         Brain.Log("glance", -1, error.GetType().Name + ": " + error.Message);
                     }
                 }
-                Post(delegate { FinishGlance(ticket, watch, said, problem); });
+                Post(delegate { FinishGlance(ticket, watch, said, problem, saw); });
             });
         }
 
         private static string GlanceReply(string said)
         {
-            said = Brain.Sparing(Brain.Clean(Safety.Filter(said)), false, Brain.Nickname);
-            return System.Text.RegularExpressions.Regex.IsMatch(said, @"^(SKIP|\[SKIP\])[.!?]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "" : said;
+            string saw;
+            return GlanceReply(said, out saw);
         }
 
-        private void FinishGlance(int ticket, int watch, string said, string problem)
+        // A glance answers "SAW: what's on screen SAY: her line", folded onto one line by See(). Without the labels the whole reply is her line.
+        private static readonly System.Text.RegularExpressions.Regex GlanceLabel = new System.Text.RegularExpressions.Regex(@"(?<![\p{L}\p{N}'])(?:(?<label>SAW|SAY)[*_]*\s*(?::|\p{Pd}(?=\s))|(?<label>[Ss]aw|[Ss]ay)[*_]*\s*:)[*_]*");
+
+        private static string GlanceReply(string raw, out string saw)
+        {
+            saw = null;
+            string text = raw ?? "";
+            System.Text.RegularExpressions.Match sawLabel = null, sayLabel = null;
+            foreach (System.Text.RegularExpressions.Match label in GlanceLabel.Matches(text))
+            {
+                bool saying = label.Groups["label"].Value.ToUpperInvariant() == "SAY";
+                if (saying && sayLabel == null) sayLabel = label;
+                else if (!saying && sawLabel == null) sawLabel = label;
+            }
+            if (sawLabel != null || sayLabel != null)
+            {
+                string seen = sawLabel == null ? "" : Brain.Clean(Labelled(text, sawLabel, sayLabel));
+                // A description the safety filter would block stays out of her memory.
+                if (seen.Length > 0 && Safety.Filter(seen) == seen && !System.Text.RegularExpressions.Regex.IsMatch(seen, @"^[\[(]?SKIP[\])]?[.!?]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) saw = seen.Length > 200 ? seen.Substring(0, 200).TrimEnd() + "..." : seen;
+                text = sayLabel == null ? "" : Labelled(text, sayLabel, sawLabel);
+            }
+            string said = Brain.Sparing(Brain.Clean(Safety.Filter(text)), false, Brain.Nickname);
+            bool skipped = System.Text.RegularExpressions.Regex.IsMatch(said, @"^[\[(]?(SKIP|nothing|none)[\])]?[.!?]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) || System.Text.RegularExpressions.Regex.IsMatch(said, @"^[\[(]?SKIP\b");
+            return skipped ? "" : said;
+        }
+
+        // The words after one label, up to the other label when that one comes later.
+        private static string Labelled(string text, System.Text.RegularExpressions.Match label, System.Text.RegularExpressions.Match other)
+        {
+            int start = label.Index + label.Length;
+            int end = other != null && other.Index > label.Index ? other.Index : text.Length;
+            return text.Substring(start, end - start).Trim(' ', '*', '_', '#', '>', '-', '|', '/', ';', ',');
+        }
+
+        private void FinishGlance(int ticket, int watch, string said, string problem, string saw = null)
         {
             glancing = false;
             if (!preferences.Watch || watch != watchTicket) return;
             string unseen = Unseeing();
             if (unseen != null || problem != null) { lastPrint = null; mainframe.ShowProblem(unseen ?? problem); return; }
-            if (string.IsNullOrEmpty(said)) return;
-            if (ticket != asking || talkState != TalkState.Off || typer.Visible || chatting || hidden || dragging) { lastPrint = null; return; }
+            if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
+            if (ticket != asking || talkState != TalkState.Off || typer.Visible || chatting || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
             // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
-            if (Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) return;
+            if (Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) { Glimpsed(saw); return; }
             glanced.Add(Tuple.Create(clock.Elapsed.TotalSeconds, said));
-            brain.Remember("(You glanced at their screen.)", said);
+            brain.Remember(string.IsNullOrEmpty(saw) ? "(You glanced at their screen.)" : "(You glanced at their screen and saw: " + saw + ")", said);
+            brain.Saw(saw, said);
             Tell("watching", said);
+        }
+
+        // With Keep her caught up on, a glance she kept quiet about still goes in her memory, so she can say what was on their screen.
+        private void Glimpsed(string saw)
+        {
+            if (preferences.CaughtUp) brain.Saw(saw, null);
         }
 
         private System.Collections.Generic.List<string> RecentGlances(double now)
@@ -3199,7 +3254,7 @@ namespace CapriDesktop
             System.Collections.Generic.List<string> older = new System.Collections.Generic.List<string>();
             for (int i = 0; i < shown; i++) foreach (string key in GlanceKeys(said[i], Brain.Nickname)) if (older.Count < 12) Key(older, key);
             if (older.Count > 0) ask += "\nEarlier you also brought up: " + string.Join(", ", older.ToArray()) + ".";
-            return ask + "\nDon't bring any of it up again: no character, move, item, place, number, name or joke from those lines. Pick something new and specific, or reply with just SKIP.)";
+            return ask + "\nDon't bring any of it up again: no character, move, item, place, number, name or joke from those lines. Pick something new and specific, or make it SAY: SKIP.)";
         }
 
         // True when a glance line brings back a name, number or phrase from one she already said, or mostly the same words.
@@ -10518,6 +10573,58 @@ namespace CapriDesktop
                                     if (GlanceReply("SKIP") != "" || GlanceReply("\"skip.\"") != "" || GlanceReply("[SKIP]") != "" || GlanceReply("Don't skip that chest.") != "Don't skip that chest.") throw new Exception("Glance replies confused SKIP with a normal sentence.");
                                     if (GlanceReply("Nice shot at that boss.") != "Nice shot at that boss." || GlanceReply("well shit, choom") != Brain.Clean(Safety.Filter("well shit, choom"))) throw new Exception("Glance replies changed the safety filter.");
                                     checks.Add("PASS glance replies: only a whole SKIP reply is silent, normal game comments and the safety filter still work");
+                                    string glanceSaw;
+                                    string[,] glanceParts =
+                                    {
+                                        { "SAW: Minecraft, a cave with diamond ore on the wall SAY: Mine those, choom.", "Mine those, choom.", "Minecraft, a cave with diamond ore on the wall" },
+                                        { "**Saw:** a boss fight in Elden Ring **Say:** \"Nice dodge.\"", "Nice dodge.", "a boss fight in Elden Ring" },
+                                        { "SAY: That boss is toast. SAW: a boss at low health in Elden Ring", "That boss is toast.", "a boss at low health in Elden Ring" },
+                                        { "SAW: a Discord chat with three friends SAY: SKIP", "", "a Discord chat with three friends" },
+                                        { "SAW - a Spotify playlist | SAY - [SKIP]", "", "a Spotify playlist" },
+                                        { "SAW: a loading screen", "", "a loading screen" },
+                                        { "SAW: a quiet inventory screen SAY: SKIP. Actually, nice sword.", "", "a quiet inventory screen" },
+                                        { "saw: a beer ad on YouTube say: Nice playlist.", "Nice playlist.", null },
+                                        { "SKIP", "", null },
+                                        { "Don't skip that chest.", "Don't skip that chest.", null }
+                                    };
+                                    for (int i = 0; i < glanceParts.GetLength(0); i++)
+                                        if (GlanceReply(glanceParts[i, 0], out glanceSaw) != glanceParts[i, 1] || glanceSaw != glanceParts[i, 2]) throw new Exception("A glance reply was read wrong: " + glanceParts[i, 0] + " -> " + GlanceReply(glanceParts[i, 0], out glanceSaw) + " / " + glanceSaw);
+                                    Brain.Unsee();
+                                    Brain glancer = new Brain();
+                                    glancer.Saw("Minecraft, a cave with diamond ore on the wall", "Mine those, choom.");
+                                    glancer.Saw("a Discord chat with three friends", null);
+                                    glancer.Saw("a code editor with a red error on line 12.", null, true);
+                                    string seenNow = Brain.Seen();
+                                    if (seenNow.IndexOf("- Just now: Minecraft, a cave with diamond ore on the wall. You said: \"Mine those, choom.\"\n- Just now: a Discord chat with three friends. You stayed quiet.\n- Just now, when they asked you to look: a code editor with a red error on line 12. You told them about it.", StringComparison.Ordinal) < 0 || seenNow.IndexOf("never say you guessed", StringComparison.Ordinal) < 0 || Brain.Remembered().IndexOf(seenNow, StringComparison.Ordinal) < 0) throw new Exception("What she saw didn't reach her prompt in order: " + seenNow);
+                                    string seenFile = Path.Combine(Path.GetDirectoryName(Brain.MemoryPath), "chat-seen-test.json");
+                                    if (File.Exists(seenFile)) File.Delete(seenFile);
+                                    Brain seenKeeper = new Brain();
+                                    seenKeeper.Load(seenFile);
+                                    seenKeeper.Saw("a chess board, white to move", null);
+                                    Brain.Unsee();
+                                    new Brain().Load(seenFile);
+                                    bool seenKept = Brain.Seen().IndexOf("a chess board, white to move", StringComparison.Ordinal) >= 0 && Brain.Seen().IndexOf("a Discord chat with three friends", StringComparison.Ordinal) >= 0;
+                                    File.WriteAllText(seenFile, "{\"at\":\"" + DateTime.Now.ToString("o", System.Globalization.CultureInfo.InvariantCulture) + "\",\"messages\":[],\"seen\":[{\"at\":\"" + DateTime.Now.AddHours(-4).ToString("o", System.Globalization.CultureInfo.InvariantCulture) + "\",\"saw\":\"an old title screen\"},{\"at\":\"" + DateTime.Now.AddMinutes(-12).ToString("o", System.Globalization.CultureInfo.InvariantCulture) + "\",\"saw\":\"a racing game, lap 2 of 3\",\"said\":\"Floor it.\"}]}");
+                                    new Brain().Load(seenFile);
+                                    string agedSeen = Brain.Seen();
+                                    File.Delete(seenFile);
+                                    if (!seenKept || agedSeen.IndexOf("an old title screen", StringComparison.Ordinal) >= 0 || agedSeen.IndexOf("- 12 min ago: a racing game, lap 2 of 3. You said: \"Floor it.\"", StringComparison.Ordinal) < 0) throw new Exception("What she saw didn't carry over a restart or age out after 3 hours: " + agedSeen);
+                                    System.Collections.Generic.List<string> seenAsked = new System.Collections.Generic.List<string>();
+                                    System.Net.Sockets.TcpListener seenFake;
+                                    string seenOpenAi = Brain.OpenAi;
+                                    Brain.OpenAi = FakeServer(new[] { "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"A racing game, you were on lap 2.\"}}]}" }, seenAsked, out seenFake);
+                                    try
+                                    {
+                                        Brain seenAsker = new Brain();
+                                        seenAsker.Remote = new Cloud("sk-proj-test", "gpt-5-mini");
+                                        seenAsker.Model = "gpt-5-mini";
+                                        string seenAnswer = seenAsker.Ask("what was on my screen earlier?");
+                                        string seenSent;
+                                        lock (seenAsked) seenSent = string.Join("\n", seenAsked.ToArray());
+                                        if (seenAnswer != "A racing game, you were on lap 2." || seenSent.IndexOf("a racing game, lap 2 of 3", StringComparison.Ordinal) < 0 || seenSent.IndexOf("never say you guessed", StringComparison.Ordinal) < 0) throw new Exception("Her chat prompt didn't carry what she saw: " + seenSent);
+                                    }
+                                    finally { Brain.OpenAi = seenOpenAi; seenFake.Stop(); Brain.Unsee(); }
+                                    checks.Add("PASS screen memory replies: a glance answers SAW and SAY, read with bold, lowercase, dashes or either order; SKIP stays silent and keeps what she saw; a blocked description stays out; her chat prompt lists what she saw, oldest first, for 3 hours and across a restart");
                                     string curses = "King of Curses with Malevolent Shrine on the hotbar, choom? Somebody's been watching too much anime.";
                                     string[] cursed = { curses };
                                     if (!Repeats("That King of Curses moveset again? Malevolent Shrine spam incoming.", cursed, "") || !Repeats("still running that king of curses build huh", cursed, "") || !Repeats(curses, cursed, "")) throw new Exception("A glance repeated a name it already brought up.");
@@ -10525,7 +10632,7 @@ namespace CapriDesktop
                                     if (Repeats("Nice dodge, you barely took a scratch.", cursed, "") || Repeats("Clean dodge, Lachy.", new[] { "Nice inventory, Lachy." }, "Lachy") || Repeats("Nice shot! [SIGNAL CORRUPTED]", new[] { "Nice dodge. [SIGNAL CORRUPTED]" }, "")) throw new Exception("A new glance counted as a repeat.");
                                     System.Collections.Generic.List<string> glanceLines = new System.Collections.Generic.List<string> { curses, "Nice dodge.", "That boss is toast.", "Big brain move.", "Inventory check, choom?", "Clean landing.", "Go go go." };
                                     string glanceAsking = GlanceAsk(glanceLines);
-                                    if (GlanceAsk(new System.Collections.Generic.List<string>()) != GlanceLine || !glanceAsking.StartsWith(GlanceLine, StringComparison.Ordinal) || glanceAsking.IndexOf("\n- Nice dodge.\n", StringComparison.Ordinal) < 0 || glanceAsking.IndexOf("\n- " + curses, StringComparison.Ordinal) >= 0 || glanceAsking.IndexOf("Earlier you also brought up: king of curses, malevolent shrine", StringComparison.Ordinal) < 0 || !glanceAsking.EndsWith("reply with just SKIP.)", StringComparison.Ordinal)) throw new Exception("The glance prompt lost her recent lines or older topics: " + glanceAsking);
+                                    if (GlanceAsk(new System.Collections.Generic.List<string>()) != GlanceLine || !glanceAsking.StartsWith(GlanceLine, StringComparison.Ordinal) || glanceAsking.IndexOf("\n- Nice dodge.\n", StringComparison.Ordinal) < 0 || glanceAsking.IndexOf("\n- " + curses, StringComparison.Ordinal) >= 0 || glanceAsking.IndexOf("Earlier you also brought up: king of curses, malevolent shrine", StringComparison.Ordinal) < 0 || !glanceAsking.EndsWith("make it SAY: SKIP.)", StringComparison.Ordinal)) throw new Exception("The glance prompt lost her recent lines or older topics: " + glanceAsking);
                                     checks.Add("PASS glance repeats: names, numbers and phrases she already brought up count as a repeat, lowercased or at a sentence start; new lines, their nickname and glitch tags don't; the brain sees her last six lines and older topics");
                                     lastPrint = null;
                                     using (Bitmap wide = new Bitmap(2560, 1440))
@@ -12759,6 +12866,8 @@ namespace CapriDesktop
                             preferences.AgentId = "agent_old";
                             preferences.AgentVersion = 1;
                             preferences.AgentPersonality = "0123456789abcdef";
+                            Brain.Unsee();
+                            brain.Saw("a pixel art farm with a red barn", "Cute barn.");
                             CloseTalk();
                             pill.Press(2);
                             if (!pill.Chatting || pill.Muted || !chatting || TalkPill.Render(1, 0, true).Width <= TalkPill.Measure(1).Width + 30) throw new Exception("Wave did not start voice chat with the mic button apart on the right.");
@@ -12806,6 +12915,10 @@ namespace CapriDesktop
                             if (MouthCell(clock.Elapsed.TotalSeconds, idle) < 0) throw new Exception("Her mouth did not follow the agent's audio.");
                             string[] wanted = { "http POST /v1/convai/agents/create sk_test_capri_1234 {\"name\":\"Capri\"", "\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45}", "http PATCH /v1/convai/agents/agent_old sk_test_capri_1234 {\"conversation_config\":{\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45},\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "\"tool_ids\":[\"tool_kept\",\"tool_1\",\"tool_2\",\"tool_3\",\"tool_4\",\"tool_5\",\"tool_6\",\"tool_7\",\"tool_8\",\"tool_9\"]", "\"tool_ids\":[\"tool_kept\",\"tool_10\",\"tool_11\",\"tool_12\",\"tool_13\",\"tool_14\",\"tool_15\",\"tool_16\",\"tool_17\",\"tool_18\"]}}}}", "\"name\":\"play_music\"", "\"name\":\"app_window\"", "\"name\":\"look_at_screen\"", "http GET /v1/convai/tools sk_test_capri_1234", "http POST /v1/convai/tools sk_test_capri_1234 {\"tool_config\":{\"type\":\"client\",\"name\":\"open_website\"", "\"name\":\"media\",\"description\":\"Control the music", "\"expects_response\":true,\"response_timeout_secs\":20}}", "You have tools for their PC", "tool {\"type\":\"client_tool_result\",\"tool_call_id\":\"call_1\",\"result\":\"Opened Spotify.\",\"is_error\":false}", "ran SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", "Never check in", "beg them to talk or say they left you hanging", "\"prompt\":{\"prompt\":\"You are Capri", "\"llm\":\"gemini-2.5-flash\"", "\"tts\":{\"voice_id\":\"abc\"}", "\"overrides\":{\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":true}},\"tts\":{\"voice_id\":true}}}", "http GET /v1/convai/conversation/get-signed-url?agent_id=agent_old sk_test_capri_1234", "init {\"type\":\"conversation_initiation_client_data\",\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "pong {\"type\":\"pong\",\"event_id\":7}", "chunk silent | chunk loud | chunk loud" };
                             foreach (string piece in wanted) if (log.IndexOf(piece, StringComparison.Ordinal) < 0) throw new Exception("Agent traffic was missing " + piece + ": " + log);
+                            bool sawInVoice = false;
+                            lock (asked) foreach (string entry in asked) if (entry.StartsWith("init ", StringComparison.Ordinal) && entry.IndexOf("a pixel art farm with a red barn. You said: \\\"Cute barn.\\\"", StringComparison.Ordinal) >= 0) sawInVoice = true;
+                            Brain.Unsee();
+                            if (!sawInVoice) throw new Exception("Voice chat didn't start with what she saw on their screen: " + log);
                             if (log.IndexOf("tool_stale", StringComparison.Ordinal) >= 0 || System.Text.RegularExpressions.Regex.Matches(log, "http POST /v1/convai/tools").Count != 18) throw new Exception("Voice chat reused a stale tool or remade a kept one: " + log);
                             Hands.Run = handsRun;
                             Hands.Catalog = handsCatalog;
@@ -13121,9 +13234,11 @@ namespace CapriDesktop
                             int beforeGap = preferences.GlanceGap;
                             string glanceUrl = FakeServer(new[]
                             {
-                                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"SKIP\"}}]}",
-                                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Don't skip that chest.\"}}]}"
+                                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"SAW: a dungeon with a closed treasure chest SAY: SKIP\"}}]}",
+                                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"SAW: a treasure chest next to their character SAY: Don't skip that chest.\"}}]}",
+                                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"A code editor with a red error on line 12.\"}}]}"
                             }, glanceAsked, out glanceFake);
+                            Brain.Unsee();
                             resetGlance = delegate
                             {
                                 preferences.Watch = false;
@@ -13222,6 +13337,7 @@ namespace CapriDesktop
                             if (glancing) { if (clock.Elapsed.TotalSeconds > glanceDeadline) throw new Exception("The fake glance timed out."); return; }
                             if (reply != null || lastGlance != 1000) throw new Exception("SKIP was spoken or lost its retry time.");
                             lock (glanceAsked) if (glanceAsked.Count != 1) throw new Exception("The first glance sent the wrong number of requests.");
+                            if (Brain.Seen().IndexOf("a dungeon with a closed treasure chest. You stayed quiet.", StringComparison.Ordinal) < 0) throw new Exception("With Keep her caught up on, a glance she kept quiet about wasn't kept: " + Brain.Seen());
                             nextGlance = 1100;
                             CheckGlance(1100, 130000);
                             if (glancing) throw new Exception("An unchanged screen was retried too soon.");
@@ -13242,6 +13358,28 @@ namespace CapriDesktop
                             }
                             if (RecentGlances(clock.Elapsed.TotalSeconds).IndexOf("Don't skip that chest.") < 0) throw new Exception("A delivered glance wasn't kept for the repeat check.");
                             checks.Add("PASS glance delivery: a sleeping watcher sends a valid frame, SKIP stays silent, unchanged scenes wait five minutes before retrying, and a sentence containing skip reaches the bubble and wakes her");
+                            System.Collections.Generic.List<ChatMessage> glanceChat = brain.History;
+                            if (glanceChat.Count < 2 || glanceChat[glanceChat.Count - 2].Content != "(You glanced at their screen and saw: a treasure chest next to their character)" || glanceChat[glanceChat.Count - 1].Content != "Don't skip that chest." || Brain.Seen().IndexOf("a treasure chest next to their character. You said: \"Don't skip that chest.\"", StringComparison.Ordinal) < 0) throw new Exception("A spoken glance didn't keep what she saw: " + Brain.Seen());
+                            string lookedAt = LookAt("the error");
+                            if (lookedAt != "You looked at their screen. You see: A code editor with a red error on line 12." || Brain.Seen().IndexOf(", when they asked you to look: A code editor with a red error on line 12. You told them about it.", StringComparison.Ordinal) < 0) throw new Exception("A look they asked for wasn't kept: " + lookedAt + " / " + Brain.Seen());
+                            mainframe.FlipCaughtUp();
+                            if (preferences.CaughtUp || mainframe.CaughtUpShown || LoadPreferences().CaughtUp) throw new Exception("Keep her caught up didn't turn off and save.");
+                            FinishGlance(asking, watchTicket, "", null, "a settings menu with a volume slider");
+                            lastPrint = new byte[64 * 36 * 3];
+                            dragging = true;
+                            FinishGlance(asking, watchTicket, "Nice slider.", null, "a settings menu with a brightness slider");
+                            dragging = false;
+                            if (Brain.Seen().IndexOf("a settings menu", StringComparison.Ordinal) >= 0 || reply != "Don't skip that chest.") throw new Exception("With Keep her caught up off, a glance she didn't say went in her memory: " + Brain.Seen());
+                            mainframe.FlipCaughtUp();
+                            if (!preferences.CaughtUp || !mainframe.CaughtUpShown || !LoadPreferences().CaughtUp) throw new Exception("Keep her caught up didn't turn back on and save.");
+                            FinishGlance(asking, watchTicket, "", null, "a world map with three quest markers");
+                            if (Brain.Seen().IndexOf("a world map with three quest markers. You stayed quiet.", StringComparison.Ordinal) < 0) throw new Exception("With Keep her caught up on, a silent glance wasn't kept: " + Brain.Seen());
+                            DataContractJsonSerializer caughtJson = new DataContractJsonSerializer(typeof(Preferences));
+                            Preferences caughtOld = (Preferences)caughtJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Size\":240}")));
+                            Preferences caughtOff = (Preferences)caughtJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"CaughtUp\":false,\"Size\":240}")));
+                            if (!new Preferences().CaughtUp || !caughtOld.CaughtUp || caughtOff.CaughtUp) throw new Exception("Keep her caught up isn't on by default, or off doesn't stick.");
+                            Brain.Unsee();
+                            checks.Add("PASS screen memory: a spoken glance goes in her chat as what she saw plus her line, a look they asked for is kept too, and Keep her caught up (on by default, saved) decides whether glances she stays quiet about are kept");
                             resetGlance();
                             resetGlance = null;
                             heard = "Hello Capri.";

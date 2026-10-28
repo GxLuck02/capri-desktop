@@ -25,6 +25,16 @@ namespace CapriDesktop
     {
         [DataMember(Name = "at")] public string At;
         [DataMember(Name = "messages")] public ChatMessage[] Messages;
+        [DataMember(Name = "seen", EmitDefaultValue = false)] public Sighting[] Seen;
+    }
+
+    [DataContract]
+    internal sealed class Sighting
+    {
+        [DataMember(Name = "at")] public string At;
+        [DataMember(Name = "saw")] public string Saw;
+        [DataMember(Name = "said", EmitDefaultValue = false)] public string Said;
+        [DataMember(Name = "asked", EmitDefaultValue = false)] public bool Asked;
     }
 
     [DataContract]
@@ -491,7 +501,7 @@ namespace CapriDesktop
         internal static string Remembered()
         {
             string notes = Notes();
-            return notes.Length == 0 ? "" : "\nYour notes about them, from me.md (they can read and edit it). Use them when they fit, and don't recite them:\n" + notes;
+            return (notes.Length == 0 ? "" : "\nYour notes about them, from me.md (they can read and edit it). Use them when they fit, and don't recite them:\n" + notes) + Seen();
         }
 
         internal static string Notes()
@@ -567,6 +577,43 @@ namespace CapriDesktop
             }
             if (dropped == 0) return "Nothing about " + text + " in my notes.";
             return all ? "Wiped my notes about you." : "Forgot " + (dropped == 1 ? "my note" : dropped + " notes") + " about " + text + ".";
+        }
+
+        // What she really saw on their screen, glances she kept quiet about included, so "what did you see?" gets the truth instead of "I guessed".
+        private static readonly List<Sighting> sightings = new List<Sighting>();
+        private static readonly object seeing = new object();
+
+        internal void Saw(string what, string said, bool asked = false)
+        {
+            string text = Regex.Replace(what ?? "", @"\s+", " ").Trim();
+            if (text.Length == 0) return;
+            lock (seeing)
+            {
+                sightings.Add(new Sighting { At = DateTime.Now.ToString("o", System.Globalization.CultureInfo.InvariantCulture), Saw = text, Said = string.IsNullOrEmpty(said) ? null : said, Asked = asked });
+                if (sightings.Count > 30) sightings.RemoveRange(0, sightings.Count - 30);
+            }
+            lock (gate) Save();
+        }
+
+        internal static void Unsee() { lock (seeing) sightings.Clear(); }
+
+        internal static string Seen()
+        {
+            List<Sighting> all;
+            lock (seeing) all = new List<Sighting>(sightings);
+            DateTime now = DateTime.Now;
+            List<string> lines = new List<string>();
+            for (int i = all.Count - 1; i >= 0 && lines.Count < 8; i--)
+            {
+                DateTime at;
+                if (!DateTime.TryParse(all[i].At, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out at)) continue;
+                TimeSpan ago = now - at;
+                if (ago > TimeSpan.FromHours(3)) break;
+                string saw = all[i].Saw.Length > 300 ? all[i].Saw.Substring(0, 300).TrimEnd() + "..." : all[i].Saw;
+                string when = ago.TotalMinutes < 1 ? "Just now" : ago.TotalMinutes < 60 ? (int)ago.TotalMinutes + " min ago" : ago.TotalHours < 2 ? "An hour ago" : (int)ago.TotalHours + " hours ago";
+                lines.Insert(0, "- " + when + (all[i].Asked ? ", when they asked you to look: " : ": ") + saw.TrimEnd('.') + ". " + (all[i].Said != null ? "You said: " + Voice.Quote(all[i].Said) : all[i].Asked ? "You told them about it." : "You stayed quiet."));
+            }
+            return lines.Count == 0 ? "" : "\nWhat you really saw on their screen lately, oldest first. These were real looks, not guesses: use them when they ask what you saw or what's going on, and never say you guessed. Don't bring them up out of nowhere:\n" + string.Join("\n", lines.ToArray());
         }
 
         internal static string[] InstalledModels()
@@ -874,6 +921,8 @@ namespace CapriDesktop
                 Kept();
             }
         }
+
+        internal List<ChatMessage> History { get { lock (gate) return new List<ChatMessage>(history); } }
 
         internal string Step(string system, string user, string tools, string claudeTools, string listing, List<KeyValuePair<string, ToolArguments>> calls)
         {
@@ -1203,13 +1252,20 @@ namespace CapriDesktop
             while (history.Count > Recall) history.RemoveAt(0);
             foreach (ChatMessage message in history) message.Content = Hands.Hush(message.Content);
             chattedAt = DateTime.Now;
+            Save();
+        }
+
+        private void Save()
+        {
             string path = ChatPath;
             if (path == null) return;
+            Sighting[] seen;
+            lock (seeing) seen = sightings.Count == 0 ? null : sightings.ToArray();
             try
             {
                 using (MemoryStream data = new MemoryStream())
                 {
-                    new DataContractJsonSerializer(typeof(SavedChat)).WriteObject(data, new SavedChat { At = chattedAt.ToString("o", System.Globalization.CultureInfo.InvariantCulture), Messages = history.ToArray() });
+                    new DataContractJsonSerializer(typeof(SavedChat)).WriteObject(data, new SavedChat { At = chattedAt.ToString("o", System.Globalization.CultureInfo.InvariantCulture), Messages = history.ToArray(), Seen = seen });
                     File.WriteAllBytes(path, data.ToArray());
                 }
             }
@@ -1239,6 +1295,11 @@ namespace CapriDesktop
                     if (message != null && (message.Role == "user" || message.Role == "assistant") && !string.IsNullOrEmpty(message.Content)) history.Add(new ChatMessage(message.Role, message.Content));
                 while (history.Count > Recall) history.RemoveAt(0);
                 chattedAt = at;
+            }
+            lock (seeing)
+            {
+                sightings.Clear();
+                if (saved.Seen != null) foreach (Sighting sighting in saved.Seen) if (sighting != null && !string.IsNullOrEmpty(sighting.Saw) && sighting.At != null) sightings.Add(sighting);
             }
         }
 
