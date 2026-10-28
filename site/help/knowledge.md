@@ -315,11 +315,12 @@ VOICE ("Every voice, ElevenLabs too" on the right of the heading)
 - Volume: Mute, 10% to 100%, 125%, 150%. Default 100%.
 - Pitch (from 0.7.5): -6 to +6 semitones. Default Normal. Higher or deeper, at the same speed.
 - Speed (from 0.7.5): 0.7x to 1.5x. Default Normal.
-- Glitch (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off, except her HD voice, which starts at 10% and shows as "10% · HD". Stutters, crushed bits and skips in her voice, more as it goes up.
+- Robot (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off, except her HD voice, which starts at 10% and shows as "10% · HD". A smooth synth under her voice that follows her pitch on the nearest note, like a talk box. Low settings add a light robotic shimmer; 100% is all robot.
+- Glitch (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off. Stutters, crushed bits and skips in her voice, more as it goes up.
 - Sounds: her sound effects. Off, or 10% to 100%. Default 60%.
 - Typing sound: "When she types". A soft typing sound while her text replies type out.
 
-Pitch, Speed and Glitch change every voice she has: her free voice styles, HD, ElevenLabs and ElevenLabs voice chat. See "Pitch, speed and glitch" under Her voice.
+Pitch, Speed, Robot and Glitch change every voice she has: her free voice styles, HD, ElevenLabs and ElevenLabs voice chat. See "Pitch, speed, robot and glitch" under Her voice.
 
 MOVES
 - Wander: Off, Rarely, Sometimes, Often or Restless.
@@ -514,13 +515,14 @@ She has two voices. Pick one under VOICE in the Mainframe, or pick OFF (since 0.
 - It needs 64-bit Windows. The Mac and Linux preview doesn't have it yet.
 - Without her free voice and without an ElevenLabs key, she types her replies.
 
-### Pitch, speed and glitch (from 0.7.5)
-Mainframe > Settings > VOICE has three sliders. They change every voice she has: her free voice (any style), HD, ElevenLabs, and ElevenLabs voice chat.
+### Pitch, speed, robot and glitch (from 0.7.5)
+Mainframe > Settings > VOICE has four sliders. They change every voice she has: her free voice (any style), HD, ElevenLabs, and ElevenLabs voice chat.
 - Pitch: -6 to +6 semitones. Default Normal. Higher or deeper, without talking faster or slower.
 - Speed: 0.7x to 1.5x. Default Normal.
+- Robot: Off, 5%, 10%, 15%, then 20% to 100%. A synth sings under her voice, like a talk box or a vocoder: it follows her pitch, pulled toward the nearest note, and takes the shape of her words. Smooth and musical, with no stutters. Low settings add a light robotic shimmer; 100% is all robot.
 - Glitch: Off, 5%, 10%, 15%, then 20% to 100%. Short stutters, crushed bits and skips, like a glitchy chip. More of them as it goes up. The same line glitches the same way each time.
 
-Her HD voice keeps its own Glitch, and it starts at 10%, so she glitches a little out of the box. While HD is the voice she's using, the slider shows it with HD after it ("10% · HD"), and moving it only changes HD. Her other voices share one Glitch, which starts at Off.
+Her HD voice keeps its own Robot and Glitch. Its Robot starts at 10%, so she sounds a little robotic out of the box, and its Glitch starts at Off. While HD is the voice she's using, those sliders show its values with HD after them ("10% · HD"), and moving them only changes HD. Her other voices share one Robot and one Glitch, which both start at Off.
 
 When you let go of a slider, she says "How do I sound now, choom?" in the voice she's using, so you can hear it. With ELEVENLABS she makes that line once (about 25 credits), then restyles the same audio on your PC, so moving the sliders again uses no more credits. If her HD voice is asleep (it rests after 10 quiet minutes), she says "One sec, waking my HD voice." first, then the line in HD. With her voice OFF she says "My voice is OFF, choom. Pick FREE VOICE to hear that." With no voice set up she says "Get my free voice under VOICE to hear that, choom."
 
@@ -733,7 +735,7 @@ If you don't touch the mouse or keyboard for a while, she falls asleep. Move the
 When she starts, crimson glitch tendrils tear out from behind her, different every time, while she beams in with her sound. Mainframe > Settings > Glitch in at startup turns all of it on or off. Off: she just appears.
 
 ### Sounds
-Mainframe > Settings > Sounds sets her sound effects (arrive, leave, hops, clicks). Volume sets her spoken voice. Pitch, Speed and Glitch change how all her voices sound. Typing sound turns the soft typing sound on or off.
+Mainframe > Settings > Sounds sets her sound effects (arrive, leave, hops, clicks). Volume sets her spoken voice. Pitch, Speed, Robot and Glitch change how all her voices sound. Typing sound turns the soft typing sound on or off.
 
 ---
 

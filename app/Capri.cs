@@ -189,15 +189,18 @@ namespace CapriDesktop
         [DataMember] public bool HdVoice;
         [DataMember] public int VoicePitch;
         [DataMember] public int VoiceSpeed = 100;
+        [DataMember] public int VoiceRobot;
         [DataMember] public int VoiceGlitch;
-        // Her HD voice keeps its own glitch, a little out of the box.
-        [DataMember] public int HdGlitch = VoiceFx.HdDefault;
+        // Her HD voice keeps its own robot, a little out of the box, and its own glitch. Early 0.7.4 builds saved a 10% HD
+        // glitch as HdGlitch, so the new name starts it at Off.
+        [DataMember] public int HdRobot = VoiceFx.HdRobotDefault;
+        [DataMember] public int HdVoiceGlitch;
 
         [OnDeserializing]
         private void Defaults(StreamingContext context)
         {
             VoiceSpeed = 100;
-            HdGlitch = VoiceFx.HdDefault;
+            HdRobot = VoiceFx.HdRobotDefault;
             Size = 240;
             Motion = true;
             OnTop = true;
@@ -901,8 +904,10 @@ namespace CapriDesktop
             Voice.Loudness = Math.Max(0, Math.Min(150, preferences.Volume));
             VoiceFx.Pitch = Math.Max(-VoiceFx.MostPitch, Math.Min(VoiceFx.MostPitch, preferences.VoicePitch));
             VoiceFx.Speed = Math.Max(VoiceFx.Slowest, Math.Min(VoiceFx.Fastest, preferences.VoiceSpeed));
+            VoiceFx.Robot = Math.Max(0, Math.Min(100, preferences.VoiceRobot));
+            VoiceFx.HdRobot = Math.Max(0, Math.Min(100, preferences.HdRobot));
             VoiceFx.Glitch = Math.Max(0, Math.Min(100, preferences.VoiceGlitch));
-            VoiceFx.HdGlitch = Math.Max(0, Math.Min(100, preferences.HdGlitch));
+            VoiceFx.HdGlitch = Math.Max(0, Math.Min(100, preferences.HdVoiceGlitch));
             Sfx.Level = Math.Max(0, Math.Min(100, preferences.Sounds));
             Sfx.Out = delegate(short[] sound) { Post(delegate { Effect(sound); }); };
             Sfx.TypeOut = delegate(short[] sound) { if (IsDisposed) return; try { typist.Open(Sfx.Rate); typist.Play(sound); } catch (Exception) { } };
@@ -2426,10 +2431,13 @@ namespace CapriDesktop
 
         internal int VoiceSpeed { get { return VoiceFx.Speed; } }
 
-        // Her HD voice keeps its own glitch; her other voices share one. The glitch slider shows the one for the voice she speaks with.
-        internal bool GlitchHd { get { return preferences.HdVoice && (preferences.Quiet || voiceBroke || (Speak == null && voice.Key == null)); } }
+        // Her HD voice keeps its own robot and glitch; her other voices share one of each. Those sliders show the ones for the voice
+        // she speaks with.
+        internal bool SpeaksHd { get { return preferences.HdVoice && (preferences.Quiet || voiceBroke || (Speak == null && voice.Key == null)); } }
 
-        internal int VoiceGlitch { get { return GlitchHd ? VoiceFx.HdGlitch : VoiceFx.Glitch; } }
+        internal int VoiceRobot { get { return SpeaksHd ? VoiceFx.HdRobot : VoiceFx.Robot; } }
+
+        internal int VoiceGlitch { get { return SpeaksHd ? VoiceFx.HdGlitch : VoiceFx.Glitch; } }
 
         internal void SetVoicePitch(int semitones)
         {
@@ -2445,10 +2453,18 @@ namespace CapriDesktop
             SavePreferences();
         }
 
+        internal void SetVoiceRobot(int percent)
+        {
+            int robot = Math.Max(0, Math.Min(100, percent));
+            if (SpeaksHd) preferences.HdRobot = VoiceFx.HdRobot = robot;
+            else preferences.VoiceRobot = VoiceFx.Robot = robot;
+            SavePreferences();
+        }
+
         internal void SetVoiceGlitch(int percent)
         {
             int glitch = Math.Max(0, Math.Min(100, percent));
-            if (GlitchHd) preferences.HdGlitch = VoiceFx.HdGlitch = glitch;
+            if (SpeaksHd) preferences.HdVoiceGlitch = VoiceFx.HdGlitch = glitch;
             else preferences.VoiceGlitch = VoiceFx.Glitch = glitch;
             SavePreferences();
         }
@@ -4366,14 +4382,14 @@ namespace CapriDesktop
         internal const string StyleSilent = "My voice is OFF, choom. Pick FREE VOICE to hear that.";
         internal const string StyleMissing = "Get my free voice under VOICE to hear that, choom.";
 
-        // Letting go of her pitch, speed or glitch slider: she says a line in the voice she's using, so they hear it.
+        // Letting go of her pitch, speed, robot or glitch slider: she says a line in the voice she's using, so they hear it.
         // ElevenLabs makes the line once; after that its audio is restyled here, so dragging around spends no more credits.
         internal void HearVoiceStyle()
         {
             bool paid = !preferences.Quiet && !voiceBroke && (Speak != null || voice.Ready);
             bool free = FreeSpeak != null || kokoro.Installed || (preferences.HdVoice && qwen.Installed);
             string line = preferences.Silent ? StyleSilent : paid || free ? StyleLine : StyleMissing;
-            if (line == StyleLine && GlitchHd && WakeFor(line)) return;
+            if (line == StyleLine && SpeaksHd && WakeFor(line)) return;
             CheckVoice(line, false);
         }
 
@@ -5044,17 +5060,17 @@ namespace CapriDesktop
             opened.Start(url, voiceId);
         }
 
-        // ElevenLabs voice chat streams its audio in, so her pitch, speed and glitch go on a chunk at a time.
+        // ElevenLabs voice chat streams its audio in, so her pitch, speed, robot and glitch go on a chunk at a time.
         // What the styling still holds back comes out once the stream has been quiet for a moment.
         private short[] ChatVoice(short[] samples)
         {
-            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, glitch = VoiceFx.Glitch;
-            if (chatFx != null && (chatFx.Pitch != pitch || chatFx.Speed != speed || chatFx.Glitch != glitch || chatFx.Rate != chatRate))
+            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, robot = VoiceFx.Robot, glitch = VoiceFx.Glitch;
+            if (chatFx != null && (chatFx.Pitch != pitch || chatFx.Speed != speed || chatFx.Robot != robot || chatFx.Glitch != glitch || chatFx.Rate != chatRate))
             {
                 speaker.Play(chatFx.Flush());
                 chatFx = null;
             }
-            if (chatFx == null && (pitch != 0 || speed != 100 || glitch > 0)) chatFx = new VoiceFx.Live(chatRate, pitch, speed, glitch, Environment.TickCount, true);
+            if (chatFx == null && (pitch != 0 || speed != 100 || robot > 0 || glitch > 0)) chatFx = new VoiceFx.Live(chatRate, pitch, speed, robot, glitch, Environment.TickCount, true);
             if (chatFx == null) return samples;
             chatTail.Stop();
             chatTail.Start();
@@ -10905,10 +10921,10 @@ namespace CapriDesktop
                                 return true;
                             };
                             Func<double, double, bool> fxNear = delegate(double fxGot, double fxWanted) { return Math.Abs(fxGot - fxWanted) <= fxWanted * 0.03; };
-                            bool fxPlain = VoiceFx.Kokoro(fxTone, 24000, 0, 0, 1) == fxTone && VoiceFx.Restyled(fxTone, 24000, 0, 100, 0, 1) == fxTone && VoiceFx.Tempo(1.1f, 0, 100) == 1.1f && VoiceFx.Tempo(1.08f, 0, 100) == 1.08f
-                                && fxSame(Voice.Samples(Voice.Wave(VoiceFx.Kokoro(fxTone, 24000, 0, 0, 1), 24000), out loudRate), fxTone);
-                            short[] fxUp = VoiceFx.Kokoro(fxTone, 24000, 6, 0, 1), fxDown = VoiceFx.Kokoro(fxTone, 24000, -6, 0, 1);
-                            short[] fxHd = VoiceFx.Restyled(fxTone, 24000, 4, 100, 0, 1), fxFast = VoiceFx.Restyled(fxTone, 24000, 0, 150, 0, 1), fxSlow = VoiceFx.Restyled(fxTone, 24000, 0, 70, 0, 1);
+                            bool fxPlain = VoiceFx.Kokoro(fxTone, 24000, 0, 0, 0, 1) == fxTone && VoiceFx.Restyled(fxTone, 24000, 0, 100, 0, 0, 1) == fxTone && VoiceFx.Tempo(1.1f, 0, 100) == 1.1f && VoiceFx.Tempo(1.08f, 0, 100) == 1.08f
+                                && fxSame(Voice.Samples(Voice.Wave(VoiceFx.Kokoro(fxTone, 24000, 0, 0, 0, 1), 24000), out loudRate), fxTone);
+                            short[] fxUp = VoiceFx.Kokoro(fxTone, 24000, 6, 0, 0, 1), fxDown = VoiceFx.Kokoro(fxTone, 24000, -6, 0, 0, 1);
+                            short[] fxHd = VoiceFx.Restyled(fxTone, 24000, 4, 100, 0, 0, 1), fxFast = VoiceFx.Restyled(fxTone, 24000, 0, 150, 0, 0, 1), fxSlow = VoiceFx.Restyled(fxTone, 24000, 0, 70, 0, 0, 1);
                             double fxBase = Fundamental(fxTone, 24000);
                             bool fxPitched = fxNear(fxBase, 200) && fxNear(Fundamental(fxUp, 24000), 200 * Math.Sqrt(2)) && fxNear(Fundamental(fxDown, 24000), 200 / Math.Sqrt(2)) && Math.Abs(fxUp.Length - 16971) <= 1 && Math.Abs(fxDown.Length - 33941) <= 1
                                 && fxNear(Fundamental(fxHd, 24000), 200 * VoiceFx.Lift(4)) && fxNear(fxHd.Length, 24000) && fxNear(Fundamental(fxFast, 24000), 200) && fxNear(fxFast.Length, 16000) && fxNear(Fundamental(fxSlow, 24000), 200) && fxNear(fxSlow.Length, 34286)
@@ -10919,8 +10935,24 @@ namespace CapriDesktop
                             short[] fxLightly = VoiceFx.Glitched(fxSpeech, 24000, 0.2, 99, out fxLight), fxHeavily = VoiceFx.Glitched(fxSpeech, 24000, 1, 99, out fxHeavy);
                             bool fxGlitches = VoiceFx.Glitched(fxSpeech, 24000, 0, 99) == fxSpeech && fxLight >= 1 && fxHeavy > fxLight && !fxSame(fxLightly, fxSpeech) && !fxSame(fxHeavily, fxSpeech) && fxSame(VoiceFx.Glitched(fxSpeech, 24000, 1, 99), fxHeavily)
                                 && fxHeavily.Length > fxSpeech.Length / 2 && fxHeavily.Length < fxSpeech.Length * 2 && VoiceFx.Seed("Hey choom.") == VoiceFx.Seed("Hey choom.") && VoiceFx.Seed("Hey choom.") != VoiceFx.Seed("Hey choom!");
+                            // Robot: a synth under her on the nearest note, shaped like her voice. Full robot sings her 200 Hz on G (196 Hz);
+                            // 10% is a layer about 16 dB under her that leaves her pitch alone. Both keep her length and come out the same every time.
+                            short[] fxRobotFull = VoiceFx.Restyled(fxTone, 24000, 0, 100, 100, 0, 1), fxRobotLight = VoiceFx.Restyled(fxTone, 24000, 0, 100, 10, 0, 1);
+                            double fxLayer = 0, fxDry = 0;
+                            int fxRobotPeak = 0;
+                            for (int i = 0; i < fxTone.Length; i++)
+                            {
+                                double fxApart = fxRobotLight[i] - fxTone[i] * Math.Cos(0.05 * Math.PI);
+                                fxLayer += fxApart * fxApart;
+                                fxDry += (double)fxTone[i] * fxTone[i];
+                                fxRobotPeak = Math.Max(fxRobotPeak, Math.Max(Math.Abs((int)fxRobotFull[i]), Math.Abs((int)fxRobotLight[i])));
+                            }
+                            double fxUnder = 10 * Math.Log10(fxDry / Math.Max(1, fxLayer)), fxSung = Fundamental(fxRobotFull, 24000);
+                            bool fxRobots = fxRobotFull.Length == fxTone.Length && fxRobotLight.Length == fxTone.Length && Math.Abs(fxSung - 196) <= 2 && fxNear(Fundamental(fxRobotLight, 24000), 200)
+                                && fxUnder > 13 && fxUnder < 19 && fxRobotPeak < 32000 && fxSame(VoiceFx.Restyled(fxTone, 24000, 0, 100, 10, 0, 1), fxRobotLight) && fxSame(VoiceFx.Kokoro(fxTone, 24000, 0, 100, 0, 1), fxRobotFull);
                             SetVoicePitch(3);
                             SetVoiceSpeed(120);
+                            SetVoiceRobot(30);
                             SetVoiceGlitch(40);
                             mainframe.Sync();
                             string fxShown = mainframe.VoiceStyleStatus;
@@ -10932,36 +10964,45 @@ namespace CapriDesktop
                                 fxSaved.Position = 0;
                                 fxLoaded = (Preferences)fxJson.ReadObject(fxSaved);
                             }
-                            Preferences fxOld = (Preferences)fxJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Volume\":80}")));
-                            bool fxKept = fxShown == "+3 | 1.2x | 40%" && VoiceFx.Pitch == 3 && VoiceFx.Speed == 120 && VoiceFx.Glitch == 40 && fxLoaded.VoicePitch == 3 && fxLoaded.VoiceSpeed == 120 && fxLoaded.VoiceGlitch == 40
-                                && fxOld.VoicePitch == 0 && fxOld.VoiceSpeed == 100 && fxOld.VoiceGlitch == 0 && new Preferences().VoiceSpeed == 100
-                                && fxLoaded.HdGlitch == VoiceFx.HdDefault && fxOld.HdGlitch == VoiceFx.HdDefault && new Preferences().HdGlitch == VoiceFx.HdDefault && VoiceFx.HdGlitch == VoiceFx.HdDefault;
+                            // An early 0.7.4 build's 10% HD glitch doesn't carry over.
+                            Preferences fxOld = (Preferences)fxJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Volume\":80,\"HdGlitch\":10}")));
+                            bool fxKept = fxShown == "+3 | 1.2x | 30% | 40%" && VoiceFx.Pitch == 3 && VoiceFx.Speed == 120 && VoiceFx.Robot == 30 && VoiceFx.Glitch == 40
+                                && fxLoaded.VoicePitch == 3 && fxLoaded.VoiceSpeed == 120 && fxLoaded.VoiceRobot == 30 && fxLoaded.VoiceGlitch == 40
+                                && fxOld.VoicePitch == 0 && fxOld.VoiceSpeed == 100 && fxOld.VoiceRobot == 0 && fxOld.VoiceGlitch == 0 && new Preferences().VoiceSpeed == 100
+                                && fxLoaded.HdRobot == VoiceFx.HdRobotDefault && fxOld.HdRobot == VoiceFx.HdRobotDefault && new Preferences().HdRobot == VoiceFx.HdRobotDefault && VoiceFx.HdRobot == VoiceFx.HdRobotDefault
+                                && fxLoaded.HdVoiceGlitch == 0 && fxOld.HdVoiceGlitch == 0 && new Preferences().HdVoiceGlitch == 0 && VoiceFx.HdGlitch == 0;
                             SetVoicePitch(40);
                             SetVoiceSpeed(5);
+                            SetVoiceRobot(-3);
                             SetVoiceGlitch(-3);
-                            bool fxClamped = VoiceFx.Pitch == VoiceFx.MostPitch && VoiceFx.Speed == VoiceFx.Slowest && VoiceFx.Glitch == 0;
+                            bool fxClamped = VoiceFx.Pitch == VoiceFx.MostPitch && VoiceFx.Speed == VoiceFx.Slowest && VoiceFx.Robot == 0 && VoiceFx.Glitch == 0;
                             SetVoicePitch(0);
                             SetVoiceSpeed(100);
                             mainframe.Sync();
-                            // Her HD voice keeps its own glitch, a little out of the box: with it picked, the glitch slider shows and moves that one, and her other voices keep theirs.
+                            // Her HD voice keeps its own robot, a little out of the box, and its own glitch: with it picked, those sliders show and
+                            // move its own, and her other voices keep theirs.
                             bool fxOwnWas = preferences.HdVoice, fxOwnQuiet = preferences.Quiet;
                             string fxOwnShown, fxOwnWidest, fxOwnPage, fxOwnMoved;
-                            int fxOwnGlitch, fxOwnShared;
+                            int fxOwnRobot, fxOwnGlitch, fxOwnSharedRobot, fxOwnShared;
                             preferences.HdVoice = true;
                             preferences.Quiet = true;
                             mainframe.ShowSettings(true);
                             try
                             {
                                 fxOwnShown = mainframe.VoiceStyleStatus;
+                                mainframe.SlideVoice(3, 12);
                                 mainframe.SlideVoice(2, 12);
                                 fxOwnWidest = mainframe.VoiceStyleStatus;
                                 fxOwnPage = mainframe.Overlap() ?? mainframe.Outside();
-                                snap("mainframe-settings-hd-glitch.png");
+                                snap("mainframe-settings-hd-voice.png");
+                                mainframe.SlideVoice(3, 1);
                                 mainframe.SlideVoice(2, 4);
                                 asking++;
                                 CloseTalk();
                                 fxOwnMoved = mainframe.VoiceStyleStatus;
+                                fxOwnRobot = VoiceFx.HdRobot;
                                 fxOwnGlitch = VoiceFx.HdGlitch;
+                                fxOwnSharedRobot = VoiceFx.Robot;
                                 fxOwnShared = VoiceFx.Glitch;
                             }
                             finally
@@ -10971,9 +11012,11 @@ namespace CapriDesktop
                                 mainframe.ShowSettings(false);
                             }
                             mainframe.Sync();
-                            bool fxPerVoice = fxOwnShown == "Normal | Normal | 10% · HD" && fxOwnWidest == "Normal | Normal | 100% · HD" && fxOwnPage == null && fxOwnMoved == "Normal | Normal | 20% · HD"
-                                && fxOwnGlitch == 20 && preferences.HdGlitch == 20 && fxOwnShared == 0 && preferences.VoiceGlitch == 0 && mainframe.VoiceStyleStatus == "Normal | Normal | Off";
-                            preferences.HdGlitch = VoiceFx.HdGlitch = VoiceFx.HdDefault;
+                            bool fxPerVoice = fxOwnShown == "Normal | Normal | 10% · HD | Off · HD" && fxOwnWidest == "Normal | Normal | 100% · HD | 100% · HD" && fxOwnPage == null && fxOwnMoved == "Normal | Normal | 5% · HD | 20% · HD"
+                                && fxOwnRobot == 5 && preferences.HdRobot == 5 && fxOwnGlitch == 20 && preferences.HdVoiceGlitch == 20 && fxOwnSharedRobot == 0 && fxOwnShared == 0 && preferences.VoiceRobot == 0 && preferences.VoiceGlitch == 0
+                                && mainframe.VoiceStyleStatus == "Normal | Normal | Off | Off";
+                            preferences.HdRobot = VoiceFx.HdRobot = VoiceFx.HdRobotDefault;
+                            preferences.HdVoiceGlitch = VoiceFx.HdGlitch = 0;
                             string fxHeard = null, fxPaid = null;
                             bool fxQuietWas = preferences.Quiet;
                             Func<string, byte[]> fxFreeWas = FreeSpeak, fxSpeakWas = Speak;
@@ -11005,7 +11048,7 @@ namespace CapriDesktop
                                 Speak = fxSpeakWas;
                             }
                             bool fxPreviewed = fxFreeHeard == Voice.Spoken(StyleLine) && fxFreePaid == null && heard == "voice check" && fxAsked == fxStill && fxPaid == Voice.Spoken(StyleLine) && fxHeard == null
-                                && VoiceFx.Pitch == 3 && VoiceFx.Speed == 120 && preferences.VoicePitch == 3 && mainframe.VoiceStyleStatus == "+3 | 1.2x | Off";
+                                && VoiceFx.Pitch == 3 && VoiceFx.Speed == 120 && preferences.VoicePitch == 3 && mainframe.VoiceStyleStatus == "+3 | 1.2x | Off | Off";
                             asking++;
                             CloseTalk();
                             SetVoicePitch(0);
@@ -11025,12 +11068,12 @@ namespace CapriDesktop
                             // Streamed in chunks of any size, her voice comes out the same as styled whole.
                             Random fxChunks = new Random(4);
                             bool fxStreams = true;
-                            foreach (int[] fxSet in new[] { new[] { 24000, 4, 120, 50 }, new[] { 16000, -3, 80, 30 }, new[] { 16000, 0, 100, 60 } })
+                            foreach (int[] fxSet in new[] { new[] { 24000, 4, 120, 10, 50 }, new[] { 16000, -3, 80, 0, 30 }, new[] { 16000, 0, 100, 0, 60 }, new[] { 16000, 2, 100, 60, 0 } })
                             {
                                 short[] fxSaid = new short[fxSet[0] * 3];
                                 for (int i = 0; i < fxSaid.Length; i++) fxSaid[i] = i % (fxSet[0] / 4) < fxSet[0] / 6 ? (short)(7000 * Math.Sin(2 * Math.PI * 170 * i / fxSet[0]) + 2000 * Math.Sin(2 * Math.PI * 510 * i / fxSet[0])) : (short)(fxChunks.Next(200) - 100);
-                                short[] fxWhole = new VoiceFx.Live(fxSet[0], fxSet[1], fxSet[2], fxSet[3], 77, true).All(fxSaid);
-                                VoiceFx.Live fxLive = new VoiceFx.Live(fxSet[0], fxSet[1], fxSet[2], fxSet[3], 77, true);
+                                short[] fxWhole = new VoiceFx.Live(fxSet[0], fxSet[1], fxSet[2], fxSet[3], fxSet[4], 77, true).All(fxSaid);
+                                VoiceFx.Live fxLive = new VoiceFx.Live(fxSet[0], fxSet[1], fxSet[2], fxSet[3], fxSet[4], 77, true);
                                 System.Collections.Generic.List<short> fxPieces = new System.Collections.Generic.List<short>();
                                 for (int fxAt = 0; fxAt < fxSaid.Length; )
                                 {
@@ -11053,6 +11096,7 @@ namespace CapriDesktop
                             for (int i = 0; i < fxChatSaid.Length; i++) fxChatSaid[i] = (short)(7000 * Math.Sin(2 * Math.PI * 190 * i / 16000.0));
                             bool fxChatArmed;
                             VoiceFx.Pitch = 6;
+                            VoiceFx.Robot = 10;
                             try
                             {
                                 for (int fxAt = 0; fxAt < fxChatSaid.Length; fxAt += 320)
@@ -11061,20 +11105,21 @@ namespace CapriDesktop
                                     Array.Copy(fxChatSaid, fxAt, fxPiece, 0, 320);
                                     fxChatHeard.AddRange(ChatVoice(fxPiece));
                                 }
-                                fxChatArmed = chatTail.Enabled && chatFx != null && chatFx.Pitch == 6;
+                                fxChatArmed = chatTail.Enabled && chatFx != null && chatFx.Pitch == 6 && chatFx.Robot == 10;
                                 fxChatHeard.AddRange(chatFx.Flush());
                                 Hush();
                             }
                             finally
                             {
                                 VoiceFx.Pitch = 0;
+                                VoiceFx.Robot = 0;
                                 chatRate = fxRateWas;
                             }
                             short[] fxChatOut = fxChatHeard.ToArray();
                             bool fxChatStyled = fxChatPlain && fxChatArmed && !chatTail.Enabled && chatFx == null && fxNear(Fundamental(fxChatOut, 16000), 190 * Math.Sqrt(2)) && fxNear(fxChatOut.Length, fxChatSaid.Length);
-                            if (!fxPlain || !fxPitched || !fxGlitches || !fxKept || !fxClamped || !fxPerVoice || !fxPreviewed || !fxElevenStyled || !fxStreams || !fxChatStyled || mainframe.VoiceStyleStatus != "Normal | Normal | Off")
-                                throw new Exception("Her voice's sliders went wrong: plain " + fxPlain + ", pitched " + fxPitched + " (" + fxBase.ToString("0") + " / " + Fundamental(fxUp, 24000).ToString("0") + " / " + Fundamental(fxDown, 24000).ToString("0") + " / " + Fundamental(fxHd, 24000).ToString("0") + " Hz, " + fxUp.Length + " / " + fxDown.Length + " / " + fxHd.Length + " / " + fxFast.Length + " / " + fxSlow.Length + "), glitches " + fxGlitches + " (" + fxLight + " / " + fxHeavy + "), kept " + fxKept + " (" + fxShown + "), clamped " + fxClamped + ", HD glitch " + fxPerVoice + " (" + fxOwnShown + " / " + fxOwnWidest + " / " + fxOwnMoved + " / " + fxOwnPage + " / " + fxOwnGlitch + " / " + fxOwnShared + "), previewed " + fxPreviewed +" (" + fxFreeHeard + " / " + fxFreePaid + " / " + fxPaid + "), ElevenLabs " + fxElevenStyled + ", streams " + fxStreams + ", voice chat " + fxChatStyled + " (" + Fundamental(fxChatOut, 16000).ToString("0") + " Hz, " + fxChatOut.Length + " samples)");
-                            checks.Add("PASS voice sliders: Pitch (-6 to +6 semitones), Speed (0.7x to 1.5x) and Glitch (Off to 100%) leave her free and ElevenLabs voices byte for byte the same at their defaults; her HD voice keeps its own glitch, 10% out of the box, which the slider shows as 10% · HD and moves without touching her other voices; pitch moves her fundamental (200 Hz to 283 and 141 Hz) while Kokoro's own speed keeps her pace, and her HD and ElevenLabs voices keep their length through a time-stretch; glitch adds stutters, crushed bits and skips that grow with the slider and repeat the same way for the same line; ElevenLabs voice chat is styled as it streams, the same as styling it whole, and its tail comes out once the stream goes quiet; the values save, load and clamp; and letting go of a slider has her say a line in the voice she's using");
+                            if (!fxPlain || !fxPitched || !fxGlitches || !fxRobots || !fxKept || !fxClamped || !fxPerVoice || !fxPreviewed || !fxElevenStyled || !fxStreams || !fxChatStyled || mainframe.VoiceStyleStatus != "Normal | Normal | Off | Off")
+                                throw new Exception("Her voice's sliders went wrong: plain " + fxPlain + ", pitched " + fxPitched + " (" + fxBase.ToString("0") + " / " + Fundamental(fxUp, 24000).ToString("0") + " / " + Fundamental(fxDown, 24000).ToString("0") + " / " + Fundamental(fxHd, 24000).ToString("0") + " Hz, " + fxUp.Length + " / " + fxDown.Length + " / " + fxHd.Length + " / " + fxFast.Length + " / " + fxSlow.Length + "), glitches " + fxGlitches + " (" + fxLight + " / " + fxHeavy + "), robot " + fxRobots + " (" + fxSung.ToString("0") + " Hz, " + fxUnder.ToString("0.0") + " dB under her, peak " + fxRobotPeak + "), kept " + fxKept + " (" + fxShown + "), clamped " + fxClamped + ", HD robot and glitch " + fxPerVoice + " (" + fxOwnShown + " / " + fxOwnWidest + " / " + fxOwnMoved + " / " + fxOwnPage + " / " + fxOwnRobot + " / " + fxOwnGlitch + " / " + fxOwnSharedRobot + " / " + fxOwnShared + "), previewed " + fxPreviewed +" (" + fxFreeHeard + " / " + fxFreePaid + " / " + fxPaid + "), ElevenLabs " + fxElevenStyled + ", streams " + fxStreams + ", voice chat " + fxChatStyled + " (" + Fundamental(fxChatOut, 16000).ToString("0") + " Hz, " + fxChatOut.Length + " samples)");
+                            checks.Add("PASS voice sliders: Pitch (-6 to +6 semitones), Speed (0.7x to 1.5x), Robot (Off to 100%) and Glitch (Off to 100%) leave her free and ElevenLabs voices byte for byte the same at their defaults; her HD voice keeps its own robot, 10% out of the box, which the slider shows as 10% · HD, and its own glitch, Off out of the box, and moves them without touching her other voices; pitch moves her fundamental (200 Hz to 283 and 141 Hz) while Kokoro's own speed keeps her pace, and her HD and ElevenLabs voices keep their length through a time-stretch; robot puts a synth on the nearest note under her, singing 200 Hz on G (" + fxSung.ToString("0") + " Hz) at full and sitting " + fxUnder.ToString("0") + " dB under her at 10%, the same way every time; glitch adds stutters, crushed bits and skips that grow with the slider and repeat the same way for the same line; ElevenLabs voice chat is styled as it streams, the same as styling it whole, and its tail comes out once the stream goes quiet; the values save, load and clamp; and letting go of a slider has her say a line in the voice she's using");
                             checks.Add("PASS settings page: language, notes, volume, sounds, bubble time, wander, sleep delay, startup glitch-in, dancing, reply length and chat memory save, reach her prompt and voice, and nothing overlaps or pokes out of the page");
                             preferences.Watch = false;
                             mainframe.Sync();
@@ -11781,9 +11826,9 @@ namespace CapriDesktop
                             try { hdVoice.Speak("Hi."); throw new Exception("A sleeping HD voice spoke."); }
                             catch (VoiceException) { }
                             hdVoice.Attach(hdPort);
-                            // Her HD voice glitches a little out of the box; these checks hear it plain first, then fully glitched.
-                            int hdGlitchWas = VoiceFx.HdGlitch;
-                            VoiceFx.HdGlitch = 0;
+                            // Her HD voice is a little robot out of the box; these checks hear it plain first, then full robot, then fully glitched.
+                            int hdRobotWas = VoiceFx.HdRobot, hdGlitchWas = VoiceFx.HdGlitch;
+                            VoiceFx.HdRobot = VoiceFx.HdGlitch = 0;
                             byte[] hdSaid =hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom, this is my HD voice.");
                             int hdRate;
                             short[] hdSamples = Voice.Samples(hdSaid, out hdRate);
@@ -11806,13 +11851,22 @@ namespace CapriDesktop
                             finally { VoiceFx.Pitch = hdPitchWas; }
                             double hdPlain = Fundamental(hdSamples, 24000), hdLifted = Fundamental(hdPitched, 24000);
                             if (hdTrouble != null || hdPlain < 250 || hdPlain > 285 || Math.Abs(hdLifted - hdPlain * Math.Sqrt(2)) > hdPlain * Math.Sqrt(2) * 0.03 || Math.Abs(hdPitched.Length - hdWave.Length) > hdWave.Length / 50) throw new Exception("Her HD voice didn't follow the pitch slider: " + hdPlain.ToString("0") + " Hz to " + hdLifted.ToString("0") + " Hz, " + hdSamples.Length + " to " + hdPitched.Length + " samples / " + hdTrouble);
-                            short[] hdGlitched;
+                            short[] hdRobotic, hdGlitched;
+                            VoiceFx.HdRobot = 100;
+                            try { hdRobotic = Voice.Samples(hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)(hdLong), out hdRate); }
+                            finally { VoiceFx.HdRobot = 0; }
                             VoiceFx.HdGlitch = 100;
                             try { hdGlitched = Voice.Samples(hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)(hdLong), out hdRate); }
-                            finally { VoiceFx.HdGlitch = hdGlitchWas; }
-                            bool hdChanged = hdGlitched.Length != hdLongSamples.Length;
+                            finally
+                            {
+                                VoiceFx.HdRobot = hdRobotWas;
+                                VoiceFx.HdGlitch = hdGlitchWas;
+                            }
+                            bool hdRoboted = false, hdChanged = hdGlitched.Length != hdLongSamples.Length;
+                            for (int i = 0; !hdRoboted && i < hdRobotic.Length && i < hdLongSamples.Length; i++) hdRoboted = hdRobotic[i] != hdLongSamples[i];
                             for (int i = 0; !hdChanged && i < hdGlitched.Length; i++) hdChanged = hdGlitched[i] != hdLongSamples[i];
-                            if (hdTrouble != null || !hdChanged || hdGlitchWas != VoiceFx.HdDefault) throw new Exception("Her HD voice didn't follow its glitch slider: " + hdGlitchWas + "% out of the box, " + hdLongSamples.Length + " to " + hdGlitched.Length + " samples / " + hdTrouble);
+                            if (hdTrouble != null || !hdRoboted || hdRobotic.Length != hdLongSamples.Length || !hdChanged || hdRobotWas != VoiceFx.HdRobotDefault || hdGlitchWas != 0)
+                                throw new Exception("Her HD voice didn't follow its robot and glitch sliders: " + hdRobotWas + "% robot and " + hdGlitchWas + "% glitch out of the box, " + hdLongSamples.Length + " to " + hdRobotic.Length + " and " + hdGlitched.Length + " samples / " + hdTrouble);
                             // Their voice: a saved clip goes out as her reference on the next line, and Her voice puts hers back.
                             short[] hdTheirs = new short[24000 * 6];
                             for (int i = 0; i < hdTheirs.Length; i++) hdTheirs[i] = (short)(8000 * Math.Sin(2 * Math.PI * 140 * i / 24000.0));
@@ -11856,7 +11910,7 @@ namespace CapriDesktop
                             string[] hdCrashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => LoggedSince(line, hdCrashFrom) && line.Contains(" | HD voice | ") && line.EndsWith(" | llama-server stopped while loading with exit code 0x00000003", StringComparison.Ordinal));
                             if (hdCrash != "Her HD voice crashed loading. Close games, then try again." || hdCrashLines.Length != 1 || hdStopped != "quiet" || hdVoice.Awake) throw new Exception("Her HD voice didn't handle a crash or a stop while waking: " + hdCrash + " / " + hdCrashLines.Length + " log lines / " + hdStopped);
                             Directory.Delete(hdRoot, true);
-                            checks.Add("PASS HD voice speech: a fake /tts server's float PCM becomes a 24 kHz WAV, the request carries her reference clip and respelled words, a long reply goes a few sentences per call so none hits the 41 s cap, the pitch slider lifts it 6 semitones without changing its length, its own glitch (10% out of the box) glitches it, their saved clip goes out as her reference until Her voice puts hers back, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
+                            checks.Add("PASS HD voice speech: a fake /tts server's float PCM becomes a 24 kHz WAV, the request carries her reference clip and respelled words, a long reply goes a few sentences per call so none hits the 41 s cap, the pitch slider lifts it 6 semitones without changing its length, its own robot (10% out of the box) and glitch (Off out of the box) change it, their saved clip goes out as her reference until Her voice puts hers back, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
                             checks.Add("LIMIT HD voice synthesis not run in the smoke test; it needs the 1.5 GB pack and a graphics card");
                             string earsRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "ears-test");
                             if (Directory.Exists(earsRoot)) Directory.Delete(earsRoot, true);

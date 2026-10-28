@@ -22,15 +22,15 @@ namespace CapriDesktop
         // Settings opens a second column to the right, so every setting shows at once.
         private const int Column = 380;
         private const int Far = 30000;
-        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 448 }, new[] { 0, 458, 578 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 460 }, new[] { Column, 482, 624 }, new[] { 0, 646, 706 } };
+        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 484 }, new[] { 0, 494, 614 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 460 }, new[] { Column, 482, 624 }, new[] { 0, 646, 706 } };
         private static readonly string[] PerchNames = Array.ConvertAll(Companion.PerchRates, rate => rate + " fps");
         // Her voice's pitch in semitones, and her speed.
         private static readonly string[] PitchNames = { "-6", "-5", "-4", "-3", "-2", "-1", "Normal", "+1", "+2", "+3", "+4", "+5", "+6" };
         private static readonly int[] Paces = { 70, 80, 90, 100, 110, 120, 130, 140, 150 };
         private static readonly string[] PaceNames = { "0.7x", "0.8x", "0.9x", "Normal", "1.1x", "1.2x", "1.3x", "1.4x", "1.5x" };
-        // Her glitch, with small steps at the subtle end.
-        private static readonly int[] GlitchSteps = { 0, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
-        private static readonly string[] GlitchNames = { "Off", "5%", "10%", "15%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" };
+        // Her robot and glitch, with small steps at the subtle end.
+        private static readonly int[] Amounts = { 0, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
+        private static readonly string[] AmountNames = { "Off", "5%", "10%", "15%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" };
         private static readonly int[] Volumes = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150 };
         private static readonly string[] VolumeNames = { "Mute", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%", "125%", "150%" };
         private static readonly int[] SizeSteps = { 140, 170, 200, 240, 280, 320, 380, 440, 500, 560 };
@@ -153,6 +153,8 @@ namespace CapriDesktop
         private readonly Label pitchName;
         private readonly Slider paceSlider;
         private readonly Label paceName;
+        private readonly Slider robotSlider;
+        private readonly Label robotName;
         private readonly Slider glitchSlider;
         private readonly Label glitchName;
         private readonly Slider sounds;
@@ -371,29 +373,34 @@ namespace CapriDesktop
             paceName = Caption("Normal", 292, 321, Font, Look.Ink);
             paceSlider.Changed += delegate { if (syncing) return; paceName.Text = PaceNames[paceSlider.Value]; capri.SetVoiceSpeed(Paces[paceSlider.Value]); };
             paceSlider.Released += delegate { if (!syncing) capri.HearVoiceStyle(); };
-            Caption("Glitch", 28, 357, Font, Look.Dim);
-            glitchSlider = PageSlider(GlitchNames, 350, "How much her voice glitches");
-            glitchName = Caption("Off", 292, 357, Font, Look.Ink);
-            glitchSlider.Changed += delegate { if (syncing) return; glitchName.Text = GlitchName(glitchSlider.Value); capri.SetVoiceGlitch(GlitchSteps[glitchSlider.Value]); };
+            Caption("Robot", 28, 357, Font, Look.Dim);
+            robotSlider = PageSlider(AmountNames, 350, "How robotic her voice sounds");
+            robotName = Caption("Off", 292, 357, Font, Look.Ink);
+            robotSlider.Changed += delegate { if (syncing) return; robotName.Text = AmountName(robotSlider.Value); capri.SetVoiceRobot(Amounts[robotSlider.Value]); };
+            robotSlider.Released += delegate { if (!syncing) capri.HearVoiceStyle(); };
+            Caption("Glitch", 28, 393, Font, Look.Dim);
+            glitchSlider = PageSlider(AmountNames, 386, "How much her voice glitches");
+            glitchName = Caption("Off", 292, 393, Font, Look.Ink);
+            glitchSlider.Changed += delegate { if (syncing) return; glitchName.Text = AmountName(glitchSlider.Value); capri.SetVoiceGlitch(Amounts[glitchSlider.Value]); };
             glitchSlider.Released += delegate { if (!syncing) capri.HearVoiceStyle(); };
-            Caption("Sounds", 28, 393, Font, Look.Dim);
-            sounds = PageSlider(SoundNames, 386, "Sound effects volume");
-            soundsName = Caption("60%", 292, 393, Font, Look.Ink);
+            Caption("Sounds", 28, 429, Font, Look.Dim);
+            sounds = PageSlider(SoundNames, 422, "Sound effects volume");
+            soundsName = Caption("60%", 292, 429, Font, Look.Ink);
             sounds.Changed += delegate { if (syncing) return; soundsName.Text = SoundNames[sounds.Value]; capri.SetSoundLevel(sounds.Value * 10); };
-            typing = Check("Typing sound", 28, 422, 328, delegate { if (!syncing) capri.ToggleTyping(); });
+            typing = Check("Typing sound", 28, 458, 328, delegate { if (!syncing) capri.ToggleTyping(); });
             typing.Hint = "When she types";
             typing.HintFont = Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point);
-            Caption("MOVES >", 28, 458, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
-            Caption("Wander", 28, 487, Font, Look.Dim);
-            wander = PageSlider(WanderNames, 480, "How much she wanders");
-            wanderName = Caption("Off", 292, 487, Font, Look.Ink);
+            Caption("MOVES >", 28, 494, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
+            Caption("Wander", 28, 523, Font, Look.Dim);
+            wander = PageSlider(WanderNames, 516, "How much she wanders");
+            wanderName = Caption("Off", 292, 523, Font, Look.Ink);
             wander.Changed += delegate { if (syncing) return; wanderName.Text = WanderNames[wander.Value]; capri.SetWanderLevel(wander.Value); };
-            Caption("Sleep", 28, 523, Font, Look.Dim);
-            sleepAfter = PageSlider(SleepNames, 516, "How long until she falls asleep");
-            sleepName = Caption("2 min", 292, 523, Font, Look.Ink);
+            Caption("Sleep", 28, 559, Font, Look.Dim);
+            sleepAfter = PageSlider(SleepNames, 552, "How long until she falls asleep");
+            sleepName = Caption("2 min", 292, 559, Font, Look.Ink);
             sleepAfter.Changed += delegate { if (syncing) return; sleepName.Text = SleepNames[sleepAfter.Value]; capri.SetSleepAfter(Sleeps[sleepAfter.Value]); };
-            dance = Check("Dance to music", 28, 552, 150, delegate { if (!syncing) capri.ToggleDance(); });
-            intro = Check("Glitch in at startup", 186, 552, 170, delegate { if (!syncing) capri.ToggleIntro(); });
+            dance = Check("Dance to music", 28, 588, 150, delegate { if (!syncing) capri.ToggleDance(); });
+            intro = Check("Glitch in at startup", 186, 588, 170, delegate { if (!syncing) capri.ToggleIntro(); });
             const int c = Column;
             Caption("CAPRI >", 28 + c, 58, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
             Caption("Size", 28 + c, 87, Font, Look.Dim);
@@ -842,10 +849,10 @@ namespace CapriDesktop
             return null;
         }
 
-        internal string VoiceStyleStatus { get { return pitchName.Text + " | " + paceName.Text + " | " + glitchName.Text; } }
+        internal string VoiceStyleStatus { get { return pitchName.Text + " | " + paceName.Text + " | " + robotName.Text + " | " + glitchName.Text; } }
 
-        // Drags one of her voice's sliders and lets go there, as they would: 0 pitch, 1 speed, 2 glitch.
-        internal void SlideVoice(int which, int index) { (which == 0 ? pitchSlider : which == 1 ? paceSlider : glitchSlider).Slide(index); }
+        // Drags one of her voice's sliders and lets go there, as they would: 0 pitch, 1 speed, 2 glitch, 3 robot.
+        internal void SlideVoice(int which, int index) { (which == 0 ? pitchSlider : which == 1 ? paceSlider : which == 2 ? glitchSlider : robotSlider).Slide(index); }
 
         internal string GapShown { get { return gapName.Text; } }
 
@@ -1023,22 +1030,29 @@ namespace CapriDesktop
             freeSetup.Visible = !eleven && !off && !freeReady;
             herVoice.Visible = !eleven && !off && freeReady && yoursShown;
             if (Fold != arrangedFold) Arrange(expanded);
-            ShowGlitch();
+            ShowEffects();
         }
 
-        // Her HD voice keeps its own glitch, so the glitch slider shows the one for the voice she speaks with.
-        private void ShowGlitch()
+        // Her HD voice keeps its own robot and glitch, so those sliders show the ones for the voice she speaks with.
+        private void ShowEffects()
         {
             bool was = syncing;
             syncing = true;
-            int glitch = capri.VoiceGlitch, near = 0;
-            for (int i = 0; i < GlitchSteps.Length; i++) if (Math.Abs(GlitchSteps[i] - glitch) < Math.Abs(GlitchSteps[near] - glitch)) near = i;
-            glitchSlider.Value = near;
-            glitchName.Text = GlitchName(near);
+            robotSlider.Value = Nearest(capri.VoiceRobot);
+            robotName.Text = AmountName(robotSlider.Value);
+            glitchSlider.Value = Nearest(capri.VoiceGlitch);
+            glitchName.Text = AmountName(glitchSlider.Value);
             syncing = was;
         }
 
-        private string GlitchName(int step) { return GlitchNames[step] + (capri.GlitchHd ? " · HD" : ""); }
+        private static int Nearest(int amount)
+        {
+            int near = 0;
+            for (int i = 0; i < Amounts.Length; i++) if (Math.Abs(Amounts[i] - amount) < Math.Abs(Amounts[near] - amount)) near = i;
+            return near;
+        }
+
+        private string AmountName(int step) { return AmountNames[step] + (capri.SpeaksHd ? " · HD" : ""); }
 
         internal void PickVoice(bool paid)
         {
@@ -1116,7 +1130,7 @@ namespace CapriDesktop
             freeVoices.Invalidate();
             freeSetup.Invalidate();
             herVoice.Invalidate();
-            ShowGlitch();
+            ShowEffects();
         }
 
         // 5 to 30 seconds of them talking, as a WAV, MP3 or M4A.

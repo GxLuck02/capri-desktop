@@ -526,19 +526,21 @@ namespace CapriDesktop
     }
 
 #if !CROSS
-    // Her voices' pitch, speed and glitch from the Settings page. At their defaults nothing here touches a sample,
-    // except her HD voice, which glitches a little out of the box.
+    // Her voices' pitch, speed, robot and glitch from the Settings page. At their defaults nothing here touches a sample,
+    // except her HD voice, which is a little robot out of the box.
     internal static class VoiceFx
     {
         internal const int MostPitch = 6;
         internal const int Slowest = 70;
         internal const int Fastest = 150;
-        internal const int HdDefault = 10;
+        internal const int HdRobotDefault = 10;
         internal static volatile int Pitch;
         internal static volatile int Speed = 100;
-        // Glitch is kept per voice: one for her free voice styles and ElevenLabs, one for her HD voice.
+        // Robot and glitch are kept per voice: one for her free voice styles and ElevenLabs, one for her HD voice.
+        internal static volatile int Robot;
+        internal static volatile int HdRobot = HdRobotDefault;
         internal static volatile int Glitch;
-        internal static volatile int HdGlitch = HdDefault;
+        internal static volatile int HdGlitch;
 
         internal static double Lift(int semitones) { return Math.Pow(2, semitones / 12.0); }
 
@@ -550,30 +552,30 @@ namespace CapriDesktop
         }
 
         // Her free voice after Kokoro, which already took care of the speed.
-        internal static short[] Kokoro(short[] pcm, int rate, int semitones, int glitch, int seed)
+        internal static short[] Kokoro(short[] pcm, int rate, int semitones, int robot, int glitch, int seed)
         {
-            if (semitones == 0 && glitch <= 0) return pcm;
-            return new Live(rate, semitones, 100, glitch, seed, false).All(pcm);
+            if (semitones == 0 && robot <= 0 && glitch <= 0) return pcm;
+            return new Live(rate, semitones, 100, robot, glitch, seed, false).All(pcm);
         }
 
         // Her HD and ElevenLabs voices have no pitch of their own, so a time-stretch keeps a pitch change from speeding her up or slowing her down.
-        internal static short[] Restyled(short[] pcm, int rate, int semitones, int speed, int glitch, int seed)
+        internal static short[] Restyled(short[] pcm, int rate, int semitones, int speed, int robot, int glitch, int seed)
         {
-            if (semitones == 0 && speed == 100 && glitch <= 0) return pcm;
-            return new Live(rate, semitones, speed, glitch, seed, true).All(pcm);
+            if (semitones == 0 && speed == 100 && robot <= 0 && glitch <= 0) return pcm;
+            return new Live(rate, semitones, speed, robot, glitch, seed, true).All(pcm);
         }
 
-        // A finished WAV, like an ElevenLabs reply, in her current pitch, speed and glitch.
+        // A finished WAV, like an ElevenLabs reply, in her current pitch, speed, robot and glitch.
         internal static byte[] Styled(byte[] wav, string text)
         {
-            int pitch = Pitch, speed = Speed, glitch = Glitch;
-            if (wav == null || (pitch == 0 && speed == 100 && glitch <= 0)) return wav;
+            int pitch = Pitch, speed = Speed, robot = Robot, glitch = Glitch;
+            if (wav == null || (pitch == 0 && speed == 100 && robot <= 0 && glitch <= 0)) return wav;
             int rate;
             short[] samples = Voice.Samples(wav, out rate);
-            return samples.Length == 0 ? wav : Voice.Wave(Restyled(samples, rate, pitch, speed, glitch, Seed(text)), rate);
+            return samples.Length == 0 ? wav : Voice.Wave(Restyled(samples, rate, pitch, speed, robot, glitch, Seed(text)), rate);
         }
 
-        // The same line glitches the same way every time.
+        // The same line glitches and hisses the same way every time.
         internal static int Seed(string text)
         {
             int hash = unchecked((int)2166136261u);
@@ -616,6 +618,14 @@ namespace CapriDesktop
 
         private static short Clip(double value) { return (short)Math.Max(-32768, Math.Min(32767, Math.Round(value))); }
 
+        // Like Clip, but the loudest peaks bend over smoothly instead of squaring off.
+        private static short Soft(double value)
+        {
+            double size = Math.Abs(value);
+            if (size > 28000) value = Math.Sign(value) * (28000 + 4767 * Math.Tanh((size - 28000) / 4767));
+            return Clip(value);
+        }
+
         // Her voice styled as it streams in, a chunk at a time, for ElevenLabs voice chat. Each step holds back only what it still has
         // to look ahead at, so any chunking sounds the same as styling the whole line at once. Flush lets out what's held at the end.
         internal sealed class Live
@@ -623,21 +633,25 @@ namespace CapriDesktop
             internal readonly int Rate;
             internal readonly int Pitch;
             internal readonly int Speed;
+            internal readonly int Robot;
             internal readonly int Glitch;
             private readonly Stretcher stretcher;
             private readonly Resampler resampler;
+            private readonly Vocoder vocoder;
             private readonly Glitcher glitcher;
 
             // `timed` is false for Kokoro, which already made the line longer or shorter for the pitch and speed.
-            internal Live(int rate, int semitones, int speed, int glitch, int seed, bool timed)
+            internal Live(int rate, int semitones, int speed, int robot, int glitch, int seed, bool timed)
             {
                 Rate = rate;
                 Pitch = semitones;
                 Speed = speed;
+                Robot = robot;
                 Glitch = glitch;
                 double lift = Lift(semitones), stretch = timed ? lift * 100 / Math.Max(1, speed) : 1;
                 if (Math.Abs(stretch - 1) > 0.001) stretcher = new Stretcher(rate, stretch);
                 if (semitones != 0) resampler = new Resampler(lift);
+                if (robot > 0) vocoder = new Vocoder(rate, robot / 100.0, seed);
                 if (glitch > 0) glitcher = new Glitcher(rate, glitch / 100.0, seed);
             }
 
@@ -645,6 +659,7 @@ namespace CapriDesktop
             {
                 if (stretcher != null) chunk = stretcher.Push(chunk);
                 if (resampler != null) chunk = resampler.Push(chunk);
+                if (vocoder != null) chunk = vocoder.Push(chunk);
                 if (glitcher != null) chunk = glitcher.Push(chunk);
                 return chunk;
             }
@@ -654,6 +669,7 @@ namespace CapriDesktop
             {
                 short[] tail = stretcher != null ? stretcher.Flush() : new short[0];
                 if (resampler != null) tail = Join(resampler.Push(tail), resampler.Flush());
+                if (vocoder != null) tail = Join(vocoder.Push(tail), vocoder.Flush());
                 if (glitcher != null) tail = Join(glitcher.Push(tail), glitcher.Flush());
                 return tail;
             }
@@ -1006,6 +1022,452 @@ namespace CapriDesktop
                 at = Math.Max(at, upTo);
             }
         }
+
+        // Her robot voice, like a talk box: a synth that follows her pitch, pulled toward the nearest note, takes on the shape
+        // of her voice and plays under her. Smooth and musical: nothing is cut, repeated or crushed. Each step waits for what it
+        // reads, so a line streamed in chunks comes out the same as styled whole.
+        private sealed class Vocoder
+        {
+            private readonly int rate;
+            private readonly int size;
+            private readonly int hop;
+            private readonly int lifter;
+            private readonly int reach;
+            private readonly int least;
+            private readonly int most;
+            private readonly int lead;
+            private readonly int seed;
+            private readonly double dry;
+            private readonly double wet;
+            private readonly double snap;
+            private readonly double glideStep;
+            private readonly double voiceStep;
+            private readonly double[] window;
+            private readonly double[] tilt;
+            private readonly double[] cosines;
+            private readonly double[] sines;
+            private readonly double[] frame;
+            private readonly double[] smooth;
+            private readonly double[] difference;
+            private readonly double[] voiceRe;
+            private readonly double[] voiceIm;
+            private readonly double[] shapeRe;
+            private readonly double[] shapeIm;
+            private readonly double[] envelope;
+            private readonly double[] synthRe;
+            private readonly double[] synthIm;
+            private readonly double[] around = new double[5];
+            private readonly List<short> held = new List<short>();
+            private readonly List<double> pitches = new List<double>();
+            private readonly List<double> clarities = new List<double>();
+            private readonly List<double> targets = new List<double>();
+            private readonly List<double> voicings = new List<double>();
+            private readonly List<double> carrier = new List<double>();
+            private readonly List<double> centres = new List<double>();
+            private readonly List<double> sum = new List<double>();
+            private readonly List<double> weight = new List<double>();
+            private long first;
+            private long analyzed;
+            private long pitchBase;
+            private long targeted;
+            private long targetBase;
+            private long made;
+            private long carrierFirst;
+            private long centreBase;
+            private long spoken;
+            private long sumFirst;
+            private long emitted;
+            private double loudest;
+            private double note;
+            private double glide;
+            private double voiced;
+            private double phase;
+            private bool sung;
+
+            internal Vocoder(int rate, double amount, int seed)
+            {
+                this.rate = rate;
+                this.seed = seed;
+                // About 43 ms frames, a quarter frame apart.
+                size = rate >= 32000 ? 2048 : rate >= 20000 ? 1024 : 512;
+                hop = size / 4;
+                // Her voice's shape is smoothed over about 2 ms of cepstrum, finer than any formant and coarser than her pitch.
+                lifter = Math.Max(8, (int)Math.Round(rate * 0.002));
+                reach = Math.Max(1, (int)Math.Round(150.0 * size / rate));
+                least = Math.Max(2, rate / 900);
+                most = Math.Min(size / 2 - 1, rate / 60);
+                // Mixed under her with equal power: 10% puts the robot 16 dB under her voice, 100% is all robot.
+                dry = Math.Cos(amount * Math.PI / 2);
+                wet = Math.Sin(amount * Math.PI / 2);
+                // A light robot leans halfway to the nearest note; a strong one sings on it.
+                snap = Math.Min(1, 0.5 + 0.5 * amount);
+                // The synth glides over about 15 ms, so it reads her notes 15 ms early and lands on them with her.
+                glideStep = 1 - Math.Exp(-1 / (0.015 * rate));
+                voiceStep = 1 - Math.Exp(-1 / (0.01 * rate));
+                lead = (int)Math.Round(0.015 * rate);
+                window = new double[size];
+                tilt = new double[size / 2 + 1];
+                cosines = new double[size / 2];
+                sines = new double[size / 2];
+                for (int i = 0; i < size; i++) window[i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / size);
+                // The synth is a sawtooth, so its harmonics fall off; this evens them out, then softens everything above 5 kHz.
+                for (int k = 0; k <= size / 2; k++)
+                {
+                    double hertz = (double)k * rate / size;
+                    tilt[k] = k / Math.Sqrt(1 + hertz * hertz / (5000.0 * 5000.0));
+                }
+                for (int k = 0; k < size / 2; k++)
+                {
+                    cosines[k] = Math.Cos(2 * Math.PI * k / size);
+                    sines[k] = Math.Sin(2 * Math.PI * k / size);
+                }
+                frame = new double[size];
+                smooth = new double[size];
+                difference = new double[most + 2];
+                voiceRe = new double[size];
+                voiceIm = new double[size];
+                shapeRe = new double[size];
+                shapeIm = new double[size];
+                envelope = new double[size / 2 + 1];
+                synthRe = new double[size];
+                synthIm = new double[size];
+                Restart();
+            }
+
+            private long Received { get { return first + held.Count; } }
+
+            private void Restart()
+            {
+                held.Clear();
+                pitches.Clear();
+                clarities.Clear();
+                targets.Clear();
+                voicings.Clear();
+                carrier.Clear();
+                centres.Clear();
+                sum.Clear();
+                weight.Clear();
+                // The first frame is centred one hop before the line starts, so every sample gets all four overlapping frames.
+                long start = -hop - size / 2;
+                first = analyzed = pitchBase = targeted = targetBase = emitted = 0;
+                made = carrierFirst = sumFirst = start;
+                centreBase = start / hop;
+                spoken = -1;
+                loudest = glide = voiced = phase = 0;
+                note = double.NaN;
+                sung = false;
+            }
+
+            internal short[] Push(short[] chunk)
+            {
+                held.AddRange(chunk);
+                List<short> output = new List<short>();
+                Run(output, false);
+                return output.ToArray();
+            }
+
+            internal short[] Flush()
+            {
+                List<short> output = new List<short>();
+                if (Received > 0) Run(output, true);
+                Restart();
+                return output.ToArray();
+            }
+
+            private void Run(List<short> output, bool ending)
+            {
+                long received = Received;
+                // At the end, the frames still to come read silence past the last sample.
+                long lastFrame = ending ? FloorDiv(received - 1 + size / 2, hop) : long.MaxValue;
+                long carrierEnd = ending ? lastFrame * hop + size / 2 : long.MaxValue;
+                long targetEnd = ending ? NoteFor(carrierEnd - 1) + 1 : long.MaxValue;
+                long analysisEnd = ending ? targetEnd + 2 : long.MaxValue;
+                // Her pitch, once a frame's window has arrived; the note she sings, once two frames either side are in;
+                // the synth, a sample at a time; then her shape on it, a frame at a time.
+                while (analyzed < analysisEnd && (ending || analyzed * hop + size / 2 <= received)) Analyze(analyzed++);
+                while (targeted < targetEnd && (ending || targeted + 2 < analyzed)) Target(targeted++);
+                while (made < carrierEnd && (ending || NoteFor(made) < targeted)) Sing(made++);
+                while (spoken <= lastFrame && (ending || (spoken * hop + size / 2 <= received && spoken * hop + size / 2 <= made))) Speak(spoken++);
+                // A sample goes out once every frame over it is in: her voice, with the robot under it.
+                long ready = ending ? received : Math.Min(received, spoken * hop - size / 2);
+                for (long j = emitted; j < ready; j++)
+                {
+                    int slot = (int)(j - sumFirst);
+                    double robot = slot < weight.Count && weight[slot] > 1e-9 ? sum[slot] / weight[slot] : 0;
+                    output.Add(Soft(In(j) * dry + robot * wet));
+                }
+                emitted = Math.Max(emitted, ready);
+                // Then everything no later step reads goes.
+                long reading = spoken * hop - size / 2;
+                sumFirst += Drop(Math.Min(emitted, reading) - sumFirst, sum, weight);
+                first += Drop(Math.Min(emitted, Math.Min(reading, analyzed * hop - size / 2)) - first, held);
+                carrierFirst += Drop(reading - carrierFirst, carrier, null);
+                centreBase += Drop(spoken - centreBase, centres, null);
+                pitchBase += Drop(targeted - 2 - pitchBase, pitches, clarities);
+                targetBase += Drop(NoteFor(made) - targetBase, targets, voicings);
+            }
+
+            // The frame whose note the synth heads for at a sample.
+            private long NoteFor(long sample) { return FloorDiv(sample + lead + hop / 2, hop); }
+
+            private static int Drop(long count, List<double> list, List<double> beside)
+            {
+                int dropped = (int)Math.Max(0, Math.Min(list.Count, count));
+                list.RemoveRange(0, dropped);
+                if (beside != null) beside.RemoveRange(0, dropped);
+                return dropped;
+            }
+
+            private static int Drop(long count, List<short> list)
+            {
+                int dropped = (int)Math.Max(0, Math.Min(list.Count, count));
+                list.RemoveRange(0, dropped);
+                return dropped;
+            }
+
+            private static long FloorDiv(long value, long by) { return value >= 0 ? value / by : -((-value + by - 1) / by); }
+
+            private double In(long index)
+            {
+                long j = index - first;
+                return index >= 0 && j >= 0 && j < held.Count ? held[(int)j] : 0;
+            }
+
+            // Her pitch in one frame, by YIN: the lag where the sound best repeats itself. 0 when it doesn't, or it's too quiet.
+            private void Analyze(long u)
+            {
+                long start = u * hop - size / 2;
+                for (int i = 0; i < size; i++) frame[i] = In(start + i);
+                double energy = 0;
+                for (int i = 0; i < size; i++)
+                {
+                    double here = frame[i];
+                    smooth[i] = 0.5 * here + 0.25 * (i > 0 ? frame[i - 1] : here) + 0.25 * (i + 1 < size ? frame[i + 1] : here);
+                    if (i >= size / 4 && i < size * 3 / 4) energy += here * here;
+                }
+                double level = Math.Sqrt(energy / (size / 2)), pitch = 0, clarity = 0;
+                loudest = Math.Max(loudest, level);
+                if (level > 20 && level > 0.03 * loudest)
+                {
+                    int span = size / 2;
+                    double running = 0;
+                    difference[0] = 1;
+                    for (int lag = 1; lag <= most + 1; lag++)
+                    {
+                        // Every lag is measured around the frame's middle, so the pitch belongs to the frame's own moment.
+                        int from = (size - span - lag) / 2;
+                        double total = 0;
+                        for (int i = from; i < from + span; i++)
+                        {
+                            double delta = smooth[i] - smooth[i + lag];
+                            total += delta * delta;
+                        }
+                        running += total;
+                        difference[lag] = running > 0 ? total * lag / running : 1;
+                    }
+                    int best = -1;
+                    for (int lag = least; lag <= most && best < 0; lag++)
+                        if (difference[lag] < 0.15)
+                        {
+                            while (lag < most && difference[lag + 1] < difference[lag]) lag++;
+                            best = lag;
+                        }
+                    if (best < 0)
+                    {
+                        best = least;
+                        for (int lag = least + 1; lag <= most; lag++) if (difference[lag] < difference[best]) best = lag;
+                    }
+                    double dip = difference[best];
+                    if (dip < 0.35)
+                    {
+                        double before = difference[best - 1], after = difference[best + 1], bend = before - 2 * dip + after;
+                        double shift = bend > 1e-12 ? 0.5 * (before - after) / bend : 0;
+                        pitch = rate / (best + Math.Max(-1, Math.Min(1, shift)));
+                        clarity = Math.Max(0, Math.Min(1, (0.35 - dip) / 0.2));
+                    }
+                }
+                pitches.Add(pitch);
+                clarities.Add(clarity);
+            }
+
+            private double PitchAt(long u) { return u >= pitchBase && u < analyzed ? pitches[(int)(u - pitchBase)] : 0; }
+
+            // The note she sings in a frame: the middle of the voiced frames around it, so one that slips an octave changes
+            // nothing, then pulled toward the nearest semitone, which only changes once she's well past the halfway point.
+            private void Target(long u)
+            {
+                double pitch = PitchAt(u), target = double.NaN, voice = 0;
+                if (pitch > 0)
+                {
+                    int count = 0;
+                    for (long v = u - 2; v <= u + 2; v++)
+                    {
+                        double near = PitchAt(v);
+                        if (near > 0) around[count++] = near;
+                    }
+                    if (count >= 3)
+                    {
+                        Array.Sort(around, 0, count);
+                        pitch = around[count / 2];
+                    }
+                    double semitone = 69 + 12 * Math.Log(pitch / 440) / Math.Log(2);
+                    if (double.IsNaN(note) || Math.Abs(semitone - note) > 0.65) note = Math.Round(semitone);
+                    target = semitone + snap * (note - semitone);
+                    voice = clarities[(int)(u - pitchBase)];
+                }
+                targets.Add(target);
+                voicings.Add(voice);
+            }
+
+            // One sample of the synth: a band-limited sawtooth that glides to each new note over about 15 ms.
+            private void Sing(long j)
+            {
+                long u = NoteFor(j);
+                bool known = u >= targetBase && u < targeted;
+                double target = known ? targets[(int)(u - targetBase)] : double.NaN, voice = known ? voicings[(int)(u - targetBase)] : 0;
+                if (!double.IsNaN(target))
+                {
+                    if (!sung) { glide = target; sung = true; }
+                    glide += (target - glide) * glideStep;
+                }
+                voiced += (voice - voiced) * voiceStep;
+                double step = Math.Min(0.45, (sung ? 440 * Math.Pow(2, (glide - 69) / 12) : 220) / rate);
+                phase += step;
+                if (phase >= 1) phase -= 1;
+                double edge = 0;
+                if (phase < step) { double t = phase / step; edge = t + t - t * t - 1; }
+                else if (phase > 1 - step) { double t = (phase - 1) / step; edge = t * t + t + t + 1; }
+                carrier.Add(2 * phase - 1 - edge);
+                if (j % hop == 0) centres.Add(voiced);
+            }
+
+            // One frame of the robot: the synth takes her voice's smoothed spectrum and loudness. Where she isn't voiced,
+            // noise with her shape stands in, so her s and t sounds come through too.
+            private void Speak(long t)
+            {
+                long start = t * hop - size / 2;
+                int half = size / 2;
+                for (int i = 0; i < size; i++)
+                {
+                    voiceRe[i] = In(start + i) * window[i];
+                    voiceIm[i] = 0;
+                }
+                Transform(voiceRe, voiceIm, false);
+                double energy = 0;
+                for (int k = 0; k <= half; k++)
+                {
+                    envelope[k] = voiceRe[k] * voiceRe[k] + voiceIm[k] * voiceIm[k];
+                    energy += k == 0 || k == half ? envelope[k] : 2 * envelope[k];
+                }
+                // Her power averaged over about 300 Hz around each point, so the shape rides on her harmonics rather than
+                // sinking into the gaps between them, which would leave the robot thin and bright.
+                for (int k = 0; k <= half; k++)
+                {
+                    int low = Math.Max(0, k - reach), high = Math.Min(half, k + reach);
+                    double total = 0;
+                    for (int b = low; b <= high; b++) total += envelope[b];
+                    shapeRe[k] = 0.5 * Math.Log(total / (high - low + 1) + 1e-2);
+                    shapeIm[k] = 0;
+                }
+                for (int k = half + 1; k < size; k++)
+                {
+                    shapeRe[k] = shapeRe[size - k];
+                    shapeIm[k] = 0;
+                }
+                Transform(shapeRe, shapeIm, true);
+                for (int q = 0; q < size; q++)
+                {
+                    int from = Math.Min(q, size - q);
+                    shapeRe[q] *= from <= lifter ? 0.5 + 0.5 * Math.Cos(Math.PI * from / (lifter + 1)) : 0;
+                    shapeIm[q] = 0;
+                }
+                Transform(shapeRe, shapeIm, false);
+                long offset = start - carrierFirst;
+                for (int i = 0; i < size; i++)
+                {
+                    synthRe[i] = carrier[(int)(offset + i)] * window[i];
+                    synthIm[i] = 0;
+                }
+                Transform(synthRe, synthIm, false);
+                double sawEnergy = 0, noiseEnergy = 0;
+                for (int k = 1; k < half; k++)
+                {
+                    envelope[k] = Math.Exp(shapeRe[k]);
+                    double gain = envelope[k] * tilt[k];
+                    synthRe[k] *= gain;
+                    synthIm[k] *= gain;
+                    sawEnergy += 2 * (synthRe[k] * synthRe[k] + synthIm[k] * synthIm[k]);
+                    noiseEnergy += 2 * envelope[k] * envelope[k];
+                }
+                double voice = centres[(int)(t - centreBase)];
+                double sawGain = sawEnergy > 1e-9 ? Math.Sin(voice * Math.PI / 2) * Math.Sqrt(energy / sawEnergy) : 0;
+                double noiseGain = noiseEnergy > 1e-9 ? Math.Cos(voice * Math.PI / 2) * Math.Sqrt(energy / noiseEnergy) : 0;
+                Random noise = new Random(unchecked(seed + (int)t * 7919));
+                voiceRe[0] = voiceIm[0] = voiceRe[half] = voiceIm[half] = 0;
+                for (int k = 1; k < half; k++)
+                {
+                    double angle = 2 * Math.PI * noise.NextDouble(), hiss = envelope[k] * noiseGain;
+                    voiceRe[k] = sawGain * synthRe[k] + hiss * Math.Cos(angle);
+                    voiceIm[k] = sawGain * synthIm[k] + hiss * Math.Sin(angle);
+                    voiceRe[size - k] = voiceRe[k];
+                    voiceIm[size - k] = -voiceIm[k];
+                }
+                Transform(voiceRe, voiceIm, true);
+                long slot = start - sumFirst;
+                while (sum.Count < slot + size)
+                {
+                    sum.Add(0);
+                    weight.Add(0);
+                }
+                for (int i = 0; i < size; i++)
+                {
+                    sum[(int)(slot + i)] += voiceRe[i] * window[i];
+                    weight[(int)(slot + i)] += window[i] * window[i];
+                }
+            }
+
+            // An FFT in place; the inverse divides by the size.
+            private void Transform(double[] real, double[] imaginary, bool inverse)
+            {
+                int n = size;
+                for (int i = 1, j = 0; i < n; i++)
+                {
+                    int bit = n >> 1;
+                    for (; (j & bit) != 0; bit >>= 1) j ^= bit;
+                    j ^= bit;
+                    if (i < j)
+                    {
+                        double swap = real[i];
+                        real[i] = real[j];
+                        real[j] = swap;
+                        swap = imaginary[i];
+                        imaginary[i] = imaginary[j];
+                        imaginary[j] = swap;
+                    }
+                }
+                for (int length = 2; length <= n; length <<= 1)
+                {
+                    int half = length >> 1, stride = n / length;
+                    for (int i = 0; i < n; i += length)
+                        for (int k = 0; k < half; k++)
+                        {
+                            double c = cosines[k * stride], s = inverse ? sines[k * stride] : -sines[k * stride];
+                            int a = i + k, b = a + half;
+                            double tr = real[b] * c - imaginary[b] * s, ti = real[b] * s + imaginary[b] * c;
+                            real[b] = real[a] - tr;
+                            imaginary[b] = imaginary[a] - ti;
+                            real[a] += tr;
+                            imaginary[a] += ti;
+                        }
+                }
+                if (inverse)
+                    for (int i = 0; i < n; i++)
+                    {
+                        real[i] /= n;
+                        imaginary[i] /= n;
+                    }
+            }
+        }
     }
 
     // Their own voice for her HD voice: a clip of them talking becomes the reference it clones, reference.wav in its folder.
@@ -1258,7 +1720,8 @@ namespace CapriDesktop
         internal byte[] Speak(string text)
         {
             FreeStyle style = Style;
-            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, glitch = VoiceFx.Glitch;
+            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, robot = VoiceFx.Robot, glitch = VoiceFx.Glitch, rate;
+            short[] pcm;
             lock (gate)
             {
                 Open(style.British);
@@ -1271,9 +1734,9 @@ namespace CapriDesktop
                     Generated made = (Generated)Marshal.PtrToStructure(audio, typeof(Generated));
                     float[] samples = new float[Math.Max(0, made.Count)];
                     if (samples.Length > 0) Marshal.Copy(made.Samples, samples, 0, samples.Length);
-                    short[] pcm = new short[samples.Length];
+                    pcm = new short[samples.Length];
                     for (int i = 0; i < samples.Length; i++) pcm[i] = (short)Math.Max(-32767, Math.Min(32767, Math.Round(samples[i] * 32767)));
-                    return Voice.Wave(VoiceFx.Kokoro(pcm, made.Rate, pitch, glitch, VoiceFx.Seed(text)), made.Rate);
+                    rate = made.Rate;
                 }
                 finally
                 {
@@ -1281,6 +1744,7 @@ namespace CapriDesktop
                     Marshal.FreeHGlobal(words);
                 }
             }
+            return Voice.Wave(VoiceFx.Kokoro(pcm, rate, pitch, robot, glitch, VoiceFx.Seed(text)), rate);
         }
 
         private void Open(bool gb)
@@ -1569,12 +2033,12 @@ namespace CapriDesktop
         {
             string code = Brain.LanguageCode(Brain.Language);
             string rest = ",\"lang\":\"" + (Array.IndexOf(Tongues, code) >= 0 ? code : "en") + "\",\"seed\":7,\"response_format\":\"pcm\",\"speaker_ref_b64\":\"" + Convert.ToBase64String(Clip()) + "\"}";
-            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, glitch = VoiceFx.HdGlitch;
+            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, robot = VoiceFx.HdRobot, glitch = VoiceFx.HdGlitch;
             List<short> said = new List<short>();
             int hertz = 24000;
             foreach (string piece in Pieces(Voice.Sayable(text))) said.AddRange(Ask(number, "{\"input\":" + Voice.Quote(piece) + rest, out hertz));
             short[] samples = said.ToArray();
-            if (pitch != 0 || speed != 100 || glitch > 0) samples = VoiceFx.Restyled(samples, hertz, pitch, speed, glitch, VoiceFx.Seed(text));
+            if (pitch != 0 || speed != 100 || robot > 0 || glitch > 0) samples = VoiceFx.Restyled(samples, hertz, pitch, speed, robot, glitch, VoiceFx.Seed(text));
             byte[] wav = Voice.Wave(samples, hertz);
             if (Voice.Seconds(wav) < 0.2) throw new VoiceException("Her HD voice made no sound.");
             return wav;
