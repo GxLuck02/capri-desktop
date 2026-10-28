@@ -1937,29 +1937,58 @@ namespace CapriDesktop
             return null;
         }
 
+        // A folder as they typed or pasted it. Explorer's "Copy as path" puts it in quotes.
+        internal static string Clean(string folder) { return (folder ?? "").Trim().Trim('"').Trim(); }
+
         // Its name on her free voice button: its folder's, without sherpa-onnx's "vits-piper-" or "sherpa-onnx-" in front.
+        // Anything typed gets a name, even what's no path at all, as it shows when she starts.
         internal static string Name(string folder)
         {
-            string name = Regex.Replace(Path.GetFileName((folder ?? "").Trim().TrimEnd('\\', '/')), "^(vits-(piper-)?|sherpa-onnx-)", "", RegexOptions.IgnoreCase);
+            string name;
+            try { name = Path.GetFileName(Clean(folder).TrimEnd('\\', '/')); }
+            catch (ArgumentException) { name = ""; }
+            name = Regex.Replace(name, "^(vits-(piper-)?|sherpa-onnx-)", "", RegexOptions.IgnoreCase);
             return name.Length == 0 ? "Voice model" : name;
         }
 
         // A .tar.bz2 or .zip they picked, unpacked into her models folder. Returns the model's folder.
         internal static string Unpack(string archive)
         {
-            string target = Path.Combine(Shelf, Regex.Replace(Path.GetFileName(archive), @"\.(tar\.bz2|tar\.gz|tgz|tar|zip)$", "", RegexOptions.IgnoreCase));
+            // Its folder is named after the archive, and only ever sits inside her models folder: an archive named ".zip" or
+            // "...zip" must never point it at the models folder itself or the one above.
+            string name = Regex.Replace(Path.GetFileName(archive), @"\.(tar\.bz2|tar\.gz|tgz|tar|zip)$", "", RegexOptions.IgnoreCase).Trim().TrimEnd('.', ' ');
+            if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) name = "voice-model";
+            string target = Path.Combine(Shelf, name);
             string staging = target + ".new";
             if (Directory.Exists(staging)) Directory.Delete(staging, true);
             Directory.CreateDirectory(staging);
-            if (archive.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) ZipFile.ExtractToDirectory(archive, staging);
-            else
+            try
             {
-                // Windows' own tar unpacks .tar.bz2, as sherpa-onnx ships its models.
-                ProcessStartInfo start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe"), "-xf \"" + archive + "\" -C \"" + staging + "\"");
-                start.UseShellExecute = false;
-                start.CreateNoWindow = true;
-                using (Process unpacking = Process.Start(start))
-                    if (!unpacking.WaitForExit(600000) || unpacking.ExitCode != 0) throw new VoiceException("Windows couldn't unpack " + Path.GetFileName(archive) + ".");
+                if (archive.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) ZipFile.ExtractToDirectory(archive, staging);
+                else
+                {
+                    // Windows' own tar unpacks .tar.bz2, as sherpa-onnx ships its models.
+                    ProcessStartInfo start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe"), "-xf \"" + archive + "\" -C \"" + staging + "\"");
+                    start.UseShellExecute = false;
+                    start.CreateNoWindow = true;
+                    using (Process unpacking = Process.Start(start))
+                    {
+                        if (!unpacking.WaitForExit(600000))
+                        {
+                            try { unpacking.Kill(); unpacking.WaitForExit(5000); }
+                            catch (Exception) { }
+                            throw new VoiceException("Windows took too long to unpack " + Path.GetFileName(archive) + ".");
+                        }
+                        if (unpacking.ExitCode != 0) throw new VoiceException("Windows couldn't unpack " + Path.GetFileName(archive) + ".");
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // A failed unpack leaves nothing half-made behind.
+                try { Directory.Delete(staging, true); }
+                catch (Exception) { }
+                throw;
             }
             // Its archive holds one folder with the model in it.
             string inside = staging;
@@ -1991,13 +2020,19 @@ namespace CapriDesktop
                 IntPtr audio = IntPtr.Zero;
                 try
                 {
-                    if (kind == "pocket") audio = Copy(words, voice);
-                    else
+                    // A model that breaks inside sherpa-onnx comes back as an SEHException; it's said like any other glitch, so
+                    // her free voice fills in.
+                    try
                     {
-                        int speaker;
-                        if (!int.TryParse((voice ?? "").Trim(), out speaker) || speaker < 0 || speaker >= LocalVoice.SherpaOnnxOfflineTtsNumSpeakers(tts)) speaker = 0;
-                        audio = LocalVoice.SherpaOnnxOfflineTtsGenerate(tts, words, speaker, 1f);
+                        if (kind == "pocket") audio = Copy(words, voice);
+                        else
+                        {
+                            int speaker;
+                            if (!int.TryParse((voice ?? "").Trim(), out speaker) || speaker < 0 || speaker >= LocalVoice.SherpaOnnxOfflineTtsNumSpeakers(tts)) speaker = 0;
+                            audio = LocalVoice.SherpaOnnxOfflineTtsGenerate(tts, words, speaker, 1f);
+                        }
                     }
+                    catch (SEHException) { throw new VoiceException("Your voice model glitched."); }
                     if (audio == IntPtr.Zero) throw new VoiceException("Your voice model glitched.");
                     LocalVoice.Generated made = (LocalVoice.Generated)Marshal.PtrToStructure(audio, typeof(LocalVoice.Generated));
                     float[] samples = new float[Math.Max(0, made.Count)];
@@ -2072,6 +2107,29 @@ namespace CapriDesktop
             }
         }
 
+        // sherpa-onnx starts espeak once for the whole app, from the first espeak-ng-data it's given, and that's usually her
+        // free voice's. So every model reads her free voice's copy, with the model's own language files added to it: a
+        // Spanish Piper voice brings es_dict, and deleting a model never takes her free voice's files with it.
+        private static string Speech(string folder)
+        {
+            string theirs = Path.Combine(folder, "espeak-ng-data"), ours = Path.Combine(Engine, "espeak-ng-data");
+            if (!Directory.Exists(theirs)) return "";
+            if (!Directory.Exists(ours)) return theirs;
+            try
+            {
+                foreach (string file in Directory.GetFiles(theirs, "*", SearchOption.AllDirectories))
+                {
+                    string target = ours + file.Substring(theirs.Length);
+                    if (File.Exists(target)) continue;
+                    Directory.CreateDirectory(Path.GetDirectoryName(target));
+                    File.Copy(file, target);
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return ours;
+        }
+
         // Opens the model, unless it's open already, and says what kind it is.
         private static string Open(string folder, string lang)
         {
@@ -2096,7 +2154,7 @@ namespace CapriDesktop
                 {
                     config.Model.Vits.Model = keep(Model(folder));
                     config.Model.Vits.Tokens = keep(inside("tokens.txt"));
-                    config.Model.Vits.Data = keep(inside("espeak-ng-data"));
+                    config.Model.Vits.Data = keep(Speech(folder));
                     config.Model.Vits.Lexicon = keep(inside("lexicon.txt"));
                     config.Model.Vits.Dict = keep(inside("dict"));
                 }
@@ -2105,7 +2163,7 @@ namespace CapriDesktop
                     config.Model.Kitten.Model = keep(Model(folder));
                     config.Model.Kitten.Voices = keep(inside("voices.bin"));
                     config.Model.Kitten.Tokens = keep(inside("tokens.txt"));
-                    config.Model.Kitten.Data = keep(inside("espeak-ng-data"));
+                    config.Model.Kitten.Data = keep(Speech(folder));
                 }
                 else if (kind == "pocket")
                 {
@@ -2131,13 +2189,15 @@ namespace CapriDesktop
                     config.Model.Kokoro.Model = keep(Model(folder));
                     config.Model.Kokoro.Voices = keep(inside("voices.bin"));
                     config.Model.Kokoro.Tokens = keep(inside("tokens.txt"));
-                    config.Model.Kokoro.Data = keep(inside("espeak-ng-data"));
+                    config.Model.Kokoro.Data = keep(Speech(folder));
                     config.Model.Kokoro.Dict = keep(inside("dict"));
                     config.Model.Kokoro.Lexicon = keep(string.Join(",", lexicons.ToArray()));
                     config.Model.Kokoro.Lang = keep(lang);
                 }
                 config.MaxSentences = 1;
-                tts = LocalVoice.SherpaOnnxCreateOfflineTts(ref config);
+                // A broken or half-downloaded .onnx throws inside sherpa-onnx rather than returning nothing.
+                try { tts = LocalVoice.SherpaOnnxCreateOfflineTts(ref config); }
+                catch (SEHException) { tts = IntPtr.Zero; }
             }
             finally { foreach (IntPtr pointer in held) Marshal.FreeHGlobal(pointer); }
             if (tts == IntPtr.Zero) throw new VoiceException("That voice model wouldn't start. Check it's a Piper, Kokoro, Kitten or Pocket TTS model for sherpa-onnx.");
@@ -2514,6 +2574,9 @@ namespace CapriDesktop
         internal volatile string Model;
         internal volatile string Speaker;
         internal volatile string Key;
+        // Picking a server changes all five under this, and a line reads them under it, so a line never pairs one server's
+        // address with another's key.
+        internal readonly object Changing = new object();
         // The last problem she noted, so a server that stays down is said once, until it answers again.
         private volatile string noted;
 
@@ -2777,7 +2840,15 @@ namespace CapriDesktop
 
         internal byte[] Speak(string text)
         {
-            string url = Url, api = Api, model = Model, speaker = Speaker, key = Key;
+            string url, api, model, speaker, key;
+            lock (Changing)
+            {
+                url = Url;
+                api = Api;
+                model = Model;
+                speaker = Speaker;
+                key = Key;
+            }
             bool fish = api == Fish;
             string name = Name(url, api);
             int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, robot = VoiceFx.ServerRobot, glitch = VoiceFx.ServerGlitch;
@@ -2787,7 +2858,7 @@ namespace CapriDesktop
                 // A model file says it all on this PC, its voice picked by speaker number (or Pocket TTS's clip) and a Kokoro
                 // model's language by Model.
                 int rate;
-                short[] made = ModelFile.Speak((url ?? "").Trim(), model, speaker, Voice.Sayable(text), out rate);
+                short[] made = ModelFile.Speak(ModelFile.Clean(url), model, speaker, Voice.Sayable(text), out rate);
                 said.AddRange(rate == YourVoice.Rate || made.Length == 0 ? made : VoiceFx.Resample(made, rate / (double)YourVoice.Rate));
             }
             Uri endpoint = api == Files ? null : Endpoint(url, api);
@@ -2911,6 +2982,7 @@ namespace CapriDesktop
         {
             return delegate(string words)
             {
+                string problem;
                 try
                 {
                     byte[] wav = Speak(words);
@@ -2920,14 +2992,21 @@ namespace CapriDesktop
                 catch (VoiceException error)
                 {
                     if (fallback == null) throw;
-                    string problem = error.Message + (Regex.IsMatch(error.Message, @"[.!?]$") ? "" : ".") + Filling;
-                    if (problem != noted)
-                    {
-                        noted = problem;
-                        trouble(problem);
-                    }
-                    return fallback(words);
+                    problem = error.Message;
                 }
+                // Anything else that breaks is said the same way, so her free voice still fills in.
+                catch (Exception error)
+                {
+                    if (fallback == null) throw;
+                    problem = Voice.Short(Name(Url, Api) + " glitched: " + error.Message);
+                }
+                problem += (Regex.IsMatch(problem, @"[.!?]$") ? "" : ".") + Filling;
+                if (problem != noted)
+                {
+                    noted = problem;
+                    trouble(problem);
+                }
+                return fallback(words);
             };
         }
     }

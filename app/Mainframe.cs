@@ -2033,6 +2033,9 @@ namespace CapriDesktop
             private void Pick(VoiceServer.Service choice, bool fill)
             {
                 bool file = choice.Api == VoiceServer.Files;
+                // A key typed for one service never goes to the next one they pick.
+                bool dropped = choice != picked && key.Box.Text.Trim().Length > 0;
+                if (choice != picked) key.Box.Text = "";
                 picked = choice;
                 service.Text = choice.Name;
                 hint.Text = choice.Hint + (file ? "" : " It only gets the words she says.");
@@ -2053,6 +2056,7 @@ namespace CapriDesktop
                 }
                 foreach (ToolStripItem item in services.Items) ((ToolStripMenuItem)item).Checked = item.Text == choice.Name;
                 Kept();
+                Say(!dropped ? "" : file ? "Key cleared: a model file needs none." : "Key cleared: paste the key for " + choice.Name + ".", false);
             }
 
             internal void Choose(string name)

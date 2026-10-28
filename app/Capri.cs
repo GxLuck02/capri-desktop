@@ -4549,7 +4549,8 @@ namespace CapriDesktop
 
         internal string ServerKeyTail { get { return server.Key == null ? null : Voice.Tail(server.Key); } }
 
-        private static string ServerAddress(string url, string api) { return Typed(url) ?? (api == VoiceServer.Fish ? VoiceServer.FishCloud : api == VoiceServer.Files ? "" : VoiceServer.Address); }
+        // A model file's folder loses any quotes it was pasted with.
+        private static string ServerAddress(string url, string api) { return api == VoiceServer.Files ? ModelFile.Clean(url) : Typed(url) ?? (api == VoiceServer.Fish ? VoiceServer.FishCloud : VoiceServer.Address); }
 
         // Their own voice server, a voice model file, or Fish Audio or OpenAI, picked from the free voice menu: HD steps aside, and
         // she says her check line through it.
@@ -4557,23 +4558,27 @@ namespace CapriDesktop
         {
             api = VoiceServer.Known(api);
             string address = ServerAddress(url, api);
-            bool same = VoiceServer.Same(server.Url, server.Api, address, api);
-            preferences.ServerUrl = server.Url = address;
-            server.Api = api;
-            preferences.ServerApi = api == VoiceServer.OpenAi ? null : api;
-            preferences.ServerModel = server.Model = Typed(model);
-            preferences.ServerSpeaker = server.Speaker = Typed(speaker);
-            // A blank key box keeps the key that's saved, for the server it was saved for. A key never goes to another server.
-            string typed = Typed(Regex.Replace(key ?? "", @"\s+", ""));
-            if (typed != null)
+            // A blank key box keeps the key that's saved, for the server it was saved for. A key never goes to another server,
+            // and a model file takes none.
+            string typed = api == VoiceServer.Files ? null : Typed(Regex.Replace(key ?? "", @"\s+", ""));
+            lock (server.Changing)
             {
-                server.Key = typed;
-                preferences.ServerKey = Voice.Protect(typed);
-            }
-            else if (!same)
-            {
-                server.Key = null;
-                preferences.ServerKey = null;
+                bool same = VoiceServer.Same(server.Url, server.Api, address, api);
+                preferences.ServerUrl = server.Url = address;
+                server.Api = api;
+                preferences.ServerApi = api == VoiceServer.OpenAi ? null : api;
+                preferences.ServerModel = server.Model = Typed(model);
+                preferences.ServerSpeaker = server.Speaker = Typed(speaker);
+                if (typed != null)
+                {
+                    server.Key = typed;
+                    preferences.ServerKey = Voice.Protect(typed);
+                }
+                else if (!same)
+                {
+                    server.Key = null;
+                    preferences.ServerKey = null;
+                }
             }
             if (preferences.HdVoice || settingUpHd)
             {
@@ -4639,7 +4644,7 @@ namespace CapriDesktop
             trial.Url = ServerAddress(url, trial.Api);
             trial.Model = Typed(model);
             trial.Speaker = Typed(speaker);
-            trial.Key = Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? (VoiceServer.Same(server.Url, server.Api, trial.Url, trial.Api) ? server.Key : null);
+            trial.Key = trial.Api == VoiceServer.Files ? null : Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? (VoiceServer.Same(server.Url, server.Api, trial.Url, trial.Api) ? server.Key : null);
             string label = VoiceServer.Label(trial.Url, trial.Api);
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -13398,6 +13403,23 @@ namespace CapriDesktop
                                 || !File.Exists(Path.Combine(vsUnpacked, "en_US-test-medium.onnx")) || vsZipped != Path.Combine(vsShelf, "kitten-test") || ModelFile.Kind(vsZipped) != "kitten"
                                 || vsRefused != ModelFile.Missing || Directory.GetDirectories(vsShelf).Length != 2)
                                 throw new Exception("Voice model files weren't told apart or unpacked right: " + vsKinds + " / " + vsUnpacked + " / " + vsZipped + " / " + vsRefused + " / " + string.Join(", ", Directory.GetDirectories(vsShelf)));
+                            // An archive named ".zip" or "...zip" unpacks into a folder of its own, never over the models folder or the
+                            // one above it. A quoted folder pasted from Explorer, or typing that's no path at all, never stops her starting.
+                            string vsOddOne = null, vsOddTwo = null;
+                            ModelFile.Shelf = vsShelf;
+                            try
+                            {
+                                File.Copy(Path.Combine(vsModels, "kitten-test.zip"), Path.Combine(vsModels, ".zip"));
+                                vsOddOne = ModelFile.Unpack(Path.Combine(vsModels, ".zip"));
+                                File.Copy(Path.Combine(vsModels, "kitten-test.zip"), Path.Combine(vsModels, "...zip"));
+                                vsOddTwo = ModelFile.Unpack(Path.Combine(vsModels, "...zip"));
+                            }
+                            finally { ModelFile.Shelf = vsShelfWas; }
+                            if (vsOddOne != Path.Combine(vsShelf, "voice-model") || vsOddTwo != vsOddOne || ModelFile.Kind(vsOddTwo) != "kitten" || ModelFile.Kind(vsZipped) != "kitten" || ModelFile.Kind(vsUnpacked) != "vits"
+                                || !Directory.Exists(vsPiper) || Directory.GetDirectories(vsShelf).Length != 3
+                                || ModelFile.Name("\"" + vsPiper + "\"") != "en_US-test-medium" || ModelFile.Name("a<b|c") != "Voice model" || VoiceServer.Label("\"C:\\x\\y\"", VoiceServer.Files) != "y"
+                                || ServerAddress(" \"" + vsPiper + "\" ", VoiceServer.Files) != vsPiper)
+                                throw new Exception("Odd voice model names weren't handled safely: " + vsOddOne + " / " + vsOddTwo + " / " + string.Join(", ", Directory.GetDirectories(vsShelf)) + " / " + ModelFile.Name("a<b|c") + " / " + VoiceServer.Label("\"C:\\x\\y\"", VoiceServer.Files));
                             // Her pitch lifts it without changing its length; its own robot and glitch change it, and her other voices' robot doesn't.
                             int vsPitchWas = VoiceFx.Pitch, vsRobotWas = VoiceFx.Robot;
                             short[] vsPitched, vsShared, vsRoboted, vsGlitched;
@@ -13698,7 +13720,7 @@ namespace CapriDesktop
                             string vsPanelUsual = "Fish Audio · cloud | " + VoiceServer.FishCloud + " | " + VoiceServer.FishFree + " |  | Paste your Fish Audio key | - | ";
                             if (!vsMenu.EndsWith(vsMenuEnd, StringComparison.Ordinal) || !vsMenu.StartsWith("Her own (picked), Bright, Sly, Sharp, -, HD ", StringComparison.Ordinal) || vsOpened != vsPanelUsual
                                 || vsKokoro != "Kokoro · on your PC | " + VoiceServer.Address + " | kokoro | af_heart | Optional | - |  / Address | Model | Voice | Key | -"
-                                || vsFileShown != "Voice model file · on your PC |  |  |  | Optional | - |  / Model folder | Language | Speaker or clip | no key | Browse..."
+                                || vsFileShown != "Voice model file · on your PC |  |  |  | Optional | - | Key cleared: a model file needs none. / Model folder | Language | Speaker or clip | no key | Browse..."
                                 || vsFileTaken != "Voice model file · on your PC | " + vsKitten + " |  |  | Optional | - | "
                                 || vsFileClip != "Voice model file · on your PC | " + vsKitten + " |  | " + Path.Combine(vsModels, "clip.wav") + " | Optional | - | Pocket TTS models copy this clip's voice. Press Test to hear it."
                                 || vsFishList != "Capri (Nox), Night City, -, " + "New voice from a clip..." || vsListBody.IndexOf("GET /model?self=true&page_size=100&page_number=1 HTTP/1.1\r\n", StringComparison.Ordinal) != 0
