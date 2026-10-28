@@ -97,8 +97,9 @@ If you downloaded it from the Capri website or GitHub, it's a false alarm on a n
 - Microsoft Defender: Trojan:Win32/Wacatac.H!ml
 - Bitdefender: Gen:Variant.Zusy or Gen:Suspicious.Cloud
 - Malwarebytes: MachineLearning/Anomalous.100%
+- Kaspersky: PDM:Trojan.Win32.Bazon.a. PDM means Kaspersky's behaviour check flagged what the app does, not a known virus. Capri reads your shortcut keys, takes screenshots when you ask and moves the mouse for jobs, which behaviour checks can mistake for spyware. Kaspersky Endpoint Security is usually run by a school or work IT team, so ask them to allow it.
 
-These are generic or machine-learning detections. They often flag new apps that aren't signed yet. Restore the file from quarantine (or allow it in your antivirus), then run it again. If you want to be sure, check the code on GitHub or check the download's SHA256 (below).
+These are generic, machine-learning or behaviour detections. They often flag new apps that aren't signed yet. Restore the file from quarantine (or allow it in your antivirus), then run it again. If you want to be sure, check the code on GitHub or check the download's SHA256 (below).
 
 On VirusTotal, a few of about 70 engines flagging Capri.exe or Capri-Setup.exe is the same kind of detection. People have seen Bkav Pro (W32.Malware), SecureAge (Malicious) and Trapmine (Suspicious.low.ml.score). The SHA256 check below tells you whether your file is the one on the release page.
 
