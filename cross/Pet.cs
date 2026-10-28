@@ -174,6 +174,7 @@ namespace CapriDesktop
         private MenuItem musicItem;
         private MenuItem brainMenu;
         private string[] ollamaModels;
+        private Mainframe mainframe;
         private List<string> cloudModels;
         internal string BrainProblem;
         internal Func<bool> MusicPlaying = Music.Playing;
@@ -866,6 +867,8 @@ namespace CapriDesktop
             move.Items.Add(danceItem);
             brainMenu = new MenuItem { Header = "Brain" };
             brainMenu.Items.Add(new MenuItem { Header = "Looking for models...", IsEnabled = false });
+            MenuItem mainframeItem = new MenuItem { Header = "Capri Mainframe" };
+            mainframeItem.Click += delegate { OpenMainframe(); };
             MenuItem settings = new MenuItem { Header = "Settings" };
             MenuItem language = new MenuItem { Header = "Language" };
             for (int i = 0; i < Brain.Languages.GetLength(0); i++)
@@ -938,6 +941,7 @@ namespace CapriDesktop
             menu.Items.Add(move);
             menu.Items.Add(sizes);
             menu.Items.Add(brainMenu);
+            menu.Items.Add(mainframeItem);
             menu.Items.Add(settings);
             menu.Items.Add(discord);
             menu.Items.Add(new Separator());
@@ -1436,7 +1440,21 @@ namespace CapriDesktop
             ShowState();
         }
 
-        private void ShowState() { }
+        private void ShowState() { if (mainframe != null) mainframe.Render(); }
+
+        internal Mainframe Frame { get { return mainframe; } }
+
+        internal void OpenMainframe()
+        {
+            if (mainframe == null)
+            {
+                mainframe = new Mainframe(this);
+                mainframe.Closed += delegate { mainframe = null; };
+                mainframe.Show();
+            }
+            else mainframe.Activate();
+            RefreshBrains();
+        }
 
         internal void FindBrain()
         {

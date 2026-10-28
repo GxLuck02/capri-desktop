@@ -626,6 +626,47 @@ namespace CapriDesktop
                 pet.ShowBrains(pet.OllamaModels);
                 if (pet.BrainChoices != 2) throw new Exception("Back on NORMAL, the Brain menu didn't list Ollama models again.");
                 checks.Add("PASS forget: Forget removes the key from Keychain and she goes back to her local brain");
+                pet.OpenMainframe();
+                return true;
+            }
+            if (step == 26)
+            {
+                Mainframe frame = pet.Frame;
+                if (frame == null || !frame.IsVisible) throw new Exception("Capri Mainframe didn't open.");
+                if (pet.OllamaModels == null || !frame.TiersFit) return false;
+                if (frame.Choices != "gemma4:e2b | qwen3:4b" || frame.OllamaShown) throw new Exception("NORMAL didn't list her Ollama models: " + frame.Choices + " | " + frame.TextStatus);
+                frame.Choose("qwen3:4b");
+                if (pet.Brain.Model != "qwen3:4b" || pet.Saved.Model != "qwen3:4b" || !frame.TextStatus.StartsWith("tier 0 | Ollama · qwen3:4b | Running on this", StringComparison.Ordinal)) throw new Exception("Picking an Ollama model in the Mainframe didn't stick: " + frame.TextStatus);
+                Snap(frame.Content as Control, "mainframe.png");
+                frame.PickTier(1);
+                if (pet.Saved.Tier != 1 || !frame.TextStatus.EndsWith("Paste your free NVIDIA key | Connect", StringComparison.Ordinal)) throw new Exception("HIGHER didn't ask for an NVIDIA key: " + frame.TextStatus);
+                frame.Type("nvapi-good-1234");
+                frame.PressConnect();
+                return true;
+            }
+            if (step == 27)
+            {
+                Mainframe frame = pet.Frame;
+                if (pet.Brain.Remote == null || pet.CloudModels == null)
+                {
+                    if (pet.BrainProblem != "Checking key...") throw new Exception("Connect in the Mainframe didn't connect: " + pet.BrainProblem);
+                    return false;
+                }
+                if (!frame.TextStatus.EndsWith("NVIDIA key saved, ends 1234 | Forget", StringComparison.Ordinal) || frame.Choices != "nvidia/nemotron-3.5-super-vl-120b-a12b | openai/gpt-oss-20b") throw new Exception("The Mainframe didn't show the saved NVIDIA key and its models: " + frame.TextStatus + " | " + frame.Choices);
+                Snap(frame.Content as Control, "mainframe-nvidia.png");
+                frame.PressConnect();
+                if (pet.Saved.Tier != 0 || Keys.Read("nvidia") != null || !frame.TextStatus.StartsWith("tier 0 |", StringComparison.Ordinal) || !frame.TextStatus.EndsWith("no key row", StringComparison.Ordinal)) throw new Exception("Forget in the Mainframe didn't go back to NORMAL: " + frame.TextStatus);
+                Brain.Ollama = "http://127.0.0.1:1";
+                pet.RefreshBrains();
+                return true;
+            }
+            if (step == 28)
+            {
+                Mainframe frame = pet.Frame;
+                if (pet.OllamaModels != null) return false;
+                if (!frame.OllamaShown || frame.TextStatus.IndexOf("ollama pull gemma4:e2b", StringComparison.Ordinal) < 0) throw new Exception("With no Ollama, the Mainframe didn't say how to get a brain: " + frame.TextStatus);
+                checks.Add("PASS mainframe: Capri Mainframe opens from her menu, lists her Ollama models on NORMAL, connects and forgets an NVIDIA key on HIGHER, and says how to get Ollama when it's missing");
+                frame.Close();
                 fakeBrain.Stop();
                 Send(shelf, "quit");
                 Finish(null);
