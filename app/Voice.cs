@@ -536,11 +536,13 @@ namespace CapriDesktop
         internal const int HdRobotDefault = 0;
         internal static volatile int Pitch;
         internal static volatile int Speed = 100;
-        // Robot and glitch are kept per voice: one for her free voice styles and ElevenLabs, one for her HD voice.
+        // Robot and glitch are kept per voice: one for her free voice styles and ElevenLabs, one for her HD voice, one for their voice server.
         internal static volatile int Robot;
         internal static volatile int HdRobot = HdRobotDefault;
+        internal static volatile int ServerRobot;
         internal static volatile int Glitch;
         internal static volatile int HdGlitch;
+        internal static volatile int ServerGlitch;
 
         internal static double Lift(int semitones) { return Math.Pow(2, semitones / 12.0); }
 
@@ -1560,21 +1562,25 @@ namespace CapriDesktop
         // Streams rather than files, so their clip isn't left locked once it's read.
         private static byte[] Decode(string path)
         {
-            try
-            {
-                using (FileStream input = File.OpenRead(path))
-                using (MemoryStream output = new MemoryStream())
-                {
-                    Windows.Media.MediaProperties.MediaEncodingProfile profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateWav(Windows.Media.MediaProperties.AudioEncodingQuality.High);
-                    profile.Audio = Windows.Media.MediaProperties.AudioEncodingProperties.CreatePcm(Rate, 1, 16);
-                    Windows.Media.Transcoding.PrepareTranscodeResult prepared = new Windows.Media.Transcoding.MediaTranscoder().PrepareStreamTranscodeAsync(input.AsRandomAccessStream(), output.AsRandomAccessStream(), profile).AsTask().Result;
-                    if (!prepared.CanTranscode) throw new VoiceException(Unreadable);
-                    prepared.TranscodeAsync().AsTask().Wait();
-                    return output.ToArray();
-                }
-            }
-            catch (VoiceException) { throw; }
+            byte[] wav;
+            try { using (FileStream input = File.OpenRead(path)) wav = Decode(input); }
             catch (Exception) { throw new VoiceException(Unreadable); }
+            if (wav == null) throw new VoiceException(Unreadable);
+            return wav;
+        }
+
+        // Any sound Windows' own decoders (Media Foundation) can read, like MP3 or M4A, as a 24 kHz mono 16-bit WAV. Null if they can't.
+        internal static byte[] Decode(Stream input)
+        {
+            using (MemoryStream output = new MemoryStream())
+            {
+                Windows.Media.MediaProperties.MediaEncodingProfile profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateWav(Windows.Media.MediaProperties.AudioEncodingQuality.High);
+                profile.Audio = Windows.Media.MediaProperties.AudioEncodingProperties.CreatePcm(Rate, 1, 16);
+                Windows.Media.Transcoding.PrepareTranscodeResult prepared = new Windows.Media.Transcoding.MediaTranscoder().PrepareStreamTranscodeAsync(input.AsRandomAccessStream(), output.AsRandomAccessStream(), profile).AsTask().Result;
+                if (!prepared.CanTranscode) return null;
+                prepared.TranscodeAsync().AsTask().Wait();
+                return output.ToArray();
+            }
         }
 
         // Too quiet, too short or too long says why. Otherwise the clip comes back with its quiet ends cut and its loudest peak near full scale.
@@ -2192,6 +2198,179 @@ namespace CapriDesktop
         }
 
         public void Dispose() { Stop(); }
+    }
+
+    // Their own voice model, through any server with OpenAI's speech API (POST /v1/audio/speech): Kokoro-FastAPI, openedai-speech,
+    // AllTalk, LocalAI, Qwen3-TTS behind vLLM-Omni and the like. It gets only the words she says. Its sound goes through her
+    // pitch and speed like her other voices, with a robot and glitch of its own.
+    internal sealed class VoiceServer
+    {
+        internal const string Style = "Your server";
+        internal const string Address = "http://localhost:8880/v1";
+        internal const string Filling = " Her free voice is filling in.";
+        // How long a server has to start answering a line, in milliseconds, before her free voice says it.
+        internal static int Patience = 20000;
+        internal volatile string Url = Address;
+        internal volatile string Model;
+        internal volatile string Speaker;
+        internal volatile string Key;
+        // The last problem she noted, so a server that stays down is said once, until it answers again.
+        private volatile string noted;
+
+        // Their address as typed, with http:// when it has no scheme, /v1 when it has no path, and /audio/speech unless it ends there.
+        internal static Uri Endpoint(string url)
+        {
+            string typed = (url ?? "").Trim();
+            if (typed.Length == 0) typed = Address;
+            if (!Regex.IsMatch(typed, "^[a-z][a-z0-9+.-]*://", RegexOptions.IgnoreCase)) typed = "http://" + typed;
+            Uri parsed;
+            if (!Uri.TryCreate(typed, UriKind.Absolute, out parsed) || (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps) || parsed.Host.Length == 0)
+                throw new VoiceException("Your voice server's address doesn't work. Try " + Address + ".");
+            string path = parsed.AbsolutePath.TrimEnd('/');
+            if (path.Length == 0) path = "/v1";
+            if (!path.EndsWith("/audio/speech", StringComparison.OrdinalIgnoreCase)) path += "/audio/speech";
+            UriBuilder built = new UriBuilder(parsed);
+            built.Path = path;
+            return built.Uri;
+        }
+
+        // Its host and port, for her notes.
+        internal static string Where(string url)
+        {
+            try { return Where(Endpoint(url)); }
+            catch (VoiceException) { return (url ?? "").Trim(); }
+        }
+
+        private static string Where(Uri at) { return at.IsDefaultPort ? at.Host : at.Host + ":" + at.Port; }
+
+        private static string Slow { get { return "Your voice server took over " + (Patience / 1000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " s to answer."; } }
+
+        internal byte[] Speak(string text)
+        {
+            Uri endpoint = Endpoint(Url);
+            string model = Model, speaker = Speaker, key = Key;
+            int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, robot = VoiceFx.ServerRobot, glitch = VoiceFx.ServerGlitch;
+            List<short> said = new List<short>();
+            // A long reply goes a few sentences at a time, so no one call has to make all of it before it starts answering.
+            foreach (string piece in QwenVoice.Pieces(Voice.Sayable(text)))
+            {
+                StringBuilder body = new StringBuilder("{");
+                if (!string.IsNullOrEmpty(model)) body.Append("\"model\":").Append(Voice.Quote(model)).Append(',');
+                body.Append("\"input\":").Append(Voice.Quote(piece));
+                if (!string.IsNullOrEmpty(speaker)) body.Append(",\"voice\":").Append(Voice.Quote(speaker));
+                body.Append(",\"response_format\":\"wav\"}");
+                said.AddRange(Ask(endpoint, key, body.ToString()));
+            }
+            short[] samples = said.ToArray();
+            if (samples.Length == 0) throw new VoiceException("Your voice server sent back no sound.");
+            if (pitch != 0 || speed != 100 || robot > 0 || glitch > 0) samples = VoiceFx.Restyled(samples, YourVoice.Rate, pitch, speed, robot, glitch, VoiceFx.Seed(text));
+            return Voice.Wave(samples, YourVoice.Rate);
+        }
+
+        private static short[] Ask(Uri endpoint, string key, string json)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(json);
+            if (endpoint.Scheme == Uri.UriSchemeHttps) ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(endpoint);
+            request.Method = "POST";
+            // A server on this PC is reached directly, never through a proxy.
+            if (endpoint.IsLoopback) request.Proxy = null;
+            request.UserAgent = "Capri-Desktop";
+            request.ContentType = "application/json";
+            request.ContentLength = payload.Length;
+            if (!string.IsNullOrEmpty(key)) request.Headers[HttpRequestHeader.Authorization] = "Bearer " + key;
+            request.ServicePoint.Expect100Continue = false;
+            request.Timeout = Patience;
+            request.ReadWriteTimeout = Patience;
+            try
+            {
+                using (Stream upload = request.GetRequestStream()) upload.Write(payload, 0, payload.Length);
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (Stream stream = response.GetResponseStream())
+                using (MemoryStream copy = new MemoryStream())
+                {
+                    stream.CopyTo(copy);
+                    return Sound(copy.ToArray(), response.ContentType);
+                }
+            }
+            catch (WebException error)
+            {
+                HttpWebResponse response = error.Response as HttpWebResponse;
+                if (response == null)
+                {
+                    if (error.Status == WebExceptionStatus.Timeout) throw new VoiceException(Slow);
+                    if (error.Status == WebExceptionStatus.ConnectFailure || error.Status == WebExceptionStatus.NameResolutionFailure) throw new VoiceException("Can't reach your voice server at " + Where(endpoint) + ". Is it running?");
+                    throw new VoiceException("Your voice server at " + Where(endpoint) + " stopped answering.");
+                }
+                int status = (int)response.StatusCode;
+                string detail;
+                using (response)
+                using (StreamReader reader = new StreamReader(response.GetResponseStream())) detail = Said(reader.ReadToEnd());
+                if (status == 404) throw new VoiceException("Your voice server has no " + endpoint.AbsolutePath + " (HTTP 404). Check its address.");
+                if (status == 401 || status == 403) throw new VoiceException(string.IsNullOrEmpty(key) ? "Your voice server wants a key (HTTP " + status + "). Add it under Your voice server." : "Your voice server turned down its key (HTTP " + status + ").");
+                throw new VoiceException("Your voice server said HTTP " + status + (detail.Length > 0 ? ": " + Voice.Short(detail) : "."));
+            }
+            catch (IOException) { throw new VoiceException("Your voice server at " + Where(endpoint) + " stopped answering."); }
+        }
+
+        // Its sound as 24 kHz mono: a WAV in any coding YourVoice reads, or anything Windows' own decoders can, like MP3.
+        private static short[] Sound(byte[] reply, string type)
+        {
+            if (reply.Length == 0) throw new VoiceException("Your voice server sent back no sound.");
+            int rate;
+            float[] mono = YourVoice.Wav(reply, out rate);
+            if (mono == null && Regex.IsMatch(type ?? "", "json|text|html", RegexOptions.IgnoreCase)) throw new VoiceException("Your voice server sent words, not sound: " + Voice.Short(Said(Encoding.UTF8.GetString(reply))));
+            if (mono == null)
+            {
+                byte[] decoded = null;
+                try { using (MemoryStream input = new MemoryStream(reply)) decoded = YourVoice.Decode(input); }
+                catch (Exception) { }
+                if (decoded != null) mono = YourVoice.Wav(decoded, out rate);
+            }
+            if (mono == null) throw new VoiceException("Capri couldn't read the sound your voice server sent.");
+            short[] pcm = new short[mono.Length];
+            for (int i = 0; i < mono.Length; i++) pcm[i] = (short)Math.Max(-32768, Math.Min(32767, Math.Round(mono[i] * 32767)));
+            return rate == YourVoice.Rate ? pcm : VoiceFx.Resample(pcm, rate / (double)YourVoice.Rate);
+        }
+
+        // What a reply says in words: OpenAI's error message, FastAPI's detail, or the text itself.
+        private static string Said(string reply)
+        {
+            string text = reply ?? "";
+            Match message = Regex.Match(text, "\"(?:message|detail|msg)\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+            if (message.Success)
+            {
+                text = message.Groups[1].Value;
+                try { text = Regex.Unescape(text); }
+                catch (ArgumentException) { }
+            }
+            return Regex.Replace(text, @"\s+", " ").Trim();
+        }
+
+        // Her free voice says any line the server can't. What went wrong is noted once, until the server answers again.
+        internal Func<string, byte[]> Or(Func<string, byte[]> fallback, Action<string> trouble)
+        {
+            return delegate(string words)
+            {
+                try
+                {
+                    byte[] wav = Speak(words);
+                    noted = null;
+                    return wav;
+                }
+                catch (VoiceException error)
+                {
+                    if (fallback == null) throw;
+                    string problem = error.Message + (Regex.IsMatch(error.Message, @"[.!?]$") ? "" : ".") + Filling;
+                    if (problem != noted)
+                    {
+                        noted = problem;
+                        trouble(problem);
+                    }
+                    return fallback(words);
+                }
+            };
+        }
     }
 #endif
 }

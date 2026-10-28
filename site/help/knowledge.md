@@ -556,6 +556,31 @@ If a clip doesn't work, the note under VOICE says why, in red:
 
 Her other free voice styles (Her own, Bright, Sly and Sharp) are set voices and can't copy yours. With one of them picked, the note under VOICE says "Your voice only works with HD." For ElevenLabs, clone your voice on elevenlabs.io instead (Voice Creation > Instant Voice Clone, needs Starter or above, the same steps as cloning her below), then paste its Voice ID under VOICE.
 
+### Use your own voice model (from 0.7.5)
+Any speech model you run yourself can be her voice, if its server speaks OpenAI's speech API (POST /v1/audio/speech). Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI and Qwen3-TTS through vLLM-Omni all do. The model runs on your PC, or wherever you run its server, not inside Capri. Windows only for now.
+1. Start the server:
+   - Kokoro-FastAPI (https://github.com/remsky/Kokoro-FastAPI): `docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest`, or on an NVIDIA card `docker run --gpus all -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-gpu:latest`. Address: http://localhost:8880/v1. Voice: af_heart, or another Kokoro voice like af_bella.
+   - Qwen3-TTS through vLLM-Omni (NVIDIA graphics card, Linux or WSL; https://github.com/vllm-project/vllm-omni/blob/main/recipes/Qwen/Qwen3-TTS.md): from the vLLM-Omni folder, `vllm serve Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice --deploy-config vllm_omni/deploy/qwen3_tts.yaml --omni --port 8091`. Address: http://localhost:8091/v1. Voice: vivian, or another of its speakers.
+2. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "Your voice server...".
+3. Type the address. Model, Voice and Key are optional: leave them blank to use the server's own defaults. A key goes to your server as a Bearer key, and Capri keeps it encrypted on your PC like her other keys. Forget removes it.
+4. Press Test. She says "Voice link online. Miss me, choom?" through your server, and the panel says how long it took. Nothing is saved yet.
+5. Press Use this server. The menu shows "Free voice: Your server", and she says the line again.
+
+What your server gets: only the words she says out loud (with "choom" respelled "chewm" so it's said right), plus the model and voice you typed. Never your chats, notes, screen or other keys. She asks it for WAV; MP3, or any other sound Windows can play, works too. Long replies go a few sentences at a time.
+
+Pitch and Speed change it like her other voices. Robot and Glitch keep their own values for it, shown with "· server" after them ("Off · server"), and both start at Off.
+
+If your server can't say a line, her free voice says that line instead, and the note under VOICE says why, in red, once until your server answers again. Each note ends with "Her free voice is filling in.":
+- "Can't reach your voice server at localhost:8880. Is it running?"
+- "Your voice server took over 20 s to answer." It has 20 seconds to start answering each line.
+- "Your voice server has no /v1/audio/speech (HTTP 404). Check its address."
+- "Your voice server wants a key (HTTP 401). Add it under Your voice server." or "Your voice server turned down its key (HTTP 401)."
+- "Your voice server said HTTP 500: ..." with the server's own words.
+
+Without her free voice installed, she types that line instead.
+
+Back to her own voice: pick Her own, another style or HD in the menu. Your server's address, model, voice and key stay saved for next time.
+
 ### Step 1: make an ElevenLabs account
 Sign up at https://elevenlabs.io. The free plan works.
 
@@ -1283,4 +1308,5 @@ Things in this file the team should confirm before the support chat relies on th
 13. "Can't open your speakers." on 0.6.2: the default-output-and-restart fix didn't work for everyone, and the underlying Windows error wasn't shown then.
 14. <unused49> replies: the CPU retry in newer builds wasn't confirmed on the reporting user's PC.
 15. Free voice chat with a real mic on a fresh PC.
+16. Your voice server (0.7.5) was only tested against a fake server. A real Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI or vLLM-Omni Qwen3-TTS server hasn't been run with it. The two start commands come from their projects' pages and weren't run here.
 

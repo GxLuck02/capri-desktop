@@ -101,6 +101,8 @@ namespace CapriDesktop
         private readonly Key herVoice;
         private bool freeReady;
         private bool yoursShown;
+        internal const string ServerChoice = "Your voice server...";
+        private ServerSheet sheet;
         private readonly Slider gap;
         private readonly Label gapName;
         private readonly Entry keyEntry;
@@ -765,6 +767,13 @@ namespace CapriDesktop
 
         private float DeviceScale() { return CurrentAutoScaleDimensions.Width / 96f; }
 
+        // The scale of whichever of her windows a control is on: the Mainframe, or their voice server's panel.
+        private static float ScaleOf(Control control)
+        {
+            Form form = control.FindForm();
+            return form == null ? 1f : form.CurrentAutoScaleDimensions.Width / 96f;
+        }
+
         private int Scaled(int value) { return loaded ? (int)Math.Round(value * DeviceScale()) : value; }
 
         private void Arrange(bool setupShown)
@@ -1200,7 +1209,7 @@ namespace CapriDesktop
             ShowEffects();
         }
 
-        // Her HD voice keeps its own robot and glitch, so those sliders show the ones for the voice she speaks with.
+        // Her HD voice and their voice server keep their own robot and glitch, so those sliders show the ones for the voice she speaks with.
         private void ShowEffects()
         {
             bool was = syncing;
@@ -1219,7 +1228,7 @@ namespace CapriDesktop
             return near;
         }
 
-        private string AmountName(int step) { return AmountNames[step] + (capri.SpeaksHd ? " · HD" : ""); }
+        private string AmountName(int step) { return AmountNames[step] + (capri.SpeaksHd ? " · HD" : capri.SpeaksServer ? " · server" : ""); }
 
         internal void PickVoice(bool paid)
         {
@@ -1294,6 +1303,9 @@ namespace CapriDesktop
             ToolStripMenuItem pick = Choice(yours || kept ? "Pick a new clip of you..." : "Your voice (HD) · pick a clip of you...", false, delegate { PickYourVoice(); });
             pick.Enabled = hdFits;
             freeMenu.Items.Add(pick);
+            // Any speech model they run themselves, through its own server.
+            freeMenu.Items.Add(new ToolStripSeparator());
+            freeMenu.Items.Add(Choice(ServerChoice, chosen == VoiceServer.Style, delegate { OpenServer(); }));
             freeVoices.Invalidate();
             freeSetup.Invalidate();
             herVoice.Invalidate();
@@ -1319,7 +1331,7 @@ namespace CapriDesktop
                 foreach (ToolStripItem item in freeMenu.Items)
                 {
                     ToolStripMenuItem choice = item as ToolStripMenuItem;
-                    if (choice != null && (choice.Text.StartsWith("HD ", StringComparison.Ordinal) || choice.Text.IndexOf("you", StringComparison.OrdinalIgnoreCase) >= 0)) items.Add(choice.Text + (choice.Checked ? " (picked)" : ""));
+                    if (choice != null && choice.Text != ServerChoice && (choice.Text.StartsWith("HD ", StringComparison.Ordinal) || choice.Text.IndexOf("you", StringComparison.OrdinalIgnoreCase) >= 0)) items.Add(choice.Text + (choice.Checked ? " (picked)" : ""));
                 }
                 return freeVoices.Text + " | " + (herVoice.Visible ? herVoice.Text : "-") + " | " + string.Join(", ", items.ToArray());
             }
@@ -1347,6 +1359,53 @@ namespace CapriDesktop
                     if (choice != null && choice.Text.StartsWith(QwenVoice.Style + " ", StringComparison.Ordinal)) return choice.Text + (choice.Enabled ? "" : " (off)") + (choice.Checked ? " (picked)" : "");
                 }
                 return "-";
+            }
+        }
+
+        // Their own voice server's address, model, voice and key, in a panel of its own over the Mainframe.
+        private void OpenServer()
+        {
+            if (sheet == null || sheet.IsDisposed) sheet = new ServerSheet(this);
+            sheet.Fill(capri.ServerUrl, capri.ServerModel, capri.ServerSpeaker, capri.ServerKeyTail);
+            if (!sheet.Visible) sheet.Show(this);
+            sheet.Activate();
+        }
+
+        // Their voice server's panel for the smoke test: what it shows, typing into it, its buttons, and a picture of it.
+        internal string ServerShown { get { return sheet == null || sheet.IsDisposed || !sheet.Visible ? "-" : sheet.Shown; } }
+
+        internal void TypeServer(string address, string name, string voice, string secret) { sheet.Type(address, name, voice, secret); }
+
+        internal void PressServer(string button) { sheet.Press(button); }
+
+        internal Form ServerPanel { get { return sheet; } }
+
+        // The free voice menu as it drops down under its button, and where, for the smoke test's picture of it.
+        internal Bitmap FreeMenuPicture()
+        {
+            freeMenu.Show(freeVoices, new Point(0, freeVoices.Height));
+            try
+            {
+                Bitmap picture = new Bitmap(freeMenu.Width, freeMenu.Height);
+                freeMenu.DrawToBitmap(picture, new Rectangle(Point.Empty, freeMenu.Size));
+                return picture;
+            }
+            finally { freeMenu.Close(); }
+        }
+
+        internal Point FreeMenuAt { get { return new Point(freeVoices.Left, freeVoices.Bottom); } }
+
+        internal string FreeMenuShown
+        {
+            get
+            {
+                List<string> items = new List<string>();
+                foreach (ToolStripItem item in freeMenu.Items)
+                {
+                    ToolStripMenuItem choice = item as ToolStripMenuItem;
+                    items.Add(choice == null ? "-" : choice.Text + (choice.Enabled ? "" : " (off)") + (choice.Checked ? " (picked)" : ""));
+                }
+                return string.Join(", ", items.ToArray());
             }
         }
 
@@ -1606,7 +1665,7 @@ namespace CapriDesktop
         {
             internal Note() { SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true); }
 
-            protected override void OnPaintBackground(PaintEventArgs e) { Backdrop(e.Graphics, this, ((Mainframe)Parent).DeviceScale()); }
+            protected override void OnPaintBackground(PaintEventArgs e) { Backdrop(e.Graphics, this, ScaleOf(this)); }
 
             protected override void WndProc(ref Message message)
             {
@@ -1670,7 +1729,7 @@ namespace CapriDesktop
 
             protected override void OnPaint(PaintEventArgs e)
             {
-                float s = ((Mainframe)Parent).DeviceScale();
+                float s = ScaleOf(this);
                 Graphics graphics = e.Graphics;
                 Backdrop(graphics, this, s);
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -1741,11 +1800,7 @@ namespace CapriDesktop
 
             internal bool Chevron { get { return chevron; } set { chevron = value; PerformLayout(); Invalidate(); } }
 
-            private float Unit()
-            {
-                Mainframe owner = Parent as Mainframe;
-                return owner == null ? 1f : owner.DeviceScale();
-            }
+            private float Unit() { return ScaleOf(this); }
 
             private bool OnChevron(int x) { return Chevron && x >= Width - 28 * Unit(); }
 
@@ -1796,6 +1851,198 @@ namespace CapriDesktop
                 float left = Width - 18 * s;
                 float y = Height / 2f;
                 using (Brush mark = new SolidBrush(hot ? Look.Cyan : Look.Dim)) graphics.FillPolygon(mark, new[] { new PointF(left, y - 2 * s), new PointF(left + 8 * s, y - 2 * s), new PointF(left + 4 * s, y + 3 * s) });
+            }
+        }
+
+        // Their own voice server: its address, an optional model, voice and key, Test, and Use this server.
+        private sealed class ServerSheet : Form
+        {
+            private readonly Mainframe owner;
+            private readonly Entry url;
+            private readonly Entry model;
+            private readonly Entry speaker;
+            private readonly Entry key;
+            private readonly Key forget;
+            private readonly Key test;
+            private readonly Label note;
+
+            internal ServerSheet(Mainframe owner)
+            {
+                this.owner = owner;
+                Text = "Your voice server";
+                Icon = owner.Icon;
+                ShowInTaskbar = false;
+                FormBorderStyle = FormBorderStyle.None;
+                StartPosition = FormStartPosition.Manual;
+                AutoScaleMode = AutoScaleMode.Dpi;
+                AutoScaleDimensions = new SizeF(96, 96);
+                Font = owner.Font;
+                BackColor = Look.Panel;
+                ForeColor = Look.Ink;
+                DoubleBuffered = true;
+                ClientSize = new Size(Wide, 356);
+                Caption("YOUR VOICE SERVER >", 28, 22, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
+                Key shut = Make("", 330, 20, 26, 22, delegate { Close(); });
+                shut.Glyph = 2;
+                shut.AccessibleName = "Close";
+                Caption("Any speech model you run, if its server speaks OpenAI's speech API, like Kokoro-FastAPI or Qwen3-TTS. It only gets the words she says.", 28, 48, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+                Caption("Address", 28, 104, Font, Look.Dim);
+                url = Input(28, 124, 328, VoiceServer.Address, "Voice server address");
+                Caption("Model", 28, 160, Font, Look.Dim);
+                model = Input(28, 180, 160, "Optional", "Model name, optional");
+                Caption("Voice", 196, 160, Font, Look.Dim);
+                speaker = Input(196, 180, 160, "Optional", "Voice name, optional");
+                Caption("Key", 28, 216, Font, Look.Dim);
+                key = Input(28, 236, 244, "Optional", "Key, optional. It goes to the server as a Bearer key");
+                key.Box.UseSystemPasswordChar = true;
+                forget = Make("Forget", 280, 236, 76, 28, delegate { owner.capri.ForgetServerKey(); Kept(null); Say("Key forgotten.", false); });
+                forget.Accent = Look.Red;
+                test = Make("Test", 28, 280, 84, 28, delegate { Try(); });
+                Key use = Make("Use this server", 120, 280, 150, 28, delegate { Use(); });
+                use.Accent = Look.Cyan;
+                use.Loud = true;
+                AcceptButton = use;
+                CancelButton = Make("Cancel", 278, 280, 78, 28, delegate { Close(); });
+                note = Caption("", 28, 320, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+            }
+
+            // What's saved, or the usual address. A saved key shows only its last four characters.
+            internal void Fill(string address, string name, string voice, string tail)
+            {
+                url.Box.Text = address ?? "";
+                model.Box.Text = name ?? "";
+                speaker.Box.Text = voice ?? "";
+                key.Box.Text = "";
+                Kept(tail);
+                Say("", false);
+            }
+
+            private void Kept(string tail)
+            {
+                key.Cue = tail == null ? "Optional" : "Key saved, ends " + tail;
+                forget.Visible = tail != null;
+            }
+
+            private void Say(string text, bool problem)
+            {
+                note.Text = text;
+                note.ForeColor = problem ? Look.Red : Look.Dim;
+            }
+
+            private void Try()
+            {
+                test.Enabled = false;
+                Say("Asking your server...", false);
+                owner.capri.TestVoiceServer(url.Box.Text, model.Box.Text, speaker.Box.Text, key.Box.Text, delegate(string said, bool problem)
+                {
+                    if (IsDisposed) return;
+                    test.Enabled = true;
+                    Say(said, problem);
+                });
+            }
+
+            private void Use()
+            {
+                owner.capri.UseVoiceServer(url.Box.Text, model.Box.Text, speaker.Box.Text, key.Box.Text);
+                Close();
+            }
+
+            internal string Shown { get { return url.Box.Text + " | " + model.Box.Text + " | " + speaker.Box.Text + " | " + key.Cue + " | " + (forget.Visible ? "Forget" : "-") + " | " + note.Text; } }
+
+            internal void Type(string address, string name, string voice, string secret)
+            {
+                url.Box.Text = address;
+                model.Box.Text = name;
+                speaker.Box.Text = voice;
+                key.Box.Text = secret;
+            }
+
+            // Clicks a button as they would, even while the Mainframe is minimized.
+            internal void Press(string button)
+            {
+                foreach (Control control in Controls)
+                    if (control is Key && control.Text == button && control.Visible && control.Enabled) { typeof(Control).GetMethod("OnClick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(control, new object[] { EventArgs.Empty }); return; }
+                throw new InvalidOperationException("The voice server panel has no " + button + " button to press.");
+            }
+
+            protected override void OnShown(EventArgs e)
+            {
+                base.OnShown(e);
+                url.Box.Focus();
+            }
+
+            // Wrapped notes and a spot over the Mainframe, once Windows has scaled the panel to the screen.
+            protected override void OnLoad(EventArgs e)
+            {
+                base.OnLoad(e);
+                float s = ScaleOf(this);
+                foreach (Control control in Controls) if (control is Label) control.MaximumSize = new Size((int)Math.Round(328 * s), 0);
+                Rectangle area = Screen.FromControl(owner).WorkingArea;
+                int x = owner.Left + (owner.Width - Width) / 2, y = owner.Top + (int)(48 * s);
+                Location = new Point(Math.Max(area.Left, Math.Min(area.Right - Width, x)), Math.Max(area.Top, Math.Min(area.Bottom - Height, y)));
+            }
+
+            protected override void OnSizeChanged(EventArgs e)
+            {
+                base.OnSizeChanged(e);
+                float s = ScaleOf(this);
+                Region old = Region;
+                using (GraphicsPath plate = Look.Plate(new RectangleF(0, 0, Width, Height), 12 * s, -1, Height / 2f, 0, true)) Region = new Region(plate);
+                if (old != null) old.Dispose();
+                Invalidate(true);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                float s = ScaleOf(this);
+                Graphics graphics = e.Graphics;
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Backdrop(graphics, this, s);
+                using (Brush red = new SolidBrush(Look.Red)) graphics.FillRectangle(red, 13 * s, 22 * s, 3 * s, 286 * s);
+                using (GraphicsPath edge = Look.Plate(new RectangleF(s, s, Width - 2 * s - 1, Height - 2 * s - 1), 12 * s, -1, Height / 2f, 0, true))
+                using (Pen cyan = new Pen(Look.Cyan, 2 * s))
+                    graphics.DrawPath(cyan, edge);
+            }
+
+            // Dragged by any spot that isn't a control, like the Mainframe.
+            protected override void WndProc(ref Message message)
+            {
+                base.WndProc(ref message);
+                if (message.Msg == 0x0084 && message.Result == new IntPtr(1)) message.Result = new IntPtr(2);
+            }
+
+            private Label Caption(string text, int x, int y, Font font, Color colour)
+            {
+                Label label = new Note();
+                label.Text = text;
+                label.Font = font;
+                label.ForeColor = colour;
+                label.BackColor = Look.Panel;
+                label.AutoSize = true;
+                label.Location = new Point(x, y);
+                Controls.Add(label);
+                return label;
+            }
+
+            private Entry Input(int x, int y, int width, string cue, string name)
+            {
+                Entry entry = new Entry();
+                entry.Bounds = new Rectangle(x, y, width, 28);
+                entry.Cue = cue;
+                entry.Box.AccessibleName = name;
+                Controls.Add(entry);
+                return entry;
+            }
+
+            private Key Make(string text, int x, int y, int width, int height, EventHandler click)
+            {
+                Key made = new Key();
+                made.Text = text;
+                made.Bounds = new Rectangle(x, y, width, height);
+                made.Click += click;
+                Controls.Add(made);
+                return made;
             }
         }
 

@@ -199,6 +199,15 @@ namespace CapriDesktop
         // glitch as HdGlitch, so the new name starts it at Off.
         [DataMember] public int HdRobot = VoiceFx.HdRobotDefault;
         [DataMember] public int HdVoiceGlitch;
+        // Their own voice server, picked from the free voice menu. Its key is sealed like her other keys. Its robot and glitch are
+        // its own and start at Off.
+        [DataMember] public bool ServerVoice;
+        [DataMember] public string ServerUrl;
+        [DataMember] public string ServerModel;
+        [DataMember] public string ServerSpeaker;
+        [DataMember] public string ServerKey;
+        [DataMember] public int ServerRobot;
+        [DataMember] public int ServerGlitch;
 
         [OnDeserializing]
         private void Defaults(StreamingContext context)
@@ -755,6 +764,7 @@ namespace CapriDesktop
         private readonly Voice voice = new Voice();
         private readonly LocalVoice kokoro;
         private readonly QwenVoice qwen;
+        private readonly VoiceServer server = new VoiceServer();
         private readonly LocalEars parakeet;
         private readonly Presence presence;
         private bool settingUpEars, settingUpHd, wakingHd, hdTest;
@@ -931,6 +941,12 @@ namespace CapriDesktop
             VoiceFx.HdRobot = Math.Max(0, Math.Min(100, preferences.HdRobot));
             VoiceFx.Glitch = Math.Max(0, Math.Min(100, preferences.VoiceGlitch));
             VoiceFx.HdGlitch = Math.Max(0, Math.Min(100, preferences.HdVoiceGlitch));
+            VoiceFx.ServerRobot = Math.Max(0, Math.Min(100, preferences.ServerRobot));
+            VoiceFx.ServerGlitch = Math.Max(0, Math.Min(100, preferences.ServerGlitch));
+            server.Url = preferences.ServerUrl ?? VoiceServer.Address;
+            server.Model = preferences.ServerModel;
+            server.Speaker = preferences.ServerSpeaker;
+            server.Key = Voice.Unprotect(preferences.ServerKey);
             Sfx.Level = Math.Max(0, Math.Min(100, preferences.Sounds));
             Sfx.Out = delegate(short[] sound) { Post(delegate { Effect(sound); }); };
             Sfx.TypeOut = delegate(short[] sound) { if (IsDisposed) return; try { typist.Open(Sfx.Rate); typist.Play(sound); } catch (Exception) { } };
@@ -2466,13 +2482,15 @@ namespace CapriDesktop
 
         internal int VoiceSpeed { get { return VoiceFx.Speed; } }
 
-        // Her HD voice keeps its own robot and glitch; her other voices share one of each. Those sliders show the ones for the voice
-        // she speaks with.
+        // Her HD voice and their voice server each keep their own robot and glitch; her other voices share one of each. Those sliders
+        // show the ones for the voice she speaks with.
         internal bool SpeaksHd { get { return preferences.HdVoice && (preferences.Quiet || voiceBroke || (Speak == null && voice.Key == null)); } }
 
-        internal int VoiceRobot { get { return SpeaksHd ? VoiceFx.HdRobot : VoiceFx.Robot; } }
+        internal bool SpeaksServer { get { return preferences.ServerVoice && (preferences.Quiet || voiceBroke || (Speak == null && voice.Key == null)); } }
 
-        internal int VoiceGlitch { get { return SpeaksHd ? VoiceFx.HdGlitch : VoiceFx.Glitch; } }
+        internal int VoiceRobot { get { return SpeaksHd ? VoiceFx.HdRobot : SpeaksServer ? VoiceFx.ServerRobot : VoiceFx.Robot; } }
+
+        internal int VoiceGlitch { get { return SpeaksHd ? VoiceFx.HdGlitch : SpeaksServer ? VoiceFx.ServerGlitch : VoiceFx.Glitch; } }
 
         internal void SetVoicePitch(int semitones)
         {
@@ -2492,6 +2510,7 @@ namespace CapriDesktop
         {
             int robot = Math.Max(0, Math.Min(100, percent));
             if (SpeaksHd) preferences.HdRobot = VoiceFx.HdRobot = robot;
+            else if (SpeaksServer) preferences.ServerRobot = VoiceFx.ServerRobot = robot;
             else preferences.VoiceRobot = VoiceFx.Robot = robot;
             SavePreferences();
         }
@@ -2500,6 +2519,7 @@ namespace CapriDesktop
         {
             int glitch = Math.Max(0, Math.Min(100, percent));
             if (SpeaksHd) preferences.HdVoiceGlitch = VoiceFx.HdGlitch = glitch;
+            else if (SpeaksServer) preferences.ServerGlitch = VoiceFx.ServerGlitch = glitch;
             else preferences.VoiceGlitch = VoiceFx.Glitch = glitch;
             SavePreferences();
         }
@@ -4398,6 +4418,7 @@ namespace CapriDesktop
         {
             if (!HdFits) { mainframe.VoiceNote("Her HD voice needs a graphics card with 6 GB or more.", true); return; }
             preferences.HdVoice = true;
+            preferences.ServerVoice = false;
             hdRest = -1;
             SavePreferences();
             ShowVoice();
@@ -4511,21 +4532,114 @@ namespace CapriDesktop
             }
             kokoro.Style = LocalVoice.Find(name);
             preferences.VoiceStyle = kokoro.Style == LocalVoice.Styles[0] ? null : kokoro.Style.Name;
+            preferences.ServerVoice = false;
             SavePreferences();
             ShowVoice();
             if (voice.Key == null && kokoro.Installed) TestVoice();
         }
 
+        internal const string TestLine = "Voice link online. Miss me, choom?";
+
         internal void TestVoice()
         {
             if (preferences.Silent) { mainframe.VoiceNote("Her voice is OFF. Pick FREE VOICE or ELEVENLABS to hear her.", true); return; }
-            if (voice.Key == null && Speak == null && !kokoro.Installed) { mainframe.VoiceNote("Get her free voice, or paste an ElevenLabs key.", true); return; }
+            if (voice.Key == null && Speak == null && !kokoro.Installed && !preferences.ServerVoice) { mainframe.VoiceNote("Get her free voice, or paste an ElevenLabs key.", true); return; }
             if (voice.Key != null && voice.VoiceId == null && Speak == null) { mainframe.VoiceNote("Paste your Voice ID first.", true); return; }
             if (hidden) SetHidden(false);
             brain.Cancel();
             heard = "voice check";
             box.Prompt = "> sys: ";
-            Answer(++asking, "Voice link online. Miss me, choom?", TalkState.Talking);
+            Answer(++asking, TestLine, TalkState.Talking);
+        }
+
+        internal string ServerUrl { get { return server.Url; } }
+
+        internal string ServerModel { get { return server.Model; } }
+
+        internal string ServerSpeaker { get { return server.Speaker; } }
+
+        internal string ServerKeyTail { get { return server.Key == null ? null : Voice.Tail(server.Key); } }
+
+        // Their own voice server, picked from the free voice menu: HD steps aside, and she says her check line through it.
+        internal void UseVoiceServer(string url, string model, string speaker, string key)
+        {
+            preferences.ServerUrl = server.Url = Typed(url) ?? VoiceServer.Address;
+            preferences.ServerModel = server.Model = Typed(model);
+            preferences.ServerSpeaker = server.Speaker = Typed(speaker);
+            // A blank key box keeps the key that's saved.
+            string typed = Typed(Regex.Replace(key ?? "", @"\s+", ""));
+            if (typed != null)
+            {
+                server.Key = typed;
+                preferences.ServerKey = Voice.Protect(typed);
+            }
+            if (preferences.HdVoice || settingUpHd)
+            {
+                preferences.HdVoice = false;
+                qwen.Cancel = true;
+                qwen.Stop();
+            }
+            preferences.ServerVoice = true;
+            SavePreferences();
+            ShowVoice();
+            TestVoice();
+        }
+
+        internal void ForgetServerKey()
+        {
+            server.Key = null;
+            preferences.ServerKey = null;
+            SavePreferences();
+        }
+
+        private static string Typed(string text)
+        {
+            text = (text ?? "").Trim();
+            return text.Length == 0 ? null : text;
+        }
+
+        // Test in their voice server's panel: she says her check line through what they typed, before it's saved, or `done` says what went wrong.
+        internal void TestVoiceServer(string url, string model, string speaker, string key, Action<string, bool> done)
+        {
+            VoiceServer trial = new VoiceServer();
+            trial.Url = Typed(url) ?? VoiceServer.Address;
+            trial.Model = Typed(model);
+            trial.Speaker = Typed(speaker);
+            trial.Key = Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? server.Key;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                byte[] wav = null;
+                string problem = null;
+                Stopwatch took = Stopwatch.StartNew();
+                try { wav = trial.Speak(Voice.Spoken(TestLine)); }
+                catch (VoiceException error) { problem = error.Message; }
+                catch (Exception error) { problem = Voice.Short("Your voice server glitched: " + error.Message); }
+                double seconds = took.Elapsed.TotalSeconds;
+                Post(delegate
+                {
+                    if (problem != null) { done(problem, true); return; }
+                    done("It works. Your server said that in " + seconds.ToString("0.0") + " s.", false);
+                    if (preferences.Silent) return;
+                    if (hidden) SetHidden(false);
+                    brain.Cancel();
+                    voice.Stop();
+                    heard = "voice check";
+                    box.Prompt = "> sys: ";
+                    Begin(++asking, TestLine, TalkState.Talking, wav);
+                });
+            });
+        }
+
+        // Their voice server says her lines, and her free voice says any it can't. What went wrong shows once under VOICE.
+        private Func<string, byte[]> Served(Func<string, byte[]> fallback)
+        {
+            return server.Or(fallback, delegate(string problem) { Post(delegate { ServerTrouble(problem); }); });
+        }
+
+        private void ServerTrouble(string problem)
+        {
+            if (!testing) Brain.Log("voice server", -1, problem);
+            mainframe.VoiceNote(problem, true);
         }
 
         internal const string StyleLine = "How do I sound now, choom?";
@@ -4537,7 +4651,7 @@ namespace CapriDesktop
         internal void HearVoiceStyle()
         {
             bool paid = !preferences.Quiet && !voiceBroke && (Speak != null || voice.Ready);
-            bool free = FreeSpeak != null || kokoro.Installed || (preferences.HdVoice && qwen.Installed);
+            bool free = FreeSpeak != null || kokoro.Installed || (preferences.HdVoice && qwen.Installed) || preferences.ServerVoice;
             string line = preferences.Silent ? StyleSilent : paid || free ? StyleLine : StyleMissing;
             if (line == StyleLine && SpeaksHd && WakeFor(line)) return;
             CheckVoice(line, false);
@@ -4649,12 +4763,12 @@ namespace CapriDesktop
         {
             bool ready = kokoro.Installed;
             mainframe.ShowVoice(voice.Key == null ? null : Voice.Tail(voice.Key), voice.VoiceId, voice.Model, voices);
-            bool hd = preferences.HdVoice, yours = YourVoice.Active(qwen.Folder);
-            mainframe.ShowFree(ready, hd ? QwenVoice.Style : kokoro.Style.Name, SettingUpVoice, HdFits, yours, YourVoice.Saved(qwen.Folder));
+            bool hd = preferences.HdVoice, yours = YourVoice.Active(qwen.Folder), served = preferences.ServerVoice;
+            mainframe.ShowFree(ready, hd ? QwenVoice.Style : served ? VoiceServer.Style : kokoro.Style.Name, SettingUpVoice, HdFits, yours, YourVoice.Saved(qwen.Folder));
             if (!note) return;
             string name = "custom voice";
             if (voices != null) foreach (VoiceEntry entry in voices.Voices) if (entry.Id == voice.VoiceId && entry.Name != null) name = entry.Name;
-            mainframe.VoiceNote(voice.Key == null ? (hd && settingUpHd ? "Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop." : hd && qwen.Installed ? (yours ? "HD voice from your clip, on your graphics card. Games get her free voice." : "HD voice on your graphics card. Games get her free voice.") : ready ? (yours ? "Free voice, runs on your PC. Your voice only works with HD." : "Free voice, runs on your PC.") : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
+            mainframe.VoiceNote(voice.Key == null ? (served ? "Your voice server at " + VoiceServer.Where(server.Url) + "." + (ready ? " Her free voice fills in if it's down." : "") : hd && settingUpHd ? "Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop." : hd && qwen.Installed ? (yours ? "HD voice from your clip, on your graphics card. Games get her free voice." : "HD voice on your graphics card. Games get her free voice.") : ready ? (yours ? "Free voice, runs on your PC. Your voice only works with HD." : "Free voice, runs on your PC.") : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
         }
 
         private float TalkScale()
@@ -5610,7 +5724,8 @@ namespace CapriDesktop
             if (ticket != asking || IsDisposed) return;
             voice.Stop();
             voiceUntil = 0;
-            Func<string, byte[]> free = preferences.Quiet && !FreeChatOn ? null : FreeSpeak ?? (testing ? null : Hd(kokoro.Installed ? new Func<string, byte[]>(kokoro.Speak) : null));
+            Func<string, byte[]> own = FreeSpeak ?? (testing || !kokoro.Installed ? null : new Func<string, byte[]>(kokoro.Speak));
+            Func<string, byte[]> free = preferences.Quiet && !FreeChatOn ? null : preferences.ServerVoice ? Served(own) : FreeSpeak ?? (testing ? null : Hd(own));
             Func<string, byte[]> speak = preferences.Quiet || local || quiet || voiceBroke ? null : Speak;
             if (speak == null && !local && !quiet && !voiceBroke && !testing && voice.Ready && !preferences.Quiet) speak = voice.Speak;
             if (speak == null && (voice.Key == null || local || quiet || voiceBroke || preferences.Quiet)) speak = free;
@@ -12265,6 +12380,436 @@ namespace CapriDesktop
                             Directory.Delete(hdRoot, true);
                             checks.Add("PASS HD voice speech: a fake /tts server's float PCM becomes a 24 kHz WAV, the request carries her reference clip and respelled words, a long reply goes a few sentences per call so none hits the 41 s cap, the pitch slider lifts it 6 semitones without changing its length, its own robot (10% out of the box) and glitch (Off out of the box) change it, their saved clip goes out as her reference until Her voice puts hers back, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
                             checks.Add("LIMIT HD voice synthesis not run in the smoke test; it needs the 1.5 GB pack and a graphics card");
+                            // Their own voice server: a fake one answers like Kokoro-FastAPI or vLLM-Omni would, with a 16-bit WAV, a float WAV
+                            // streamed in chunks, an MP3, an error or nothing in time, and her free voice says the lines it can't.
+                            short[] vsTone = new short[22050];
+                            for (int i = 0; i < vsTone.Length; i++) vsTone[i] = (short)(9000 * Math.Sin(2 * Math.PI * 220 * i / 22050.0));
+                            byte[] vsPlain = Voice.Wave(vsTone, 22050), vsFloat, vsMp3 = null;
+                            float[] vsFloats = new float[12000];
+                            for (int i = 0; i < vsFloats.Length; i++) vsFloats[i] = (float)(0.4 * Math.Sin(2 * Math.PI * 330 * i / 24000.0));
+                            using (MemoryStream vsFloatMade = new MemoryStream())
+                            using (BinaryWriter vsWriter = new BinaryWriter(vsFloatMade))
+                            {
+                                // Its sizes are left at 0xFFFFFFFF, as a server streaming a WAV writes them.
+                                vsWriter.Write(System.Text.Encoding.ASCII.GetBytes("RIFF"));
+                                vsWriter.Write(-1);
+                                vsWriter.Write(System.Text.Encoding.ASCII.GetBytes("WAVEfmt "));
+                                vsWriter.Write(16);
+                                vsWriter.Write((short)3);
+                                vsWriter.Write((short)1);
+                                vsWriter.Write(24000);
+                                vsWriter.Write(24000 * 4);
+                                vsWriter.Write((short)4);
+                                vsWriter.Write((short)32);
+                                vsWriter.Write(System.Text.Encoding.ASCII.GetBytes("data"));
+                                vsWriter.Write(-1);
+                                foreach (float vsSample in vsFloats) vsWriter.Write(vsSample);
+                                vsWriter.Flush();
+                                vsFloat = vsFloatMade.ToArray();
+                            }
+                            string vsUnmade = null;
+                            ManualResetEvent vsMp3Done = new ManualResetEvent(false);
+                            ThreadPool.QueueUserWorkItem(delegate
+                            {
+                                try
+                                {
+                                    using (MemoryStream vsIn = new MemoryStream(vsPlain))
+                                    using (MemoryStream vsOut = new MemoryStream())
+                                    {
+                                        Windows.Media.Transcoding.PrepareTranscodeResult vsPrepared = new Windows.Media.Transcoding.MediaTranscoder().PrepareStreamTranscodeAsync(vsIn.AsRandomAccessStream(), vsOut.AsRandomAccessStream(), Windows.Media.MediaProperties.MediaEncodingProfile.CreateMp3(Windows.Media.MediaProperties.AudioEncodingQuality.Medium)).AsTask().Result;
+                                        if (vsPrepared.CanTranscode)
+                                        {
+                                            vsPrepared.TranscodeAsync().AsTask().Wait();
+                                            vsMp3 = vsOut.ToArray();
+                                        }
+                                        else vsUnmade = vsPrepared.FailureReason.ToString();
+                                    }
+                                }
+                                catch (Exception vsError) { vsUnmade = vsError.GetBaseException().Message; }
+                                finally { vsMp3Done.Set(); }
+                            });
+                            if (!vsMp3Done.WaitOne(60000)) throw new Exception("Windows took over a minute to make a test MP3.");
+                            System.Collections.Generic.List<string> vsAsked = new System.Collections.Generic.List<string>();
+                            string vsMode = "wav";
+                            System.Net.Sockets.TcpListener vsServer = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+                            vsServer.Start();
+                            ThreadPool.QueueUserWorkItem(delegate
+                            {
+                                try
+                                {
+                                    while (true)
+                                    {
+                                        System.Net.Sockets.TcpClient vsClient = vsServer.AcceptTcpClient();
+                                        try
+                                        {
+                                            System.Net.Sockets.NetworkStream vsStream = vsClient.GetStream();
+                                            MemoryStream vsGot = new MemoryStream();
+                                            byte[] vsBuffer = new byte[65536];
+                                            string vsRequest = "";
+                                            while (true)
+                                            {
+                                                int vsRead = vsStream.Read(vsBuffer, 0, vsBuffer.Length);
+                                                if (vsRead <= 0) break;
+                                                vsGot.Write(vsBuffer, 0, vsRead);
+                                                vsRequest = System.Text.Encoding.UTF8.GetString(vsGot.ToArray());
+                                                int vsEnd = vsRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                                                if (vsEnd < 0) continue;
+                                                System.Text.RegularExpressions.Match vsLength = System.Text.RegularExpressions.Regex.Match(vsRequest, @"Content-Length:\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                                if (vsGot.Length >= vsEnd + 4 + (vsLength.Success ? int.Parse(vsLength.Groups[1].Value) : 0)) break;
+                                            }
+                                            string vsNow = vsMode;
+                                            lock (vsAsked) vsAsked.Add(vsRequest);
+                                            if (vsNow == "slow") Thread.Sleep(3000);
+                                            int vsStatus = vsNow == "missing" ? 404 : vsNow == "broken" ? 500 : vsNow == "locked" ? 401 : 200;
+                                            byte[] vsAnswer = vsNow == "float" ? vsFloat : vsNow == "mp3" ? vsMp3 : vsStatus != 200 ? System.Text.Encoding.UTF8.GetBytes(vsNow == "missing" ? "{\"detail\":\"Not Found\"}" : vsNow == "broken" ? "{\"detail\":\"Model is still loading\"}" : "{\"error\":{\"message\":\"Invalid API key\"}}") : vsPlain;
+                                            if (vsNow == "float")
+                                            {
+                                                // Streamed in chunks, as Kokoro-FastAPI sends it.
+                                                byte[] vsHead = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n");
+                                                vsStream.Write(vsHead, 0, vsHead.Length);
+                                                for (int vsAt = 0; vsAt < vsAnswer.Length; vsAt += 4096)
+                                                {
+                                                    int vsSize = Math.Min(4096, vsAnswer.Length - vsAt);
+                                                    byte[] vsMark = System.Text.Encoding.ASCII.GetBytes(vsSize.ToString("x") + "\r\n");
+                                                    vsStream.Write(vsMark, 0, vsMark.Length);
+                                                    vsStream.Write(vsAnswer, vsAt, vsSize);
+                                                    vsStream.Write(new byte[] { 13, 10 }, 0, 2);
+                                                }
+                                                byte[] vsLast = System.Text.Encoding.ASCII.GetBytes("0\r\n\r\n");
+                                                vsStream.Write(vsLast, 0, vsLast.Length);
+                                            }
+                                            else
+                                            {
+                                                byte[] vsHead = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 " + vsStatus + " Reply\r\nContent-Type: " + (vsNow == "mp3" ? "audio/mpeg" : vsStatus == 200 ? "audio/wav" : "application/json") + "\r\nContent-Length: " + vsAnswer.Length + "\r\nConnection: close\r\n\r\n");
+                                                vsStream.Write(vsHead, 0, vsHead.Length);
+                                                vsStream.Write(vsAnswer, 0, vsAnswer.Length);
+                                            }
+                                        }
+                                        catch (IOException) { }
+                                        finally { vsClient.Close(); }
+                                    }
+                                }
+                                catch (Exception) { }
+                            });
+                            string vsUrl = "http://127.0.0.1:" + ((IPEndPoint)vsServer.LocalEndpoint).Port + "/v1", vsWhere = "127.0.0.1:" + ((IPEndPoint)vsServer.LocalEndpoint).Port;
+                            string vsPaths = VoiceServer.Endpoint("http://localhost:8880/v1") + " " + VoiceServer.Endpoint("localhost:8880") + " " + VoiceServer.Endpoint("http://127.0.0.1:8091/v1/") + " " + VoiceServer.Endpoint("https://tts.example.net/v1/audio/speech") + " " + VoiceServer.Endpoint("  ");
+                            string vsBad = null;
+                            try { VoiceServer.Endpoint("http://"); }
+                            catch (VoiceException vsError) { vsBad = vsError.Message; }
+                            if (vsPaths != "http://localhost:8880/v1/audio/speech http://localhost:8880/v1/audio/speech http://127.0.0.1:8091/v1/audio/speech https://tts.example.net/v1/audio/speech http://localhost:8880/v1/audio/speech"
+                                || vsBad != "Your voice server's address doesn't work. Try " + VoiceServer.Address + "." || VoiceServer.Where(vsUrl) != vsWhere || new VoiceServer().Url != "http://localhost:8880/v1")
+                                throw new Exception("Her voice server's address came out wrong: " + vsPaths + " / " + vsBad + " / " + VoiceServer.Where(vsUrl));
+                            VoiceServer vsVoice = new VoiceServer();
+                            vsVoice.Url = vsUrl;
+                            vsVoice.Model = "kokoro";
+                            vsVoice.Speaker = "af_heart";
+                            vsVoice.Key = "sk-local-test-1234";
+                            System.Collections.Generic.List<string> vsNotes = new System.Collections.Generic.List<string>();
+                            byte[] vsStandIn = Voice.Wave(new short[12000], 24000);
+                            Func<string, byte[]> vsFree = delegate(string vsWords) { return vsStandIn; };
+                            Action<string> vsNoted = delegate(string vsProblem) { lock (vsNotes) vsNotes.Add(vsProblem); };
+                            // Off the UI thread, as her replies are.
+                            Func<Func<string, byte[]>, string, byte[]> vsOff = delegate(Func<string, byte[]> vsSay, string vsWords)
+                            {
+                                byte[] vsHeard = null;
+                                Exception vsFailed = null;
+                                ManualResetEvent vsDone = new ManualResetEvent(false);
+                                ThreadPool.QueueUserWorkItem(delegate
+                                {
+                                    try { vsHeard = vsSay(vsWords); }
+                                    catch (Exception vsError) { vsFailed = vsError; }
+                                    finally { vsDone.Set(); }
+                                });
+                                if (!vsDone.WaitOne(30000)) throw new Exception("Her voice server took over 30 s with a test line.");
+                                if (vsFailed != null) throw vsFailed;
+                                return vsHeard;
+                            };
+                            int vsRate;
+                            const string vsLine = "Hey choom, this is your server.";
+                            byte[] vsSaid = vsOff(vsVoice.Or(vsFree, vsNoted), vsLine);
+                            short[] vsSamples = Voice.Samples(vsSaid, out vsRate);
+                            string vsBody;
+                            lock (vsAsked) vsBody = vsAsked[vsAsked.Count - 1];
+                            if (vsNotes.Count != 0 || vsSaid == vsStandIn || vsRate != 24000 || Math.Abs(vsSamples.Length - 24000) > 48 || Math.Abs(Fundamental(vsSamples, 24000) - 220) > 3)
+                                throw new Exception("Her voice server's 22 kHz WAV didn't become her 24 kHz voice: " + string.Join(" / ", vsNotes.ToArray()) + " / " + vsRate + " Hz / " + vsSamples.Length + " samples / " + Fundamental(vsSamples, 24000).ToString("0") + " Hz");
+                            if (vsBody.IndexOf("POST /v1/audio/speech HTTP/1.1\r\n", StringComparison.Ordinal) != 0 || vsBody.IndexOf("\r\nAuthorization: Bearer sk-local-test-1234\r\n", StringComparison.Ordinal) < 0 || vsBody.IndexOf("\r\nContent-Type: application/json\r\n", StringComparison.Ordinal) < 0
+                                || !vsBody.EndsWith("\r\n\r\n{\"model\":\"kokoro\",\"input\":\"Hey chewm, this is your server.\",\"voice\":\"af_heart\",\"response_format\":\"wav\"}", StringComparison.Ordinal))
+                                throw new Exception("Her voice server got the wrong request: " + vsBody);
+                            vsMode = "float";
+                            short[] vsFloated = Voice.Samples(vsOff(vsVoice.Or(vsFree, vsNoted), "Float, choom."), out vsRate);
+                            if (vsNotes.Count != 0 || vsRate != 24000 || vsFloated.Length != vsFloats.Length || Math.Abs(vsFloated[100] - (int)Math.Round(vsFloats[100] * 32767)) > 1)
+                                throw new Exception("Her voice server's float WAV, streamed in chunks, didn't come through: " + string.Join(" / ", vsNotes.ToArray()) + " / " + vsRate + " Hz / " + vsFloated.Length + " samples");
+                            if (vsMp3 != null)
+                            {
+                                vsMode = "mp3";
+                                short[] vsDecoded = Voice.Samples(vsOff(vsVoice.Or(vsFree, vsNoted), "MP3, choom."), out vsRate);
+                                if (vsNotes.Count != 0 || Math.Abs(vsDecoded.Length - 24000) > 2400 || Math.Abs(Fundamental(vsDecoded, 24000) - 220) > 4.5)
+                                    throw new Exception("Her voice server's MP3 didn't come through Windows' decoder: " + string.Join(" / ", vsNotes.ToArray()) + " / " + vsDecoded.Length + " samples, " + Fundamental(vsDecoded, 24000).ToString("0") + " Hz");
+                            }
+                            else checks.Add("LIMIT voice server: Windows on this PC couldn't make a test MP3 (" + vsUnmade + "), so an MP3 reply wasn't checked");
+                            // With no key, model or voice she sends just the words, and no key.
+                            vsMode = "wav";
+                            VoiceServer vsBare = new VoiceServer();
+                            vsBare.Url = "127.0.0.1:" + ((IPEndPoint)vsServer.LocalEndpoint).Port;
+                            vsOff(vsBare.Or(vsFree, vsNoted), "Just the words.");
+                            lock (vsAsked) vsBody = vsAsked[vsAsked.Count - 1];
+                            if (vsNotes.Count != 0 || vsBody.IndexOf("POST /v1/audio/speech ", StringComparison.Ordinal) != 0 || vsBody.IndexOf("Authorization", StringComparison.OrdinalIgnoreCase) >= 0 || !vsBody.EndsWith("\r\n\r\n{\"input\":\"Just the words.\",\"response_format\":\"wav\"}", StringComparison.Ordinal))
+                                throw new Exception("Her voice server got more than the words: " + vsBody);
+                            // Her pitch lifts it without changing its length; its own robot and glitch change it, and her other voices' robot doesn't.
+                            int vsPitchWas = VoiceFx.Pitch, vsRobotWas = VoiceFx.Robot;
+                            short[] vsPitched, vsShared, vsRoboted, vsGlitched;
+                            try
+                            {
+                                VoiceFx.Pitch = 6;
+                                vsPitched = Voice.Samples(vsOff(vsVoice.Or(vsFree, vsNoted), vsLine), out vsRate);
+                                VoiceFx.Pitch = 0;
+                                VoiceFx.Robot = 100;
+                                vsShared = Voice.Samples(vsOff(vsVoice.Or(vsFree, vsNoted), vsLine), out vsRate);
+                                VoiceFx.Robot = vsRobotWas;
+                                VoiceFx.ServerRobot = 100;
+                                vsRoboted = Voice.Samples(vsOff(vsVoice.Or(vsFree, vsNoted), vsLine), out vsRate);
+                                VoiceFx.ServerRobot = 0;
+                                VoiceFx.ServerGlitch = 100;
+                                vsGlitched = Voice.Samples(vsOff(vsVoice.Or(vsFree, vsNoted), vsLine), out vsRate);
+                            }
+                            finally
+                            {
+                                VoiceFx.Pitch = vsPitchWas;
+                                VoiceFx.Robot = vsRobotWas;
+                                VoiceFx.ServerRobot = 0;
+                                VoiceFx.ServerGlitch = 0;
+                            }
+                            bool vsSame = vsShared.Length == vsSamples.Length, vsRobotic = false, vsGlitchy = vsGlitched.Length != vsSamples.Length;
+                            for (int i = 0; vsSame && i < vsShared.Length; i++) vsSame = vsShared[i] == vsSamples[i];
+                            for (int i = 0; !vsRobotic && i < vsRoboted.Length && i < vsSamples.Length; i++) vsRobotic = vsRoboted[i] != vsSamples[i];
+                            for (int i = 0; !vsGlitchy && i < vsGlitched.Length; i++) vsGlitchy = vsGlitched[i] != vsSamples[i];
+                            double vsLifted = Fundamental(vsPitched, 24000);
+                            if (vsNotes.Count != 0 || Math.Abs(vsLifted - 220 * Math.Sqrt(2)) > 220 * Math.Sqrt(2) * 0.03 || Math.Abs(vsPitched.Length - vsSamples.Length) > vsSamples.Length / 50 || !vsSame || !vsRobotic || vsRoboted.Length != vsSamples.Length || !vsGlitchy)
+                                throw new Exception("Her voice server didn't follow her sliders: " + vsLifted.ToString("0") + " Hz at +6, " + vsPitched.Length + " samples, shared robot " + (vsSame ? "left it" : "changed it") + ", its robot " + vsRobotic + ", its glitch " + vsGlitchy + " / " + string.Join(" / ", vsNotes.ToArray()));
+                            // Errors and a server too slow to answer: her free voice says the line, and why is noted once until it answers again.
+                            Func<string, byte[]> vsSays = vsVoice.Or(vsFree, vsNoted);
+                            vsMode = "missing";
+                            byte[] vsLost = vsOff(vsSays, "Anyone there?"), vsLostAgain = vsOff(vsSays, "Still nobody?");
+                            int vsOnce;
+                            lock (vsNotes) vsOnce = vsNotes.Count;
+                            vsMode = "wav";
+                            byte[] vsBack = vsOff(vsSays, "There you are.");
+                            vsMode = "broken";
+                            byte[] vsBroken = vsOff(vsSays, "Loading?");
+                            vsMode = "locked";
+                            byte[] vsLocked = vsOff(vsSays, "Let me in.");
+                            vsMode = "slow";
+                            int vsPatienceWas = VoiceServer.Patience;
+                            Stopwatch vsWaited = Stopwatch.StartNew();
+                            byte[] vsSlow;
+                            VoiceServer.Patience = 800;
+                            try { vsSlow = vsOff(vsSays, "Take your time."); }
+                            finally { VoiceServer.Patience = vsPatienceWas; }
+                            double vsWaitedFor = vsWaited.Elapsed.TotalSeconds;
+                            vsMode = "wav";
+                            string[] vsWhy;
+                            lock (vsNotes) vsWhy = vsNotes.ToArray();
+                            if (vsLost != vsStandIn || vsLostAgain != vsStandIn || vsOnce != 1 || vsBack == vsStandIn || vsBroken != vsStandIn || vsLocked != vsStandIn || vsSlow != vsStandIn || vsWaitedFor > 2.5 || vsWhy.Length != 4
+                                || vsWhy[0] != "Your voice server has no /v1/audio/speech (HTTP 404). Check its address." + VoiceServer.Filling
+                                || vsWhy[1] != "Your voice server said HTTP 500: Model is still loading." + VoiceServer.Filling
+                                || vsWhy[2] != "Your voice server turned down its key (HTTP 401)." + VoiceServer.Filling
+                                || vsWhy[3] != "Your voice server took over 0.8 s to answer." + VoiceServer.Filling || VoiceServer.Patience != 20000)
+                                throw new Exception("Her voice server's errors didn't hand the line to her free voice, said once in plain words: " + string.Join(" / ", vsWhy) + " / once " + vsOnce + " / waited " + vsWaitedFor.ToString("0.0") + " s");
+                            // In the app: the free voice menu opens their server's panel. Test speaks through what they typed without saving it;
+                            // Use this server keeps it, with the key sealed, and she says her check line through it.
+                            bool vsQuietWas = preferences.Quiet, vsPagedWas = mainframe.SettingsShown;
+                            // Each line she says leaves a worker waiting to show its text; short waits give them back before the next steps' 500 ms checks.
+                            int vsVoiceWaitWas = VoiceWait, vsFreeWaitWas = FreeWait;
+                            VoiceWait = FreeWait = 100;
+                            Func<string, byte[]> vsFreeWas = FreeSpeak;
+                            string vsFreeHeard = null;
+                            FreeSpeak = delegate(string vsWords) { vsFreeHeard = vsWords; return vsStandIn; };
+                            Func<Func<bool>, bool> vsPump = delegate(Func<bool> vsReady)
+                            {
+                                Stopwatch vsWaiting = Stopwatch.StartNew();
+                                while (!vsReady() && vsWaiting.ElapsedMilliseconds < 10000)
+                                {
+                                    Application.DoEvents();
+                                    Thread.Sleep(10);
+                                }
+                                return vsReady();
+                            };
+                            Func<int> vsCount = delegate { lock (vsAsked) return vsAsked.Count; };
+                            // Her check line is up with its sound handed to her speaker. Still playing would be too narrow: one slow DoEvents can outlast it.
+                            Func<bool> vsTalking = delegate { return reply == TestLine && voiceUntil > 0; };
+                            string vsMenu, vsOpened, vsTyped, vsTested, vsUsedNote, vsUsedStatus, vsUsedMenu, vsSliders, vsPage, vsFellNote, vsFellState, vsOnceNote, vsKept, vsForgot, vsSly, vsTestBody, vsUseBody;
+                            bool vsTestSpoke, vsTestUnsaved, vsUseSpoke, vsFellSpoke, vsOnceSpoke, vsSealed, vsRound, vsOldRound, vsSlyOff, vsHdOff;
+                            int vsAskedBefore;
+                            test.Stop();
+                            try
+                            {
+                                preferences.Quiet = true;
+                                mainframe.ShowSettings(false);
+                                ShowVoice();
+                                vsMenu = mainframe.FreeMenuShown;
+                                using (Bitmap vsPanel = new Bitmap(mainframe.Width, mainframe.Height))
+                                using (Bitmap vsDrop = mainframe.FreeMenuPicture())
+                                {
+                                    mainframe.DrawToBitmap(vsPanel, new Rectangle(Point.Empty, mainframe.Size));
+                                    Point vsAt = mainframe.FreeMenuAt;
+                                    using (Bitmap vsBoth = new Bitmap(Math.Max(vsPanel.Width, vsAt.X + vsDrop.Width), Math.Max(vsPanel.Height, vsAt.Y + vsDrop.Height)))
+                                    {
+                                        using (Graphics vsDraw = Graphics.FromImage(vsBoth))
+                                        {
+                                            vsDraw.Clear(Look.Panel);
+                                            vsDraw.DrawImageUnscaled(vsPanel, 0, 0);
+                                            vsDraw.DrawImageUnscaled(vsDrop, vsAt.X, vsAt.Y);
+                                        }
+                                        vsBoth.Save(Path.Combine(output, "mainframe-voice-server-menu.png"), ImageFormat.Png);
+                                    }
+                                }
+                                mainframe.PickFree(Mainframe.ServerChoice);
+                                vsOpened = mainframe.ServerShown;
+                                mainframe.TypeServer(vsUrl, " kokoro ", "af_heart", "sk-panel-test-9876");
+                                vsTyped = mainframe.ServerShown;
+                                vsAskedBefore = vsCount();
+                                mainframe.PressServer("Test");
+                                vsPump(delegate { return !mainframe.ServerShown.EndsWith("Asking your server...", StringComparison.Ordinal) && vsTalking(); });
+                                vsTested = mainframe.ServerShown;
+                                vsTestSpoke = vsTalking() && vsFreeHeard == null && vsCount() == vsAskedBefore + 1;
+                                lock (vsAsked) vsTestBody = vsAsked[vsAsked.Count - 1];
+                                vsTestUnsaved = !preferences.ServerVoice && preferences.ServerUrl == null && preferences.ServerKey == null && server.Key == null;
+                                Form vsSheet = mainframe.ServerPanel;
+                                using (Bitmap vsPicture = new Bitmap(vsSheet.Width, vsSheet.Height))
+                                {
+                                    vsSheet.DrawToBitmap(vsPicture, new Rectangle(Point.Empty, vsSheet.Size));
+                                    vsPicture.Save(Path.Combine(output, "mainframe-voice-server.png"), ImageFormat.Png);
+                                }
+                                asking++;
+                                CloseTalk();
+                                vsAskedBefore = vsCount();
+                                mainframe.PressServer("Use this server");
+                                vsPump(delegate { return vsTalking() && vsCount() > vsAskedBefore; });
+                                vsUseSpoke = vsTalking() && vsFreeHeard == null && vsCount() == vsAskedBefore + 1 && mainframe.ServerShown == "-";
+                                lock (vsAsked) vsUseBody = vsAsked[vsAsked.Count - 1];
+                                vsUsedNote = mainframe.VoiceNoteText;
+                                vsUsedStatus = mainframe.FreeStatus;
+                                vsUsedMenu = mainframe.FreeMenuShown;
+                                vsSealed = preferences.ServerVoice && !preferences.HdVoice && preferences.ServerUrl == vsUrl && preferences.ServerModel == "kokoro" && preferences.ServerSpeaker == "af_heart"
+                                    && preferences.ServerKey != null && preferences.ServerKey.IndexOf("sk-panel-test-9876", StringComparison.Ordinal) < 0 && Voice.Unprotect(preferences.ServerKey) == "sk-panel-test-9876" && server.Key == "sk-panel-test-9876";
+                                asking++;
+                                CloseTalk();
+                                // Its own robot and glitch, saved apart from her other voices'. Letting go of each says a line through it, and
+                                // both lines reach the server before it starts failing on purpose below.
+                                mainframe.ShowSettings(true);
+                                vsAskedBefore = vsCount();
+                                mainframe.SlideVoice(3, 5);
+                                mainframe.SlideVoice(2, 4);
+                                vsPump(delegate { return vsCount() >= vsAskedBefore + 2; });
+                                vsSliders = mainframe.VoiceStyleStatus;
+                                vsPage = mainframe.Overlap() ?? mainframe.Outside();
+                                snap("mainframe-settings-voice-server.png");
+                                mainframe.ShowSettings(false);
+                                asking++;
+                                CloseTalk();
+                                DataContractJsonSerializer vsJson = new DataContractJsonSerializer(typeof(Preferences));
+                                string vsSaved;
+                                Preferences vsLoaded;
+                                using (MemoryStream vsStore = new MemoryStream())
+                                {
+                                    vsJson.WriteObject(vsStore, preferences);
+                                    vsSaved = System.Text.Encoding.UTF8.GetString(vsStore.ToArray());
+                                    vsStore.Position = 0;
+                                    vsLoaded = (Preferences)vsJson.ReadObject(vsStore);
+                                }
+                                Preferences vsOld = (Preferences)vsJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Volume\":80,\"HdVoice\":true}")));
+                                vsRound = vsLoaded.ServerVoice && vsLoaded.ServerUrl == vsUrl && vsLoaded.ServerModel == "kokoro" && vsLoaded.ServerSpeaker == "af_heart" && vsLoaded.ServerKey == preferences.ServerKey
+                                    && Voice.Unprotect(vsLoaded.ServerKey) == "sk-panel-test-9876" && vsLoaded.ServerRobot == 30 && vsLoaded.ServerGlitch == 20 && vsSaved.IndexOf("sk-panel-test-9876", StringComparison.Ordinal) < 0
+                                    && VoiceFx.ServerRobot == 30 && VoiceFx.ServerGlitch == 20 && VoiceFx.Robot == 0 && VoiceFx.Glitch == 0 && preferences.VoiceRobot == 0 && preferences.VoiceGlitch == 0 && VoiceFx.HdRobot == VoiceFx.HdRobotDefault;
+                                vsOldRound = !vsOld.ServerVoice && vsOld.ServerUrl == null && vsOld.ServerKey == null && vsOld.ServerRobot == 0 && vsOld.ServerGlitch == 0 && !new Preferences().ServerVoice;
+                                // A server that fails: her free voice says the line, and why shows under VOICE once.
+                                vsMode = "broken";
+                                vsFreeHeard = null;
+                                TestVoice();
+                                vsPump(delegate { return vsTalking() && vsFreeHeard != null; });
+                                vsFellSpoke = vsTalking() && vsFreeHeard == Voice.Spoken(TestLine);
+                                vsFellState = reply + " | " + (voiceUntil > 0) + " | " + vsFreeHeard;
+                                vsFellNote = mainframe.VoiceNoteText;
+                                asking++;
+                                CloseTalk();
+                                mainframe.VoiceNote("still the same", false);
+                                vsFreeHeard = null;
+                                TestVoice();
+                                vsPump(delegate { return vsTalking() && vsFreeHeard != null; });
+                                vsOnceSpoke = vsTalking() && vsFreeHeard == Voice.Spoken(TestLine);
+                                vsOnceNote = mainframe.VoiceNoteText;
+                                vsMode = "wav";
+                                asking++;
+                                CloseTalk();
+                                // A blank key box keeps the saved key; Forget drops it.
+                                UseVoiceServer(vsUrl, "kokoro", "af_heart", " ");
+                                asking++;
+                                CloseTalk();
+                                mainframe.PickFree(Mainframe.ServerChoice);
+                                vsKept = mainframe.ServerShown + " / " + (Voice.Unprotect(preferences.ServerKey) == "sk-panel-test-9876");
+                                mainframe.PressServer("Forget");
+                                vsForgot = mainframe.ServerShown + " / " + (preferences.ServerKey == null && server.Key == null && ServerKeyTail == null);
+                                mainframe.PressServer("Cancel");
+                                // Her own styles and HD each take over from it, and it stays saved for next time.
+                                ChooseVoiceStyle("Sly");
+                                vsSly = mainframe.FreeStatus;
+                                vsSlyOff = !preferences.ServerVoice && preferences.ServerUrl == vsUrl && preferences.VoiceStyle == "Sly";
+                                asking++;
+                                CloseTalk();
+                                preferences.ServerVoice = true;
+                                hdFitsTest = true;
+                                ChooseVoiceStyle(QwenVoice.Style);
+                                vsHdOff = preferences.HdVoice && !preferences.ServerVoice;
+                                ChooseVoiceStyle(LocalVoice.Styles[0].Name);
+                                asking++;
+                                CloseTalk();
+                            }
+                            finally
+                            {
+                                test.Start();
+                                VoiceWait = vsVoiceWaitWas;
+                                FreeWait = vsFreeWaitWas;
+                                hdFitsTest = null;
+                                vsMode = "wav";
+                                FreeSpeak = vsFreeWas;
+                                preferences.Quiet = vsQuietWas;
+                                preferences.ServerVoice = false;
+                                preferences.ServerUrl = preferences.ServerModel = preferences.ServerSpeaker = preferences.ServerKey = null;
+                                preferences.ServerRobot = VoiceFx.ServerRobot = 0;
+                                preferences.ServerGlitch = VoiceFx.ServerGlitch = 0;
+                                server.Url = VoiceServer.Address;
+                                server.Model = server.Speaker = server.Key = null;
+                                if (mainframe.ServerShown != "-") mainframe.PressServer("Cancel");
+                                ShowVoice();
+                                mainframe.ShowSettings(vsPagedWas);
+                                mainframe.Sync();
+                            }
+                            string vsMenuEnd = ", -, " + Mainframe.ServerChoice;
+                            string vsPanelUsual = VoiceServer.Address + " |  |  | Optional | - | ";
+                            if (!vsMenu.EndsWith(vsMenuEnd, StringComparison.Ordinal) || !vsMenu.StartsWith("Her own (picked), Bright, Sly, Sharp, -, HD ", StringComparison.Ordinal) || vsOpened != vsPanelUsual
+                                || vsTyped != vsUrl + " |  kokoro  | af_heart | Optional | - | " || !vsTested.StartsWith(vsUrl + " |  kokoro  | af_heart | Optional | - | It works. Your server said that in ", StringComparison.Ordinal) || !vsTestSpoke || !vsTestUnsaved
+                                || vsTestBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || !vsTestBody.EndsWith("{\"model\":\"kokoro\",\"input\":\"Voice link online. Miss me, chewm?\",\"voice\":\"af_heart\",\"response_format\":\"wav\"}", StringComparison.Ordinal))
+                                throw new Exception("Their voice server's panel didn't open or test right: " + vsMenu + " / " + vsOpened + " / " + vsTyped + " / " + vsTested + " / spoke " + vsTestSpoke + ", unsaved " + vsTestUnsaved);
+                            if (!vsUseSpoke || !vsSealed || vsUseBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || vsUsedNote != "Your voice server at " + vsWhere + "." + (kokoro.Installed ? " Her free voice fills in if it's down." : "")
+                                || !vsUsedStatus.StartsWith("Free voice: " + VoiceServer.Style + " | ", StringComparison.Ordinal) || !vsUsedMenu.EndsWith(vsMenuEnd + " (picked)", StringComparison.Ordinal) || vsUsedMenu.IndexOf("Her own (picked)", StringComparison.Ordinal) >= 0)
+                                throw new Exception("Use this server didn't keep it and speak through it: spoke " + vsUseSpoke + ", sealed " + vsSealed + " / " + vsUsedNote + " / " + vsUsedStatus + " / " + vsUsedMenu);
+                            if (vsSliders != "Normal | Normal | 30% · server | 20% · server" || vsPage != null || !vsRound || !vsOldRound)
+                                throw new Exception("Their voice server's own robot and glitch didn't stick apart from her other voices: " + vsSliders + " / " + vsPage + " / round trip " + vsRound + ", old settings " + vsOldRound);
+                            if (!vsFellSpoke || vsFellNote != "Your voice server said HTTP 500: Model is still loading." + VoiceServer.Filling || !vsOnceSpoke || vsOnceNote != "still the same")
+                                throw new Exception("A failing voice server didn't hand her line to her free voice and say so once: " + vsFellSpoke + " (" + vsFellState + ") / " + vsFellNote + " / " + vsOnceSpoke + " / " + vsOnceNote);
+                            if (vsKept != vsUrl + " | kokoro | af_heart | Key saved, ends 9876 | Forget |  / True" || vsForgot != vsUrl + " | kokoro | af_heart | Optional | - | Key forgotten. / True"
+                                || !vsSly.StartsWith("Free voice: Sly | ", StringComparison.Ordinal) || !vsSlyOff || !vsHdOff || preferences.HdVoice || preferences.ServerVoice || preferences.ServerKey != null)
+                                throw new Exception("Their voice server's key or switching away went wrong: " + vsKept + " / " + vsForgot + " / " + vsSly + " / " + vsSlyOff + " / " + vsHdOff);
+                            // A server that isn't running.
+                            vsServer.Stop();
+                            byte[] vsGone = vsOff(vsVoice.Or(vsFree, vsNoted), "Hello?");
+                            string vsGoneNote, vsAlone = null;
+                            lock (vsNotes) vsGoneNote = vsNotes[vsNotes.Count - 1];
+                            try { vsOff(vsVoice.Or(null, vsNoted), "Hello again?"); }
+                            catch (VoiceException vsError) { vsAlone = vsError.Message; }
+                            if (vsGone != vsStandIn || vsGoneNote != "Can't reach your voice server at " + vsWhere + ". Is it running?" + VoiceServer.Filling || vsAlone != "Can't reach your voice server at " + vsWhere + ". Is it running?" || vsNotes.Count != 5)
+                                throw new Exception("A voice server that isn't running didn't say so: " + vsGoneNote + " / " + vsAlone + " / " + vsNotes.Count + " notes");
+                            checks.Add("PASS your voice server: Your voice server... in the free voice menu opens a panel for any OpenAI-style speech server's address, model, voice and key; Test speaks through it before anything's saved and Use this server keeps it, the key sealed like her other keys (a blank box keeps it, Forget drops it); she POSTs only the words to /v1/audio/speech with a Bearer key when there is one; a 16-bit 22 kHz WAV, a float WAV streamed in chunks" + (vsMp3 != null ? " and an MP3" : "") + " become her 24 kHz voice; her pitch moves it and its own robot and glitch (saved apart, shown as · server) change it; a 404, a 500, a refused key, no answer within its 20 s (0.8 s here) or no server at all hand the line to her free voice and say why once; picking one of her own styles or HD turns it off and keeps it saved");
                             string earsRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "ears-test");
                             if (Directory.Exists(earsRoot)) Directory.Delete(earsRoot, true);
                             string earsSource = Path.Combine(earsRoot, "source");
