@@ -592,7 +592,10 @@ namespace CapriDesktop
         private static readonly string[] SnubbedLines = { "Fine. Ignore me. See if I care.", "Wow. Ignored. Noted.", "I'll just sit here. Alone. Bored." };
         // Cyberpunk 2077 starting, or a Night City song coming on, is home for her: she cheers once, then waits two hours before cheering for the same again.
         private const double HomeGap = 7200;
-        private static readonly Regex NightCityMusic = new Regex(@"cyberpunk|edgerunners|night city|\bsamurai\b|rezodrone|rosa walton|hallie coggins|adamczyk|przyby[lł]owicz|i really want to stay at your house|chippin.? in|never fade away|resist and disorder|the rebel path|this fffire|podsiad[lł]o", RegexOptions.IgnoreCase);
+        private static readonly Regex NightCityMusic = new Regex(@"rezodrone|rosa walton|hallie coggins|adamczyk|przyby[lł]owicz|i really want to stay at your house|chippin.? in|never fade away|resist and disorder|the rebel path|this fffire|podsiad[lł]o|^\W*samurai\s*[-–—]", RegexOptions.IgnoreCase);
+        // "Cyberpunk 2077 review - YouTube" isn't a song: the game's own name only counts next to a word for music.
+        private static readonly Regex NightCityName = new Regex(@"cyberpunk|edgerunners|night city", RegexOptions.IgnoreCase);
+        private static readonly Regex MusicWord = new Regex(@"\b(ost|soundtrack|score|music|songs?|radio|playlist|mix|theme|lyrics|album)\b", RegexOptions.IgnoreCase);
         private static readonly string[] HomeGameLines = { "Night City?! You're taking me home, choom.", "Ooh, Cyberpunk. Go wreck some corpos for me.", "[SIGNAL CORRUPTED] ...wait. I know that skyline." };
         private static readonly string[] HomeSongLines = { "Wait, that's Night City. Turn it up.", "Ooh, my soundtrack. Preem taste.", "Now that's music. You're learning." };
         private bool homeBusy, homeGame, homeSong;
@@ -2863,6 +2866,8 @@ namespace CapriDesktop
                     game = running.Length > 0;
                     foreach (Process process in running) process.Dispose();
                     foreach (OpenWindow window in Hands.Windows()) if ((string.Equals(window.Program, "Spotify", StringComparison.OrdinalIgnoreCase) || (window.Title ?? "").IndexOf("YouTube", StringComparison.OrdinalIgnoreCase) >= 0) && NightCity(window.Title)) song = true;
+                    // A paused YouTube tab keeps its title, so the song has to be playing too.
+                    if (song) song = MusicPlaying();
                 }
                 catch (Exception) { }
                 Post(delegate
@@ -2875,7 +2880,7 @@ namespace CapriDesktop
             });
         }
 
-        internal static bool NightCity(string title) { return !string.IsNullOrEmpty(title) && NightCityMusic.IsMatch(title); }
+        internal static bool NightCity(string title) { return !string.IsNullOrEmpty(title) && (NightCityMusic.IsMatch(title) || (NightCityName.IsMatch(title) && MusicWord.IsMatch(title))); }
 
         private void CheckLag(double now)
         {
@@ -7963,9 +7968,10 @@ namespace CapriDesktop
                             homeGame = homeSong = false;
                             gameCheered = songCheered = -HomeGap;
                             if (Array.IndexOf(HomeGameLines, homeFirst) < 0 || homeStill != null || homeSoon != null || homeBusyLine != null || Array.IndexOf(HomeSongLines, homeSongLine) < 0 || Array.IndexOf(HomeGameLines, homeLater) < 0
-                                || !NightCity("SAMURAI - Chippin' In") || !NightCity("I Really Want to Stay at Your House - Rosa Walton - YouTube - Google Chrome") || !NightCity("Dawid Podsiadło - Let You Down") || NightCity("Chase Atlantic - Consume") || NightCity("Spotify Premium") || NightCity(null))
+                                || !NightCity("SAMURAI - Chippin' In") || !NightCity("I Really Want to Stay at Your House - Rosa Walton - YouTube - Google Chrome") || !NightCity("Dawid Podsiadło - Let You Down") || NightCity("Chase Atlantic - Consume") || NightCity("Spotify Premium") || NightCity(null)
+                                || !NightCity("SAMURAI - Black Dog") || !NightCity("Night City Radio - 24/7 synthwave - YouTube - Google Chrome") || NightCity("Cyberpunk 2077 Phantom Liberty review - YouTube - Google Chrome") || NightCity("Afro Samurai clip - YouTube") || NightCity("Samurai Jack - Episode 1 - YouTube"))
                                 throw new Exception("Her Night City cheer went wrong: " + homeFirst + " / " + homeStill + " / " + homeSoon + " / " + homeBusyLine + " / " + homeSongLine + " / " + homeLater);
-                            checks.Add("PASS Night City: she cheers when Cyberpunk 2077 starts or a 2077 or Edgerunners song comes on in Spotify or YouTube, at most once every two hours for each, never while she's busy, and other songs don't count");
+                            checks.Add("PASS Night City: she cheers when Cyberpunk 2077 starts or a 2077 or Edgerunners song comes on in Spotify or YouTube, at most once every two hours for each, never while she's busy, and other songs, a 2077 review or trailer and other samurai don't count");
                             string lagEarly = Lagging(0.95, 10, true) ?? Lagging(0.95, 25, true) ?? Lagging(0.95, 40, true), lagLine = Lagging(0.97, 55, true);
                             string lagSoon = null, lagBusy = null, lagCooled = null, lagLater = null;
                             for (int i = 0; i < 4; i++) lagSoon = lagSoon ?? Lagging(0.99, 70 + i * 15, true);
