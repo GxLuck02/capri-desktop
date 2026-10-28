@@ -44,6 +44,7 @@ namespace CapriDesktop
 
         private bool blinked;
         private bool slept;
+        private double noticedBefore = -1;
         private Func<byte[]> peekWas;
         private readonly List<string> glanceAsks = new List<string>();
         private const string GlanceSaid = "SAW: a racing game, a red car in first place. SAY: First place? Don't choke now.";
@@ -950,6 +951,8 @@ namespace CapriDesktop
             if (step == 24)
             {
                 if (pet.Arriving || pet.Falling) return false;
+                pet.CheckNudge(pet.Now);
+                noticedBefore = pet.Noticed;
                 pet.PopIn();
                 if (!pet.Leaving || pet.Away) throw new Exception("She didn't glitch out to pop in somewhere else.");
                 return true;
@@ -963,7 +966,8 @@ namespace CapriDesktop
                 pet.CheckPopIn(pet.Now + 60);
                 pet.SetCheckIns(true);
                 if (!pet.IsVisible || pet.Away || pet.PopOut >= 0 || Array.IndexOf(Pet.PopLines, hello) < 0) throw new Exception("Popping in while she was out went wrong: " + hello + " | away " + pet.Away + " | out " + pet.PopOut);
-                checks.Add("PASS pop-ins while she's out: she glitches over to a new spot at the top of the screen, says hi and stays out");
+                if (noticedBefore < 0 || pet.Noticed != noticedBefore) throw new Exception("A pop-in restarted her 2-hour wait to ask for attention: " + noticedBefore + " then " + pet.Noticed);
+                checks.Add("PASS pop-ins while she's out: she glitches over to a new spot at the top of the screen, says hi and stays out, and her 2-hour wait to ask for attention keeps counting");
                 pet.ForgetNudges();
                 pet.Talk.Dismiss();
                 pet.Nudge(pet.Now, null);

@@ -1982,7 +1982,8 @@ namespace CapriDesktop
             {
                 Screen screen = ScreenHere();
                 if (screen == null || quitting) return;
-                SetAway(false);
+                // Only coming out of hiding restarts her wait to ask for attention: a pop-in nobody touched isn't them noticing her.
+                if (away) SetAway(false);
                 if (!IsVisible) Show();
                 walking = false;
                 seat = null;
@@ -2165,6 +2166,7 @@ namespace CapriDesktop
         }
 
         internal double NudgeOut { get { return nudgeOut; } }
+        internal double Noticed { get { return noticed; } }
         internal double NudgeWait { get { return nudgeGap; } }
 
         internal int GlanceGap { get { return Saved.GlanceGap > 0 ? Saved.GlanceGap : 120; } }
