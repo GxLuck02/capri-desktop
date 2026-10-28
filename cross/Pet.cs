@@ -453,12 +453,7 @@ namespace CapriDesktop
             // Showing her, at the start or when she pops in, never takes the keyboard from what they're typing in, like on Windows.
             ShowActivated = false;
             WindowStartupLocation = WindowStartupLocation.Manual;
-            try
-            {
-                IPlatformHandle own = TryGetPlatformHandle();
-                if (own != null) Desk.Unfocused(own.Handle.ToInt64());
-            }
-            catch (Exception) { }
+            Unfocus(this);
             body.Size = Array.IndexOf(Sizes, Saved.Size) >= 0 ? Saved.Size : 240;
             body.Mouth = mouth;
             RenderOptions.SetBitmapInterpolationMode(body, BitmapInterpolationMode.HighQuality);
@@ -470,6 +465,9 @@ namespace CapriDesktop
             // A saved key's models are read now, so a stuck NVIDIA model has others to hand over to.
             if (Brain.Remote != null && Program.Smoke == null) ListCloud();
             Talk = new Talk(this);
+            // Her bubble and pill come up by themselves with her, so they leave the keyboard alone too. Her typing box takes it.
+            Unfocus(Talk.Bubble);
+            Unfocus(Talk.Pill);
             frames.Interval = TimeSpan.FromMilliseconds(33);
             frames.Tick += delegate { Tick(); };
             Opened += delegate
@@ -492,6 +490,16 @@ namespace CapriDesktop
                     DispatcherTimer.RunOnce(() => Greet(ticket, DateTime.Now.Hour), TimeSpan.FromMilliseconds(1800));
                 }
             };
+        }
+
+        private void Unfocus(Window shown)
+        {
+            try
+            {
+                IPlatformHandle handle = shown.TryGetPlatformHandle();
+                if (handle != null) Desk.Unfocused(handle.Handle.ToInt64());
+            }
+            catch (Exception) { }
         }
 
         internal double Now { get { return clock.Elapsed.TotalSeconds; } }
