@@ -3466,19 +3466,7 @@ namespace CapriDesktop
                     print[i + 2] = pixel.B;
                 }
             }
-            byte[] before = lastPrint;
-            if (before != null && !force)
-            {
-                long difference = 0;
-                int moved = 0;
-                for (int i = 0; i < print.Length; i += 3)
-                {
-                    int change = Math.Max(Math.Abs(print[i] - before[i]), Math.Max(Math.Abs(print[i + 1] - before[i + 1]), Math.Abs(print[i + 2] - before[i + 2])));
-                    difference += change;
-                    if (change > 24) moved++;
-                }
-                if (difference <= 64 * 36 * 6 && moved < 24) return false;
-            }
+            if (!force && !Glances.Moved(print, lastPrint)) return false;
             lastPrint = print;
             return true;
         }

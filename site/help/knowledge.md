@@ -899,7 +899,7 @@ Now and then she asks you to say please. Reply "please" and she does it.
 ## 16. Watch my screen
 
 ### How do I turn it on?
-Mainframe > Settings > WATCH > Watch my screen. The Every slider sets how often she looks (10 s to 10 min).
+Mainframe > Settings > WATCH > Watch my screen. The Every slider sets how often she looks (10 s to 10 min). On Mac and Linux: right-click her > Settings > Watch my screen, and Glance every.
 
 ### Check my screen
 Any time, ask "check my screen", "what's on my screen?", "can you see this?", "look at this error" or "rate my build". She takes a screenshot right then and answers about it. Watch my screen doesn't need to be on.
@@ -1095,13 +1095,14 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Start at login: right-click her > Settings > Start at login. It's off until you tick it. On Mac it adds a login item (macOS says Capri added a background item; manage it in System Settings > General > Login Items). On Linux it adds ~/.config/autostart/capri.desktop. It starts the copy you ticked it in; if you move Capri, open the new copy once.
 - Right-click her > Help > Copy error details, with your system, desktop and her brain at the top
 - "Check my screen": she looks when you ask (see "Check my screen on Mac and Linux" below)
+- Watch my screen: right-click her > Settings > Watch my screen. She glances now and then and comments when something's worth a line, like on Windows. Glance every sets how often (10 s to 10 min, default 2 min), and Keep her caught up keeps the glances she stays quiet about. Mac asks once for Screen Recording. Linux only watches with tools that don't flash: grim, Spectacle on KDE, ImageMagick's import, scrot or maim. GNOME on Wayland flashes every screenshot, so there she says so and only looks when you ask.
 - Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings)
 
 ### Not yet
 - No Mainframe. Everything is in her right-click menu.
 - No voice chat: "Voice chat isn't on Mac and Linux yet. Type to me for now, choom."
 - No built-in brain. Use Ollama or an API key.
-- No keyboard shortcuts, Watch my screen (she only looks when you ask) or mouse and keyboard jobs.
+- No keyboard shortcuts or mouse and keyboard jobs.
 - No automatic updates. She says when a new version is out, and right-click her > Get Capri X opens its download page.
 
 ### Right-click menu
@@ -1110,7 +1111,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
-- Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Check in on me, Pop-ins (Rarely, Sometimes, Often), Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Check in on me, Pop-ins (Rarely, Sometimes, Often), Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
 - Get Capri X, only when a new version is out

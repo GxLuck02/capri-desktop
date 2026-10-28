@@ -10,7 +10,11 @@ namespace CapriDesktop
     internal static class Eyes
     {
         // A whole-screen picture's file bytes, or null when no tool here could take one. The smoke test hands in its own.
-        internal static Func<byte[]> Shoot = Screenshot;
+        internal static Func<byte[]> Shoot = delegate { return Screenshot(Tools(OperatingSystem.IsMacOS(), Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP"))); };
+        // The same for Watch my screen, with only the tools that don't flash, play a shutter sound or ask first.
+        internal static Func<byte[]> Peek = delegate { return Screenshot(QuietTools(OperatingSystem.IsMacOS(), Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP"))); };
+
+        internal const string Unwatchable = "I can't watch your screen quietly here: this desktop's screenshots flash or ask first. I'll still look whenever you ask me to check your screen. On X11, installing scrot or maim fixes it.";
 
         internal static string Missing
         {
@@ -52,10 +56,26 @@ namespace CapriDesktop
             return tools;
         }
 
-        private static byte[] Screenshot()
+        // Watching takes a screenshot every few minutes, so it skips gnome-screenshot (a flash and a shutter sound), the XFCE tool,
+        // and Spectacle outside KDE's Wayland, where it would ask first.
+        internal static List<string[]> QuietTools(bool mac, string session, string desktop)
+        {
+            List<string[]> quiet = new List<string[]>();
+            bool wayland = string.Equals(session, "wayland", StringComparison.OrdinalIgnoreCase);
+            bool kde = (desktop ?? "").ToLowerInvariant().Contains("kde");
+            foreach (string[] tool in Tools(mac, session, desktop))
+            {
+                if (tool[0] == "gnome-screenshot" || tool[0] == "xfce4-screenshooter") continue;
+                if (tool[0] == "spectacle" && wayland && !kde) continue;
+                quiet.Add(tool);
+            }
+            return quiet;
+        }
+
+        private static byte[] Screenshot(List<string[]> tools)
         {
             bool mac = OperatingSystem.IsMacOS();
-            foreach (string[] tool in Tools(mac, Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP")))
+            foreach (string[] tool in tools)
             {
                 string path = Path.Combine(Path.GetTempPath(), "capri-screen-" + Guid.NewGuid().ToString("N") + (mac ? ".jpg" : ".png"));
                 try
@@ -96,6 +116,34 @@ namespace CapriDesktop
                 }
             }
             catch (Exception) { return false; }
+        }
+
+        // The screen's fingerprint for Glances.Moved: the picture shrunk to 64 x 36, as RGB bytes. Null if it can't be read.
+        internal static byte[] Print(byte[] picture)
+        {
+            if (picture == null || picture.Length == 0) return null;
+            SKBitmap read;
+            try { read = SKBitmap.Decode(picture); }
+            catch (Exception) { return null; }
+            using (SKBitmap original = read)
+            {
+                if (original == null || original.Width <= 0 || original.Height <= 0) return null;
+                using (SKBitmap tiny = original.Resize(new SKImageInfo(64, 36), SKFilterQuality.Medium))
+                {
+                    if (tiny == null) return null;
+                    byte[] print = new byte[64 * 36 * 3];
+                    for (int y = 0; y < 36; y++)
+                        for (int x = 0; x < 64; x++)
+                        {
+                            SKColor pixel = tiny.GetPixel(x, y);
+                            int i = (y * 64 + x) * 3;
+                            print[i] = pixel.Red;
+                            print[i + 1] = pixel.Green;
+                            print[i + 2] = pixel.Blue;
+                        }
+                    return print;
+                }
+            }
         }
 
         // The picture as a JPEG at most this wide, the size her brain looks at on Windows too. Null if it can't be read.

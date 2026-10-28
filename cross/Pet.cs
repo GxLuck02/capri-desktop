@@ -42,6 +42,9 @@ namespace CapriDesktop
         [DataMember] internal bool NoMemories;
         [DataMember] internal bool NoCheckIns;
         [DataMember] internal int? PopPace;
+        [DataMember] internal bool Watch;
+        [DataMember] internal int GlanceGap;
+        [DataMember] internal bool NoCaughtUp;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -294,6 +297,23 @@ namespace CapriDesktop
         private double nudgeLook;
         private bool nudgeChecking;
         private int clicks;
+        // Watch my screen, like on Windows and off until ticked: every so often she takes a quiet screenshot and comments when
+        // something's worth a line. Glance every sets how often; Keep her caught up keeps the glances she stays quiet about.
+        internal static readonly int[] GlanceGaps = { 10, 15, 30, 60, 90, 120, 180, 300, 600 };
+        internal static readonly string[] GlanceGapNames = { "10 s", "15 s", "30 s", "1 min", "1.5 min", "2 min", "3 min", "5 min", "10 min" };
+        private readonly List<MenuItem> gapPicks = new List<MenuItem>();
+        private MenuItem watchItem;
+        private MenuItem caughtUpItem;
+        private double nextGlance = -1;
+        private double lastGlance = -1;
+        private int watchTicket;
+        private bool glancing;
+        private bool watchTold;
+        private byte[] lastPrint;
+        private readonly List<Tuple<double, string>> glanced = new List<Tuple<double, string>>();
+        // Her brain's look at a glance, and how long they've been away from the computer. The smoke test hands in its own.
+        internal Func<byte[], string, string> Seeing;
+        internal Func<double> Idle = Limbs.IdleSeconds;
         // Tells the tray menu whether to offer Hide her or Show her, since a pop-in or Talk to her brings her out too.
         internal Action AwayChanged;
         // Settings > Start at login. Off until they tick it; the file is the setting.
@@ -575,6 +595,7 @@ namespace CapriDesktop
                 if (Program.Smoke == null) CheckHome(now);
                 if (Program.Smoke == null) CheckLag(now);
                 if (Program.Smoke == null) CheckNudge(now);
+                if (Program.Smoke == null) CheckGlance(now);
             }
             Advance(now);
             Talk.Update(now);
@@ -594,7 +615,7 @@ namespace CapriDesktop
             }
         }
 
-        // "Check my screen": her brain looks at a screenshot, like on Windows. Only when they ask, since she doesn't watch by herself here yet.
+        // "Check my screen": her brain looks at a screenshot when they ask, like on Windows. Watch my screen's glances are below.
         private string LookAt(string focus)
         {
             Cloud remote = Brain.Remote;
@@ -1196,6 +1217,22 @@ namespace CapriDesktop
                 pops.Items.Add(pick);
             }
             settings.Items.Add(pops);
+            watchItem = new MenuItem { Header = "Watch my screen", ToggleType = MenuItemToggleType.CheckBox };
+            watchItem.Click += delegate { SetWatch(!Saved.Watch); };
+            settings.Items.Add(watchItem);
+            MenuItem gaps = new MenuItem { Header = "Glance every" };
+            for (int i = 0; i < GlanceGaps.Length; i++)
+            {
+                int seconds = GlanceGaps[i];
+                MenuItem pick = new MenuItem { Header = GlanceGapNames[i], ToggleType = MenuItemToggleType.Radio, GroupName = "gaps" };
+                pick.Click += delegate { SetGlanceGap(seconds); };
+                gapPicks.Add(pick);
+                gaps.Items.Add(pick);
+            }
+            settings.Items.Add(gaps);
+            caughtUpItem = new MenuItem { Header = "Keep her caught up", ToggleType = MenuItemToggleType.CheckBox };
+            caughtUpItem.Click += delegate { SetCaughtUp(Saved.NoCaughtUp); };
+            settings.Items.Add(caughtUpItem);
             loginItem = new MenuItem { Header = "Start at login", ToggleType = MenuItemToggleType.CheckBox };
             loginItem.Click += delegate { SetLogin(!StartsAtLogin); };
             settings.Items.Add(loginItem);
@@ -1257,6 +1294,9 @@ namespace CapriDesktop
             checkInsItem.IsChecked = !Saved.NoCheckIns;
             for (int i = 0; i < popPicks.Count; i++) popPicks[i].IsChecked = i == PopPace;
             loginItem.IsChecked = StartsAtLogin;
+            watchItem.IsChecked = Saved.Watch;
+            for (int i = 0; i < gapPicks.Count; i++) gapPicks[i].IsChecked = GlanceGaps[i] == GlanceGap;
+            caughtUpItem.IsChecked = !Saved.NoCaughtUp;
         }
 
         internal bool StartsAtLogin { get { return File.Exists(LoginFile); } }
@@ -1714,10 +1754,11 @@ namespace CapriDesktop
             nextPopIn = now + PopGap();
             if (!CanPop) return;
             popChecking = true;
+            Func<double> read = Idle;
             ThreadPool.QueueUserWorkItem(delegate
             {
                 double idle = -1;
-                try { idle = Limbs.IdleSeconds(); }
+                try { idle = read(); }
                 catch (Exception) { }
                 // Only while someone's at the computer, like on Windows. A desktop that doesn't say counts as someone there.
                 Dispatcher.UIThread.Post(delegate { popChecking = false; if (idle <= 60 && CanPop) PopIn(); });
@@ -1861,12 +1902,13 @@ namespace CapriDesktop
                 }
                 return;
             }
-            if (Saved.NoCheckIns || away || nudgeChecking || now < nudgeLook || now - noticed < nudgeGap || !CanPop || (clip != idle && clip != perch)) return;
+            if (Saved.NoCheckIns || away || nudgeChecking || now < nudgeLook || now - noticed < nudgeGap || !CanPop || (clip != idle && clip != perch) || (lastGlance >= 0 && now - lastGlance < 300)) return;
             nudgeChecking = true;
+            Func<double> read = Idle;
             ThreadPool.QueueUserWorkItem(delegate
             {
                 double idle = -1;
-                try { idle = Limbs.IdleSeconds(); }
+                try { idle = read(); }
                 catch (Exception) { }
                 Dispatcher.UIThread.Post(delegate
                 {
@@ -1919,6 +1961,155 @@ namespace CapriDesktop
 
         internal double NudgeOut { get { return nudgeOut; } }
         internal double NudgeWait { get { return nudgeGap; } }
+
+        internal int GlanceGap { get { return Saved.GlanceGap > 0 ? Saved.GlanceGap : 120; } }
+        internal bool Glancing { get { return glancing; } }
+        internal bool WatchShown { get { return watchItem.IsChecked; } }
+        internal string GapShown
+        {
+            get
+            {
+                for (int i = 0; i < gapPicks.Count; i++) if (gapPicks[i].IsChecked) return GlanceGapNames[i];
+                return "";
+            }
+        }
+
+        internal void SetWatch(bool on)
+        {
+            Saved.Watch = on;
+            watchTicket++;
+            nextGlance = -1;
+            lastGlance = -1;
+            lastPrint = null;
+            watchTold = false;
+            Save();
+            Sync();
+            string blind = on ? Unseeing() : null;
+            if (blind != null) Talk.Answer("(watch my screen)", blind);
+        }
+
+        internal void SetGlanceGap(int seconds)
+        {
+            Saved.GlanceGap = seconds;
+            if (Saved.Watch) nextGlance = Now + Math.Min(20, seconds);
+            Save();
+            Sync();
+        }
+
+        internal void SetCaughtUp(bool on)
+        {
+            Saved.NoCaughtUp = !on;
+            Save();
+            Sync();
+        }
+
+        // Why her brain can't watch, or null when it can.
+        private string Unseeing()
+        {
+            Cloud remote = Brain.Remote;
+            if (Brain.Model == null) return "My brain's offline, so I can't watch your screen yet.";
+            if (remote != null && remote.Kind == "deepseek") return "DeepSeek can't see, so I can't watch your screen. A free NVIDIA key can: " + Brain.FreeKeyHow + ".";
+            if (remote != null && remote.Model == Brain.Unsighted) return remote.Model + " can't see screens. Pick one that can " + Brain.BrainMenu + (remote.Kind == "nvidia" ? ", like nvidia/nemotron-3.5-super-vl-120b-a12b." : ".");
+            return null;
+        }
+
+        private void CheckGlance(double now)
+        {
+            if (!Saved.Watch || glancing) return;
+            if (nextGlance < 0) nextGlance = now + Math.Min(20, GlanceGap);
+            if (now < nextGlance || Brain.Model == null || away || dragging || pressed || !Talk.Quiet) return;
+            nextGlance = now + GlanceGap * (0.8 + random.NextDouble() * 0.4);
+            if (Unseeing() != null) return;
+            Glance(now);
+        }
+
+        // One look: a quiet screenshot, skipped when the screen hasn't changed since the last one, then her brain's line about it.
+        internal void Glance(double now)
+        {
+            glancing = true;
+            int ticket = asking;
+            int watch = watchTicket;
+            bool force = lastGlance < 0 || now - lastGlance >= 300;
+            byte[] before = lastPrint;
+            string ask = Glances.Ask(RecentGlances(now));
+            Func<byte[], string, string> seeing = Seeing ?? delegate(byte[] shot, string question) { return Brain.See(shot, Brain.Persona + Brain.Speech(), question, 140); };
+            Func<double> idle = Idle;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string said = null, saw = null, problem = null;
+                byte[] print = null;
+                bool looked = false, blind = false;
+                try
+                {
+                    // Not while they've been away from the computer for 10 minutes, like on Windows.
+                    if (idle() <= 600)
+                    {
+                        byte[] picture = Eyes.Peek();
+                        print = Eyes.Print(picture);
+                        if (print == null) blind = true;
+                        else if (force || Glances.Moved(print, before))
+                        {
+                            byte[] shot = Eyes.Jpeg(picture, 1280);
+                            looked = shot != null;
+                            if (looked) said = Glances.Reply(seeing(shot, ask), out saw);
+                        }
+                    }
+                }
+                catch (Exception error)
+                {
+                    looked = true;
+                    problem = error.Message;
+                    Brain.Log("glance", -1, error.GetType().Name + ": " + error.Message);
+                }
+                Dispatcher.UIThread.Post(delegate { FinishGlance(ticket, watch, print, looked, blind, said, saw, problem); });
+            });
+        }
+
+        private void FinishGlance(int ticket, int watch, byte[] print, bool looked, bool blind, string said, string saw, string problem)
+        {
+            glancing = false;
+            if (!Saved.Watch || watch != watchTicket) return;
+            if (blind)
+            {
+                // Said once each time Watch my screen goes on; she keeps trying quietly in case a tool turns up.
+                if (!watchTold && Talk.Quiet && !away) { watchTold = true; Blurt("(watch my screen)", Eyes.Unwatchable); }
+                return;
+            }
+            if (!looked) return;
+            lastGlance = Now;
+            lastPrint = print;
+            if (problem != null)
+            {
+                lastPrint = null;
+                // A brain that turned out not to see gets said once, like Windows' Mainframe note; other errors go in errors.txt.
+                string unseen = Unseeing();
+                if (unseen != null && !watchTold && Talk.Quiet && !away) { watchTold = true; Blurt("(watch my screen)", unseen); }
+                return;
+            }
+            if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
+            if (ticket != asking || away || dragging || !Talk.Quiet) { lastPrint = null; Glimpsed(saw); return; }
+            // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
+            if (Glances.Repeats(said, RecentGlances(Now), Brain.Nickname)) { Glimpsed(saw); return; }
+            glanced.Add(Tuple.Create(Now, said));
+            Brain.Saw(saw, said);
+            Brain.Remember(string.IsNullOrEmpty(saw) ? "(You glanced at their screen.)" : "(You glanced at their screen and saw: " + saw + ")", said);
+            Reply(++asking, "(your screen)", said);
+            // Her own glance isn't them paying her attention.
+            noticedAsked = asking;
+        }
+
+        // With Keep her caught up on, a glance she kept quiet about still goes in her memory, so she can say what was on their screen.
+        private void Glimpsed(string saw)
+        {
+            if (!Saved.NoCaughtUp) Brain.Saw(saw, null);
+        }
+
+        private List<string> RecentGlances(double now)
+        {
+            glanced.RemoveAll(delegate(Tuple<double, string> line) { return now - line.Item1 > Glances.Memory || now < line.Item1; });
+            if (glanced.Count > 30) glanced.RemoveRange(0, glanced.Count - 30);
+            return glanced.ConvertAll<string>(delegate(Tuple<double, string> line) { return line.Item2; });
+        }
 
         internal double PopOut { get { return popOut; } }
         internal bool CheckIns { get { return !Saved.NoCheckIns; } }

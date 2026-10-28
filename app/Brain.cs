@@ -1916,6 +1916,21 @@ namespace CapriDesktop
         internal const string Line = "(You glance at their screen while they do their thing. Reply in two parts, with the labels SAW: and SAY: written exactly like that. SAW: what's on their screen, in under 20 plain words: the game or app and what's happening. SAY: your reaction in one short line, in character, to something specific you can see: tease them, cheer them on, or ask about it. A game scene, scoreboard, inventory or quiet moment is enough. Don't invent action from a still image, and never guess who a person is; name someone only if their name is written on screen. If nothing's worth a line, still give the SAW part and make it SAY: SKIP. For a blank screen, a bare desktop or a loading screen, reply with just SKIP.)";
         // Her glance lines from the last hour count as already said.
         internal const double Memory = 3600;
+
+        // Whether the screen changed enough since the last fingerprint, a 64 x 36 RGB thumbnail, to be worth a look.
+        internal static bool Moved(byte[] print, byte[] before)
+        {
+            if (before == null || before.Length != print.Length) return true;
+            long difference = 0;
+            int moved = 0;
+            for (int i = 0; i + 2 < print.Length; i += 3)
+            {
+                int change = Math.Max(Math.Abs(print[i] - before[i]), Math.Max(Math.Abs(print[i + 1] - before[i + 1]), Math.Abs(print[i + 2] - before[i + 2])));
+                difference += change;
+                if (change > 24) moved++;
+            }
+            return difference > 64 * 36 * 6 || moved >= 24;
+        }
         private static readonly HashSet<string> Plain = new HashSet<string>((
             "about after again all also always and another any anything are around away back been before being best better big bit bring but came can come coming could damn dang did does doing done down each even ever every feel feels finally first for from game games get gets getting give going gonna good got great guess had has have hey here hope how huge huh into just keep kind know last least left let like little look looks looking lol lots made make many maybe mean more most move much nah need never new next nice not nothing now off okay old omg once one only ooh other out over own play played player playing pretty probably quite ready real really right same say screen see seen should show some somebody someone something soon still such sure take than that the them then there they thing things think this those though time today too took tried try trying turn use very want wanna was wait watch watching way well went were what when where which while who whoa why will with without wow yeah year yep yes yet you your yours " +
             "choom preem nova gonk delta eddies flatline flatlined corpo corpos yezzirrr night city arasaka capri").Split(' '));

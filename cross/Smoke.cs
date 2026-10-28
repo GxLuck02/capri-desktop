@@ -43,6 +43,19 @@ namespace CapriDesktop
         private readonly List<byte[]> spoken = new List<byte[]>();
 
         private bool blinked;
+        private Func<byte[]> peekWas;
+        private readonly List<string> glanceAsks = new List<string>();
+        private const string GlanceSaid = "SAW: a racing game, a red car in first place. SAY: First place? Don't choke now.";
+
+        private static byte[] FakeScreen(SkiaSharp.SKColor color)
+        {
+            using (SkiaSharp.SKBitmap screen = new SkiaSharp.SKBitmap(320, 180))
+            {
+                screen.Erase(color);
+                using (SkiaSharp.SKImage image = SkiaSharp.SKImage.FromBitmap(screen))
+                using (SkiaSharp.SKData png = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100)) return png.ToArray();
+            }
+        }
 
         internal Smoke(Pet pet, string folder)
         {
@@ -914,6 +927,63 @@ namespace CapriDesktop
                 pet.ForgetNudges();
                 if (!asked || !sulked || !welcomed) throw new Exception("Asking for attention went wrong: " + ask + " | " + sulk + " | " + glad + " | wait " + pet.NudgeWait);
                 checks.Add("PASS attention: she asks for attention, sulks and waits twice as long when ignored, and picking her up gets a happy line and the usual 2 hours");
+                peekWas = Eyes.Peek;
+                Eyes.Peek = delegate { return FakeScreen(new SkiaSharp.SKColor(200, 30, 40)); };
+                pet.Idle = delegate { return 0; };
+                pet.Seeing = delegate(byte[] shot, string question)
+                {
+                    lock (glanceAsks) glanceAsks.Add(question);
+                    return GlanceSaid;
+                };
+                pet.SetWatch(true);
+                if (!pet.WatchShown || pet.GapShown != "2 min" || pet.GlanceGap != 120) throw new Exception("Watch my screen didn't turn on at 2 min: " + pet.WatchShown + " | " + pet.GapShown);
+                pet.Talk.Dismiss();
+                pet.Glance(pet.Now);
+                return true;
+            }
+            if (step == 26)
+            {
+                if (pet.Glancing) return false;
+                string glanceLine = pet.Talk.Reply;
+                int asks;
+                lock (glanceAsks) asks = glanceAsks.Count;
+                if (glanceLine != Glances.Reply(GlanceSaid) || asks != 1 || glanceAsks[0] != Glances.Line) throw new Exception("Her first glance went wrong: " + glanceLine + " | " + asks);
+                pet.Talk.Dismiss();
+                pet.Glance(pet.Now);
+                return true;
+            }
+            if (step == 27)
+            {
+                if (pet.Glancing) return false;
+                int asks;
+                lock (glanceAsks) asks = glanceAsks.Count;
+                if (asks != 1 || pet.Talk.Reply != null) throw new Exception("She looked again at a screen that hadn't changed: " + asks);
+                Eyes.Peek = delegate { return FakeScreen(new SkiaSharp.SKColor(20, 60, 220)); };
+                pet.Glance(pet.Now);
+                return true;
+            }
+            if (step == 28)
+            {
+                if (pet.Glancing) return false;
+                int asks;
+                lock (glanceAsks) asks = glanceAsks.Count;
+                bool repeatDropped = asks == 2 && pet.Talk.Reply == null && glanceAsks[1].IndexOf(Glances.Reply(GlanceSaid), StringComparison.Ordinal) >= 0;
+                Eyes.Peek = delegate { return null; };
+                pet.Glance(pet.Now);
+                if (!repeatDropped) throw new Exception("A changed screen with the same line wasn't dropped as a repeat: " + asks + " | " + pet.Talk.Reply);
+                return true;
+            }
+            if (step == 29)
+            {
+                if (pet.Glancing) return false;
+                string told = pet.Talk.Reply;
+                Eyes.Peek = peekWas;
+                pet.Seeing = null;
+                pet.SetWatch(false);
+                List<string[]> gnome = Eyes.QuietTools(false, "wayland", "ubuntu:GNOME"), x11 = Eyes.QuietTools(false, "x11", "XFCE"), kde = Eyes.QuietTools(false, "wayland", "KDE");
+                bool quietRight = gnome.Count == 1 && gnome[0][0] == "grim" && x11.Count == 4 && x11[0][0] == "import" && kde[0][0] == "spectacle" && Eyes.QuietTools(true, null, null)[0][0] == "screencapture";
+                if (told != Eyes.Unwatchable || pet.WatchShown || !quietRight) throw new Exception("Watching without a quiet screenshot tool went wrong: " + told + " | " + quietRight);
+                checks.Add("PASS watch my screen: she glances, comments on what she sees, skips a screen that hasn't changed and a line she already said, and says once when this desktop can't take quiet screenshots");
                 Finish(null);
                 return true;
             }
