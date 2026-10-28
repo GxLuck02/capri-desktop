@@ -18,11 +18,12 @@ namespace CapriDesktop
         private static readonly int[] Gaps = { 10, 15, 30, 60, 90, 120, 180, 300, 600 };
         private static readonly string[] GapNames = { "10 s", "15 s", "30 s", "1 min", "1.5 min", "2 min", "3 min", "5 min", "10 min" };
         private const int SetupHeight = 118;
-        private const int PageTall = 668;
+        private const int PageTall = 706;
         // Settings opens a second column to the right, so every setting shows at once.
         private const int Column = 380;
         private const int Far = 30000;
-        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 376 }, new[] { 0, 386, 538 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 424 }, new[] { Column, 446, 550 }, new[] { 0, 572, 632 } };
+        private static readonly int[][] PageBars = { new[] { 0, 58, 206 }, new[] { 0, 220, 376 }, new[] { 0, 386, 538 }, new[] { Column, 58, 146 }, new[] { Column, 162, 250 }, new[] { Column, 266, 424 }, new[] { Column, 446, 588 }, new[] { 0, 610, 670 } };
+        private static readonly string[] PerchNames = Array.ConvertAll(Companion.PerchRates, rate => rate + " fps");
         private static readonly int[] Volumes = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150 };
         private static readonly string[] VolumeNames = { "Mute", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%", "125%", "150%" };
         private static readonly int[] SizeSteps = { 140, 170, 200, 240, 280, 320, 380, 440, 500, 560 };
@@ -156,6 +157,9 @@ namespace CapriDesktop
         private readonly Label recallName;
         private readonly Entry custom;
         private readonly Label customNote;
+        private readonly Slider perchFps;
+        private readonly Label perchFpsName;
+        private readonly Label perchNote;
 
         internal Mainframe(Companion owner, Icon icon, string version)
         {
@@ -402,24 +406,33 @@ namespace CapriDesktop
             blackwallNote.AutoSize = false;
             blackwallNote.TextAlign = ContentAlignment.MiddleRight;
             blackwallNote.Bounds = new Rectangle(28 + c, 526, 328, 18);
-            Caption("KEYS >", 28, 576, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
-            talkKeys = Make("Talk: Ctrl + Alt + V", 96, 570, 250, 28, delegate { PickKeys(0); });
+            // Frames a second while she sits on a window. Her sway takes 2 s at every fps; past 30 she draws in-betweens.
+            Caption("Perch", 28 + c, 561, Font, Look.Dim);
+            perchFps = PageSlider(PerchNames, 554, "Her perch frames per second", c);
+            perchFpsName = Caption("30 fps", 292 + c, 561, Font, Look.Ink);
+            perchFps.Changed += delegate { if (syncing) return; capri.SetPerchFps(Companion.PerchRates[perchFps.Value]); ShowPerch(); };
+            perchNote = Caption("", 120 + c, 444, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+            perchNote.AutoSize = false;
+            perchNote.TextAlign = ContentAlignment.MiddleRight;
+            perchNote.Bounds = new Rectangle(120 + c, 444, 236, 20);
+            Caption("KEYS >", 28, 614, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
+            talkKeys = Make("Talk: Ctrl + Alt + V", 96, 608, 250, 28, delegate { PickKeys(0); });
             talkKeys.AccessibleName = "Her talk key. Click, press new keys, then Confirm";
-            muteKeys = Make("Mute mic: Ctrl + Alt + N", 358, 570, 250, 28, delegate { PickKeys(1); });
+            muteKeys = Make("Mute mic: Ctrl + Alt + N", 358, 608, 250, 28, delegate { PickKeys(1); });
             muteKeys.AccessibleName = "Her mute key. Click, press new keys, then Confirm";
-            typeKeys = Make("Type: Ctrl + Alt + T", 96, 604, 250, 28, delegate { PickKeys(2); });
+            typeKeys = Make("Type: Ctrl + Alt + T", 96, 642, 250, 28, delegate { PickKeys(2); });
             typeKeys.AccessibleName = "Her typing key. Click, press new keys, then Confirm";
-            hideKeys = Make("Hide/show: Ctrl + Alt + H", 358, 604, 250, 28, delegate { PickKeys(3); });
+            hideKeys = Make("Hide/show: Ctrl + Alt + H", 358, 642, 250, 28, delegate { PickKeys(3); });
             hideKeys.AccessibleName = "Her hide key. Click, press new keys, then Confirm";
             // Only a click ends picking a key, so Enter, Esc and Tab can be her keys too.
-            confirmKeys = Make("Confirm", 620, 570, 116, 28, delegate { ConfirmKeys(); });
+            confirmKeys = Make("Confirm", 620, 608, 116, 28, delegate { ConfirmKeys(); });
             confirmKeys.Accent = Look.Cyan;
             confirmKeys.Loud = true;
             confirmKeys.AccessibleName = "Confirm her new keys";
-            cancelKeys = Make("Cancel", 620, 604, 116, 28, delegate { CancelKeys(); });
+            cancelKeys = Make("Cancel", 620, 642, 116, 28, delegate { CancelKeys(); });
             cancelKeys.AccessibleName = "Cancel and keep her old keys";
             confirmKeys.Visible = cancelKeys.Visible = false;
-            keysNote = Caption("", 96, 640, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+            keysNote = Caption("", 96, 678, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             keysNote.MaximumSize = new Size(512, 0);
             for (int i = first; i < Controls.Count; i++)
             {
@@ -718,6 +731,8 @@ namespace CapriDesktop
             recall.Value = Math.Max(0, Array.IndexOf(Recalls, capri.Recall));
             recallName.Text = Lengths[recall.Value];
             ShowPersonality();
+            perchFps.Value = Math.Max(0, Array.IndexOf(Companion.PerchRates, capri.PerchFps));
+            ShowPerch();
             syncing = false;
         }
 
@@ -739,6 +754,20 @@ namespace CapriDesktop
             base.OnActivated(e);
             ShowPersonality();
         }
+
+        // Past 30 fps she draws her perch more often, so the HABITS line says it costs more.
+        private void ShowPerch()
+        {
+            perchFpsName.Text = PerchNames[perchFps.Value];
+            perchNote.Text = Companion.PerchRates[perchFps.Value] > 30 ? "Perch over 30 fps uses more CPU" : "";
+        }
+
+        internal string PerchStatus { get { return perchFpsName.Text + " | " + (perchNote.Text.Length > 0 ? perchNote.Text : "-"); } }
+
+        internal void SlidePerch(int steps) { Press(perchFps, steps); }
+
+        // The HABITS row and KEYS fit inside the settings page.
+        internal bool PerchFits { get { return ClientRectangle.Contains(perchFpsName.Bounds) && ClientRectangle.Contains(perchFps.Bounds) && ClientRectangle.Contains(hideKeys.Bounds); } }
 
         internal string Status { get { return brainName.Text + " | " + brainNote.Text; } }
 
@@ -762,7 +791,10 @@ namespace CapriDesktop
 
         internal string GapShown { get { return gapName.Text; } }
 
-        internal void SlideGap(int steps) { gap.Focus(); for (int i = 0; i < Math.Abs(steps); i++) { KeyEventArgs press = new KeyEventArgs(steps > 0 ? Keys.Right : Keys.Left); typeof(Control).GetMethod("OnKeyDown", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(gap, new object[] { press }); } }
+        internal void SlideGap(int steps) { Press(gap, steps); }
+
+        // Arrow keys on a slider, the way they'd press them.
+        private static void Press(Slider slider, int steps) { slider.Focus(); for (int i = 0; i < Math.Abs(steps); i++) { KeyEventArgs press = new KeyEventArgs(steps > 0 ? Keys.Right : Keys.Left); typeof(Control).GetMethod("OnKeyDown", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(slider, new object[] { press }); } }
 
         internal void Searching()
         {

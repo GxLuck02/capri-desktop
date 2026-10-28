@@ -176,6 +176,8 @@ namespace CapriDesktop
         [DataMember] public int HideMods = 3;
         [DataMember] public int HideVk = 0x48;
         [DataMember] public int WanderPace = 1;
+        // Frames a second of her perch: 10, 15, 20, 30, 40, 50 or 60. 30 shows the art as drawn.
+        [DataMember] public int PerchFps = 30;
         [DataMember] public string AgentPolyglot;
         [DataMember] public string AgentPersonality;
         // Check in on me is on by default. Before 0.7.3 it was saved as PopIns, off by default, so the new name turns it on once for everyone.
@@ -206,6 +208,7 @@ namespace CapriDesktop
             HideMods = 3;
             HideVk = 0x48;
             WanderPace = 1;
+            PerchFps = 30;
             CheckIns = true;
         }
     }
@@ -568,6 +571,14 @@ namespace CapriDesktop
         private Clip clip;
         private double clipStart;
         private int idleCycle;
+        // Above 30 fps, how much of the next perch frame mixes into this one, in 256ths, and the spare cell they mix into.
+        private int perchMix;
+        private Bitmap inBetween;
+        private int[] mixFrom, mixTo;
+        // The perch step, place and facing she was last drawn at. Off 30 fps a tick with nothing new to show skips drawing.
+        private long drawnStep = -1;
+        private Point drawnAt;
+        private bool drawnFacing;
         private readonly Groove groove;
         private double danceLast = -1;
         private double dancePos;
@@ -828,6 +839,8 @@ namespace CapriDesktop
         private bool hideKey;
         private const int BlinkFrom = 9;
         private const int PerchBlinkFrom = 34;
+        // Her perch fps choices. The art is 30 fps: slower holds each frame longer, faster mixes in-betweens of neighbouring frames.
+        internal static readonly int[] PerchRates = { 10, 15, 20, 30, 40, 50, 60 };
         internal bool TestFailed;
 
         internal Companion(string data, EventWaitHandle signal, bool smoke)
@@ -1106,9 +1119,33 @@ namespace CapriDesktop
             if (riding) FollowCursor(); else if (onPanel) HoldPanel(); else if (falling) Tumble(now); else if (seat != null) HoldSeat(now);
             if (walking) Walk(now);
             if (!riding && !dragging && !walking && !falling && outro == null && clip != arrive && clip != leave) Face();
-            RenderFrame();
+            if (!Steady(now)) RenderFrame();
             if (!riding && !dragging && !walking && outro == null && !preferences.Motion && clip == idle && speech == null && talkState == TalkState.Off) frames.Stop();
+            int interval = FrameInterval(now);
+            if (frames.Interval != interval) frames.Interval = interval;
         }
+
+        // Her frame timer ticks every 33 ms, except while she sits through her perch at another fps. WinForms timers tick on
+        // Windows' 1/64 s clock, so 33 ms really comes every 47 ms; off 30 she asks for just under a whole number of its ticks.
+        private int FrameInterval(double now)
+        {
+            int fps = preferences.PerchFps;
+            if (fps == 30 || !SittingStill || (clip != perch && clip != perchDance) || (fps < 30 && (clip != perch || !Quiet(now)))) return 33;
+            return Math.Max(1, 64 / fps) * 1000 / 64 - 1;
+        }
+
+        // A tick off 30 fps with nothing new to show: she's only sitting, still where she was drawn, and her perch frame hasn't changed.
+        private bool Steady(double now)
+        {
+            int fps = preferences.PerchFps;
+            return fps != 30 && clip == perch && SittingStill && Quiet(now) && anchor == drawnAt && facingLeft == drawnFacing && (long)((now - clipStart) * fps) == drawnStep;
+        }
+
+        // On a window, not riding, dragged, walking, falling or leaving.
+        private bool SittingStill { get { return seat != null && !riding && !dragging && !walking && !falling && outro == null; } }
+
+        // Nothing else about her moves: no words, bubble, typing box or music notes. Her pill only redraws when it changes.
+        private bool Quiet(double now) { return speech == null && talkState == TalkState.Off && !box.Visible && !typer.Visible && !notes.Exists(note => now - note.Born < NoteLife); }
 
         private void Face()
         {
@@ -1151,6 +1188,8 @@ namespace CapriDesktop
             clip = next;
             clipStart = clock.Elapsed.TotalSeconds;
             idleCycle = 0;
+            perchMix = 0;
+            drawnStep = -1;
             blinkWith = null;
             danceLast = -1;
             nodGain = 0;
@@ -1204,6 +1243,8 @@ namespace CapriDesktop
             if (perched && !seated && !walking) Play(perch);
             if ((!perched && seated) || (clip == dangle && !dragging && !falling && !hanging)) Play(idle);
             int index = (int)((now - clipStart) * clip.Fps);
+            perchMix = 0;
+            if ((clip == perch || clip == perchDance) && preferences.PerchFps != 30) index = PerchIndex(now - clipStart, preferences.PerchFps, out perchMix);
             if (clip == leave || clip == perchLeave) return Math.Min(index, clip.Count - 1);
             if ((clip == glitch && index >= glitch.Count) || (clip == wake && index >= wake.Count) || (clip == grin && index >= grin.Count * 2)) { Play(idle); index = 0; }
             if (clip == arrive && index >= arrive.Count)
@@ -1220,7 +1261,7 @@ namespace CapriDesktop
             }
             if (clip == dance || clip == perchDance) { Jam(now, FollowBeat(now)); return index % clip.Count; }
             if (clip != idle && clip != perch) return index % clip.Count;
-            if (!preferences.Motion) return 0;
+            if (!preferences.Motion) { perchMix = 0; return 0; }
             int cycle = index / clip.Count;
             if (cycle != idleCycle)
             {
@@ -1230,6 +1271,15 @@ namespace CapriDesktop
                 if (now >= nextGlitch && speech == null && talkState == TalkState.Off) { nextGlitch = now + 30 + random.NextDouble() * 30; Play(clip == perch ? perchGlitch : glitch); return 0; }
             }
             return index % clip.Count;
+        }
+
+        // Her perch frame t seconds into the loop at a given fps, and how much of the frame after it mixes in, in 256ths.
+        // The art is 30 fps, so the loop is 2 s at every fps: slower holds each frame a while, faster lands between frames.
+        internal static int PerchIndex(double t, int fps, out int mix)
+        {
+            long step = (long)(t * fps), at = step * 30;
+            mix = fps > 30 ? (int)(at % fps * 256 / fps) : 0;
+            return (int)(at / fps);
         }
 
         private void StayOnTop()
@@ -2495,6 +2545,23 @@ namespace CapriDesktop
         }
 
         private bool SleepDue(long quiet) { return preferences.SleepAfter > 0 && quiet >= preferences.SleepAfter * 1000L; }
+
+        internal int PerchFps { get { return preferences.PerchFps; } }
+
+        internal void SetPerchFps(int fps)
+        {
+            preferences.PerchFps = PerchRate(fps);
+            SavePreferences();
+        }
+
+        // The nearest perch fps choice, and 30 when it was never set.
+        internal static int PerchRate(int fps)
+        {
+            if (fps <= 0) return 30;
+            int near = 0;
+            for (int i = 0; i < PerchRates.Length; i++) if (Math.Abs(PerchRates[i] - fps) < Math.Abs(PerchRates[near] - fps)) near = i;
+            return PerchRates[near];
+        }
 
         internal void SetSoundLevel(int percent)
         {
@@ -5351,16 +5418,69 @@ namespace CapriDesktop
             }
             Clip shown = clip;
             int blinkFrom = clip == perch ? PerchBlinkFrom : BlinkFrom;
+            int following = (cell + 1) % clip.Count;
             if ((clip == idle || clip == perch) && blinkWith != null && cell >= blinkFrom && cell < blinkFrom + blinkWith.Count) { shown = blinkWith; cell -= blinkFrom; }
             int talk = MouthCell(now, shown);
+            Bitmap tween = perchMix > 0 ? Tween(shown, cell, following) : null;
             Bitmap next = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb);
-            using (Graphics graphics = Graphics.FromImage(next)) Draw(graphics, shown, cell, talk);
+            using (Graphics graphics = Graphics.FromImage(next)) Draw(graphics, shown, cell, talk, tween);
             Native.DrawLayered(Handle, next, anchor);
+            drawnStep = veiled || now < veilUntil ? -1 : (long)((now - clipStart) * preferences.PerchFps);
+            drawnAt = anchor;
+            drawnFacing = facingLeft;
             Bitmap old = frame;
             frame = next;
             if (old != null) old.Dispose();
             UpdateTalk(now);
             if (pill.Visible) UpdatePill(now);
+        }
+
+        // Above 30 fps, the in-between of a perch frame and the one after it (or the blink frame there), mixed into one spare cell.
+        // Neighbouring frames barely differ, so a straight mix reads as the frame between them, with no extra art in memory.
+        private Bitmap Tween(Clip shown, int cell, int following)
+        {
+            Clip after = clip;
+            if (clip == perch && blinkWith != null && following >= PerchBlinkFrom && following < PerchBlinkFrom + blinkWith.Count) { after = blinkWith; following -= PerchBlinkFrom; }
+            int width = shown.Strip.Width / shown.Count;
+            if (inBetween == null) inBetween = new Bitmap(width, shown.Strip.Height, PixelFormat.Format32bppPArgb);
+            Mix(shown.Strip, cell, after.Strip, following, perchMix, inBetween);
+            return inBetween;
+        }
+
+        // Cell a of one strip mixed with weight 256ths of cell b of another, into a spare cell. Her strips are premultiplied,
+        // so a straight mix of each channel fades her edges right too.
+        private void Mix(Bitmap from, int a, Bitmap to, int b, int weight, Bitmap into)
+        {
+            int width = into.Width, high = into.Height;
+            if (mixFrom == null || mixFrom.Length != width * high) { mixFrom = new int[width * high]; mixTo = new int[width * high]; }
+            Pixels(from, new Rectangle(a * width, 0, width, high), mixFrom, false);
+            Pixels(to, new Rectangle(b * width, 0, width, high), mixTo, false);
+            uint keep = (uint)(256 - weight), take = (uint)weight;
+            for (int i = 0; i < mixFrom.Length; i++)
+            {
+                uint p = (uint)mixFrom[i], q = (uint)mixTo[i];
+                // Two channels at a time: blue and red, then green and alpha, each in its own 16 bits.
+                uint blueRed = (((p & 0xFF00FF) * keep + (q & 0xFF00FF) * take + 0x800080) >> 8) & 0xFF00FF;
+                uint greenAlpha = (((p >> 8) & 0xFF00FF) * keep + ((q >> 8) & 0xFF00FF) * take + 0x800080) & 0xFF00FF00;
+                mixFrom[i] = (int)(greenAlpha | blueRed);
+            }
+            Pixels(into, new Rectangle(0, 0, width, high), mixFrom, true);
+        }
+
+        // Copies a block of a premultiplied bitmap's pixels out, or back in.
+        private static void Pixels(Bitmap image, Rectangle area, int[] pixels, bool write)
+        {
+            BitmapData data = image.LockBits(area, write ? ImageLockMode.WriteOnly : ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
+            try
+            {
+                for (int y = 0; y < area.Height; y++)
+                {
+                    IntPtr row = new IntPtr(data.Scan0.ToInt64() + (long)y * data.Stride);
+                    if (write) Marshal.Copy(pixels, y * area.Width, row, area.Width);
+                    else Marshal.Copy(row, pixels, y * area.Width, area.Width);
+                }
+            }
+            finally { image.UnlockBits(data); }
         }
 
         internal void Say(string text)
@@ -5405,7 +5525,8 @@ namespace CapriDesktop
             veilUntil = now + Shatter.Handoff;
         }
 
-        private void Draw(Graphics graphics, Clip shown, int cell, int talk = -1)
+        // tween, when given, is a spare cell to draw in place of the clip's own.
+        private void Draw(Graphics graphics, Clip shown, int cell, int talk = -1, Bitmap tween = null)
         {
             if (veiled || clock.Elapsed.TotalSeconds < veilUntil) return;
             graphics.CompositingMode = CompositingMode.SourceOver;
@@ -5420,14 +5541,16 @@ namespace CapriDesktop
             graphics.TranslateTransform(Width / 2f, Height / 2f + breathe);
             graphics.RotateTransform(tilt + (float)leanAngle);
             if (facingLeft) graphics.ScaleTransform(-1, 1);
+            Bitmap strip = tween ?? shown.Strip;
             int width = shown.Strip.Width / shown.Count;
+            if (tween != null) cell = 0;
             float tall = preferences.Size * shown.Height;
-            float wide = tall * width / shown.Strip.Height;
+            float wide = tall * width / strip.Height;
             float shiftX = shown.ShiftX * preferences.Size, shiftY = shown.ShiftY * preferences.Size;
             if (shown == walk && walking && preferences.Motion) Wisp(graphics, now, Math.Sign(walkTo - anchor.X) * (facingLeft ? -1 : 1), wide, tall);
             float nod = shown == dance || shown == perchDance ? NodDepth() : 0;
-            if (nod > 0.002f) Nod(graphics, shown.Strip, cell, width, wide, tall, nod, shown == perchDance, shiftX, shiftY);
-            else graphics.DrawImage(shown.Strip, new RectangleF(-wide / 2f + shiftX, -tall / 2f + shiftY, wide, tall), new RectangleF(cell * width, 0, width, shown.Strip.Height), GraphicsUnit.Pixel);
+            if (nod > 0.002f) Nod(graphics, strip, cell, width, wide, tall, nod, shown == perchDance, shiftX, shiftY);
+            else graphics.DrawImage(strip, new RectangleF(-wide / 2f + shiftX, -tall / 2f + shiftY, wide, tall), new RectangleF(cell * width, 0, width, strip.Height), GraphicsUnit.Pixel);
             if (talk >= 0) graphics.DrawImage(mouth.Strip, new RectangleF(-wide / 2f, -tall / 2f, wide, tall), new RectangleF(talk * width, 0, width, mouth.Strip.Height), GraphicsUnit.Pixel);
             if (notes.Count > 0 && preferences.Motion) Notes(graphics, now, seat != null || riding || onPanel);
         }
@@ -5572,6 +5695,7 @@ namespace CapriDesktop
                 {
                     Preferences value = (Preferences)new DataContractJsonSerializer(typeof(Preferences)).ReadObject(stream);
                     if (value.Size < MinSize || value.Size > MaxSize) value.Size = 240;
+                    value.PerchFps = PerchRate(value.PerchFps);
                     CheckKeys(value);
                     return value;
                 }
@@ -5648,6 +5772,7 @@ namespace CapriDesktop
                 mainframe.Dispose();
                 foreach (Clip owned in new[] { idle, blink, blinkGlitch, grin, glitch, dangle, sleep, wake, perch, perchBlink, perchBlinkGlitch, perchGlitch, mouth }) owned.Strip.Dispose();
                 if (frame != null) frame.Dispose();
+                if (inBetween != null) inBetween.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -6500,6 +6625,255 @@ namespace CapriDesktop
                                     graphics.TranslateTransform(anchor.X - originX, anchor.Y - originY);
                                     Draw(graphics, perch, 0);
                                     still.Save(Path.Combine(output, "sit.png"), ImageFormat.Png);
+                                }
+                                {
+                                    // Perch fps: the frame at each fps and time, her 2 s loop, 30 as before, in-betweens, her frame timer, and what each fps costs.
+                                    int fpsWas = preferences.PerchFps;
+                                    double glitchWas = nextGlitch;
+                                    Point anchorWas = anchor;
+                                    nextGlitch = double.MaxValue;
+                                    int mixed;
+                                    string framesWrong = null;
+                                    // Worked by hand: fps, seconds into the loop, frame, and how much of the next frame mixes in, in 256ths.
+                                    double[][] worked = { new double[] { 10, 0.15, 3, 0 }, new double[] { 10, 1.95, 57, 0 }, new double[] { 15, 0.1, 2, 0 }, new double[] { 20, 0.06, 1, 0 }, new double[] { 20, 0.11, 3, 0 }, new double[] { 30, 1.01, 30, 0 }, new double[] { 40, 0.03, 0, 192 }, new double[] { 40, 0.06, 1, 128 }, new double[] { 40, 0.085, 2, 64 }, new double[] { 50, 0.03, 0, 153 }, new double[] { 50, 0.05, 1, 51 }, new double[] { 60, 0.025, 0, 128 }, new double[] { 60, 0.04, 1, 0 }, new double[] { 60, 2.025, 60, 128 } };
+                                    foreach (double[] sample in worked)
+                                        if (PerchIndex(sample[1], (int)sample[0], out mixed) != (int)sample[2] || mixed != (int)sample[3]) framesWrong = sample[0] + " fps at " + sample[1] + " s showed frame " + PerchIndex(sample[1], (int)sample[0], out mixed) + " + " + mixed + "/256";
+                                    foreach (int fps in PerchRates)
+                                    {
+                                        // Frame 0 at 0 s and again at 2 s, never backwards, and fps x 2 different pictures in between.
+                                        System.Collections.Generic.HashSet<int> pictures = new System.Collections.Generic.HashSet<int>();
+                                        int lastShown = 0;
+                                        for (int i = 0; i < 4000; i++)
+                                        {
+                                            int shownAt = PerchIndex(i * 0.0005, fps, out mixed);
+                                            if (shownAt < lastShown) framesWrong = fps + " fps went backwards at " + i * 0.0005 + " s";
+                                            lastShown = shownAt;
+                                            pictures.Add(shownAt * 256 + mixed);
+                                        }
+                                        int nextLoop = PerchIndex(2.0001, fps, out mixed);
+                                        if (pictures.Count != fps * 2 || lastShown > 59 || PerchIndex(0, fps, out mixed) != 0 || nextLoop != 60) framesWrong = fps + " fps showed " + pictures.Count + " pictures in a loop that ended on frame " + lastShown + " and came back on " + nextLoop;
+                                    }
+                                    Random times = new Random(7);
+                                    for (int i = 0; i < 2000; i++)
+                                    {
+                                        double t = times.NextDouble() * 100;
+                                        if (PerchIndex(t, 30, out mixed) != (int)(t * 30) || mixed != 0) framesWrong = "30 fps moved off its old frame at " + t + " s";
+                                    }
+                                    double fpsNow = clock.Elapsed.TotalSeconds;
+                                    Play(perch);
+                                    blinkWith = perchBlink;
+                                    preferences.PerchFps = 60;
+                                    clipStart = fpsNow - 67.5 / 60;
+                                    int fastCell = Advance(fpsNow), fastMix = perchMix;
+                                    preferences.PerchFps = 30;
+                                    clipStart = fpsNow - 1.0105;
+                                    int oldCell = Advance(fpsNow), oldMix = perchMix;
+                                    if (fastCell != 33 || fastMix != 128 || oldCell != 30 || oldMix != 0) framesWrong = "her perch advanced to " + fastCell + " + " + fastMix + " at 60 fps and " + oldCell + " + " + oldMix + " at 30";
+                                    if (framesWrong != null) throw new Exception("Perch frames went wrong: " + framesWrong);
+                                    // Halfway from loop frame 33 to the blink: every channel of every pixel is the rounded average of the two.
+                                    int cellWide = perch.Strip.Width / perch.Count, cellHigh = perch.Strip.Height;
+                                    int[] loopPixels = new int[cellWide * cellHigh], blinkPixels = new int[loopPixels.Length], mixPixels = new int[loopPixels.Length];
+                                    Pixels(perch.Strip, new Rectangle(33 * cellWide, 0, cellWide, cellHigh), loopPixels, false);
+                                    Pixels(perchBlink.Strip, new Rectangle(0, 0, cellWide, cellHigh), blinkPixels, false);
+                                    perchMix = 128;
+                                    Pixels(Tween(perch, 33, 34), new Rectangle(0, 0, cellWide, cellHigh), mixPixels, false);
+                                    int mixMisses = 0, blinkChanged = 0;
+                                    for (int i = 0; i < mixPixels.Length; i++)
+                                    {
+                                        if (loopPixels[i] != blinkPixels[i]) blinkChanged++;
+                                        for (int shift = 0; shift < 32; shift += 8)
+                                            if ((mixPixels[i] >> shift & 255) != ((loopPixels[i] >> shift & 255) * 128 + (blinkPixels[i] >> shift & 255) * 128 + 128) >> 8) mixMisses++;
+                                        int mixAlpha = mixPixels[i] >> 24 & 255;
+                                        if ((mixPixels[i] & 255) > mixAlpha || (mixPixels[i] >> 8 & 255) > mixAlpha || (mixPixels[i] >> 16 & 255) > mixAlpha) mixMisses++;
+                                    }
+                                    if (mixMisses > 0 || blinkChanged < 50) throw new Exception("The perch in-between didn't mix right: " + mixMisses + " misses, " + blinkChanged + " pixels changed by the blink");
+                                    // Drawn, the in-between of frames 10 and 11 lands halfway between drawing each of them. Her breathing is held
+                                    // still for these, so all three are drawn in the same place.
+                                    blinkWith = null;
+                                    Bitmap[] trio = new Bitmap[3];
+                                    int[][] trioPixels = new int[3][];
+                                    bool motionWas = preferences.Motion;
+                                    preferences.Motion = false;
+                                    for (int k = 0; k < 3; k++)
+                                    {
+                                        trio[k] = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb);
+                                        using (Graphics graphics = Graphics.FromImage(trio[k])) Draw(graphics, perch, k == 2 ? 11 : 10, -1, k == 1 ? Tween(perch, 10, 11) : null);
+                                        trioPixels[k] = new int[Width * Height];
+                                        Pixels(trio[k], new Rectangle(0, 0, Width, Height), trioPixels[k], false);
+                                    }
+                                    preferences.Motion = motionWas;
+                                    int tweenOff = 0, tweenFar = 0;
+                                    Rectangle changedArea = Rectangle.Empty;
+                                    for (int i = 0; i < trioPixels[0].Length; i++)
+                                    {
+                                        bool differs = false;
+                                        for (int shift = 0; shift < 32; shift += 8)
+                                        {
+                                            int a = trioPixels[0][i] >> shift & 255, m = trioPixels[1][i] >> shift & 255, b = trioPixels[2][i] >> shift & 255;
+                                            int off = Math.Abs(m * 2 - a - b) / 2;
+                                            tweenOff = Math.Max(tweenOff, off);
+                                            if (off > 3) tweenFar++;
+                                            if (Math.Abs(a - b) > 24) differs = true;
+                                        }
+                                        Rectangle pixel = new Rectangle(i % Width, i / Width, 1, 1);
+                                        if (differs) changedArea = changedArea.IsEmpty ? pixel : Rectangle.Union(changedArea, pixel);
+                                    }
+                                    // A close-up of where frames 10 and 11 differ most: frame 10, the in-between, frame 11.
+                                    Rectangle close = changedArea.IsEmpty ? new Rectangle(0, 0, Width, Height) : Rectangle.Intersect(new Rectangle(0, 0, Width, Height), Rectangle.Inflate(changedArea, 12, 12));
+                                    using (Bitmap sheet = new Bitmap(close.Width * 4 * 3 + 40, close.Height * 4 + 20, PixelFormat.Format32bppArgb))
+                                    using (Graphics graphics = Graphics.FromImage(sheet))
+                                    {
+                                        graphics.Clear(Color.FromArgb(214, 220, 228));
+                                        graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+                                        graphics.PixelOffsetMode = PixelOffsetMode.Half;
+                                        for (int k = 0; k < 3; k++) graphics.DrawImage(trio[k], new Rectangle(10 + k * (close.Width * 4 + 10), 10, close.Width * 4, close.Height * 4), close, GraphicsUnit.Pixel);
+                                        sheet.Save(Path.Combine(output, "perch-tween.png"), ImageFormat.Png);
+                                    }
+                                    foreach (Bitmap drawn in trio) drawn.Dispose();
+                                    if (tweenFar > trioPixels[0].Length * 4 / 100) throw new Exception("The drawn perch in-between wasn't halfway: " + tweenFar + " channels more than 3 off, at most " + tweenOff);
+                                    // Her frame timer: just under a whole number of Windows' 1/64 s ticks off 30, and 33 ms when anything else moves.
+                                    Play(perch);
+                                    if (!SittingStill || !Quiet(fpsNow)) throw new Exception("She wasn't sitting quietly for the perch fps check: seat " + (seat != null) + ", talk " + talkState + ", speech " + (speech != null) + ", bubble " + box.Visible + ", typer " + typer.Visible);
+                                    int[] intervals = { 92, 61, 45, 33, 14, 14, 14 };
+                                    string timerWrong = null;
+                                    for (int i = 0; i < PerchRates.Length; i++)
+                                    {
+                                        preferences.PerchFps = PerchRates[i];
+                                        if (FrameInterval(fpsNow) != intervals[i]) timerWrong = PerchRates[i] + " fps sitting still ticked every " + FrameInterval(fpsNow) + " ms";
+                                    }
+                                    preferences.PerchFps = 10;
+                                    speech = "hi";
+                                    int talkingSlow = FrameInterval(fpsNow);
+                                    preferences.PerchFps = 60;
+                                    int talkingFast = FrameInterval(fpsNow);
+                                    speech = null;
+                                    riding = true;
+                                    int ridingFast = FrameInterval(fpsNow);
+                                    riding = false;
+                                    Play(perchDance);
+                                    int dancingFast = FrameInterval(fpsNow);
+                                    preferences.PerchFps = 10;
+                                    int dancingSlow = FrameInterval(fpsNow);
+                                    Play(perchGlitch);
+                                    int glitching = FrameInterval(fpsNow);
+                                    Play(perch);
+                                    if (talkingSlow != 33 || talkingFast != 14 || ridingFast != 33 || dancingFast != 14 || dancingSlow != 33 || glitching != 33) timerWrong = "talking " + talkingSlow + "/" + talkingFast + ", riding " + ridingFast + ", dancing " + dancingFast + "/" + dancingSlow + ", glitching " + glitching;
+                                    // Off 30, a tick inside the same perch step skips drawing; a new step, a move, a turn or 30 fps draws.
+                                    preferences.PerchFps = 60;
+                                    RenderFrame();
+                                    double sameStep = clipStart + (drawnStep + 0.5) / 60;
+                                    bool skipsSame = Steady(sameStep), drawsNext = !Steady(sameStep + 1.0 / 60);
+                                    anchor = new Point(anchor.X + 1, anchor.Y);
+                                    bool drawsMoved = !Steady(sameStep);
+                                    anchor = anchorWas;
+                                    facingLeft = !facingLeft;
+                                    bool drawsTurned = !Steady(sameStep);
+                                    facingLeft = !facingLeft;
+                                    preferences.PerchFps = 30;
+                                    bool drawsAt30 = !Steady(sameStep);
+                                    if (!skipsSame || !drawsNext || !drawsMoved || !drawsTurned || !drawsAt30) timerWrong = "skipping: same step " + skipsSame + ", next " + drawsNext + ", moved " + drawsMoved + ", turned " + drawsTurned + ", 30 fps " + drawsAt30;
+                                    if (timerWrong != null) throw new Exception("Her perch frame timer went wrong: " + timerWrong);
+                                    // It saves, snaps to a choice and loads; settings from before it start at 30.
+                                    SetPerchFps(60);
+                                    bool savedFast = preferences.PerchFps == 60 && File.ReadAllText(settingsPath).IndexOf("\"PerchFps\":60", StringComparison.Ordinal) >= 0 && LoadPreferences().PerchFps == 60;
+                                    SetPerchFps(37);
+                                    int snapped = preferences.PerchFps;
+                                    SetPerchFps(0);
+                                    int unset = preferences.PerchFps;
+                                    SetPerchFps(99);
+                                    int over = preferences.PerchFps;
+                                    SetPerchFps(7);
+                                    int under = preferences.PerchFps;
+                                    SetPerchFps(30);
+                                    Preferences older = (Preferences)new DataContractJsonSerializer(typeof(Preferences)).ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Size\":240}")));
+                                    if (!savedFast || snapped != 40 || unset != 30 || over != 60 || under != 10 || older.PerchFps != 30 || new Preferences().PerchFps != 30 || LoadPreferences().PerchFps != 30) throw new Exception("Perch fps didn't save and load: saved " + savedFast + ", 37 to " + snapped + ", 0 to " + unset + ", 99 to " + over + ", 7 to " + under + ", old settings " + older.PerchFps);
+                                    // What each fps costs: a timer paced like her frame timer runs her frame work while she sits, and each tick is timed.
+                                    long spent = 0;
+                                    int ticked = 0, drew = 0, intervalAt30 = 0, perchSizeWas = preferences.Size;
+                                    double probeUntil = 0;
+                                    Bitmap seen = frame;
+                                    System.Windows.Forms.Timer probe = new System.Windows.Forms.Timer();
+                                    probe.Tick += delegate
+                                    {
+                                        // A tick that takes longer than the timer's interval is followed straight away by the next, so the probe stops itself on time.
+                                        if (clock.Elapsed.TotalSeconds >= probeUntil) { probe.Stop(); return; }
+                                        frames.Stop();
+                                        long start = Stopwatch.GetTimestamp();
+                                        Tick();
+                                        spent += Stopwatch.GetTimestamp() - start;
+                                        ticked++;
+                                        if (frame != seen) { drew++; seen = frame; }
+                                        int wanted = FrameInterval(clock.Elapsed.TotalSeconds);
+                                        if (probe.Interval != wanted) probe.Interval = wanted;
+                                    };
+                                    Func<double, double> pump = delegate(double seconds)
+                                    {
+                                        double from = clock.Elapsed.TotalSeconds;
+                                        probeUntil = from + seconds;
+                                        probe.Start();
+                                        while (clock.Elapsed.TotalSeconds < probeUntil)
+                                        {
+                                            Native.MsgWaitForMultipleObjectsEx(0, null, 5, 0x04FF, 0x0004);
+                                            Application.DoEvents();
+                                        }
+                                        probe.Stop();
+                                        return clock.Elapsed.TotalSeconds - from;
+                                    };
+                                    // One draw is painting her into a new frame, then showing it on the layered window.
+                                    Func<string> drawCost = delegate
+                                    {
+                                        RenderFrame();
+                                        Stopwatch timed = Stopwatch.StartNew();
+                                        for (int i = 0; i < 30; i++)
+                                            using (Bitmap canvas = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb))
+                                            using (Graphics graphics = Graphics.FromImage(canvas)) Draw(graphics, perch, i);
+                                        double paintMs = timed.Elapsed.TotalMilliseconds / 30;
+                                        timed.Restart();
+                                        for (int i = 0; i < 30; i++) Native.DrawLayered(Handle, frame, anchor);
+                                        double showMs = timed.Elapsed.TotalMilliseconds / 30;
+                                        perchMix = 128;
+                                        timed.Restart();
+                                        for (int i = 0; i < 30; i++) Tween(perch, i, i + 1);
+                                        return "one draw at " + preferences.Size + ": painting " + paintMs.ToString("0.0") + " ms + showing " + showMs.ToString("0.0") + " ms; an in-between mix " + (timed.Elapsed.TotalMilliseconds / 30).ToString("0.00") + " ms";
+                                    };
+                                    System.Collections.Generic.List<string> costs = new System.Collections.Generic.List<string>();
+                                    double[] drawRates = new double[PerchRates.Length + 2];
+                                    test.Stop();
+                                    frames.Stop();
+                                    try
+                                    {
+                                        costs.Add(drawCost());
+                                        for (int pass = 0; pass < PerchRates.Length + 2; pass++)
+                                        {
+                                            bool giant = pass >= PerchRates.Length;
+                                            int fps = giant ? (pass == PerchRates.Length ? 30 : 60) : PerchRates[pass];
+                                            if (giant && preferences.Size != MaxSize) { SetCharacterSize(MaxSize); costs.Add(drawCost()); }
+                                            preferences.PerchFps = fps;
+                                            probe.Interval = FrameInterval(clock.Elapsed.TotalSeconds);
+                                            if (fps == 30 && !giant) intervalAt30 = probe.Interval;
+                                            pump(0.3);
+                                            spent = 0;
+                                            ticked = drew = 0;
+                                            double took = pump(1.5);
+                                            drawRates[pass] = drew / took;
+                                            costs.Add(fps + " fps" + (giant ? " at Giant" : "") + ": " + (ticked / took).ToString("0") + " ticks/s, " + drawRates[pass].ToString("0") + " draws/s, " + (spent * 100.0 / Stopwatch.Frequency / took).ToString("0") + "% of one core");
+                                        }
+                                    }
+                                    finally
+                                    {
+                                        probe.Dispose();
+                                        preferences.PerchFps = fpsWas;
+                                        if (preferences.Size != perchSizeWas) SetCharacterSize(perchSizeWas);
+                                        anchor = anchorWas;
+                                        Location = anchor;
+                                        nextGlitch = glitchWas;
+                                        frames.Start();
+                                        test.Start();
+                                    }
+                                    File.WriteAllLines(Path.Combine(output, "perch-fps.txt"), costs.ToArray());
+                                    if (intervalAt30 != 33 || drawRates[6] < drawRates[3] * 1.5 || drawRates[0] >= drawRates[3] || drawRates[0] > 12 || seat != held) throw new Exception("Perch fps timing went wrong (interval at 30: " + intervalAt30 + ", seat kept " + (seat == held) + "): " + string.Join("; ", costs.ToArray()));
+                                    RenderFrame();
+                                    checks.Add("PASS perch fps: 10 to 60 keeps her 2 s loop with fps x 2 pictures in it, 30 shows the same frames as before and ticks every 33 ms, below 30 holds frames and ticks slower, above 30 mixes exact in-betweens (drawn at most " + tweenOff + "/255 off halfway) and ticks every 1/64 s only while she sits, ticks with nothing new skip drawing, and it saves and loads; " + string.Join("; ", costs.ToArray()));
                                 }
                                 shelf.Hide();
                                 double gone = clock.Elapsed.TotalSeconds;
@@ -10171,6 +10545,18 @@ namespace CapriDesktop
                             mainframe.Sync();
                             if (!personaMissing || !personaOpened || !personaBlankFalls || !personaBlankKept || !personaEditReached || !personaLocked || !personaLongKept || !personaResetKept || !personaResetAgain || !personaResetMissing || !personaMovedOn || !personaEditStays || mainframe.PersonalityShown != Brain.HerDefault || personaHash(Brain.Persona) != todaysPersona) throw new Exception("personality.md went wrong: missing " + personaMissing + ", opened " + personaOpened + ", empty " + personaBlankFalls + "/" + personaBlankKept + ", edited " + personaEditReached + ", locked " + personaLocked + ", long " + personaLongKept + ", reset " + personaResetKept + "/" + personaResetAgain + "/" + personaResetMissing + ", old default " + personaMovedOn + "/" + personaEditStays + ", note " + mainframe.PersonalityShown + ", reply " + reply);
                             checks.Add("PASS personality.md: her default is 0.7.3's prompt byte for byte (4943 characters, same SHA-256); an edit with notes, blank lines and Windows line endings reaches her chat and voice-chat prompts on her next reply and marks her agent for re-tuning; missing, empty and locked files fall back to her default and the Mainframe says so in red; a 20,000-character one is kept whole with a yellow slow-brains warning; Edit personality opens personality.md through the test seam and makes it when missing; Reset keeps theirs as personality.backup.md and never overwrites it with her default; an untouched old default moves to the new one; nothing overlaps");
+                            if (mainframe.PerchStatus != "30 fps | -" || !mainframe.PerchFits) throw new Exception("The perch fps row didn't open right: " + mainframe.PerchStatus + " / fits " + mainframe.PerchFits);
+                            mainframe.SlidePerch(3);
+                            string perchFast = mainframe.PerchStatus;
+                            int perchSaved = preferences.PerchFps;
+                            string perchOverlap = mainframe.Overlap();
+                            snap("mainframe-settings-perch.png");
+                            mainframe.SlidePerch(-6);
+                            string perchSlow = mainframe.PerchStatus;
+                            int perchLow = preferences.PerchFps;
+                            mainframe.SlidePerch(3);
+                            if (perchFast != "60 fps | Perch over 30 fps uses more CPU" || perchSaved != 60 || perchOverlap != null || perchSlow != "10 fps | -" || perchLow != 10 || preferences.PerchFps != 30 || mainframe.PerchStatus != "30 fps | -") throw new Exception("The perch fps slider went wrong: " + perchFast + " / " + perchSaved + " / " + perchOverlap + " / " + perchSlow + " / " + perchLow + " / " + mainframe.PerchStatus);
+                            checks.Add("PASS perch fps slider: under HABITS it shows 30 fps by default, slides from 10 to 60 fps, saves each pick, says when it uses more CPU, and fits the page with nothing overlapping");
                             SetVolume(50);
                             SetSoundLevel(30);
                             SetSleepAfter(600);
@@ -12520,6 +12906,7 @@ namespace CapriDesktop
         [DllImport("user32.dll")] internal static extern int GetDpiForWindow(IntPtr window);
         [DllImport("user32.dll")] internal static extern bool AllowSetForegroundWindow(int process);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, string lParam);
+        [DllImport("user32.dll")] internal static extern int MsgWaitForMultipleObjectsEx(int count, IntPtr[] handles, int milliseconds, int wake, int flags);
         [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr window);
         [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr window, IntPtr dc);
         [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);
