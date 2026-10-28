@@ -268,9 +268,20 @@ namespace CapriDesktop
                         || !windowLog.Contains("set visible of application process \"Discord\" to false") || !linuxSteered || !windowLog.Contains("wmctrl -i -c 0x03c00007") || !windowLog.Contains("xdotool windowminimize 0x04200001") || !windowLog.Contains("wmctrl -i -a 0x04200001")
                         || closedDiscord != "Closed discord." || !noWmctrl.Contains("needs wmctrl"))
                         throw new Exception("Closing and switching apps went wrong: " + closedDiscord + " / " + noWmctrl + " / " + windowLog);
+                    // Her power tool: a lock happens at once, a shutdown waits and cancel stops it. Only the pretend runner sees any of it.
+                    did.Clear();
+                    string lockedLine = Hands.Do("power", new ToolArguments { Action = "lock" });
+                    bool poweredNow = Limbs.Power("lock", 0, false) && Limbs.Power("sleep", 0, true) && Limbs.Power("sign_out", 0, true);
+                    bool waiting = Limbs.Power("shut_down", 600, false);
+                    bool cancelled = Limbs.Power("cancel", 0, false), nothingLeft = !Limbs.Power("cancel", 0, false);
+                    string powerLog = string.Join(" / ", did);
+                    if (lockedLine != "Locked your PC." || !poweredNow || !waiting || !cancelled || !nothingLeft || !powerLog.Contains("loginctl lock-session") || !powerLog.Contains("pmset sleepnow") || !powerLog.Contains("«event aevtrlgo»") || powerLog.Contains("poweroff")
+                        || Limbs.PowerCommands("sign_out", false)[0][0] != "gnome-session-quit" || Limbs.PowerCommands("restart", true)[0][2].IndexOf("restart", StringComparison.Ordinal) < 0 || Limbs.PowerCommands("dance", false) != null)
+                        throw new Exception("Her power tool went wrong on Mac or Linux: " + lockedLine + " / " + powerLog);
                 }
                 finally
                 {
+                    Limbs.Power("cancel", 0, false);
                     Music.Run = runWas;
                     Limbs.Launch = launchWas;
                     Limbs.Patience = patienceWas;
@@ -278,7 +289,7 @@ namespace CapriDesktop
                     Hands.Catalog = catalogWas;
                     Hands.Forget();
                 }
-                checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing and turns the volume on Mac and Linux, closes, minimizes and switches to apps (System Events on Mac, wmctrl on Linux, which says when it's missing); Windows-only shortcuts say so");
+                checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing and turns the volume on Mac and Linux, closes, minimizes and switches to apps (System Events on Mac, wmctrl on Linux, which says when it's missing), and shuts down, restarts, sleeps, locks and signs out, with cancel stopping a wait; Windows-only shortcuts say so");
                 pet.ShowBrains(new[] { "gemma4:e4b", "qwen3:8b" });
                 int brains = pet.BrainChoices;
                 pet.Brain.Remember("what's up?", "Not much, choom.");

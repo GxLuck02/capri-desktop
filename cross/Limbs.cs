@@ -92,6 +92,7 @@ namespace CapriDesktop
             Hands.NowPlaying = delegate { return Song(OnMac); };
             Hands.Windows = delegate { return Windows(OnMac); };
             Hands.Steer = delegate(OpenWindow window, string action) { return Steer(window, action, OnMac); };
+            Hands.Power = delegate(string action, int seconds) { return Power(action, seconds, OnMac); };
             Hands.Chord = delegate { throw new PlatformNotSupportedException("keyboard shortcuts only work on Windows for now"); };
             // A look is already in her transcript; anything else she did goes in as a job, like on Windows.
             brain.Act = delegate(string tool, ToolArguments args)
@@ -276,6 +277,70 @@ namespace CapriDesktop
         }
 
         private static string Quoted(string text) { return (text ?? "").Replace("\\", "\\\\").Replace("\"", "\\\""); }
+
+        // Her power tool on Mac and Linux, like shutdown.exe on Windows: a wait first, so her line plays and "cancel" can stop
+        // it, then the first command that works.
+        private static readonly object powerGate = new object();
+        private static Timer powerLater;
+
+        internal static string[][] PowerCommands(string action, bool mac)
+        {
+            if (mac)
+            {
+                if (action == "shut_down") return new[] { new[] { "osascript", "-e", "tell application \"System Events\" to shut down" } };
+                if (action == "restart") return new[] { new[] { "osascript", "-e", "tell application \"System Events\" to restart" } };
+                if (action == "sleep") return new[] { new[] { "pmset", "sleepnow" } };
+                if (action == "lock") return new[] { new[] { "pmset", "displaysleepnow" } };
+                if (action == "sign_out") return new[] { new[] { "osascript", "-e", "tell application \"loginwindow\" to «event aevtrlgo»" } };
+                return null;
+            }
+            if (action == "shut_down") return new[] { new[] { "systemctl", "poweroff" }, new[] { "loginctl", "poweroff" } };
+            if (action == "restart") return new[] { new[] { "systemctl", "reboot" }, new[] { "loginctl", "reboot" } };
+            if (action == "sleep") return new[] { new[] { "systemctl", "suspend" }, new[] { "loginctl", "suspend" } };
+            if (action == "lock") return new[] { new[] { "loginctl", "lock-session" }, new[] { "xdg-screensaver", "lock" } };
+            if (action != "sign_out") return null;
+            List<string[]> signOut = new List<string[]> { new[] { "gnome-session-quit", "--logout", "--no-prompt" }, new[] { "qdbus", "org.kde.ksmserver", "/KSMServer", "logout", "0", "0", "0" } };
+            string session = Environment.GetEnvironmentVariable("XDG_SESSION_ID");
+            if (!string.IsNullOrEmpty(session)) signOut.Add(new[] { "loginctl", "terminate-session", session });
+            return signOut.ToArray();
+        }
+
+        internal static bool Power(string action, int seconds, bool mac)
+        {
+            if (action == "cancel")
+            {
+                lock (powerGate)
+                {
+                    bool stopped = powerLater != null;
+                    if (stopped) powerLater.Dispose();
+                    powerLater = null;
+                    return stopped;
+                }
+            }
+            string[][] commands = PowerCommands(action, mac);
+            if (commands == null) return false;
+            if (seconds <= 0) return PowerNow(commands);
+            Timer timer = null;
+            timer = new Timer(delegate
+            {
+                lock (powerGate) { if (powerLater != timer) return; powerLater = null; }
+                PowerNow(commands);
+            }, null, Timeout.Infinite, Timeout.Infinite);
+            lock (powerGate) { if (powerLater != null) powerLater.Dispose(); powerLater = timer; }
+            timer.Change(seconds * 1000L, Timeout.Infinite);
+            return true;
+        }
+
+        private static bool PowerNow(string[][] commands)
+        {
+            foreach (string[] command in commands)
+            {
+                string[] args = new string[command.Length - 1];
+                Array.Copy(command, 1, args, 0, args.Length);
+                if (Music.Run(command[0], args) != null) return true;
+            }
+            return false;
+        }
 
         internal static string[] MacFolders()
         {

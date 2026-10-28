@@ -1088,6 +1088,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Wander, dance to music, petting, sizes
 - Opening apps and websites, playing songs on Spotify, skipping tracks, what's playing, volume
 - Closing, minimizing and switching to apps ("close Discord"). Mac asks once to let Capri control System Events; press OK. Linux needs wmctrl (and xdotool to minimize), and on Wayland she only sees apps running through XWayland, like Discord and Spotify.
+- Shut down, restart, sleep, lock and sign out ("lock my PC", "shut down my PC in 10 minutes"; say cancel to stop a wait)
 - "Playing Capri" on your Discord profile, with Show on Discord in Settings
 - Right-click her > Help > Copy error details, with your system, desktop and her brain at the top
 - "Check my screen": she looks when you ask (see "Check my screen on Mac and Linux" below)
