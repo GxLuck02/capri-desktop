@@ -7827,7 +7827,7 @@ namespace CapriDesktop
                             string lagSoon = null, lagBusy = null, lagCooled = null, lagLater = null;
                             for (int i = 0; i < 4; i++) lagSoon = lagSoon ?? Lagging(0.99, 70 + i * 15, true);
                             for (int i = 0; i < 4; i++) lagBusy = lagBusy ?? Lagging(0.99, 2000 + i * 15, false);
-                            for (int i = 0; i < 4; i++) lagCooled = lagCooled ?? Lagging(i == 2 ? 0.4 : 0.99, 2100 + i * 15, true);
+                            for (int i = 0; i < 4; i++) lagCooled = lagCooled ?? Lagging(i == 0 ? 0.4 : 0.99, 2100 + i * 15, true);
                             for (int i = 0; i < 4; i++) lagLater = lagLater ?? Lagging(0.99, 2200 + i * 15, true);
                             lagHot = 0;
                             lagSaid = -LagGap;
@@ -7836,7 +7836,7 @@ namespace CapriDesktop
                             cpuRead = Native.CpuTimes(out cpuIdle, out cpuTotal) && cpuTotal > 0 && cpuIdle >= 0 && cpuIdle <= cpuTotal;
                             if (lagEarly != null || Array.IndexOf(LagLines, lagLine) < 0 || lagSoon != null || lagBusy != null || lagCooled != null || Array.IndexOf(LagLines, lagLater) < 0 || !cpuRead)
                                 throw new Exception("Her lag joke went wrong: " + lagEarly + " / " + lagLine + " / " + lagSoon + " / " + lagBusy + " / " + lagCooled + " / " + lagLater + " / read " + cpuRead);
-                            checks.Add("PASS lag joke: about a minute of the CPU over 90% gets her \"might go cyberpsycho\" line, at most once every half hour, not while she's busy, and a cool-down in between starts the count again");
+                            checks.Add("PASS lag joke: about a minute of the CPU over 90% gets her \"might go cyberpsycho\" line, at most once every half hour, not while she's busy, and a cooler moment starts the count again");
                             DataContractJsonSerializer checkInsJson = new DataContractJsonSerializer(typeof(Preferences));
                             Preferences checkInsNew = new Preferences();
                             Preferences checkInsUpdated = (Preferences)checkInsJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"PopIns\":false,\"Size\":240}")));
