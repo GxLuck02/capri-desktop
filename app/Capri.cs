@@ -10872,6 +10872,7 @@ namespace CapriDesktop
                                 using (Bitmap panel = new Bitmap(mainframe.Width, mainframe.Height))
                                 {
                                     mainframe.DrawToBitmap(panel, new Rectangle(Point.Empty, mainframe.Size));
+                                    mainframe.DrawRims(panel);
                                     panel.Save(Path.Combine(output, name), ImageFormat.Png);
                                 }
                             };
@@ -11017,6 +11018,30 @@ namespace CapriDesktop
                             mainframe.SlidePerch(3);
                             if (perchFast != "60 fps | Perch over 30 fps uses more CPU" || perchSaved != 60 || perchOverlap != null || perchSlow != "10 fps | -" || perchLow != 10 || preferences.PerchFps != 30 || mainframe.PerchStatus != "30 fps | -") throw new Exception("The perch fps slider went wrong: " + perchFast + " / " + perchSaved + " / " + perchOverlap + " / " + perchSlow + " / " + perchLow + " / " + mainframe.PerchStatus);
                             checks.Add("PASS perch fps slider: under HABITS it shows 30 fps by default, slides from 10 to 60 fps, saves each pick, says when it uses more CPU, and fits the page with nothing overlapping");
+                            // A screen too short for Settings, like a 1080p laptop at 150%: the page fits the screen and scrolls, header and all.
+                            int backTop = mainframe.BackTop;
+                            mainframe.ShortScreen = 480;
+                            mainframe.ShowSettings(true);
+                            bool shortOpened = mainframe.ScrollStatus == "480 tall | rims" && mainframe.ClientSize.Height == mainframe.Px(480) && mainframe.Scrolled == 0 && mainframe.ScrollMost > 0 && !mainframe.HideKeyShows;
+                            snap("mainframe-settings-short-top.png");
+                            mainframe.Wheel(-1);
+                            bool shortRow = mainframe.Scrolled == Math.Min(36, mainframe.ScrollMost) && mainframe.BackTop == backTop - mainframe.Px(mainframe.Scrolled);
+                            mainframe.Wheel(-40);
+                            bool shortBottom = mainframe.Scrolled == mainframe.ScrollMost && mainframe.HideKeyShows && mainframe.BackTop < 0;
+                            string shortOverlap = mainframe.Overlap() ?? mainframe.Outside();
+                            snap("mainframe-settings-short-bottom.png");
+                            mainframe.Wheel(40);
+                            bool shortTop = mainframe.Scrolled == 0 && mainframe.BackTop == backTop && !mainframe.HideKeyShows;
+                            string shortTabs = mainframe.TabShows();
+                            bool shortTabbed = mainframe.Scrolled == 0 && mainframe.BackTop == backTop;
+                            string shortPerch = mainframe.PerchStatus;
+                            mainframe.Wheel(-40);
+                            mainframe.ShowSettings(false);
+                            bool shortLeft = mainframe.Scrolled == 0 && mainframe.BackTop == backTop && mainframe.ClientSize.Height == mainTall && mainframe.ScrollStatus == "whole | -";
+                            mainframe.ShortScreen = 0;
+                            mainframe.ShowSettings(true);
+                            if (!shortOpened || !shortRow || !shortBottom || shortOverlap != null || !shortTop || shortTabs != null || !shortTabbed || shortPerch != "30 fps | -" || !shortLeft || mainframe.Scrolled != 0 || !mainframe.PerchFits) throw new Exception("Settings on a short screen went wrong: opened " + shortOpened + ", row " + shortRow + ", bottom " + shortBottom + ", overlap " + shortOverlap + ", top " + shortTop + ", tab " + shortTabs + "/" + shortTabbed + ", perch " + shortPerch + ", left " + shortLeft + ", now " + mainframe.ScrollStatus + " scrolled " + mainframe.Scrolled);
+                            checks.Add("PASS short screens: Settings shrinks to fit a screen 480 px tall; a turn of the wheel over a slider scrolls the page and its header one row and leaves the slider alone; at the bottom the hide key shows, at the top Back is back where it was; Tab scrolls to every control it lands on; nothing overlaps; leaving Settings puts it all back");
                             SetVolume(50);
                             SetSoundLevel(30);
                             SetSleepAfter(600);
@@ -13824,6 +13849,7 @@ namespace CapriDesktop
         [DllImport("user32.dll")] internal static extern int GetDpiForWindow(IntPtr window);
         [DllImport("user32.dll")] internal static extern bool AllowSetForegroundWindow(int process);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, string lParam);
+        [DllImport("user32.dll")] internal static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] internal static extern int MsgWaitForMultipleObjectsEx(int count, IntPtr[] handles, int milliseconds, int wake, int flags);
         [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr window);
         [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr window, IntPtr dc);

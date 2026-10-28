@@ -147,6 +147,17 @@ namespace CapriDesktop
         private readonly List<KeyValuePair<Control, int>> pageLeft = new List<KeyValuePair<Control, int>>();
         private readonly Dictionary<Control, bool> stops = new Dictionary<Control, bool>();
         private bool paged;
+        // On a screen too short for Settings, the whole page, header too, scrolls a row per turn of the wheel.
+        private const int ScrollRow = 36;
+        private readonly List<Control> scrolled = new List<Control>();
+        private readonly Dictionary<Control, int> tops = new Dictionary<Control, int>();
+        private int pageView = PageTall;
+        private int pageScroll;
+        private int wheel;
+        private readonly Rim topRim = new Rim();
+        private readonly Rim bottomRim = new Rim();
+        // Smoke tests pretend the screen's working area is this many px tall, before scaling; 0 uses the real one.
+        internal int ShortScreen;
         private readonly Key languages;
         private readonly ContextMenuStrip languageMenu;
         private readonly Slider volume;
@@ -210,6 +221,7 @@ namespace CapriDesktop
             more.Accent = Look.Cyan;
             more.Loud = true;
             int header = Controls.Count;
+            for (int i = 0; i < header; i++) Scrolls(Controls[i]);
             Caption("BRAIN >", 28, 58, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
             brainName = Caption("", 28, 78, Look.Mono(10.5f, FontStyle.Bold, GraphicsUnit.Point), Look.Ink);
             brainNote = Caption("", 28, 100, Font, Look.Dim);
@@ -486,11 +498,16 @@ namespace CapriDesktop
             {
                 Control control = Controls[i];
                 pageLeft.Add(new KeyValuePair<Control, int>(control, control.Left));
+                Scrolls(control);
                 control.Left += Far;
                 Reachable(control, false);
                 // Clicking into anything else while a key is being picked keeps the old key, so typing in a box is never swallowed.
                 control.Enter += delegate { if (capturing != 0 && control != confirmKeys && control != cancelKeys && control != PickedKey) CancelKeys(); };
             }
+            Controls.Add(topRim);
+            Controls.Add(bottomRim);
+            topRim.BringToFront();
+            bottomRim.BringToFront();
             Searching();
             Sync();
         }
@@ -549,11 +566,63 @@ namespace CapriDesktop
             close.Left = Scaled(330 + edge);
             if (Hidden(ActiveControl)) more.Focus();
             if (on) Sync();
+            wheel = 0;
             Arrange(expanded);
             Rectangle area = Screen.FromControl(this).WorkingArea;
             if (on && Right > area.Right) Left = Math.Max(area.Left, area.Right - Width);
             // She opens centred on the shorter main page, so the taller Settings page can hang off the bottom.
             if (on && Bottom > area.Bottom) Top = Math.Max(area.Top, area.Bottom - Height);
+        }
+
+        // A header or settings control moves with the page, and Tab landing on it scrolls it into view.
+        private void Scrolls(Control control)
+        {
+            scrolled.Add(control);
+            control.Enter += delegate { Reveal(control); };
+        }
+
+        // Scrolls just far enough to show all of a control Tab reached. A click leaves the page where it is.
+        private void Reveal(Control control)
+        {
+            if (!paged || pageView >= PageTall || Control.MouseButtons != MouseButtons.None) return;
+            float s = DeviceScale();
+            int edge = Scaled(8);
+            // Near the top it goes all the way up, so the header shows too.
+            int up = pageScroll - (int)Math.Ceiling((edge - control.Top) / s);
+            if (control.Top < edge) ScrollPage(up < 2 * ScrollRow ? 0 : up);
+            else if (control.Bottom > ClientSize.Height - edge) ScrollPage(pageScroll + (int)Math.Ceiling((control.Bottom - ClientSize.Height + edge) / s));
+        }
+
+        // Moves the page and its header up by `to` px, as far as the page runs past the screen. Off Settings it's always 0.
+        private void ScrollPage(int to)
+        {
+            int next = paged ? Math.Max(0, Math.Min(PageTall - pageView, to)) : 0;
+            if (next == pageScroll) return;
+            if (pageScroll == 0) foreach (Control control in scrolled) tops[control] = control.Top;
+            pageScroll = next;
+            int shift = Scaled(next);
+            // Every control moves at once, with no half-scrolled frame in between.
+            Native.SendMessage(Handle, 0x000B, IntPtr.Zero, IntPtr.Zero);
+            try { foreach (Control control in scrolled) control.Top = tops[control] - shift; }
+            finally { Native.SendMessage(Handle, 0x000B, new IntPtr(1), IntPtr.Zero); }
+            Invalidate(true);
+        }
+
+        // How much of the settings page the screen's working area has room for, before scaling.
+        private int Fit()
+        {
+            int room = ShortScreen > 0 ? ShortScreen : (int)(Screen.FromControl(this).WorkingArea.Height / DeviceScale());
+            return Math.Max(4 * ScrollRow, Math.Min(PageTall, room));
+        }
+
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            if (!paged || pageView >= PageTall) return;
+            wheel += e.Delta;
+            int rows = wheel / 120;
+            wheel -= rows * 120;
+            if (rows != 0) ScrollPage(pageScroll - rows * ScrollRow);
         }
 
         private void Reachable(Control control, bool on)
@@ -631,13 +700,18 @@ namespace CapriDesktop
             Graphics graphics = e.Graphics;
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
             Backdrop(graphics, this, s);
-            using (GraphicsPath edge = Look.Plate(new RectangleF(s, s, Width - 2 * s - 1, Height - 2 * s - 1), 12 * s, -1, Height / 2f, 0, true))
-            using (Pen cyan = new Pen(Look.Cyan, 2 * s))
-                graphics.DrawPath(cyan, edge);
+            Frame(graphics, s);
             if (paged)
             {
                 using (Brush red = new SolidBrush(Look.Red))
-                    foreach (int[] bar in PageBars) graphics.FillRectangle(red, (13 + bar[0]) * s, bar[1] * s, 3 * s, (bar[2] - bar[1]) * s);
+                    foreach (int[] bar in PageBars) graphics.FillRectangle(red, (13 + bar[0]) * s, (bar[1] - pageScroll) * s, 3 * s, (bar[2] - bar[1]) * s);
+                if (pageView >= PageTall) return;
+                // A thin thumb on her right edge shows how much of the page is on screen, and where.
+                float rail = Height - 36 * s;
+                float thumb = rail * pageView / PageTall;
+                float at = 18 * s + (rail - thumb) * pageScroll / (PageTall - pageView);
+                using (Brush track = new SolidBrush(Track)) graphics.FillRectangle(track, Width - 9 * s, 18 * s, 3 * s, rail);
+                using (Brush lit = new SolidBrush(Look.Cyan)) graphics.FillRectangle(lit, Width - 9 * s, at, 3 * s, thumb);
                 return;
             }
             int shift = (expanded ? SetupHeight : 0) + KeyRow;
@@ -651,6 +725,14 @@ namespace CapriDesktop
             }
             if (expanded) Dots(graphics, s, 210, filled);
             if (below > 0) Dots(graphics, s, InstallAt + 24 + shift - fold, voiceFilled);
+        }
+
+        // Her cyan frame, which the rims draw again over settings scrolled under her edges.
+        private void Frame(Graphics graphics, float s)
+        {
+            using (GraphicsPath edge = Look.Plate(new RectangleF(s, s, Width - 2 * s - 1, Height - 2 * s - 1), 12 * s, -1, Height / 2f, 0, true))
+            using (Pen cyan = new Pen(Look.Cyan, 2 * s))
+                graphics.DrawPath(cyan, edge);
         }
 
         // The dotted bar her brain setup and her voice downloads share.
@@ -708,7 +790,16 @@ namespace CapriDesktop
             updateNote.MaximumSize = new Size(Scaled(328), 0);
             customNote.MaximumSize = new Size(Scaled(328), 0);
             if (keysNote != null) keysNote.MaximumSize = new Size(Scaled(512), 0);
-            ClientSize = new Size(Scaled(paged ? Wide + Column : Wide), Scaled(paged ? PageTall : Tall + shift + below - fold));
+            if (paged) pageView = Fit();
+            ClientSize = new Size(Scaled(paged ? Wide + Column : Wide), Scaled(paged ? pageView : Tall + shift + below - fold));
+            ScrollPage(pageScroll);
+            bool scrolls = paged && pageView < PageTall;
+            topRim.Visible = bottomRim.Visible = scrolls;
+            if (scrolls)
+            {
+                topRim.Bounds = new Rectangle(Scaled(14), 0, ClientSize.Width - Scaled(28), Scaled(3));
+                bottomRim.Bounds = new Rectangle(Scaled(14), ClientSize.Height - Scaled(3), ClientSize.Width - Scaled(28), Scaled(3));
+            }
             Invalidate(true);
         }
 
@@ -823,7 +914,7 @@ namespace CapriDesktop
         internal void SlidePerch(int steps) { Press(perchFps, steps); }
 
         // The HABITS row and KEYS fit inside the settings page.
-        internal bool PerchFits { get { return ClientRectangle.Contains(perchFpsName.Bounds) && ClientRectangle.Contains(perchFps.Bounds) && ClientRectangle.Contains(hideKeys.Bounds); } }
+        internal bool PerchFits { get { Rectangle page = PageArea; return page.Contains(perchFpsName.Bounds) && page.Contains(perchFps.Bounds) && page.Contains(hideKeys.Bounds); } }
 
         internal string Status { get { return brainName.Text + " | " + brainNote.Text; } }
 
@@ -856,13 +947,73 @@ namespace CapriDesktop
         // A settings control that pokes out past the page's edge, or null.
         internal string Outside()
         {
+            Rectangle page = PageArea;
             foreach (KeyValuePair<Control, int> entry in pageLeft)
             {
                 Control control = entry.Key;
                 if (!control.Visible || (control is Label && control.Text.Length == 0)) continue;
-                if (!ClientRectangle.Contains(control.Bounds)) return control.Text.Length > 0 ? control.Text : control.AccessibleName;
+                if (!page.Contains(control.Bounds)) return control.Text.Length > 0 ? control.Text : control.AccessibleName;
             }
             return null;
+        }
+
+        // The whole settings page, scrolled or not, in the window's own px.
+        private Rectangle PageArea { get { return paged ? new Rectangle(0, -Scaled(pageScroll), ClientSize.Width, Math.Max(ClientSize.Height, Scaled(PageTall))) : ClientRectangle; } }
+
+        // Settings on a short screen: how much shows (or whole) and whether the rims hold her frame together.
+        internal string ScrollStatus { get { return (paged && pageView < PageTall ? pageView + " tall" : "whole") + " | " + (topRim.Visible && bottomRim.Visible ? "rims" : "-"); } }
+
+        internal int Scrolled { get { return pageScroll; } }
+
+        internal int ScrollMost { get { return Math.Max(0, PageTall - pageView); } }
+
+        internal int BackTop { get { return more.Top; } }
+
+        internal bool HideKeyShows { get { return ClientRectangle.Contains(hideKeys.Bounds); } }
+
+        internal int Px(int value) { return Scaled(value); }
+
+        // DrawToBitmap paints child controls bottom to top, so a screenshot draws the rims again over what's under them, as the screen does.
+        internal void DrawRims(Bitmap panel)
+        {
+            foreach (Rim rim in new[] { topRim, bottomRim })
+            {
+                if (!rim.Visible) continue;
+                using (Bitmap strip = new Bitmap(rim.Width, rim.Height))
+                using (Graphics graphics = Graphics.FromImage(panel))
+                {
+                    rim.DrawToBitmap(strip, new Rectangle(Point.Empty, rim.Size));
+                    graphics.DrawImageUnscaled(strip, rim.Location);
+                }
+            }
+        }
+
+        // Turns the mouse wheel over the perch slider, so it reaches the page the way a real wheel does.
+        internal void Wheel(int notches)
+        {
+            Point at = perchFps.PointToScreen(new Point(perchFps.Width / 2, perchFps.Height / 2));
+            for (int i = 0; i < Math.Abs(notches); i++)
+                Native.SendMessage(perchFps.Handle, 0x020A, new IntPtr((notches > 0 ? 120 : -120) << 16), new IntPtr((at.Y << 16) | (at.X & 0xFFFF)));
+        }
+
+        // Tabs through Settings from Back and names the first control that gets focus without all of it showing, or null.
+        internal string TabShows()
+        {
+            Control from = more;
+            bool keys = false;
+            for (int i = 0; i < 160; i++)
+            {
+                if (!SelectNextControl(from, true, true, true, true)) break;
+                Control at = ActiveControl;
+                if (at == null || at == from || at == more) break;
+                Control whole = at;
+                while (whole.Parent != this) whole = whole.Parent;
+                if (!ClientRectangle.Contains(whole.Bounds)) return "Tab reached " + (whole.AccessibleName ?? whole.Text) + " half off the screen";
+                keys = keys || whole == hideKeys;
+                from = at;
+            }
+            more.Focus();
+            return keys ? null : "Tab never reached the hide key";
         }
 
         internal string VoiceStyleStatus { get { return pitchName.Text + " | " + paceName.Text + " | " + robotName.Text + " | " + glitchName.Text; } }
@@ -1456,6 +1607,34 @@ namespace CapriDesktop
             internal Note() { SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true); }
 
             protected override void OnPaintBackground(PaintEventArgs e) { Backdrop(e.Graphics, this, ((Mainframe)Parent).DeviceScale()); }
+
+            protected override void WndProc(ref Message message)
+            {
+                if (message.Msg == 0x0084) { message.Result = new IntPtr(-1); return; }
+                base.WndProc(ref message);
+            }
+        }
+
+        // A strip along her top or bottom edge that keeps her frame whole over settings scrolled under it.
+        private sealed class Rim : Label
+        {
+            internal Rim()
+            {
+                SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+                AutoSize = false;
+                BackColor = Look.Panel;
+                Visible = false;
+            }
+
+            protected override void OnPaintBackground(PaintEventArgs e) { Backdrop(e.Graphics, this, ((Mainframe)Parent).DeviceScale()); }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Mainframe owner = (Mainframe)Parent;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                e.Graphics.TranslateTransform(-Left, -Top);
+                owner.Frame(e.Graphics, owner.DeviceScale());
+            }
 
             protected override void WndProc(ref Message message)
             {
