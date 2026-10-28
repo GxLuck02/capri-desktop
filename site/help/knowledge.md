@@ -605,7 +605,7 @@ If your server can't say a line, her free voice says that line instead, and the 
 - "Your voice server has no /v1/audio/speech (HTTP 404). Check its address."
 - "Your voice server wants a key (HTTP 401). Add it under Any voice model." or "Your voice server turned down its key (HTTP 401)."
 - "Your voice server said HTTP 500: ..." with the server's own words.
-- Fish Audio and OpenAI go by name: "Fish Audio turned down its key (HTTP 401).", "Can't reach Fish Audio. Check your internet connection."
+- Fish Audio and OpenAI go by name: "Fish Audio turned down its key (HTTP 401).", "Can't reach Fish Audio. Check your internet connection.", "Fish Audio can't find that voice (HTTP 404). Check its ID or link on fish.audio." or "Fish Audio is busy (HTTP 429). Try again in a moment."
 - "Fish Audio wants credit for s2.1-pro (HTTP 402). For its free tier, set Model to s2.1-pro-free." Fish Audio's paid models need credit on your Fish Audio account.
 - Model files: "That's no voice model Capri can run. Pick a Piper, Kokoro or Kitten model for sherpa-onnx: its .tar.bz2, or the .onnx in its folder.", "Voice model files run on her free voice. Get free voice under VOICE first." or "That voice model wouldn't start. Check it's a Piper, Kokoro or Kitten model for sherpa-onnx."
 

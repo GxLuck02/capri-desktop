@@ -2582,7 +2582,7 @@ namespace CapriDesktop
                     // Fish Audio's API takes its voice as a reference ID, and its model in a header.
                     body.Append("\"text\":").Append(Voice.Quote(piece));
                     if (!string.IsNullOrEmpty(speaker)) body.Append(",\"reference_id\":").Append(Voice.Quote(FishVoice(speaker)));
-                    body.Append(",\"format\":\"wav\"}");
+                    body.Append(",\"format\":\"wav\",\"sample_rate\":").Append(YourVoice.Rate).Append('}');
                 }
                 else
                 {
@@ -2642,7 +2642,10 @@ namespace CapriDesktop
                 string detail;
                 using (response)
                 using (StreamReader reader = new StreamReader(response.GetResponseStream())) detail = Said(reader.ReadToEnd());
+                // Fish Audio's 404 is a voice it can't find, and its 429 is too many lines too fast.
+                if (status == 404 && name == "Fish Audio") throw new VoiceException("Fish Audio can't find that voice (HTTP 404). Check its ID or link on fish.audio.");
                 if (status == 404) throw new VoiceException(name + " has no " + endpoint.AbsolutePath + " (HTTP 404). Check its address.");
+                if (status == 429) throw new VoiceException(name + " is busy (HTTP 429). Try again in a moment.");
                 if (status == 401 || status == 403) throw new VoiceException(string.IsNullOrEmpty(key) ? name + " wants a key (HTTP " + status + "). Add it under " + Menu + "." : name + " turned down its key (HTTP " + status + ").");
                 // Fish Audio's paid models answer 402 on an account with no credit. Its free tier is a model of its own.
                 if (status == 402 && name == "Fish Audio" && model != FishFree) throw new VoiceException("Fish Audio wants credit for " + (string.IsNullOrEmpty(model) ? "its usual model" : model) + " (HTTP 402). For its free tier, set Model to " + FishFree + ".");

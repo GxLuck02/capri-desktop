@@ -13332,7 +13332,7 @@ namespace CapriDesktop
                             lock (vsAsked) vsBody = vsAsked[vsAsked.Count - 1];
                             if (vsNotes.Count != 0 || vsRate != 24000 || Math.Abs(vsFished.Length - 24000) > 48 || vsBody.IndexOf("POST /v1/tts HTTP/1.1\r\n", StringComparison.Ordinal) != 0
                                 || vsBody.IndexOf("\r\nAuthorization: Bearer fish-test-4321\r\n", StringComparison.Ordinal) < 0 || vsBody.IndexOf("\r\nmodel: " + VoiceServer.FishFree + "\r\n", StringComparison.Ordinal) < 0
-                                || !vsBody.EndsWith("\r\n\r\n{\"text\":\"Hey chewm, this is Fish.\",\"reference_id\":\"0123456789abcdef0123456789abcdef\",\"format\":\"wav\"}", StringComparison.Ordinal))
+                                || !vsBody.EndsWith("\r\n\r\n{\"text\":\"Hey chewm, this is Fish.\",\"reference_id\":\"0123456789abcdef0123456789abcdef\",\"format\":\"wav\",\"sample_rate\":24000}", StringComparison.Ordinal))
                                 throw new Exception("Fish Audio's API got the wrong request: " + string.Join(" / ", vsNotes.ToArray()) + " / " + vsFished.Length + " samples / " + vsBody);
                             // Voice model files: what a folder holds, its name on her button, and archives unpacked into her models folder.
                             string vsModels = Path.Combine(Path.GetDirectoryName(settingsPath), "models-test");
