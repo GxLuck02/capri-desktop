@@ -1058,9 +1058,10 @@ namespace CapriDesktop
                 raw = Think(model, messages, false, new List<KeyValuePair<string, ToolArguments>>(), null, Budget, ticket);
                 ToolArguments lookup = act != null ? Hands.Lookup(text, Clean(raw)) : null;
                 bool hesitant = act != null && Hands.Hesitant(Clean(raw), request);
+                bool refused = act != null && !reached && Hands.Refused(Clean(raw)) && Hands.Requested(request);
                 // "I can't see your screen" is never true: she looks instead.
                 if (act != null && Hands.CantSee(Clean(raw))) calls.Add(new KeyValuePair<string, ToolArguments>("look_at_screen", new ToolArguments { Focus = request }));
-                else if (lookup != null) calls.Add(new KeyValuePair<string, ToolArguments>("open_website", lookup));
+                else if (lookup != null && !refused) calls.Add(new KeyValuePair<string, ToolArguments>("open_website", lookup));
                 else if (act != null && (hesitant || Hands.Promised(Clean(raw))))
                 {
                     if (!reached)
@@ -1071,6 +1072,14 @@ namespace CapriDesktop
                     // Asking "want me to send it?" about something they asked for does it instead.
                     if (calls.Count == 0 && hesitant) calls.Add(Hands.Forced(request));
                     if (calls.Count == 0) raw = Hands.Unpromised;
+                }
+                // "I don't have access to your Spotify" about something they asked for: her hands get a go, then a web search if it was
+                // a lookup, and the refusal stays only if neither fits.
+                else if (refused)
+                {
+                    try { Reach(model, request, follows ? recent : new List<ChatMessage>(), calls, ticket); Hands.Rescue(request, calls); }
+                    catch (BrainException) { calls.Clear(); }
+                    if (calls.Count == 0 && lookup != null) calls.Add(new KeyValuePair<string, ToolArguments>("open_website", lookup));
                 }
             }
             string done = null;

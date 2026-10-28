@@ -424,6 +424,24 @@ namespace CapriDesktop
 
         internal static bool CantSee(string reply) { return Unseen.IsMatch(reply ?? ""); }
 
+        // "I don't have access to your Spotify" or "no puedo abrir apps" is never true either: her hands get a go first.
+        private static readonly Regex Refusal = new Regex(
+            @"\bi (can'?t|cannot|can not|couldn'?t)\s+(\w+\s+){0,2}" + Able + @"|\bi('?m| am) (unable|not able) to\s+(\w+\s+){0,2}" + Able + @"|\bi (don'?t|do not) have (the )?(ability|permission|a way|any way) to\s+(\w+\s+){0,2}" + Able +
+            @"|\b(don'?t|do not|can'?t|cannot) (have )?(any )?access (to )?((your|ur|the|their)\s+)?(apps?|spotify|youtube|discord|steam|music|pc|computer|programs?|browser|files|media player)\b" +
+            @"|\bno (tengo|puedo) (acceso|abrir|reproducir|poner|controlar|acceder|usar|buscar|cerrar|tocar)\b|\bno tengo (forma|manera) de\b" +
+            @"|\bje ne (peux|sais) pas (ouvrir|lancer|jouer|contr[oô]ler|acc[ée]der|utiliser|chercher|fermer|mettre)\b|\bje n'ai pas acc[eè]s\b", RegexOptions.IgnoreCase);
+        private const string Able = @"(open|launch|start|run|play|pause|resume|skip|control|access|use|search|google|close|mute|unmute|put on|turn (up|down|on|off)|change)\b";
+
+        internal static bool Refused(string reply) { return Refusal.IsMatch((reply ?? "").Replace('’', '\'')); }
+
+        // They asked her to do something, rather than asked about her: "do you play Valorant?" is a question, "can you put on some music?" isn't.
+        internal static bool Requested(string said)
+        {
+            string text = (said ?? "").Trim();
+            if (!Regex.IsMatch(text, @"\?\s*$")) return true;
+            return Regex.IsMatch(Regex.Replace(Opener.Replace(text, ""), @"^[\s¿¡]+", ""), @"^((hey|yo|ok|okay|oye|hola)[\s,]+)?(capri[\s,]+)?((can|could|would|will) (you|u)|(me )?(puedes|podr[ií]as|pones|abres)|(est-ce que )?tu (peux|pourrais)|peux-tu|pourrais-tu)\b", RegexOptions.IgnoreCase);
+        }
+
         private static readonly Regex Chatter = new Regex(@"^(play (with|along|around|dead|dumb|nice|fair|a game with|a joke)|open up (to|about)|start (a story|a joke|an argument)|run (a mile|a race)|kill (the boss|me|time)|look (at it this way|forward)|show me (how|why)|check my (spelling|grammar)|rate my joke|mets-toi)\b", RegexOptions.IgnoreCase);
 
         private static string Asked(string said)

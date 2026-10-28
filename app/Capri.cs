@@ -10456,6 +10456,37 @@ namespace CapriDesktop
                                     finally { Brain.Ollama = splitOllama; eagerFake.Stop(); }
                                     checks.Add("PASS no asking first: when her reply asks \"want me to send it?\" about a job they asked for, she does the job; \"yes\" to an old ask runs the first request; chat offers like another joke stay chat");
 
+                                    if (!Hands.Refused("Sorry choom, I don't have access to your Spotify.") || !Hands.Refused("I can't actually control your music, choom.") || !Hands.Refused("I'm unable to open apps.") || !Hands.Refused("No tengo acceso a tu Spotify.") || !Hands.Refused("No puedo abrir aplicaciones.") || !Hands.Refused("Je ne peux pas ouvrir Discord.")
+                                        || Hands.Refused("I can't wait to hear it!") || Hands.Refused("I can't believe you beat that boss.") || Hands.Refused("I don't have a body, choom.") || Hands.Refused("Playing it now.")) throw new Exception("Refusals were spotted wrong.");
+                                    if (!Hands.Requested("can you get me some tunes?") || !Hands.Requested("gimme some tunes") || !Hands.Requested("¿me pones música?") || Hands.Requested("do you play valorant?") || Hands.Requested("what can you do?")) throw new Exception("Requests and questions about her were told apart wrong.");
+                                    System.Collections.Generic.List<string> refusedAsked = new System.Collections.Generic.List<string>();
+                                    System.Net.Sockets.TcpListener refusedFake;
+                                    Brain.Ollama = FakeServer(new string[]
+                                    {
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"Sorry choom, I don't have access to your Spotify.\"},\"done_reason\":\"stop\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"function\":{\"name\":\"play_music\",\"arguments\":{\"song\":\"lofi beats\"}}}]},\"done_reason\":\"stop\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"Lofi's on, choom.\"},\"done_reason\":\"stop\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"I can't play Valorant, I'm a desktop pet.\"},\"done_reason\":\"stop\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"I can't open that one.\"},\"done_reason\":\"stop\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"chat\"},\"done_reason\":\"stop\"}"
+                                    }, refusedAsked, out refusedFake);
+                                    try
+                                    {
+                                        System.Collections.Generic.List<string> refusedJobs = new System.Collections.Generic.List<string>();
+                                        Brain refuser = new Brain();
+                                        refuser.Model = "refuser-test";
+                                        refuser.Act = delegate(string name, ToolArguments args) { refusedJobs.Add(name + "|" + args.Song); return "Playing lofi beats on Spotify."; };
+                                        string refusedTunes = refuser.Ask("can you get me some tunes?");
+                                        string refusedGame = refuser.Ask("do you play valorant?");
+                                        string refusedThing = refuser.Ask("put my playlist thing on");
+                                        string refusedRan = string.Join(" / ", refusedJobs.ToArray());
+                                        int refusedCalls;
+                                        lock (refusedAsked) refusedCalls = refusedAsked.Count;
+                                        if (refusedTunes != "Lofi's on, choom." || refusedGame != "I can't play Valorant, I'm a desktop pet." || refusedThing != "I can't open that one." || refusedRan != "play_music|lofi beats" || refusedCalls != 6) throw new Exception("A refusal of something she can do wasn't tried with her hands: " + refusedTunes + " / " + refusedGame + " / " + refusedThing + " / " + refusedRan + " / " + refusedCalls);
+                                    }
+                                    finally { Brain.Ollama = splitOllama; refusedFake.Stop(); }
+                                    checks.Add("PASS no false refusals: when her reply says she can't open, play or access something they asked for (English, Spanish or French), her hands try it first; questions about her, and things her hands can't do, keep the reply");
+
                                     System.Collections.Generic.List<string> reachAsked = new System.Collections.Generic.List<string>();
                                     System.Net.Sockets.TcpListener reachFake;
                                     string reachUrl = FakeServer(new string[]
