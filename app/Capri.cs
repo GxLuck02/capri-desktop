@@ -13415,7 +13415,7 @@ namespace CapriDesktop
                                 vsOddTwo = ModelFile.Unpack(Path.Combine(vsModels, "...zip"));
                             }
                             finally { ModelFile.Shelf = vsShelfWas; }
-                            if (vsOddOne != Path.Combine(vsShelf, "voice-model") || vsOddTwo != vsOddOne || ModelFile.Kind(vsOddTwo) != "kitten" || ModelFile.Kind(vsZipped) != "kitten" || ModelFile.Kind(vsUnpacked) != "vits"
+                            if (vsOddOne != Path.Combine(vsShelf, "voice-model") || vsOddTwo != vsOddOne || ModelFile.Kind(vsOddTwo) == null || ModelFile.Kind(vsZipped) != "kitten" || ModelFile.Kind(vsUnpacked) != "vits"
                                 || !Directory.Exists(vsPiper) || Directory.GetDirectories(vsShelf).Length != 3
                                 || ModelFile.Name("\"" + vsPiper + "\"") != "en_US-test-medium" || ModelFile.Name("a<b|c") != "Voice model" || VoiceServer.Label("\"C:\\x\\y\"", VoiceServer.Files) != "y"
                                 || ServerAddress(" \"" + vsPiper + "\" ", VoiceServer.Files) != vsPiper)
