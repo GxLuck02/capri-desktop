@@ -257,7 +257,7 @@ The main page has three sections: BRAIN, VOICE and CAPRI.
   - "NVIDIA · <model>", "ChatGPT · <model>", "Claude · <model>" or "DeepSeek · <model>" with "Using your <company> key"
   - "No brain yet" or "Setup stopped" when she has none
   - "Looking for a brain..." while she checks
-- Model menu: pick a different model for the brain she's using.
+- Model menu: pick a different model for the brain she's using. Your chat carries on with the new model, and with a new tier or key too.
 - Refresh: looks for her brain again (for example after you open Ollama).
 - Setup steps, when she has no brain yet:
   - ✓ your RAM and graphics card

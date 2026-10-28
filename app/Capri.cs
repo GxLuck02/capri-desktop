@@ -4107,9 +4107,8 @@ namespace CapriDesktop
             brain.Cancel();
             ++asking;
             CloseTalk();
+            // Her chat carries on with the new model, a stand-in for a stuck one too, so changing brains never wipes what she was doing.
             brain.Model = name;
-            // A stand-in for a stuck model carries on the same chat.
-            if (keep) brain.Forget();
             Cloud remote = brain.Remote;
             if (remote != null) remote.Model = name;
             if (!keep) return;
@@ -4177,7 +4176,6 @@ namespace CapriDesktop
             Mirror();
             SavePreferences();
             brain.Remote = TierCloud();
-            brain.Forget();
             cloudModels = null;
             ShowTiers();
             FindBrain();
@@ -4196,7 +4194,6 @@ namespace CapriDesktop
             ++asking;
             CloseTalk();
             brain.Remote = null;
-            brain.Forget();
             cloudModels = null;
             if (preferences.Tier == 1)
             {
@@ -4235,7 +4232,6 @@ namespace CapriDesktop
                         if (remote.Model == null) { mainframe.ShowProblem("That key can't use any chat models."); return; }
                         brain.Cancel();
                         brain.Remote = remote;
-                        brain.Forget();
                         if (remote.Kind == "nvidia") preferences.NvidiaKey = Voice.Protect(key);
                         else preferences.PaidKey = Voice.Protect(key);
                         preferences.Tier = remote.Kind == "nvidia" ? 1 : 2;
@@ -11805,8 +11801,12 @@ namespace CapriDesktop
                             mainframe.ShowSetup(here, Engine.Fit(here), true, null);
                             if (mainframe.ClientSize.Height <= tall) throw new Exception("Setup card did not make room.");
                             mainframe.ShowOllama(new[] { "gemma4:e4b", "qwen3:1.7b" }, "gemma4:e4b");
+                            brain.Remember("what's up?", "Not much, choom.");
+                            int chatBeforePick = brain.History.Count;
                             ChooseModel("qwen3:1.7b");
                             if (brain.Model != "qwen3:1.7b" || preferences.Model != "qwen3:1.7b") throw new Exception("Model choice did not stick.");
+                            if (chatBeforePick < 2 || brain.History.Count != chatBeforePick) throw new Exception("Picking another model wiped her chat: " + chatBeforePick + " then " + brain.History.Count);
+                            checks.Add("PASS a new brain keeps the chat: picking another model carries on the same conversation instead of wiping it");
                             string sealedKey = Voice.Protect("sk_test_capri_1234");
                             if (Voice.Unprotect(sealedKey) != "sk_test_capri_1234" || sealedKey.Contains("sk_test") || Voice.Unprotect("not a key") != null || Voice.Tail("sk_test_capri_1234") != "1234") throw new Exception("Key storage failed.");
                             if (Voice.Spoken("[GLITCH] Hey *choom*, [static] ready?") != "Hey choom, ready?" || Voice.Spoken("[STATIC]") != "") throw new Exception("Spoken text kept her tags: " + Voice.Spoken("[GLITCH] Hey *choom*, [static] ready?"));
