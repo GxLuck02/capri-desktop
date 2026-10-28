@@ -814,7 +814,7 @@ Mainframe > Settings > Sounds sets her sound effects (arrive, leave, hops, click
 
 ## 15. What she can do on your PC (Windows)
 
-Just ask her, in text or voice chat. Requests work in English, Spanish, French, German, Portuguese, Italian, Polish, Dutch, Russian, Ukrainian, Turkish, Chinese, Japanese, Korean, Thai, Vietnamese, Indonesian, Arabic, Hindi, Swedish, Norwegian, Danish, Finnish, Czech, Slovak, Hungarian, Romanian, Greek, Filipino, Malay, Swahili, Catalan, Serbian, Croatian, Bosnian, Estonian, Latvian, Lithuanian, Slovenian, Bulgarian and Maltese ("abre Spotify", "öffne Spotify", "打开Spotify", "Spotifyを開いて", "스포티파이 열어줘", "spotify kholo", "öppna Spotify", "άνοιξε το Spotify"). In other languages, if she answers instead of doing it, ask in English.
+Just ask her, in text or voice chat. Requests work in English, Spanish, French, German, Portuguese, Italian, Polish, Dutch, Russian, Ukrainian, Turkish, Chinese, Japanese, Korean, Thai, Vietnamese, Indonesian, Arabic, Hindi, Swedish, Norwegian, Danish, Finnish, Czech, Slovak, Hungarian, Romanian, Greek, Filipino, Malay, Swahili, Catalan, Serbian, Croatian, Bosnian, Estonian, Latvian, Lithuanian, Slovenian, Bulgarian, Maltese, Hebrew, Urdu and Persian ("abre Spotify", "öffne Spotify", "打开Spotify", "Spotifyを開いて", "스포티파이 열어줘", "spotify kholo", "öppna Spotify", "άνοιξε το Spotify"). In other languages, if she answers instead of doing it, ask in English.
 
 If her reply says she can't open, play or access something she can do (like "I don't have access to your Spotify"), she tries it with her tools before giving you that answer.
 

@@ -186,7 +186,11 @@ namespace CapriDesktop
             @"|^((atidaryk|paleisk|uždaryk|ieškok|surask|parodyk|sustabdyk|įjunk|išjunk|pagarsink|patylink)(?!\w)|(ar )?(gali|galėtum|galite|galėtumėte) (atidaryti|paleisti|uždaryti|ieškoti|surasti|parodyti|sustabdyti|įjungti|išjungti)(?!\w))" +
             @"|^((odpri|predvajaj|zapri|poišči|išči|ustavi|vklopi|izklopi|zaženi|pošlji)(?!\w)|(ali |a )?(mi )?(lahko|bi lahko) (mi )?(odpreš|predvajaš|zapreš|poiščeš|pokažeš|vklopiš|izklopiš|zaženeš|odprl|odprla|predvajal|predvajala)(?!\w))" +
             @"|^((пусни|намери|потърси|спри|увеличи|намали|изключи|прати)(?!\w)|(можеш ли|би ли могла|би ли могъл|може ли) (да )?(отвориш|пуснеш|затвориш|намериш|потърсиш|покажеш|спреш|включиш|изключиш)(?!\w))" +
-            @"|^((iftaħ|iftah|doqq|agħlaq|aghlaq|fittex|urini|waqqaf|ixgħel|ixghel|itfi|għolli|gholli|baxxi)(?!\w)|(tista'?|tistax|tistgħu) (tiftaħ|tiftah|iddoqq|tagħlaq|taghlaq|tfittex|turini|twaqqaf|tixgħel|titfi)(?!\w))", RegexOptions.IgnoreCase);
+            @"|^((iftaħ|iftah|doqq|agħlaq|aghlaq|fittex|urini|waqqaf|ixgħel|ixghel|itfi|għolli|gholli|baxxi)(?!\w)|(tista'?|tistax|tistgħu) (tiftaħ|tiftah|iddoqq|tagħlaq|taghlaq|tfittex|turini|twaqqaf|tixgħel|titfi)(?!\w))" +
+            // Hebrew, Urdu and Persian. Urdu and Persian put the verb last.
+            @"|^(בבקשה )?(פתח|פתחי|תפתח|תפתחי|נגן|נגני|תנגן|תנגני|סגור(?= )|סגרי|תסגור|תסגרי|חפש|חפשי|תחפש|תחפשי|תראה לי|תראי לי|הראה לי|הראי לי|עצור|עצרי|תעצור|תעצרי|הגבר|תגביר|תגבירי|הנמך|תנמיך|תנמיכי|שים(?! לב)|שימי(?! לב)|תשים|תשימי|הפעל|הפעילי|תפעיל|תפעילי|כבה|כבי|תכבה|תכבי|שלח|שלחי|תשלח|תשלחי)(?!\w)|^(את יכולה|אתה יכול|תוכלי|תוכל|אפשר) (בבקשה )?ל(פתוח|נגן|סגור|חפש|הראות|הפעיל|כבות|שים|הגביר|הנמיך|שלוח)(?!\w)" +
+            @"|(کھولو|کھول دو|کھولیں|کھول دیں|چلاؤ|چلا دو|چلائیں|چلا دیں|بجاؤ|بجا دو|بجائیں|بند کرو|بند کر دو|بند کریں|بند کر دیں|ڈھونڈو|ڈھونڈ دو|تلاش کرو|تلاش کریں|دکھاؤ|دکھا دو|دکھائیں|روکو|روک دو|روکیں|بڑھاؤ|بڑھا دو|کم کرو|کم کر دو|بھیجو|بھیج دو)( نا| پلیز| پلز)?[۔.!?؟\s]*$|(کھول|چلا|بجا|بند کر|دکھا|ڈھونڈ) (سکتے|سکتی|سکو) (ہو|ہیں|گے|گی)|کون سا گانا" +
+            @"|(باز کن|بازش کن|باز کنید|پخش کن|پخشش کن|پخش کنید|بذار|بزار|بگذار|بذارش|ببند|ببندش|ببندید|جستجو کن|سرچ کن|بگرد|پیدا کن|نشون بده|نشونم بده|نشان بده|نشانم بده|متوقف کن|قطع کن|زیاد کن|زیادش کن|کم کن|کمش کن|بفرست|اجرا کن)( لطفا| لطفاً| دیگه| پلیز)?[.!?؟\s]*$|^(لطفا |لطفاً )?(می[\u200C ]?(تونی|توانی)|می[\u200C ]?شه) .*(باز کنی|بازش کنی|پخش کنی|بذاری|بزاری|بگذاری|ببندی|جستجو کنی|بگردی|پیدا کنی|نشون بدی|نشان بدهی|اجرا کنی|بفرستی)", RegexOptions.IgnoreCase);
 
         private static readonly Regex Errands = new Regex(
             @"^(send|dm|pm|reply to|respond to)\b(?!\s+(me|us|help)\b)|^(message|msg|text|ping) (?!(is|was|are|were|from|looks|said|says|me|us)\b)\w|^(post|tweet) (this|that|it|a|an|my|our|something|on|in|to)\b" +
@@ -511,7 +515,10 @@ namespace CapriDesktop
             @"|\bnegaliu (\w+ ){0,2}(atidaryti|paleisti|groti|valdyti|pasiekti|įjungti|uždaryti)(?!\w)|\bneturiu prieigos(?!\w)" +
             @"|\bne morem (\w+ ){0,2}(odpreti|predvajati|zagnati|upravljati|dostopati|zapreti)(?!\w)|\bnimam dostopa(?!\w)" +
             @"|\bне мога да (отворя|пусна|включа|контролирам|стартирам|достъпя|затворя)(?!\w)|\bнямам достъп(?!\w)" +
-            @"|\bma (nistax|nistgħax) (niftaħ|niftah|indoqq|nikkontrolla|nidħol|nixgħel|nagħlaq)(?!\w)|\bm'?għandix aċċess(?!\w)", RegexOptions.IgnoreCase);
+            @"|\bma (nistax|nistgħax) (niftaħ|niftah|indoqq|nikkontrolla|nidħol|nixgħel|nagħlaq)(?!\w)|\bm'?għandix aċċess(?!\w)" +
+            @"|אני לא (יכולה|יכול|מסוגלת|מסוגל) ל(פתוח|נגן|הפעיל|שלוט|גשת|סגור|חפש)|אין לי גישה" +
+            @"|نہیں (کھول|چلا|بجا|بند کر|کنٹرول کر|ایکسیس کر|رسائی حاصل کر) (سکتی|سکتا)|(رسائی|ایکسیس) (نہیں ہے|حاصل نہیں)|میرے پاس (رسائی|ایکسیس) نہیں" +
+            @"|نمی[\u200C ]?(تونم|توانم) .{0,40}?(باز کنم|پخش کنم|اجرا کنم|کنترل کنم|ببندم|بذارم|بگذارم)|دسترسی (ندارم|نداریم)", RegexOptions.IgnoreCase);
         private const string Able = @"(open|launch|start|run|play|pause|resume|skip|control|access|use|search|google|close|mute|unmute|put on|turn (up|down|on|off)|change)\b";
 
         internal static bool Refused(string reply) { return Refusal.IsMatch((reply ?? "").Replace('’', '\'')); }
@@ -528,10 +535,11 @@ namespace CapriDesktop
                 @"|làm ơn|hãy|bạn có thể|tolong|bisa(kah)?|(kamu|kau|anda) bisa|ممكن|هل (يمكنك|تستطيع)|من فضلك|لو سمحت|можеш|чи можеш|чи можете" +
                 @"|kan du|kunde du|skulle du|vil du|voisitko|voitko|můžeš|mohl bys|mohla bys|môžeš|((meg|el|be|le) )?tudnád|poți|poti|ai putea|μπορείς να|μπορεις να|θα μπορούσες να|pwede mo bang|puwede mo bang|pwede bang|kaya mo bang" +
                 @"|boleh(kah)?|(je )?(unaweza|waweza)|tafadhali|naomba|(em )?(pots|podries)|možeš li|mozes li|da li možeš|da li mozes|možete li|mozete li|да ли можеш" +
-                @"|kas (sa |te )?(saad|saate|võiksid|võiksite|saaksid|saaksite)|vai (tu )?(vari|varētu)|ar (gali|galėtum|galite)|(ali |a )?(mi )?lahko|bi (mi )?lahko|би ли|може ли|tista'?|tistax|tistgħu)(?!\w)", RegexOptions.IgnoreCase)
+                @"|kas (sa |te )?(saad|saate|võiksid|võiksite|saaksid|saaksite)|vai (tu )?(vari|varētu)|ar (gali|galėtum|galite)|(ali |a )?(mi )?lahko|bi (mi )?lahko|би ли|може ли|tista'?|tistax|tistgħu" +
+                @"|את יכולה|אתה יכול|תוכלי|תוכל|אפשר|בבקשה|می[\u200C ]?(تونی|توانی)|می[\u200C ]?شه|لطفا|لطفاً)(?!\w)", RegexOptions.IgnoreCase)
                 // Chinese and Thai ask at the start without spaces; Japanese, Korean, Turkish and Hindi ask at the end.
                 || Regex.IsMatch(text, @"^(capri[\s,，]*)?((你|您)?(能不能|可不可以|能|可以|会不会|會不會)?(帮|幫|给|給|替)我|(你|您)(能|可以)|请|請|麻烦|麻煩|ช่วย|กรุณา|รบกวน)", RegexOptions.IgnoreCase)
-                || Regex.IsMatch(text, @"(くれる|くれない|くれます|くれませんか|もらえる|もらえない|もらえます|もらえませんか|ください|줄래|줄래요|줄 ?수 ?있어|줄 ?수 ?있어요|주세요|주실래요|줘|줘요|r m[ıi]s[ıi]n|bilir misin|सकते हो|सकती हो|सकोगे|सकोगी|सकते हैं|सकती हैं|ได้ไหม|ได้มั้ย|ได้มั๊ย|หน่อย)\s*(か)?\s*[?？؟]\s*$", RegexOptions.IgnoreCase);
+                || Regex.IsMatch(text, @"(くれる|くれない|くれます|くれませんか|もらえる|もらえない|もらえます|もらえませんか|ください|줄래|줄래요|줄 ?수 ?있어|줄 ?수 ?있어요|주세요|주실래요|줘|줘요|r m[ıi]s[ıi]n|bilir misin|सकते हो|सकती हो|सकोगे|सकोगी|सकते हैं|सकती हैं|سکتے ہو|سکتی ہو|سکتے ہیں|سکتی ہیں|سکو گے|سکو گی|ได้ไหม|ได้มั้ย|ได้มั๊ย|หน่อย)\s*(か)?\s*[?？؟]\s*$", RegexOptions.IgnoreCase);
         }
 
         private static readonly Regex Chatter = new Regex(@"^(play (with|along|around|dead|dumb|nice|fair|a game with|a joke)|open up (to|about)|start (a story|a joke|an argument)|run (a mile|a race)|kill (the boss|me|time)|look (at it this way|forward)|show me (how|why)|check my (spelling|grammar)|rate my joke|mets-toi)\b", RegexOptions.IgnoreCase);
