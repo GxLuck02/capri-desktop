@@ -266,11 +266,11 @@ namespace CapriDesktop
                 pet.Talk.Submit("  Lachy!!  ");
                 bool namedRight = !pet.Talk.Typing && Brain.Nickname == "Lachy" && pet.Saved.Nickname == "Lachy" && pet.Talk.Reply == "Got it, Lachy." && Brain.Character.IndexOf("call them: Lachy.", StringComparison.Ordinal) >= 0;
                 pet.SetNickname("shithead");
-                bool refusedName = Brain.Nickname == "Lachy" && pet.Talk.Reply == Brain.NotCalling;
+                bool rudeName = Brain.Nickname == "shithead" && pet.Saved.Nickname == "shithead" && pet.Talk.Reply == "Got it, shithead.";
                 pet.SetNickname("choom");
                 bool clearedName = Brain.Nickname == null && pet.Saved.Nickname == null && pet.Talk.Reply == "Back to choom, then." && Brain.Character.IndexOf("set a nickname", StringComparison.Ordinal) < 0;
-                if (!askedName || !namedRight || !refusedName || !clearedName) throw new Exception("The nickname went wrong: asked " + askedName + ", named " + namedRight + ", refused " + refusedName + ", cleared " + clearedName);
-                checks.Add("PASS nickname: Settings > What should she call you? asks in her typing box, saves a cleaned-up name she says back, a rude one is refused, and choom goes back to choom");
+                if (!askedName || !namedRight || !rudeName || !clearedName) throw new Exception("The nickname went wrong: asked " + askedName + ", named " + namedRight + ", rude " + rudeName + ", cleared " + clearedName);
+                checks.Add("PASS nickname: Settings > What should she call you? asks in her typing box, saves a cleaned-up name she says back, rude ones too since it's their call, and choom goes back to choom");
                 pet.Hear("remember I love Hollow Knight");
                 string saved = pet.Talk.Reply;
                 string kept = Brain.Notes();

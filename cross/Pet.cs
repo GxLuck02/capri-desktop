@@ -1004,14 +1004,10 @@ namespace CapriDesktop
         internal void SetNickname(string typed)
         {
             string name = Brain.Nick(typed);
-            bool callable = Brain.Callable(name);
-            if (callable)
-            {
-                Brain.Nickname = name.Length == 0 ? null : name;
-                Saved.Nickname = Brain.Nickname;
-                Save();
-            }
-            Reply(++asking, NameHeard, callable ? Brain.Renamed(name) : Brain.NotCalling);
+            Brain.Nickname = name.Length == 0 ? null : name;
+            Saved.Nickname = Brain.Nickname;
+            Save();
+            Reply(++asking, NameHeard, Brain.Renamed(name));
         }
 
         internal void SetLanguage(string language)
@@ -1281,8 +1277,6 @@ namespace CapriDesktop
             int ticket = ++asking;
             Brain.Cancel();
             voice.Stop();
-            string blocked = Safety.Screen(text);
-            if (blocked != null) { Reply(ticket, text, blocked); return; }
             bool askPlease;
             string heard = text;
             text = Hands.Manners(text, out askPlease);
@@ -1309,7 +1303,7 @@ namespace CapriDesktop
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string said;
-                try { said = Safety.Filter(think(text)); }
+                try { said = think(text); }
                 catch (BrainException error) { said = error.Message == Brain.Offline ? Offline : error.Told ? error.Message : "My brain couldn't answer: " + error.Message; }
                 catch (Exception error) { said = Brain.Explain(error) ?? "That reply was cancelled. Try again."; }
                 if (string.IsNullOrWhiteSpace(said)) said = "My brain sent an empty reply. Try again.";

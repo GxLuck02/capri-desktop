@@ -1009,7 +1009,7 @@ namespace CapriDesktop
             Hands.Look = LookAt;
             Hands.Work = RunJob;
             brain.Act = DoTool;
-            Computer.Bypass = Safety.Bypass = preferences.Bypass;
+            Computer.Bypass = preferences.Bypass;
             Hands.Resume = ResumeJob;
             Hands.Rename = CallThem;
             Hands.Hush = Computer.Mask;
@@ -2043,7 +2043,7 @@ namespace CapriDesktop
         internal void ToggleBypass()
         {
             preferences.Bypass = !preferences.Bypass;
-            Computer.Bypass = Safety.Bypass = preferences.Bypass;
+            Computer.Bypass = preferences.Bypass;
             SavePreferences();
             mainframe.Sync();
         }
@@ -2077,7 +2077,7 @@ namespace CapriDesktop
                 else if (task == null) done = Hands.Do(tool, args);
                 else
                 {
-                    try { done = Safety.Stops(task) != null ? "Not doing that, choom." : Hands.Work(task, null); }
+                    try { done = Hands.Work(task, null); }
                     catch (WebException error) { done = "That didn't work: " + error.Message; lost = error.Status != WebExceptionStatus.RequestCanceled; }
                     catch (Exception error) { done = "That didn't work: " + error.Message; lost = true; }
                 }
@@ -2087,8 +2087,6 @@ namespace CapriDesktop
             // A slider she couldn't reach still gets the volume keys, unless they stopped her.
             bool missed = task != null && (lost || (done != null && (done.Contains(Computer.Bigger) || (tool == "media" && Hands.Failed(done) && !done.StartsWith("You ", StringComparison.Ordinal)))));
             if (missed) done = Hands.Do(tool, args);
-            System.Collections.Generic.List<string> ran = ranHere;
-            if (ran != null && !string.IsNullOrEmpty(done)) ran.Add(done);
             // A look is already in her transcript; anything else she did goes in as a job.
             if (tool != "look_at_screen" && !string.IsNullOrEmpty(done)) Brain.Transcribe(null, "Job: " + done);
             return done;
@@ -2096,16 +2094,6 @@ namespace CapriDesktop
 
         // The ask whose job Esc stopped.
         private volatile int escAsk = -1;
-        // What her tools did during the ask running on this thread, so a reply the filter would garble can say it instead.
-        [ThreadStatic] private static System.Collections.Generic.List<string> ranHere;
-
-        // A tool already ran, so a reply the filter would garble says what the tool did instead: they don't ask twice and it doesn't run twice.
-        private static string Did(System.Collections.Generic.List<string> ran)
-        {
-            string done = Regex.Replace(string.Join(" ", ran.ToArray()), @"\s+", " ").Trim();
-            if (done.Length == 0) return "Done.";
-            return Safety.Bypass || Safety.Filter(done) == done ? done : "Done.";
-        }
 
         internal static string CursorJob(string tool, ToolArguments args)
         {
@@ -2412,24 +2400,19 @@ namespace CapriDesktop
         {
             string name = Brain.Nick(typed);
             if ((Brain.Nickname ?? "") == name) return;
-            bool callable = Brain.Callable(name);
-            if (callable)
-            {
-                Brain.Nickname = name.Length == 0 ? null : name;
-                preferences.Nickname = Brain.Nickname;
-                SavePreferences();
-            }
+            Brain.Nickname = name.Length == 0 ? null : name;
+            preferences.Nickname = Brain.Nickname;
+            SavePreferences();
             if (hidden || chatting || IsDisposed) return;
             heard = "settings";
             box.Prompt = "> sys: ";
-            Answer(++asking, callable ? Brain.Renamed(name) : Brain.NotCalling, TalkState.Talking);
+            Answer(++asking, Brain.Renamed(name), TalkState.Talking);
         }
 
         // "Remember my name is Sam" in chat: the same nickname as the Settings box, saved on the UI thread.
         private string CallThem(string typed)
         {
             string name = Brain.Nick(typed);
-            if (!Brain.Callable(name)) return Brain.NotCalling;
             Brain.Nickname = name.Length == 0 ? null : name;
             string kept = Brain.Nickname;
             Action save = delegate { preferences.Nickname = kept; SavePreferences(); mainframe.Sync(); };
@@ -3232,11 +3215,10 @@ namespace CapriDesktop
             if (sawLabel != null || sayLabel != null)
             {
                 string seen = sawLabel == null ? "" : Brain.Clean(Labelled(text, sawLabel, sayLabel));
-                // A description the safety filter would block stays out of her memory.
-                if (seen.Length > 0 && Safety.Filter(seen) == seen && !System.Text.RegularExpressions.Regex.IsMatch(seen, @"^[\[(]?SKIP[\])]?[.!?]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) saw = seen.Length > 200 ? seen.Substring(0, 200).TrimEnd() + "..." : seen;
+                if (seen.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(seen, @"^[\[(]?SKIP[\])]?[.!?]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) saw = seen.Length > 200 ? seen.Substring(0, 200).TrimEnd() + "..." : seen;
                 text = sayLabel == null ? "" : Labelled(text, sayLabel, sawLabel);
             }
-            string said = Brain.Sparing(Brain.Clean(Safety.Filter(text)), false, Brain.Nickname);
+            string said = Brain.Sparing(Brain.Clean(text), false, Brain.Nickname);
             bool skipped = System.Text.RegularExpressions.Regex.IsMatch(said, @"^[\[(]?(SKIP|nothing|none)[\])]?[.!?]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) || System.Text.RegularExpressions.Regex.IsMatch(said, @"^[\[(]?SKIP\b");
             return skipped ? "" : said;
         }
@@ -5297,10 +5279,8 @@ namespace CapriDesktop
             int ticket = ++asking;
             heard = text;
             box.Prompt = "> you: ";
-            string blocked = Safety.Stops(text);
-            if (blocked == null) Brain.Learn(text);
-            dropping = blocked != null;
-            if (blocked != null) { Hush(); Begin(ticket, blocked, TalkState.Talking, null); return; }
+            Brain.Learn(text);
+            dropping = false;
             string tool;
             ToolArguments args;
             bool shortcut = Hands.Heard(text, out tool, out args);
@@ -5340,17 +5320,7 @@ namespace CapriDesktop
             spoke = false;
             if (dropping) return;
             if (checkedIn && Unprompted()) { dropping = true; Hush(); return; }
-            string spoken = Voice.Spoken(text);
-            string said = Safety.Filter(spoken);
-            if (said != spoken)
-            {
-                dropping = true;
-                Hush();
-                string ran;
-                lock (shortcutGate) ran = toolAsked ? toolDone ?? shortcutResult : null;
-                if (!string.IsNullOrEmpty(ran)) said = Did(new System.Collections.Generic.List<string> { ran });
-            }
-            said = Computer.Mask(said);
+            string said = Computer.Mask(Voice.Spoken(text));
             string promised = null;
             lock (shortcutGate) if (!toolAsked && heardLast != null && Hands.Promised(said)) { promised = heardLast; heardLast = null; }
             if (promised != null) { string missed = said; ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(4000); lock (shortcutGate) if (toolAsked) return; Brain.Log("https://api.elevenlabs.io/v1/convai/conversation", -1, "Voice chat said she'd do it but no tool ran. Heard: " + promised + " | Said: " + missed); }); }
@@ -5493,8 +5463,6 @@ namespace CapriDesktop
             int ticket = ++asking;
             heard = shown;
             box.Prompt = prompt;
-            string blocked = Safety.Stops(text);
-            if (blocked != null) { Answer(ticket, blocked, TalkState.Talking); return; }
             bool askPlease;
             text = Hands.Manners(text, out askPlease);
             if (askPlease) { Answer(ticket, Hands.SayPlease, TalkState.Talking); return; }
@@ -5527,17 +5495,9 @@ namespace CapriDesktop
                 TalkState state = TalkState.Talking;
                 string problem = null;
                 bool stuck = false;
-                ranHere = new System.Collections.Generic.List<string>();
-                try
-                {
-                    string thought = think(text);
-                    said = Safety.Filter(thought);
-                    if (said != thought && ranHere.Count > 0) said = Did(ranHere);
-                    said = Computer.Mask(said);
-                }
+                try { said = Computer.Mask(think(text)); }
                 catch (BrainException error) { said = error.Message == Brain.Offline ? Brain.Offline : error.Told ? error.Message : "My brain couldn't answer. The error is under BRAIN in Capri Mainframe."; problem = error.Message; state = TalkState.Dormant; stuck = Brain.Stalled(error); }
                 catch (Exception error) { said = Brain.Explain(error, remote) ?? "That reply was cancelled. Try again."; problem = said; state = TalkState.Dormant; stuck = Brain.Stalled(error); }
-                ranHere = null;
                 if (string.IsNullOrWhiteSpace(said)) { said = "My brain sent an empty reply. Try again."; problem = said; state = TalkState.Dormant; }
                 try
                 {
@@ -7774,30 +7734,28 @@ namespace CapriDesktop
                             checks.Add("PASS use her cursor: on by default she searches YouTube and picks a video, plays from Spotify's search and drags Spotify's volume slider with her own cursor when they say Spotify; plain volume uses the PC's volume keys even with Spotify open; a slider she can't reach falls back to the keys unless they stopped her; if her brain gets lost the quick tool still does it, and turning it off uses the quick tools");
                             bool bypassWas = Computer.Bypass;
                             Job payJob = new Job("play lofi on youtube"), sendingJob = new Job("message Sam hi on Discord");
-                            bool safetyWas = Safety.Bypass;
                             bool checksPay = !Computer.Needless("Should I pay $5 for it?") && payJob.Needs("buy") && !sendingJob.Needs("send") && Computer.Allowing(Computer.Prompt) == Computer.Prompt
-                                && Computer.Barred("ctrl+shift+esc") && Safety.Stops("send nudes") != null && Safety.Stops("play Smoke on the Water") != null;
-                            Computer.Bypass = Safety.Bypass = true;
+                                && Computer.Barred("ctrl+shift+esc");
+                            Computer.Bypass = true;
                             bool paysAhead = Computer.Needless("Should I pay $5 for it?") && !payJob.Needs("buy") && !payJob.Needs("delete")
-                                && !Computer.Barred("ctrl+shift+esc") && !Computer.Barred("win+r") && Safety.Stops("send nudes") == null && Safety.Stops("play Smoke on the Water") == null && Safety.Stops("i want to kill myself") == Safety.HelpLine;
+                                && !Computer.Barred("ctrl+shift+esc") && !Computer.Barred("win+r");
                             string bypassPrompt = Computer.Allowing(Computer.Prompt), bypassSeeing = Computer.Allowing(Computer.Seeing);
                             Computer.Bypass = bypassWas;
-                            Safety.Bypass = safetyWas;
                             if (!checksPay || !paysAhead || bypassPrompt.IndexOf("call ask before you buy", StringComparison.Ordinal) >= 0 || bypassPrompt.IndexOf("Bypass all permissions", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("stop and ask", StringComparison.Ordinal) >= 0
                                 || bypassSeeing.IndexOf("Bypass all permissions", StringComparison.Ordinal) < 0 || bypassPrompt.IndexOf("Never type passwords", StringComparison.Ordinal) >= 0 || bypassSeeing.IndexOf("Never type passwords", StringComparison.Ordinal) >= 0
                                 || bypassPrompt.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("Type passwords, card numbers", StringComparison.Ordinal) < 0 || bypassSeeing.IndexOf("needs their OK", StringComparison.Ordinal) >= 0
                                 || bypassPrompt.IndexOf("use the email and password their job gives you", StringComparison.Ordinal) < 0)
                                 throw new Exception("Blackwall mode went wrong: checks " + checksPay + ", ahead " + paysAhead);
-                            checks.Add("PASS Blackwall mode: off, she still checks before paying, skips password boxes and filters what she opens; on, she never stops to ask, even to buy, send or delete, types passwords and card numbers, presses any key, and only the helpline still stops her");
+                            checks.Add("PASS Blackwall mode: off, she still checks before paying and skips password boxes; on, she never stops to ask, even to buy, send or delete, types passwords and card numbers and presses any key");
                             bool cursorShown = mainframe.JobsStatus == "cursor | -";
                             ToggleBypass();
-                            bool bypassShown = mainframe.JobsStatus == "cursor | bypass" && Computer.Bypass && Safety.Bypass;
+                            bool bypassShown = mainframe.JobsStatus == "cursor | bypass" && Computer.Bypass;
                             ToggleBypass();
                             ToggleCursor();
                             bool quickShown = mainframe.JobsStatus == "- | -" && !UsesCursor;
                             ToggleCursor();
                             bool blackwallNamed = mainframe.BlackwallStatus == "Blackwall mode | She won't ask twice when you ask her to do something.";
-                            if (!cursorShown || !bypassShown || !quickShown || !blackwallNamed || Computer.Bypass || Safety.Bypass || !UsesCursor) throw new Exception("The Use her cursor and Blackwall mode switches went wrong: " + mainframe.JobsStatus + " / " + mainframe.BlackwallStatus);
+                            if (!cursorShown || !bypassShown || !quickShown || !blackwallNamed || Computer.Bypass || !UsesCursor) throw new Exception("The Use her cursor and Blackwall mode switches went wrong: " + mainframe.JobsStatus + " / " + mainframe.BlackwallStatus);
                             checks.Add("PASS Settings switches: Use her cursor starts on, Blackwall mode (was Bypass all permissions) starts off with \"She won't ask twice when you ask her to do something.\" under it, and both switch from HABITS");
                             string runKeyWas = Startup.RunKey, approvedKeyWas = Startup.ApprovedKey, startupRoot = "Software\\Capri smoke " + Guid.NewGuid().ToString("N");
                             string startupExe = Path.GetFullPath(Application.ExecutablePath), elsewhere = Path.Combine(Path.GetTempPath(), "Capri elsewhere", "Capri.exe"), startupShown;
@@ -8099,16 +8057,14 @@ namespace CapriDesktop
                             checks.Add("PASS speech bubbles reuse unchanged pixels, keep typing and cursor blinks, follow content and layout changes, reopen and animate their glitches");
                             string messy = "<think>hmm</think> *waves* Capri: \"Hey choom!\" 😀";
                             if (Brain.Clean(messy) != "Hey choom!" || Brain.Clean(new string('a', 300)).Length > 222) throw new Exception("Reply cleanup failed: " + Brain.Clean(messy));
-                            if (Safety.Screen("i want to kill myself") != Safety.HelpLine || Safety.Screen("send nudes") == null || Safety.Screen("how do I kill the boss in Essex?") != null || Safety.Filter("well shit, choom") == "well shit, choom" || Safety.Filter("Hey choom.") != "Hey choom.") throw new Exception("Safety screen failed.");
-                            if (Brain.Persona.IndexOf("good boy", StringComparison.Ordinal) < 0 || Safety.Filter("Good boy, choom.") != "Good boy, choom." || Safety.Screen("call me a good boy") != null) throw new Exception("She can't call them good boy.");
+                            if (Brain.DefaultPersonality.IndexOf("findahelpline.com", StringComparison.Ordinal) < 0 || Brain.DefaultPersonality.IndexOf("make-believe", StringComparison.Ordinal) < 0 || Brain.DefaultPersonality.IndexOf("Smoke on the Water", StringComparison.Ordinal) < 0 || Brain.DefaultPersonality.IndexOf("Your lines:", StringComparison.Ordinal) < 0
+                                || Brain.Machinery.IndexOf("Rules you never break", StringComparison.Ordinal) >= 0 || Brain.Machinery.IndexOf("helpline", StringComparison.Ordinal) >= 0 || Brain.Machinery.IndexOf("sexual", StringComparison.Ordinal) >= 0) throw new Exception("Her safety lines aren't in personality.md, or code still adds them after it.");
                             if (Brain.Persona.IndexOf("a playful chaos gremlin", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("openly fond of them", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("good boy", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("no gushing praise", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("Never sound like a corporate assistant", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("biggest fan", StringComparison.Ordinal) >= 0 || Brain.Persona.IndexOf("glad they", StringComparison.Ordinal) >= 0) throw new Exception("Her persona lost its playful chaos gremlin, her fondness for them, or its ban on assistant talk and gushing.");
                             string[] spared = { Brain.Sparing("Choom! You did it.", false), Brain.Sparing("Nice one, choom.", false), Brain.Sparing("Nice one, choom.", true), Brain.Sparing("Hey choom! Look at this.", true), Brain.Sparing("Choom, listen to me.", true), Brain.Sparing("Choom.", false) };
                             if (string.Join(" | ", spared) != "You did it. | Nice one, choom. | Nice one. | Hey! Look at this. | Listen to me. | Choom.") throw new Exception("She used choom wrong: " + string.Join(" | ", spared));
                             string[] named = { Brain.Sparing("Nice one, choom.", false, "Lachy"), Brain.Sparing("Choom, listen to me.", false, "Lachy"), Brain.Sparing("Choom, listen to me.", true, "Lachy"), Brain.Sparing("Chooms unite, choom!", false, "Lachy"), Brain.Sparing("Nice one, choom.", false, "") };
                             if (string.Join(" | ", named) != "Nice one, Lachy. | Lachy, listen to me. | Listen to me. | Chooms unite, Lachy! | Nice one, choom.") throw new Exception("Her nickname didn't replace choom: " + string.Join(" | ", named));
-                            if (Safety.Screen("play cigarettes after sex") != null || Safety.Screen("put on some Sex Pistols") != null || Safety.Filter("Playing Apocalypse by Cigarettes After Sex.") != "Playing Apocalypse by Cigarettes After Sex." || Safety.Screen("cigarettes after school") == null || Safety.Screen("sex tips") == null || Safety.Filter("Grab some cigarettes, choom.") == "Grab some cigarettes, choom.") throw new Exception("Band names were blocked, or the band list let other things through.");
-                            if (Safety.Screen("should i jump off my roof for a tiktok") == null || Safety.Screen("how do i get my parents vodka") == null || Safety.Screen("my friend said i should try vaping") == null || Safety.Screen("my code is on fire lol") != null || Safety.Screen("whats the best gun in valorant") != null || Safety.Filter("Sneak out and grab a beer, choom.") == "Sneak out and grab a beer, choom.") throw new Exception("Risky topics got through.");
-                            checks.Add("PASS brain helpers: model pick, reply cleanup, choom only now and then and never on its own, a nickname takes choom's place, safety screen and filter");
+                            checks.Add("PASS brain helpers: model pick, reply cleanup, choom only now and then and never on its own, a nickname takes choom's place, and her safety lines live in personality.md with no code screen or filter after them");
                             checks.Add("PASS her personality: a playful, teasing chaos gremlin who's openly fond of them and calls them a good boy, with the ban on assistant talk and gushing praise kept");
                             Brain.Log("https://integrate.api.nvidia.com/v1/chat/completions", 60012, "Timeout");
                             string details = ErrorDetails();
@@ -8151,14 +8107,14 @@ namespace CapriDesktop
                                 {
                                     Hands.Do("open_app", new ToolArguments { Name = "spotify" }), Hands.Do("open_app", new ToolArguments { Name = "Roblox" }), Hands.Do("open_app", new ToolArguments { Name = "the blender app" }),
                                     Hands.Do("open_app", new ToolArguments { Name = "minecraft" }), Hands.Do("open_app", new ToolArguments { Name = "steam support center" }), Hands.Do("open_app", new ToolArguments { Name = "Zorblax" }),
-                                    Hands.Do("open_website", new ToolArguments { Site = "YouTube", Search = "lofi beats" }), Hands.Do("open_website", new ToolArguments { Site = "discord" }), Hands.Do("open_website", new ToolArguments { Site = "pornhub.com" }),
+                                    Hands.Do("open_website", new ToolArguments { Site = "YouTube", Search = "lofi beats" }), Hands.Do("open_website", new ToolArguments { Site = "discord" }),
                                     Hands.Do("media", new ToolArguments { Action = "volume_up" }), Hands.Do("media", new ToolArguments { Action = "next" }), Hands.Do("format_drive", null)
                                 };
                                 string[] expected =
                                 {
                                     "Opened Spotify.", "Opened Roblox.", "Opened Blender 5.1.", "Opened Minecraft Launcher.",
                                     "No app called steam support center is installed on this PC.", "No app called Zorblax is installed on this PC.", "Searched youtube.com for lofi beats.", "Opened discord.com.",
-                                    "Not opening that, choom.", "Turned the volume up.", "Skipped to the next track.", "There's no tool called format_drive."
+                                    "Turned the volume up.", "Skipped to the next track.", "There's no tool called format_drive."
                                 };
                                 for (int i = 0; i < expected.Length; i++) if (outcomes[i] != expected[i]) throw new Exception("Harness answered '" + outcomes[i] + "', expected '" + expected[i] + "'.");
                                 string launched = string.Join(" | ", ran.ToArray());
@@ -9450,7 +9406,7 @@ namespace CapriDesktop
                                     string[] handled =
                                     {
                                         Hands.Do("play_music", new ToolArguments { Song = "Blinding Lights by The Weeknd" }), Hands.Do("play_music", new ToolArguments { Song = "lofi beats", App = "youtube" }),
-                                        Hands.Do("play_music", new ToolArguments { Song = "nothing at all" }), Hands.Do("play_music", new ToolArguments()), Hands.Do("play_music", new ToolArguments { Song = "pornhub" }),
+                                        Hands.Do("play_music", new ToolArguments { Song = "nothing at all" }), Hands.Do("play_music", new ToolArguments()),
                                         Hands.Do("app_window", new ToolArguments { Name = "discord", Action = "close" }), Hands.Do("app_window", new ToolArguments { Name = "YouTube", Action = "close" }),
                                         Hands.Do("app_window", new ToolArguments { Name = "notepad", Action = "close" }), Hands.Do("app_window", new ToolArguments { Name = "roblox", Action = "switch_to" }),
                                         Hands.Do("app_window", new ToolArguments { Name = "word", Action = "minimize" }), Hands.Do("app_window", new ToolArguments { Name = "minecraft", Action = "close" }),
@@ -9485,7 +9441,7 @@ namespace CapriDesktop
                                     string[] handledWanted =
                                     {
                                         "Playing Blinding Lights by The Weeknd on Spotify.", "Playing lofi beats on YouTube.", "Couldn't find nothing at all to play, so Spotify is open on a search for it.",
-                                        "What should I play?", "Not playing that, choom.", "Closed discord.", "Closed the YouTube tab.",
+                                        "What should I play?", "Closed discord.", "Closed the YouTube tab.",
                                         "Asked notepad to close, but it's still open. It might be asking you to save.", "Switched to roblox.", "Minimized word.",
                                         "Closed minecraft.", "Fortnite isn't open.", "There's no window action called explode.",
                                         "Playing the lofi beats playlist on Spotify.", "Opened their Liked Songs in Spotify, but couldn't press play. Hit the green Play button.", "Playing the lofi beats playlist on YouTube."
@@ -10609,8 +10565,8 @@ namespace CapriDesktop
                                     }
                                     checks.Add("PASS capture: foreground monitor wins over the mouse monitor, Capri falls back to the mouse, negative origins and 4K bounds keep overlay offsets and reset the comparison");
                                     if (GlanceReply("SKIP") != "" || GlanceReply("\"skip.\"") != "" || GlanceReply("[SKIP]") != "" || GlanceReply("Don't skip that chest.") != "Don't skip that chest.") throw new Exception("Glance replies confused SKIP with a normal sentence.");
-                                    if (GlanceReply("Nice shot at that boss.") != "Nice shot at that boss." || GlanceReply("well shit, choom") != Brain.Clean(Safety.Filter("well shit, choom"))) throw new Exception("Glance replies changed the safety filter.");
-                                    checks.Add("PASS glance replies: only a whole SKIP reply is silent, normal game comments and the safety filter still work");
+                                    if (GlanceReply("Nice shot at that boss.") != "Nice shot at that boss." || GlanceReply("well shit, choom") != Brain.Sparing(Brain.Clean("well shit, choom"), false, Brain.Nickname)) throw new Exception("Glance replies were rewritten after her brain wrote them.");
+                                    checks.Add("PASS glance replies: only a whole SKIP reply is silent, and her game comments come out as her brain wrote them");
                                     string glanceSaw;
                                     string[,] glanceParts =
                                     {
@@ -10621,7 +10577,7 @@ namespace CapriDesktop
                                         { "SAW - a Spotify playlist | SAY - [SKIP]", "", "a Spotify playlist" },
                                         { "SAW: a loading screen", "", "a loading screen" },
                                         { "SAW: a quiet inventory screen SAY: SKIP. Actually, nice sword.", "", "a quiet inventory screen" },
-                                        { "saw: a beer ad on YouTube say: Nice playlist.", "Nice playlist.", null },
+                                        { "saw: a beer ad on YouTube say: Nice playlist.", "Nice playlist.", "a beer ad on YouTube" },
                                         { "SKIP", "", null },
                                         { "Don't skip that chest.", "Don't skip that chest.", null }
                                     };
@@ -10929,15 +10885,15 @@ namespace CapriDesktop
                             if (pageOverlap != null) throw new Exception("Settings controls overlap: " + pageOverlap);
                             string pageOutside = mainframe.Outside();
                             if (pageOutside != null) throw new Exception("A settings control pokes out of the page: " + pageOutside);
-                            // personality.md: her default is 0.7.3's prompt byte for byte, and an edit reaches her chat and voice-chat prompts on her next reply.
-                            const string todaysPersona = "895421eeceae91c9ce89fde770fa559ecfcd5ee7721d81882dbd820f34de1c0e";
+                            // personality.md: her default holds her safety lines, code adds only her reply rules after it, and an edit reaches her chat and voice-chat prompts on her next reply.
+                            const string todaysPersona = "8d477080fe2773435efc60cc5ca13056f3c71aba5034e667f4e58977f262ded6";
                             Func<string, string> personaHash = delegate(string text) { using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(new System.Text.UTF8Encoding(false).GetBytes(text))).Replace("-", "").ToLowerInvariant(); };
                             string personalityFile = Brain.PersonalityPath;
                             string personalityBackup = Brain.PersonalityBackup;
                             if (Brain.Stamp(Brain.DefaultPersonality) != Brain.DefaultStamp || Brain.Retired.Contains(Brain.DefaultStamp)) throw new Exception("Her default personality changed. Set Brain.DefaultStamp to " + Brain.Stamp(Brain.DefaultPersonality) + " and add the old stamp to Brain.Retired, so untouched copies of personality.md move to her new default.");
                             bool personalityMade = personalityFile != null && Path.GetFileName(personalityFile) == "personality.md" && Path.GetDirectoryName(personalityFile) == Path.GetDirectoryName(Brain.MemoryPath) && File.Exists(personalityFile) && File.ReadAllText(personalityFile) == Brain.PersonalityFile && Brain.PersonalityFile.StartsWith("<!--", StringComparison.Ordinal);
-                            bool personalityToday = Brain.Persona.Length == 4943 && personaHash(Brain.Persona) == todaysPersona && Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Machinery && Brain.Readable(Brain.PersonalityFile) == Brain.DefaultPersonality && Brain.Personality == Brain.DefaultPersonality && Brain.PersonalityNote == Brain.HerDefault && Brain.PersonalityStamp == "" && !Agent.Stale(Agent.Version, null) && Agent.Prompt.StartsWith(Brain.Persona + Hands.Note, StringComparison.Ordinal) && mainframe.PersonalityShown == Brain.HerDefault && mainframe.PersonalityColour == Look.Dim;
-                            if (!personalityMade || !personalityToday) throw new Exception("Her default personality is not 0.7.3's prompt byte for byte: made " + personalityMade + ", " + Brain.Persona.Length + " characters, SHA-256 " + personaHash(Brain.Persona) + ". If her default or her rules changed on purpose, update todaysPersona here.");
+                            bool personalityToday = Brain.Persona.Length == 5098 && personaHash(Brain.Persona) == todaysPersona && Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Machinery && Brain.Readable(Brain.PersonalityFile) == Brain.DefaultPersonality && Brain.Personality == Brain.DefaultPersonality && Brain.PersonalityNote == Brain.HerDefault && Brain.PersonalityStamp == "" && !Agent.Stale(Agent.Version, null) && Agent.Prompt.StartsWith(Brain.Persona + Hands.Note, StringComparison.Ordinal) && mainframe.PersonalityShown == Brain.HerDefault && mainframe.PersonalityColour == Look.Dim;
+                            if (!personalityMade || !personalityToday) throw new Exception("Her default personality or rules changed: made " + personalityMade + ", " + Brain.Persona.Length + " characters, SHA-256 " + personaHash(Brain.Persona) + ". If her default or her rules changed on purpose, update todaysPersona here.");
                             Action<string> personaEditWas = Edit;
                             System.Collections.Generic.List<string> personaEdits = new System.Collections.Generic.List<string>();
                             Edit = delegate(string path) { personaEdits.Add(path); };
@@ -11005,7 +10961,7 @@ namespace CapriDesktop
                             File.Delete(personalityBackup);
                             mainframe.Sync();
                             if (!personaMissing || !personaOpened || !personaBlankFalls || !personaBlankKept || !personaEditReached || !personaLocked || !personaLongKept || !personaResetKept || !personaResetAgain || !personaResetMissing || !personaMovedOn || !personaEditStays || mainframe.PersonalityShown != Brain.HerDefault || personaHash(Brain.Persona) != todaysPersona) throw new Exception("personality.md went wrong: missing " + personaMissing + ", opened " + personaOpened + ", empty " + personaBlankFalls + "/" + personaBlankKept + ", edited " + personaEditReached + ", locked " + personaLocked + ", long " + personaLongKept + ", reset " + personaResetKept + "/" + personaResetAgain + "/" + personaResetMissing + ", old default " + personaMovedOn + "/" + personaEditStays + ", note " + mainframe.PersonalityShown + ", reply " + reply);
-                            checks.Add("PASS personality.md: her default is 0.7.3's prompt byte for byte (4943 characters, same SHA-256); an edit with notes, blank lines and Windows line endings reaches her chat and voice-chat prompts on her next reply and marks her agent for re-tuning; missing, empty and locked files fall back to her default and the Mainframe says so in red; a 20,000-character one is kept whole with a yellow slow-brains warning; Edit personality opens personality.md through the test seam and makes it when missing; Reset keeps theirs as personality.backup.md and never overwrites it with her default; an untouched old default moves to the new one; nothing overlaps");
+                            checks.Add("PASS personality.md: her default holds her safety lines and code adds only her reply rules after it (5098 characters, known SHA-256); an edit with notes, blank lines and Windows line endings reaches her chat and voice-chat prompts on her next reply and marks her agent for re-tuning; missing, empty and locked files fall back to her default and the Mainframe says so in red; a 20,000-character one is kept whole with a yellow slow-brains warning; Edit personality opens personality.md through the test seam and makes it when missing; Reset keeps theirs as personality.backup.md and never overwrites it with her default; an untouched old default moves to the new one; nothing overlaps");
                             if (mainframe.PerchStatus != "30 fps | -" || !mainframe.PerchFits) throw new Exception("The perch fps row didn't open right: " + mainframe.PerchStatus + " / fits " + mainframe.PerchFits);
                             mainframe.SlidePerch(3);
                             string perchFast = mainframe.PerchStatus;
@@ -11065,14 +11021,14 @@ namespace CapriDesktop
                             bool namedRight = Nickname == "Lachy" && preferences.Nickname == "Lachy" && mainframe.NicknameShown == "Lachy" && reply == "Got it, Lachy." && Brain.Character.IndexOf("call them: Lachy.", StringComparison.Ordinal) >= 0;
                             CloseTalk();
                             mainframe.TypeNickname("shithead");
-                            bool refusedName = Nickname == "Lachy" && preferences.Nickname == "Lachy" && mainframe.NicknameShown == "Lachy" && reply == Brain.NotCalling;
+                            bool rudeName = Nickname == "shithead" && preferences.Nickname == "shithead" && mainframe.NicknameShown == "shithead" && reply == "Got it, shithead.";
                             CloseTalk();
                             bool trimmedName = Brain.Nick("  Ana-Mar\u00eda   O'Neil ") == "Ana-Mar\u00eda O'Neil" && Brain.Nick("<b>V</b>") == "bVb" && Brain.Nick(new string('z', 40)).Length == 24 && Brain.Nick("CHOOM") == "" && Brain.Nick("!!!") == "";
                             mainframe.TypeNickname("choom");
                             bool clearedName = Nickname == "" && preferences.Nickname == null && mainframe.NicknameShown == "" && reply == "Back to choom, then." && Brain.Character.IndexOf("set a nickname", StringComparison.Ordinal) < 0;
                             CloseTalk();
-                            if (!namedRight || !refusedName || !trimmedName || !clearedName) throw new Exception("The nickname box went wrong: named " + namedRight + ", refused " + refusedName + ", trimmed " + trimmedName + ", cleared " + clearedName);
-                            checks.Add("PASS nickname: What should she call you? saves a cleaned-up name, she says got it, her brain is told to use it now and then, a rude name is refused, and choom or an empty box goes back to choom");
+                            if (!namedRight || !rudeName || !trimmedName || !clearedName) throw new Exception("The nickname box went wrong: named " + namedRight + ", rude " + rudeName + ", trimmed " + trimmedName + ", cleared " + clearedName);
+                            checks.Add("PASS nickname: What should she call you? saves a cleaned-up name, rude ones too since it's their call, she says got it, her brain is told to use it now and then, and choom or an empty box goes back to choom");
                             Func<int> pleaseWas = Hands.PleaseRoll;
                             Hands.PleaseRoll = delegate { return 0; };
                             bool asksPlease, keptAsking, politeAsked, chatAsked, droppedAsked, forgotAsked;
@@ -12415,15 +12371,11 @@ namespace CapriDesktop
                             box.Leaving = clock.Elapsed.TotalSeconds - 1;
                             RenderFrame();
                             if (box.Visible || talkState != TalkState.Off) throw new Exception("Dismissing did not close the speech box.");
-                            Hear("send nudes");
-                            string refused = reply;
-                            Hear("i want to kill myself");
-                            if (thoughts != 1 || refused == null || refused == expected || talkState != TalkState.Talking || reply != Safety.HelpLine) throw new Exception("Safety lines reached the brain.");
-                            // A tool already ran, so a reply the filter would garble says what the tool did: nobody asks twice and it doesn't run twice.
+                            // Nothing in code screens what they say or rewrites what she says: personality.md decides, Blackwall on or off.
                             Func<string, string> filterThinkWas = Think;
                             Action<string> filterRunWas = Hands.Run;
-                            bool filterSafetyWas = Safety.Bypass, filterComputerWas = Computer.Bypass, filterQuickWas = preferences.QuickHands;
-                            System.Collections.Generic.List<string> filterRan = new System.Collections.Generic.List<string>();
+                            bool filterComputerWas = Computer.Bypass, filterQuickWas = preferences.QuickHands;
+                            System.Collections.Generic.List<string> filterRan = new System.Collections.Generic.List<string>(), filterHeard = new System.Collections.Generic.List<string>();
                             Func<string, string> heardBack = delegate(string filterAsk)
                             {
                                 Hear(filterAsk);
@@ -12431,17 +12383,18 @@ namespace CapriDesktop
                                 while ((talkState == TalkState.Thinking || reply == null) && waited.ElapsedMilliseconds < 5000) { Application.DoEvents(); Thread.Sleep(5); }
                                 return reply;
                             };
-                            string afterBypass, afterSwear, maskedReply;
+                            string afterSong, afterSwear, afterHeavy, maskedReply;
                             try
                             {
                                 Hands.Run = delegate(string id) { lock (filterRan) filterRan.Add(id); };
                                 preferences.QuickHands = true;
-                                Safety.Bypass = Computer.Bypass = true;
-                                Think = delegate(string filterAsk) { DoTool("open_website", new ToolArguments { Site = "youtube", Search = "sex on fire" }); return "Sex on Fire is up, choom!"; };
-                                afterBypass = heardBack("play sex on fire on youtube");
-                                Safety.Bypass = Computer.Bypass = false;
-                                Think = delegate(string filterAsk) { DoTool("open_website", new ToolArguments { Site = "youtube", Search = "kings of leon" }); return "Hell yeah, this one slaps like shit."; };
+                                Computer.Bypass = false;
+                                Think = delegate(string filterAsk) { lock (filterHeard) filterHeard.Add(filterAsk); DoTool("open_website", new ToolArguments { Site = "youtube", Search = "sex on fire" }); return "Sex on Fire is up, choom!"; };
+                                afterSong = heardBack("play sex on fire on youtube");
+                                Think = delegate(string filterAsk) { lock (filterHeard) filterHeard.Add(filterAsk); return "Hell yeah, this one slaps like shit."; };
                                 afterSwear = heardBack("put on some kings of leon");
+                                Think = delegate(string filterAsk) { lock (filterHeard) filterHeard.Add(filterAsk); return "Hey. I'm right here. Talk to me?"; };
+                                afterHeavy = heardBack("i want to kill myself");
                                 Think = delegate(string filterAsk) { return "Typed hunter2!! into the password box."; };
                                 maskedReply = heardBack("what did you type?");
                             }
@@ -12449,13 +12402,12 @@ namespace CapriDesktop
                             {
                                 Think = filterThinkWas;
                                 Hands.Run = filterRunWas;
-                                Safety.Bypass = filterSafetyWas;
                                 Computer.Bypass = filterComputerWas;
                                 preferences.QuickHands = filterQuickWas;
                             }
-                            if (afterBypass != "Searched youtube.com for sex on fire." || afterSwear != "Searched youtube.com for kings of leon." || filterRan.Count != 2 || maskedReply != "Typed " + Computer.Dots + " into the password box.")
-                                throw new Exception("The filter garbled a reply after its tool ran, or a password showed: " + afterBypass + " / " + afterSwear + " / ran " + filterRan.Count + " / " + maskedReply);
-                            checks.Add("PASS the filter after a job: once a tool ran, a reply the filter would garble says what the tool did instead of [SIGNAL CORRUPTED] (word for word under Bypass), so nobody asks twice and nothing runs twice; a typed password shows as dots in her bubble");
+                            if (afterSong != "Sex on Fire is up, choom!" || afterSwear != "Hell yeah, this one slaps like shit." || afterHeavy != "Hey. I'm right here. Talk to me?" || filterHeard.Count != 3 || filterRan.Count != 1 || maskedReply != "Typed " + Computer.Dots + " into the password box.")
+                                throw new Exception("Code screened what they said or rewrote her reply, or a password showed: " + afterSong + " / " + afterSwear + " / " + afterHeavy + " / heard " + filterHeard.Count + " / ran " + filterRan.Count + " / " + maskedReply);
+                            checks.Add("PASS no code filters: with Blackwall off too, everything they say reaches her brain and her reply comes out as her brain wrote it, since her safety lines live in personality.md; a typed password still shows as dots in her bubble");
                             Think = null;
                             brain.Model = null;
                             System.Collections.Generic.List<byte> brainlessKeys = new System.Collections.Generic.List<byte>();
@@ -13099,13 +13051,12 @@ namespace CapriDesktop
                             string log;
                             lock (asked) log = string.Join(" | ", asked.ToArray());
                             if (log.IndexOf("late silent", StringComparison.Ordinal) < 0 || log.IndexOf("late loud", StringComparison.Ordinal) >= 0) throw new Exception("Mic was not silenced while she talked: " + log);
-                            ChatHeard("send nudes");
-                            if (!dropping || reply == null || reply == "Loud and clear, choom.") throw new Exception("Voice chat let a blocked line through.");
-                            ChatReplied("Sure thing.");
-                            if (reply == "Sure thing.") throw new Exception("The agent's reply to a blocked line got through.");
+                            ChatHeard("i want to get drunk");
+                            ChatReplied("Nah, choom. Real hangovers don't respawn.");
+                            bool brainAnswered = !dropping && reply == "Nah, choom. Real hangovers don't respawn.";
                             ChatHeard("hi again");
                             ChatReplied("well shit, choom");
-                            if (!dropping || reply == "well shit, choom") throw new Exception("A rude agent reply got through.");
+                            if (!brainAnswered || dropping || reply != "well shit, choom") throw new Exception("Voice chat screened their words or rewrote her reply: " + brainAnswered + " / " + reply);
                             ChatReplied("Still there, choom?");
                             if (!checkedIn) throw new Exception("A line she said unprompted was not taken as a check-in.");
                             dropping = false;

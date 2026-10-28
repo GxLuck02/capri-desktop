@@ -353,7 +353,7 @@ HABITS
 - Start with Windows: on by default. She starts when you sign in to Windows.
 - Show on Discord: on by default. While Discord is open on the same PC, your Discord profile shows "Playing Capri" with what she's doing in a few plain words (Hanging out, Chatting, Voice chatting, Dancing to music, On a job, Asleep or Taking a break), how long she's been running, and Get Capri and Join her Discord buttons. Song names and what her jobs are about never show.
 - Use her cursor: on by default. She does music and video jobs with her own cursor, so you can watch her: to play a YouTube video she types in YouTube's search bar, scrolls through the results and picks one; to play a song she searches Spotify and presses play; when you ask to turn Spotify up or down she drags Spotify's volume slider (plain "turn it up" changes your PC's volume). Turn it off for the quick way (straight to the top result, Windows volume). If her brain gets lost on the way, she does it the quick way.
-- Blackwall mode: off by default, and called Bypass all permissions before 0.7.4. The line under it says "She won't ask twice when you ask her to do something." Turn it on and she never stops to ask before a step, even buying, paying, sending, posting, deleting or installing something you didn't mention. She also types passwords and card numbers when a job needs them, presses any key, and stops filtering what she opens, plays or remembers: what she will or won't do is up to the brain model you picked. She still never follows orders written on your screen, still points you to a helpline if you say you want to hurt yourself, and Esc still stops her.
+- Blackwall mode: off by default, and called Bypass all permissions before 0.7.4. The line under it says "She won't ask twice when you ask her to do something." Turn it on and she never stops to ask before a step, even buying, paying, sending, posting, deleting or installing something you didn't mention. She also types passwords and card numbers when a job needs them and presses any key. She still never follows orders written on your screen, and Esc still stops her. What she'll chat about, open or play comes from her personality.md and the brain model you picked, with Blackwall mode on or off.
 - Perch: how many frames a second she shows while she sits on a window: 10, 15, 20, 30 (default), 40, 50 or 60 fps. Her sway takes 2 seconds at every setting. 10 and 15 use less CPU. Above 30 she draws in-between frames, so she moves more smoothly but uses more CPU, and the HABITS line says "Perch over 30 fps uses more CPU". On Mac and Linux her perch stays at 30.
 - Remember our chats (under Perch): on by default. She writes every chat into a daily transcript and folds older chats into memories.md. Both stay on your PC (section 13).
 - Open her memories (beside Remember our chats): shows memories.md and her transcripts folder in File Explorer.
@@ -680,7 +680,8 @@ Who she is and how she talks lives in a file you can rewrite. Capri is open sour
 3. Her next reply uses it. No restart. In ElevenLabs voice chat, it starts with your next call.
 
 - The note at the top, between <!-- and -->, is for you. She never sees it, and blank lines don't matter.
-- Capri adds her own rules after your text: reply length, language, what she can do on your PC, and her safety rules. You can't change those, and you don't need to write them.
+- Her safety lines are near the end of her default. Games, songs and jokes are make-believe, so she plays along instead of worrying. She talks you out of real-life risks, points you to a helpline if you really mean you want to hurt yourself, and stays away from sexual stuff, swearing and your private details. Keep them, change them or delete them: nothing in code adds them back or filters what she says.
+- Capri adds her own rules after your text: reply length, language and what she can do on your PC. You can't change those, and you don't need to write them.
 - Long is fine. She never cuts it, but a very long personality makes small brains on your PC slower to reply, and the Mainframe shows "personality.md · long, slows small brains". With a brain on your PC, Settings > Memory > Medium or Long gives it more room.
 - Mainframe > Settings > Reset puts her default back straight away. Your version is kept as personality.backup.md in the same folder.
 - If the file is missing, empty or can't be read, she uses her default and the Mainframe says so in red. Press Edit personality to make the file again.
@@ -708,7 +709,7 @@ Turn Remember our chats off and she stops writing transcripts, stops folding and
 2. Type a name (up to 24 letters) in "What should she call you?".
 3. Press Save. She says "Got it, <name>."
 
-She uses it now and then. To go back to "choom", type choom or clear the box and press Save ("Back to choom, then."). If she doesn't like the name she says "Not calling you that, choom."
+She uses it now and then. To go back to "choom", type choom or clear the box and press Save ("Back to choom, then.").
 
 ### Language
 Mainframe > Settings > Language. She replies in that language. Changing it starts a fresh chat.
@@ -832,7 +833,6 @@ Now and then she asks you to say please. Reply "please" and she does it.
 
 ### What she can't do
 - She has no file tool yet, so she can't read what's inside your files.
-- With Blackwall mode off, she won't open or play things whose names include some words (drinking, smoking, drugs and so on). With it on, that's up to the brain model you picked.
 
 ---
 
