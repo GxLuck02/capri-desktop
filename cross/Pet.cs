@@ -334,6 +334,7 @@ namespace CapriDesktop
         private double nextSleepCheck;
         private bool sleepChecking;
         private double sleepIdle;
+        private MenuItem sitItem;
         private PixelPoint? sleptAt;
         private readonly DispatcherTimer frames = new DispatcherTimer();
         private readonly Stopwatch clock = Stopwatch.StartNew();
@@ -1018,8 +1019,16 @@ namespace CapriDesktop
             if (!pressed || e.InitialPressMouseButton != MouseButton.Left) return;
             pressed = false;
             e.Pointer.Capture(null);
-            if (dragging) Drop();
+            if (dragging) Let((e.KeyModifiers & KeyModifiers.Shift) != 0);
             else React();
+        }
+
+        // Letting go of her: she falls onto the window below, or with Shift held sits right there, like on Windows.
+        internal void Let(bool here)
+        {
+            if (!here) { Drop(); return; }
+            dragging = false;
+            SitHere();
         }
 
         internal int Pets { get { return petTicket; } }
@@ -1153,8 +1162,8 @@ namespace CapriDesktop
             talk.Click += delegate { Talk.Open(); };
             quietItem = new MenuItem { Header = "Quiet", ToggleType = MenuItemToggleType.CheckBox };
             quietItem.Click += delegate { ToggleShush(); };
-            MenuItem sit = new MenuItem { Header = "Sit here" };
-            sit.Click += delegate { if (seat != null && seat.Free) StandUp(); else SitHere(); };
+            sitItem = new MenuItem { Header = "Sit here" };
+            sitItem.Click += delegate { if (seat != null && seat.Free) StandUp(); else SitHere(); };
             MenuItem move = new MenuItem { Header = "Move" };
             for (int i = 0; i < WanderNames.Length; i++)
             {
@@ -1301,7 +1310,7 @@ namespace CapriDesktop
             quit.Click += delegate { Quit(); };
             menu.Items.Add(talk);
             menu.Items.Add(quietItem);
-            menu.Items.Add(sit);
+            menu.Items.Add(sitItem);
             menu.Items.Add(move);
             menu.Items.Add(sizes);
             menu.Items.Add(brainMenu);
@@ -1336,7 +1345,11 @@ namespace CapriDesktop
             caughtUpItem.IsChecked = !Saved.NoCaughtUp;
             quietItem.IsChecked = shushed;
             for (int i = 0; i < sleepPicks.Count; i++) sleepPicks[i].IsChecked = Sleeps[i] == SleepAfter;
+            sitItem.Header = SitChoice;
         }
+
+        // Sit here, or Stand up while she sits where she was put, like Windows' Move menu.
+        internal string SitChoice { get { return seat != null && seat.Free ? "Stand up" : "Sit here"; } }
 
         internal int SleepAfter { get { return Saved.SleepAfter ?? 120; } }
 

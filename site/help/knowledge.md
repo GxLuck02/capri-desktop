@@ -1110,7 +1110,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 ### Right-click menu
 - Talk to her
 - Quiet: for when you focus or game. She stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her. It's in the tray or menu bar menu too. Starting her again ends it.
-- Sit here
+- Sit here: she sits right where she is. While she sits like that it says Stand up. Holding Shift as you drop her does Sit here too, like on Windows.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance, Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min)
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.

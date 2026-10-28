@@ -671,7 +671,14 @@ namespace CapriDesktop
             {
                 shelfSpot = Near(shelfAsked, true);
                 if (shelfSpot == null) return false;
+                PixelPoint letAt = pet.Hip;
+                pet.Grab();
+                pet.Let(true);
+                Ledge here = pet.Seat;
+                if (here == null || !here.Free || pet.Hip.Y != here.Y || Math.Abs(pet.Hip.X - letAt.X) > Px(60) || pet.SitChoice != "Stand up") throw new Exception("Shift + drop didn't sit her where she was let go: seat " + (here == null ? "none" : here.Left + "-" + here.Right + " at " + here.Y + (here.Free ? " free" : "")) + ", hip " + pet.Hip + " from " + letAt + ", menu " + pet.SitChoice);
+                checks.Add("PASS Shift + drop: she sits right where she's let go, and her menu says Stand up");
                 pet.StandUp();
+                if (pet.SitChoice != "Sit here") throw new Exception("Her menu still said Stand up after she stood.");
                 pet.Move(pet.Seated(shelfSpot.Bounds.X + Px(220), shelfSpot.Bounds.Y - Px(12)));
                 if (!pet.Drop()) throw new Exception("She couldn't reach the test shelf 12 px under her.");
                 return true;
