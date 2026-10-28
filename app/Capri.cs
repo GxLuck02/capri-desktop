@@ -11506,13 +11506,22 @@ namespace CapriDesktop
                                 Thread.CurrentThread.CurrentUICulture = uiWas;
                                 if (File.Exists(heldSettings)) { if (File.Exists(settingsPath)) File.Delete(settingsPath); File.Move(heldSettings, settingsPath); }
                             }
+                            // Every language her free ears hear is one she can be set to speak.
+                            string unoffered = "";
+                            foreach (string earsCode in LocalEars.European)
+                            {
+                                bool offered = false;
+                                for (int offeredRow = 0; offeredRow < Brain.Languages.GetLength(0); offeredRow++) if (Brain.Languages[offeredRow, 2] == earsCode) offered = true;
+                                if (!offered) unoffered += earsCode + " ";
+                            }
                             if (newInstall.Language != "Spanish" || Brain.SystemLanguage(new System.Globalization.CultureInfo("nb-NO")) != "Norwegian" || Brain.SystemLanguage(new System.Globalization.CultureInfo("fil-PH")) != "Filipino"
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("en-AU")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("th-TH")) != null || Brain.SystemLanguage(System.Globalization.CultureInfo.InvariantCulture) != null
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("ja-JP")) != "Japanese" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ko-KR")) != "Korean" || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-CN")) != "Simplified Chinese"
                                 || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-TW")) != "Traditional Chinese" || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-HK")) != "Traditional Chinese" || Brain.LanguageCode("Traditional Chinese") != "zh" || Brain.LanguageCode("Korean") != "ko"
-                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("hi-IN")) != "Hindi" || Brain.SystemLanguage(new System.Globalization.CultureInfo("bn-BD")) != "Bengali" || Brain.Languages[24, 0] != "हिन्दी")
-                                throw new Exception("A new install didn't start in the PC's own language: " + newInstall.Language);
-                            checks.Add("PASS a new install starts in the PC's own language when she speaks it (Spanish Windows gets Spanish, Norwegian Bokmål gets Norsk, Japanese, Korean, Hindi and Bengali their own, Taiwan and Hong Kong Traditional Chinese and mainland China Simplified), and English or a language she doesn't speak yet stays English");
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("hi-IN")) != "Hindi" || Brain.SystemLanguage(new System.Globalization.CultureInfo("bn-BD")) != "Bengali" || Brain.Languages[34, 0] != "हिन्दी"
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("fi-FI")) != "Finnish" || Brain.SystemLanguage(new System.Globalization.CultureInfo("hu-HU")) != "Hungarian" || Brain.SystemLanguage(new System.Globalization.CultureInfo("hr-HR")) != "Croatian" || Brain.LanguageCode("Slovenian") != "sl" || unoffered.Length > 0)
+                                throw new Exception("A new install didn't start in the PC's own language: " + newInstall.Language + (unoffered.Length > 0 ? " / her ears hear languages Settings doesn't offer: " + unoffered : ""));
+                            checks.Add("PASS a new install starts in the PC's own language when she speaks it (Spanish Windows gets Spanish, Norwegian Bokmål gets Norsk, Japanese, Korean, Hindi, Bengali, Finnish, Hungarian and Croatian their own, Taiwan and Hong Kong Traditional Chinese and mainland China Simplified), English or a language she doesn't speak yet stays English, and every language her free ears hear is in Settings");
                             if (mainframe.SettingsStatus != "Fran\u00e7ais | 50% | 30% | Often | 10 min | dance | - | Medium | Medium | Quick" || BubbleHold(100) != 4.5 || !preferences.NoIntro || preferences.Sounds != 30 || Sfx.Level != 30 || SleepDue(599000) || !SleepDue(600000)) throw new Exception("The settings page showed the wrong values: " + mainframe.SettingsStatus);
                             mainframe.TypeNickname("  Lachy!!  ");
                             bool namedRight = Nickname == "Lachy" && preferences.Nickname == "Lachy" && mainframe.NicknameShown == "Lachy" && reply == "Got it, Lachy." && Brain.Character.IndexOf("call them: Lachy.", StringComparison.Ordinal) >= 0;
@@ -11610,7 +11619,7 @@ namespace CapriDesktop
                             int[] latinTakes = Look.Takes(latinLines, "CAPRI: " + new string('a', 40), 47);
                             bool hanziFit = hanziLines.TrueForAll(delegate(string wideRow) { return Look.Cells(wideRow) <= 34 && "，。！？".IndexOf(wideRow[0]) < 0; });
                             if (!hanziFit || hanziLines.Count != 4 || Look.Cells(hanziLines[0]) != 31 || hanziShown != 63 || latinLines.Count != 3 || latinTakes[2] != 6 || Look.Cells(hanzi) != 28 || Look.Cut(hanzi, 5) != hanzi.Substring(0, 2)
-                                || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12).ToArray()) != "CAPRI: hey|choom, long|day?" || SpeechBox.Fit(hanziReply) != 34 || SpeechBox.Fit(hanziReply + hanziReply) != 44 || Brain.Languages[20, 0] != "简体中文")
+                                || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12).ToArray()) != "CAPRI: hey|choom, long|day?" || SpeechBox.Fit(hanziReply) != 34 || SpeechBox.Fit(hanziReply + hanziReply) != 44 || Brain.Languages[30, 0] != "简体中文")
                                 throw new Exception("Chinese didn't fit her bubble: " + string.Join(" | ", hanziLines.ToArray()) + " / shown " + hanziShown + " / long word " + latinTakes[latinTakes.Length - 1]);
                             using (SpeechBox hanziBox = new SpeechBox())
                             {

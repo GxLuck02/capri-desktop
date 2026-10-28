@@ -430,9 +430,12 @@ namespace CapriDesktop
         {
             { "English", "English", "en" }, { "Español", "Spanish", "es" }, { "Français", "French", "fr" }, { "Deutsch", "German", "de" },
             { "Italiano", "Italian", "it" }, { "Português", "Portuguese", "pt" }, { "Nederlands", "Dutch", "nl" }, { "Svenska", "Swedish", "sv" },
-            { "Dansk", "Danish", "da" }, { "Norsk", "Norwegian", "no" }, { "Polski", "Polish", "pl" }, { "Čeština", "Czech", "cs" },
+            { "Dansk", "Danish", "da" }, { "Norsk", "Norwegian", "no" }, { "Suomi", "Finnish", "fi" }, { "Eesti", "Estonian", "et" },
+            { "Latviešu", "Latvian", "lv" }, { "Lietuvių", "Lithuanian", "lt" }, { "Polski", "Polish", "pl" }, { "Čeština", "Czech", "cs" },
+            { "Slovenčina", "Slovak", "sk" }, { "Magyar", "Hungarian", "hu" }, { "Slovenščina", "Slovenian", "sl" }, { "Hrvatski", "Croatian", "hr" },
             { "Română", "Romanian", "ro" }, { "Türkçe", "Turkish", "tr" }, { "Русский", "Russian", "ru" }, { "Українська", "Ukrainian", "uk" },
-            { "Ελληνικά", "Greek", "el" }, { "Tiếng Việt", "Vietnamese", "vi" }, { "Bahasa Indonesia", "Indonesian", "id" }, { "Filipino", "Filipino", "fil" },
+            { "Български", "Bulgarian", "bg" }, { "Ελληνικά", "Greek", "el" }, { "Malti", "Maltese", "mt" }, { "Tiếng Việt", "Vietnamese", "vi" },
+            { "Bahasa Indonesia", "Indonesian", "id" }, { "Filipino", "Filipino", "fil" },
             { "简体中文", "Simplified Chinese", "zh" }, { "繁體中文", "Traditional Chinese", "zh" }, { "日本語", "Japanese", "ja" }, { "한국어", "Korean", "ko" },
             { "हिन्दी", "Hindi", "hi" }, { "বাংলা", "Bengali", "bn" }, { "العربية", "Arabic", "ar" }, { "اردو", "Urdu", "ur" }, { "فارسی", "Persian", "fa" }
         };
