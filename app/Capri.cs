@@ -5637,6 +5637,14 @@ namespace CapriDesktop
             base.Dispose(disposing);
         }
 
+        // An errors.txt line stamped at or after `from`, so a rerun in the same folder doesn't count the last run's lines.
+        private static bool LoggedSince(string line, DateTime from)
+        {
+            DateTime at;
+            return line.Length >= 19 && DateTime.TryParseExact(line.Substring(0, 19), "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out at)
+                && at >= from.AddTicks(-(from.Ticks % TimeSpan.TicksPerSecond));
+        }
+
         internal void StartSmokeTest(string output)
         {
             Directory.CreateDirectory(output);
@@ -7313,9 +7321,10 @@ namespace CapriDesktop
                                     return Process.Start(new ProcessStartInfo("cmd.exe", "/c exit " + (spawned.Count == 1 ? "-1073741819" : "3")) { UseShellExecute = false, CreateNoWindow = true });
                                 };
                                 string crashSaid = null;
+                                DateTime crashFrom = DateTime.Now;
                                 try { crashing.Ensure(Engine.Picks[2]); }
                                 catch (BrainException error) { crashSaid = error.Message; }
-                                string[] crashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => line.Contains(" | brain | - | llama-server stopped while loading " + Engine.Picks[2].Name));
+                                string[] crashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => LoggedSince(line, crashFrom) && line.Contains(" | brain | - | llama-server stopped while loading " + Engine.Picks[2].Name));
                                 if (crashSaid != "Brain crashed loading. Close games, press Refresh." || string.Join(" ", spawned.ToArray()) != "gpu cpu" || !crashing.CpuOnly || crashLines.Length != 2
                                     || !crashLines[0].EndsWith(Engine.Picks[2].Name + " with exit code 0xC0000005, restarting it on the CPU", StringComparison.Ordinal) || !crashLines[1].EndsWith(Engine.Picks[2].Name + " on the CPU with exit code 0x00000003", StringComparison.Ordinal))
                                     throw new Exception("A brain that crashed while loading wasn't retried on the CPU or logged: " + crashSaid + " / " + string.Join(" ", spawned.ToArray()) + " / " + string.Join(" || ", crashLines));
@@ -10842,6 +10851,7 @@ namespace CapriDesktop
                             if (hdVoice.Awake) throw new Exception("Her HD voice stayed awake after Stop.");
                             Func<ProcessStartInfo, Process> hdSpawnWas = QwenVoice.Spawn;
                             string hdCrash = null, hdStopped = null;
+                            DateTime hdCrashFrom = DateTime.Now;
                             try
                             {
                                 QwenVoice.Spawn = delegate(ProcessStartInfo info) { return Process.Start(new ProcessStartInfo("cmd.exe", "/c exit 3") { UseShellExecute = false, CreateNoWindow = true }); };
@@ -10861,7 +10871,7 @@ namespace CapriDesktop
                                 QwenVoice.Spawn = hdSpawnWas;
                                 hdVoice.Stop();
                             }
-                            string[] hdCrashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => line.Contains(" | HD voice | ") && line.EndsWith(" | llama-server stopped while loading with exit code 0x00000003", StringComparison.Ordinal));
+                            string[] hdCrashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => LoggedSince(line, hdCrashFrom) && line.Contains(" | HD voice | ") && line.EndsWith(" | llama-server stopped while loading with exit code 0x00000003", StringComparison.Ordinal));
                             if (hdCrash != "Her HD voice crashed loading. Close games, then try again." || hdCrashLines.Length != 1 || hdStopped != "quiet" || hdVoice.Awake) throw new Exception("Her HD voice didn't handle a crash or a stop while waking: " + hdCrash + " / " + hdCrashLines.Length + " log lines / " + hdStopped);
                             Directory.Delete(hdRoot, true);
                             checks.Add("PASS HD voice speech: a fake /tts server's float PCM becomes a 24 kHz WAV, the request carries her reference clip and respelled words, a long reply goes a few sentences per call so none hits the 41 s cap, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
