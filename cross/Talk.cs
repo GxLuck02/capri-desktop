@@ -480,6 +480,10 @@ namespace CapriDesktop
             Typer.Hide();
         }
 
+        // How long a finished reply stays up, like Windows: 4 s plus a bit per letter, up to 14 s, halved for Quick and
+        // doubled for Long.
+        internal static double Hold(int length, int level) { return Math.Min(14, 4 + length * 0.05) * new[] { 0.5, 1, 2 }[Math.Max(0, Math.Min(2, level))]; }
+
         internal void Update(double now)
         {
             UpdatePill(now);
@@ -489,7 +493,7 @@ namespace CapriDesktop
             {
                 sheet.Revealed = Math.Min(reply.Length, (int)((now - replyStart) * pace));
                 if (sheet.Revealed >= reply.Length && replyDone < 0) replyDone = now;
-                if (replyDone >= 0 && leaving < 0 && !Typer.IsVisible && now > replyDone + Math.Min(14, 4 + reply.Length * 0.05)) leaving = now;
+                if (replyDone >= 0 && leaving < 0 && !Typer.IsVisible && now > replyDone + Hold(reply.Length, pet.BubbleTime)) leaving = now;
             }
             double glitch = 0;
             if (opened >= 0 && now - opened < 0.2) glitch = 1 - (now - opened) / 0.2;

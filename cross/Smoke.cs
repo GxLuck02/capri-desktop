@@ -212,6 +212,13 @@ namespace CapriDesktop
                 pet.Talk.Dismiss();
                 if (!quieted || !unhushed || pet.Free != freeBefore) throw new Exception("Quiet went wrong: quiet " + quieted + " (" + hushed + "), back " + unhushed + ", free before " + freeBefore + " and after " + pet.Free);
                 checks.Add("PASS quiet: right-click > Quiet stops her pop-ins, check-ins, cheers, jokes and glances until it's turned off, and she says so both times");
+                pet.SetBubbleTime(2);
+                bool bubbleLong = pet.BubblePicked == "Long" && Talk.Hold(100, pet.BubbleTime) == 18 && Talk.Hold(1000, pet.BubbleTime) == 28;
+                pet.SetBubbleTime(0);
+                bool bubbleQuick = pet.BubblePicked == "Quick" && Talk.Hold(100, pet.BubbleTime) == 4.5;
+                pet.SetBubbleTime(1);
+                if (!bubbleLong || !bubbleQuick || pet.BubblePicked != "Normal" || Talk.Hold(100, pet.BubbleTime) != 9) throw new Exception("Bubble went wrong: long " + bubbleLong + ", quick " + bubbleQuick + ", picked " + pet.BubblePicked);
+                checks.Add("PASS bubble: Settings > Bubble keeps her replies up half as long on Quick and twice as long on Long, like Windows");
                 bool loginNew = !pet.StartsAtLogin;
                 pet.SetLogin(true);
                 string loginText = File.Exists(pet.LoginFile) ? File.ReadAllText(pet.LoginFile) : "";

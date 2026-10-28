@@ -222,7 +222,7 @@ Esc or clicking away closes the box. Your message shows as "> you:" and her repl
 The wave starts voice chat. With FREE VOICE picked (or no ElevenLabs key) it's free voice chat: you talk, she answers out loud. See section 12.
 
 ### How long do her bubbles stay up?
-It depends on how long the reply is (4 seconds plus a bit per letter, up to 14 seconds). Mainframe > Settings > BRAIN > Bubble changes it: Quick, Normal or Long.
+It depends on how long the reply is (4 seconds plus a bit per letter, up to 14 seconds). Mainframe > Settings > BRAIN > Bubble changes it: Quick, Normal or Long. On Mac and Linux it's right-click her > Settings > Bubble.
 
 ### Does she remember what we talked about?
 Yes. She keeps the chat for up to a week, even after a restart. Mainframe > Settings > Memory sets how many recent messages she keeps in mind: Short (8), Medium (16) or Long (32). Changing her language starts a fresh chat; changing her model carries on the same one, on Mac and Linux too.
@@ -1114,7 +1114,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance, Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min)
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
-- Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Check in on me, Pop-ins (Rarely, Sometimes, Often), Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Check in on me, Pop-ins (Rarely, Sometimes, Often), Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
 - Get Capri X, only when a new version is out

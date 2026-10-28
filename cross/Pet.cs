@@ -46,6 +46,7 @@ namespace CapriDesktop
         [DataMember] internal int GlanceGap;
         [DataMember] internal bool NoCaughtUp;
         [DataMember] internal int? SleepAfter;
+        [DataMember] internal int? Bubble;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -335,6 +336,9 @@ namespace CapriDesktop
         private bool sleepChecking;
         private double sleepIdle;
         private MenuItem sitItem;
+        // Settings > Bubble, like Windows: how long her replies stay up.
+        internal static readonly string[] BubbleNames = { "Quick", "Normal", "Long" };
+        private readonly List<MenuItem> bubblePicks = new List<MenuItem>();
         private PixelPoint? sleptAt;
         private readonly DispatcherTimer frames = new DispatcherTimer();
         private readonly Stopwatch clock = Stopwatch.StartNew();
@@ -1246,6 +1250,16 @@ namespace CapriDesktop
             settings.Items.Add(language);
             settings.Items.Add(replies);
             settings.Items.Add(recall);
+            MenuItem bubble = new MenuItem { Header = "Bubble" };
+            for (int i = 0; i < BubbleNames.Length; i++)
+            {
+                int level = i;
+                MenuItem pick = new MenuItem { Header = BubbleNames[i], ToggleType = MenuItemToggleType.Radio, GroupName = "bubble" };
+                pick.Click += delegate { SetBubbleTime(level); };
+                bubblePicks.Add(pick);
+                bubble.Items.Add(pick);
+            }
+            settings.Items.Add(bubble);
             settings.Items.Add(sounds);
             voiceMenu = new MenuItem { Header = "Voice" };
             settings.Items.Add(voiceMenu);
@@ -1346,6 +1360,25 @@ namespace CapriDesktop
             quietItem.IsChecked = shushed;
             for (int i = 0; i < sleepPicks.Count; i++) sleepPicks[i].IsChecked = Sleeps[i] == SleepAfter;
             sitItem.Header = SitChoice;
+            for (int i = 0; i < bubblePicks.Count; i++) bubblePicks[i].IsChecked = i == BubbleTime;
+        }
+
+        internal int BubbleTime { get { return Math.Max(0, Math.Min(2, Saved.Bubble ?? 1)); } }
+
+        internal string BubblePicked
+        {
+            get
+            {
+                for (int i = 0; i < bubblePicks.Count; i++) if (bubblePicks[i].IsChecked) return BubbleNames[i];
+                return null;
+            }
+        }
+
+        internal void SetBubbleTime(int level)
+        {
+            Saved.Bubble = Math.Max(0, Math.Min(2, level));
+            Save();
+            Sync();
         }
 
         // Sit here, or Stand up while she sits where she was put, like Windows' Move menu.
