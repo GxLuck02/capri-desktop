@@ -53,6 +53,7 @@ namespace CapriDesktop
         [DataMember] internal int Robot;
         [DataMember] internal int Glitch;
         [DataMember] internal bool NoIntro;
+        [DataMember] internal bool NotOnTop;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -277,6 +278,11 @@ namespace CapriDesktop
         private double nextPopIn = -1;
         private double popOut = -1;
         private int popAsked, popClicks, popPets;
+        // Always on top, like Windows' and on by default. Off, she's an ordinary window, and coming out to say hi, asking for
+        // attention or being shown brings her to the front until it's over or they touch her.
+        private MenuItem onTopItem;
+        private double raisedUntil = -1;
+        private int raisedAsked, raisedClicks, raisedPets;
         private bool popChecking;
         // Cyberpunk 2077 starting, or a Night City song coming on, is home for her, like on Windows: she cheers once, then waits
         // two hours before cheering for the same again. Check in on me off stops it.
@@ -449,7 +455,7 @@ namespace CapriDesktop
             SystemDecorations = SystemDecorations.None;
             Background = Brushes.Transparent;
             TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
-            Topmost = true;
+            Topmost = !Saved.NotOnTop;
             ShowInTaskbar = false;
             CanResize = false;
             // Showing her, at the start or when she pops in, never takes the keyboard from what they're typing in, like on Windows.
@@ -470,6 +476,7 @@ namespace CapriDesktop
             // Her bubble and pill come up by themselves with her, so they leave the keyboard alone too. Her typing box takes it.
             Unfocus(Talk.Bubble);
             Unfocus(Talk.Pill);
+            if (!OnTop) Stack(false);
             frames.Interval = TimeSpan.FromMilliseconds(33);
             frames.Tick += delegate { Tick(); };
             Opened += delegate
@@ -579,6 +586,7 @@ namespace CapriDesktop
             Screen saved = Saved.Placed ? Screens.ScreenFromPoint(new PixelPoint(Saved.X + Px(body.Size / 2), Saved.Y + Px(body.Size / 2))) : null;
             Screen screen = saved ?? Screens.Primary ?? (Screens.All.Count > 0 ? Screens.All[0] : null);
             if (screen == null) return;
+            Raise(Now + 6);
             if (Saved.NoIntro && saved != null)
             {
                 Move(new PixelPoint(Saved.X, Saved.Y));
@@ -614,6 +622,7 @@ namespace CapriDesktop
             PixelRect area = screen.WorkingArea;
             Move(new PixelPoint(area.X + area.Width / 2 - Px(body.Size / 2), area.Y));
             Arrive();
+            Raise(Now + 6);
         }
 
         internal bool Away { get { return away; } }
@@ -647,6 +656,7 @@ namespace CapriDesktop
             seat = null;
             falling = false;
             Arrive();
+            Raise(Now + 6);
         }
 
         internal int Arrivals;
@@ -666,6 +676,7 @@ namespace CapriDesktop
             if (Program.Smoke == null && now >= nextUpdate) { nextUpdate = now + 6 * 3600; CheckUpdate(); }
             if (UpdateNews != null && !away && !dragging && Talk.Quiet) { Talk.Answer("(update)", UpdateNews); UpdateNews = null; }
             if (outro != null && now >= outroAt) { Action next = outro; outro = null; next(); }
+            CheckRaised(now);
             if (away && !IsVisible)
             {
                 Talk.Gone();
@@ -1404,6 +1415,9 @@ namespace CapriDesktop
                 pops.Items.Add(pick);
             }
             settings.Items.Add(pops);
+            onTopItem = new MenuItem { Header = "Always on top", ToggleType = MenuItemToggleType.CheckBox };
+            onTopItem.Click += delegate { SetOnTop(Saved.NotOnTop); };
+            settings.Items.Add(onTopItem);
             watchItem = new MenuItem { Header = "Watch my screen", ToggleType = MenuItemToggleType.CheckBox };
             watchItem.Click += delegate { SetWatch(!Saved.Watch); };
             settings.Items.Add(watchItem);
@@ -1472,6 +1486,7 @@ namespace CapriDesktop
             danceItem.IsChecked = dancing;
             musicItem.IsChecked = !Saved.NoDance;
             introItem.IsChecked = !Saved.NoIntro;
+            onTopItem.IsChecked = OnTop;
             string language = Brain.Language ?? "English";
             foreach (MenuItem pick in languagePicks) pick.IsChecked = (string)pick.Tag == language;
             for (int i = 0; i < replyPicks.Count; i++) replyPicks[i].IsChecked = i == Brain.Wordiness;
@@ -1737,6 +1752,46 @@ namespace CapriDesktop
         }
 
         internal bool IntroShown { get { return introItem.IsChecked; } }
+        internal bool OnTop { get { return !Saved.NotOnTop; } }
+        internal bool OnTopShown { get { return onTopItem.IsChecked; } }
+        internal bool Raised { get { return raisedUntil >= 0; } }
+
+        internal void SetOnTop(bool on)
+        {
+            Saved.NotOnTop = !on;
+            raisedUntil = -1;
+            Stack(on);
+            Save();
+            Sync();
+        }
+
+        // Her bubble, typing box and pill go with her, like on Windows.
+        private void Stack(bool above)
+        {
+            Topmost = above;
+            foreach (Window window in new Window[] { Talk.Bubble, Talk.Typer, Talk.Pill }) window.Topmost = above;
+        }
+
+        internal void Raise(double until)
+        {
+            if (OnTop) return;
+            raisedUntil = until;
+            raisedAsked = asking;
+            raisedClicks = clicks;
+            raisedPets = petTicket;
+            Stack(true);
+        }
+
+        // Back to an ordinary window once her line's done and the time's up, or as soon as they touch her or talk to her: she stays
+        // in front of what's there now until another window comes up, like Windows' pop-ins.
+        internal void CheckRaised(double now)
+        {
+            if (raisedUntil < 0) return;
+            bool touched = asking != raisedAsked || clicks != raisedClicks || petTicket != raisedPets || dragging || pressed || Talk.Typing;
+            if (!touched && (now < raisedUntil || !Talk.Quiet)) return;
+            raisedUntil = -1;
+            Stack(OnTop);
+        }
 
         internal void SetIntro(bool on)
         {
@@ -2207,6 +2262,7 @@ namespace CapriDesktop
                 popClicks = clicks;
                 popPets = petTicket;
                 popOut = hidden ? Now + 6 : -1;
+                Raise(Now + 6);
             };
             if (hidden) arrive();
             else GlitchOut(arrive);
@@ -2372,6 +2428,7 @@ namespace CapriDesktop
             nudgeOut = now + 20;
             nudgeAsked = asking;
             Blurt(NudgeHeard, line);
+            Raise(now + 20);
         }
 
         // Like on Windows, she only sulks out loud when someone's touched the computer in the last 20 s; she waits twice as long either way.
