@@ -269,6 +269,22 @@ namespace CapriDesktop
                 if (noModels != Pet.PullChoice || pet.FirstBrainChoice != Pet.NoOllama) throw new Exception("The Brain menu didn't offer her brain download: " + noModels + " / " + pet.FirstBrainChoice);
                 if (chatBeforePick < 2 || chatAfterPick != chatBeforePick) throw new Exception("Picking another model wiped her chat: " + chatBeforePick + " then " + chatAfterPick);
                 checks.Add("PASS settings menu: wander, dance, language, reply length, chat memory and the brain picker change her and show which is picked, picking another model keeps the chat, and with Ollama open but empty Brain offers to download gemma4:e4b");
+                // Her Discord status: the switch, plain states, and Discord's socket found by name in its temp folder.
+                string ipcFolder = Path.Combine(folder, "ipc");
+                Directory.CreateDirectory(ipcFolder);
+                File.WriteAllText(Path.Combine(ipcFolder, "discord-ipc-3"), "");
+                string tmpWas = Environment.GetEnvironmentVariable("TMPDIR");
+                List<string> ipcNames;
+                Environment.SetEnvironmentVariable("TMPDIR", ipcFolder);
+                try { ipcNames = Presence.Names(); }
+                finally { Environment.SetEnvironmentVariable("TMPDIR", tmpWas); }
+                pet.SetDiscord(false);
+                bool discordOff = pet.Saved.NoDiscord && !pet.DiscordShown;
+                pet.SetDiscord(true);
+                bool discordOn = !pet.Saved.NoDiscord && pet.DiscordShown;
+                if (!ipcNames.Contains(Path.Combine(ipcFolder, "discord-ipc-3")) || !discordOff || !discordOn || Array.IndexOf(new[] { "Hanging out", "Chatting", "Dancing to music", "Taking a break" }, pet.Doing) < 0)
+                    throw new Exception("Her Discord status went wrong: " + string.Join(", ", ipcNames) + " / off " + discordOff + " / on " + discordOn + " / " + pet.Doing);
+                checks.Add("PASS Discord status: Settings > Show on Discord turns it off and on, she says what she's doing in plain words, and she finds Discord's socket in its temp folder");
                 pet.AskNickname();
                 bool askedName = pet.Talk.Typing && pet.Talk.Reply != null && pet.Talk.Reply.StartsWith("What should I call you?", StringComparison.Ordinal);
                 pet.Talk.Submit("  Lachy!!  ");

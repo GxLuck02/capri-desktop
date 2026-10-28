@@ -82,7 +82,7 @@ The first time the installed Capri runs, she also sets herself to start with Win
 Yes, by default. To stop it, open Capri Mainframe, click Settings, and turn off Start with Windows under HABITS. Turning her off in Task Manager > Startup apps works too, and the switch in Settings shows it. She only sets this once: if you turn it off, it stays off after updates. A Capri.exe you run from somewhere else, like Downloads, doesn't start with Windows unless you turn the switch on in that copy.
 
 ### Why does my Discord say "Playing Capri"?
-That's her Discord status. While Discord is open on the same PC, your profile shows "Playing Capri" with what she's doing in a few plain words, how long she's been running, and buttons to get Capri and join her Discord. It never shows song names or what her jobs are about. To turn it off, open Capri Mainframe, click Settings, and turn off Show on Discord under HABITS. If friends can't see it, turn on Share your activity in Discord's User Settings > Activity Privacy.
+That's her Discord status. While Discord is open on the same PC, your profile shows "Playing Capri" with what she's doing in a few plain words, how long she's been running, and buttons to get Capri and join her Discord. It never shows song names or what her jobs are about. To turn it off, open Capri Mainframe, click Settings, and turn off Show on Discord under HABITS. On Mac and Linux it's right-click her > Settings > Show on Discord. If friends can't see it, turn on Share your activity in Discord's User Settings > Activity Privacy.
 
 ### "Item Not Found" or the installer disappeared
 Your browser or antivirus held the file back.
@@ -1081,6 +1081,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Her personality file (personality.md), with Reset
 - Wander, dance to music, petting, sizes
 - Opening apps and websites, playing songs on Spotify, skipping tracks, what's playing, volume
+- "Playing Capri" on your Discord profile, with Show on Discord in Settings
 
 ### Not yet
 - No Mainframe. Everything is in her right-click menu.
@@ -1097,7 +1098,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it."
-- Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Open her notes (me.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Show on Discord, Open her notes (me.md), Edit her personality (personality.md), Reset her personality to default
 - Join the Discord
 - Quit Capri
 

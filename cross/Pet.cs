@@ -35,6 +35,7 @@ namespace CapriDesktop
         [DataMember] internal string VoiceId;
         [DataMember] internal bool Silent;
         [DataMember] internal int Typing;
+        [DataMember] internal bool NoDiscord;
     }
 
     internal sealed class Clip
@@ -206,6 +207,10 @@ namespace CapriDesktop
         private const string NameHeard = "(nickname)";
         private const string PersonalityHeard = "(personality)";
         private const string BrainHeard = "(brain download)";
+        // "Playing Capri" on their Discord profile, like on Windows. Off in the smoke test.
+        private readonly Presence presence;
+        private MenuItem discordItem;
+        private double nextStatus;
         private bool pulling;
         private volatile int pulled = -1;
         private bool dancing;
@@ -258,6 +263,7 @@ namespace CapriDesktop
             if (Program.Smoke == null) Sfx.Out = Limbs.Sound;
             if (Program.Smoke == null) Brain.Load(Path.Combine(folder, "chat.json"));
             Limbs.Attach(Brain);
+            if (Program.Smoke == null) presence = new Presence(System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
             voice.Key = ReadVoiceKey();
             voice.VoiceId = string.IsNullOrEmpty(Saved.VoiceId) ? null : Saved.VoiceId;
             if (Program.Smoke == null) { Voice.Playback = Limbs.Speak; Voice.Silence = Limbs.Hush; }
@@ -434,6 +440,7 @@ namespace CapriDesktop
         private void Tick()
         {
             double now = Now;
+            if (presence != null && now >= nextStatus) { nextStatus = now + 1; presence.Show(Saved.NoDiscord ? null : Doing); }
             if (outro != null && now >= outroAt) { Action next = outro; outro = null; next(); }
             if (away && !IsVisible) { if (smoke != null) smoke.Tick(now); return; }
             if (!dragging)
@@ -452,6 +459,26 @@ namespace CapriDesktop
             Advance(now);
             Talk.Update(now);
             if (smoke != null) smoke.Tick(now);
+        }
+
+        // What their Discord profile says under "Playing Capri". Plain words only, like on Windows: song names and what
+        // she's told can be private, so they never go out.
+        internal string Doing
+        {
+            get
+            {
+                if (away) return "Taking a break";
+                if (!Talk.Quiet) return "Chatting";
+                if (clip == dance || clip == perchDance) return "Dancing to music";
+                return "Hanging out";
+            }
+        }
+
+        internal void SetDiscord(bool on)
+        {
+            Saved.NoDiscord = !on;
+            Save();
+            Sync();
         }
 
         private void Play(Clip next)
@@ -922,6 +949,9 @@ namespace CapriDesktop
             settings.Items.Add(sounds);
             voiceMenu = new MenuItem { Header = "Voice" };
             settings.Items.Add(voiceMenu);
+            discordItem = new MenuItem { Header = "Show on Discord", ToggleType = MenuItemToggleType.CheckBox };
+            discordItem.Click += delegate { SetDiscord(Saved.NoDiscord); };
+            settings.Items.Add(discordItem);
             settings.Items.Add(notes);
             settings.Items.Add(personality);
             settings.Items.Add(resetPersonality);
@@ -962,7 +992,10 @@ namespace CapriDesktop
             for (int i = 0; i < recallPicks.Count; i++) recallPicks[i].IsChecked = Recalls[i] == Brain.Recall;
             for (int i = 0; i < soundPicks.Count; i++) soundPicks[i].IsChecked = SoundLevels[i] == Sfx.Level;
             typingItem.IsChecked = TypingSound;
+            discordItem.IsChecked = !Saved.NoDiscord;
         }
+
+        internal bool DiscordShown { get { return discordItem.IsChecked == true; } }
 
         internal string Picked
         {
@@ -1642,6 +1675,7 @@ namespace CapriDesktop
             quitting = true;
             Brain.Cancel();
             voice.Stop();
+            if (presence != null) presence.Dispose();
             Talk.Dismiss();
             GlitchOut(delegate
             {
