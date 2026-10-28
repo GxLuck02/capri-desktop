@@ -828,7 +828,7 @@ namespace CapriDesktop
         internal ProcessStartInfo StartInfo(int number)
         {
             int threads = Engine.Threads(Environment.ProcessorCount);
-            ProcessStartInfo info = new ProcessStartInfo(Server, "-m \"" + Path.Combine(folder, ModelFile) + "\" --mmproj \"" + Path.Combine(folder, CodecFile) + "\" --host 127.0.0.1 --port " + number + " -c 2048 -np 1 --no-webui --log-disable -t " + threads + " -tb " + threads);
+            ProcessStartInfo info = new ProcessStartInfo(Server, "-m \"" + Path.Combine(folder, ModelFile) + "\" --mmproj \"" + Path.Combine(folder, CodecFile) + "\" --host 127.0.0.1 --port " + number + " -c 2048 -np 1 --no-webui --log-disable -t " + threads + " -tb " + threads + " --poll 0 --poll-batch 0");
             info.UseShellExecute = false;
             info.CreateNoWindow = true;
             info.WorkingDirectory = engine;

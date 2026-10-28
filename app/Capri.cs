@@ -10382,7 +10382,9 @@ namespace CapriDesktop
                                 QwenVoice.ModelSize = hdSizes[2];
                             }
                             if (!QwenVoice.ModelUrl.StartsWith("https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/", StringComparison.Ordinal) || QwenVoice.ModelSha.Length != 64 || QwenVoice.CodecSha.Length != 64 || !QwenVoice.EngineUrl.EndsWith("/llama-" + QwenVoice.Build + "-bin-win-vulkan-x64.zip", StringComparison.Ordinal)) throw new Exception("Her HD voice points at the wrong download.");
-                            checks.Add("PASS HD voice pack: llama.cpp " + QwenVoice.Build + " engine, codec and Qwen3-TTS model download with their checksums and unpack from a fake server");
+                            string hdLaunch = hdVoice.StartInfo(1234).Arguments;
+                            if (!hdLaunch.Contains(QwenVoice.ModelFile) || !hdLaunch.Contains("--mmproj \"") || !hdLaunch.Contains(" --port 1234 -c 2048 -np 1 ") || !hdLaunch.EndsWith(" --poll 0 --poll-batch 0", StringComparison.Ordinal)) throw new Exception("Her HD voice starts with the wrong settings: " + hdLaunch);
+                            checks.Add("PASS HD voice pack: llama.cpp " + QwenVoice.Build + " engine, codec and Qwen3-TTS model download with their checksums and unpack from a fake server, and its server starts with a 2048 context and without busy-waiting on the CPU");
                             string hdTrouble = null;
                             byte[] hdTone = Voice.Wave(new short[12000], 24000);
                             Action<string> hdNoted = delegate(string problem) { hdTrouble = problem; };
