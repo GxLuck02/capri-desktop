@@ -200,7 +200,7 @@ namespace CapriDesktop
                 int settleWas = Limbs.Settle;
                 Func<List<InstalledApp>> catalogWas = Hands.Catalog;
                 List<string> did = new List<string>();
-                bool noWindowTool = false;
+                bool noWindowTool = false, pactlWorks = false;
                 string tempApps = Path.Combine(folder, "apps");
                 try
                 {
@@ -216,7 +216,12 @@ namespace CapriDesktop
                         if (line.Contains("PlaybackStatus")) return "   variant       string \"Playing\"\n";
                         if (line.Contains("Metadata")) return "   variant       array [\n         dict entry(\n            string \"xesam:artist\"\n            variant                array [\n                  string \"Chase Atlantic\"\n               ]\n         )\n         dict entry(\n            string \"xesam:title\"\n            variant                string \"Consume\"\n         )\n      ]\n";
                         if (file == "osascript" && line.Contains("current track")) return "Petite Meller - In Love With Myself\n";
-                        if (file == "pactl") return null;
+                        if (file == "pactl" && pactlWorks && line.Contains("get-sink-volume")) return "Volume: front-left: 26214 /  40% / -23.88 dB,   front-right: 26214 /  40% / -23.88 dB\n        balance 0.00\n";
+                        if (file == "pactl" && pactlWorks && line.Contains("get-sink-mute")) return "Mute: yes\n";
+                        if (file == "pactl") return pactlWorks ? "" : null;
+                        if (line == "amixer sget Master") return "Simple mixer control 'Master',0\n  Front Left: Playback 26214 [40%] [-23.88dB] [on]\n";
+                        if (file == "osascript" && line.EndsWith("-e output volume of (get volume settings)", StringComparison.Ordinal)) return "40\n";
+                        if (file == "osascript" && line.EndsWith("-e output muted of (get volume settings)", StringComparison.Ordinal)) return "false\n";
                         if (file == "osascript" && line.Contains("background only is false")) return "Finder\tcom.apple.finder\nDiscord\tcom.hnc.Discord\nCapri\tmissing value\n";
                         if (file == "osascript" && line.Contains("exists application process")) return "false\n";
                         if (file == "wmctrl" && line == "wmctrl -lpx") return noWindowTool ? null : "0x01e00003 -1 0      N/A                    N/A Desktop\n0x03c00007  0 99999999 discord.discord  host #general | Discord\n0x04200001  0 99999998 Navigator.firefox  host YouTube — Mozilla Firefox\n";
@@ -270,6 +275,23 @@ namespace CapriDesktop
                         || !windowLog.Contains("set visible of application process \"Discord\" to false") || !linuxSteered || !windowLog.Contains("wmctrl -i -c 0x03c00007") || !windowLog.Contains("xdotool windowminimize 0x04200001") || !windowLog.Contains("wmctrl -i -a 0x04200001")
                         || closedDiscord != "Closed discord." || !noWmctrl.Contains("needs wmctrl") || !noneListed || !listedAgain || Hands.Presses)
                         throw new Exception("Closing and switching apps went wrong: " + closedDiscord + " / " + noWmctrl + " / " + windowLog);
+                    // An exact volume and the mute state: osascript on Mac, pactl on Linux, and amixer when pactl is missing.
+                    did.Clear();
+                    pactlWorks = true;
+                    double? pulseLevel = Limbs.Level(false);
+                    bool? pulseMuted = Limbs.Muted(false);
+                    bool pulseSet = Limbs.SetLevel(0.4, false) && Limbs.Mute(false, false);
+                    pactlWorks = false;
+                    double? alsaLevel = Limbs.Level(false);
+                    bool? alsaMuted = Limbs.Muted(false);
+                    double? macLevel = Limbs.Level(true);
+                    bool? macMuted = Limbs.Muted(true);
+                    bool macSet = Limbs.SetLevel(0.55, true) && Limbs.Mute(true, true);
+                    string setLine = Hands.Do("media", new ToolArguments { Action = "volume_set", Level = "40" });
+                    string volumeLog = string.Join(" / ", did);
+                    if (pulseLevel != 0.4 || pulseMuted != true || !pulseSet || alsaLevel != 0.4 || alsaMuted != false || macLevel != 0.4 || macMuted != false || !macSet || setLine != "Set the volume to 40%."
+                        || !volumeLog.Contains("pactl set-sink-volume @DEFAULT_SINK@ 40%") || !volumeLog.Contains("pactl set-sink-mute @DEFAULT_SINK@ 0") || !volumeLog.Contains("osascript -e set volume output volume 55") || !volumeLog.Contains("osascript -e set volume output muted true"))
+                        throw new Exception("Setting the volume went wrong on Mac or Linux: " + setLine + " / " + volumeLog);
                     // Her power tool: a lock happens at once, a shutdown waits and cancel stops it. Only the pretend runner sees any of it.
                     did.Clear();
                     string lockedLine = Hands.Do("power", new ToolArguments { Action = "lock" });
@@ -291,7 +313,7 @@ namespace CapriDesktop
                     Hands.Catalog = catalogWas;
                     Hands.Forget();
                 }
-                checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing and turns the volume on Mac and Linux, closes, minimizes and switches to apps (System Events on Mac, wmctrl on Linux, which says when it's missing), and shuts down, restarts, sleeps, locks and signs out, with cancel stopping a wait; Windows-only shortcuts say so");
+                checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing, turns or sets the volume and reads the mute state on Mac and Linux, closes, minimizes and switches to apps (System Events on Mac, wmctrl on Linux, which says when it's missing), and shuts down, restarts, sleeps, locks and signs out, with cancel stopping a wait; Windows-only shortcuts say so");
                 pet.ShowBrains(new[] { "gemma4:e4b", "qwen3:8b" });
                 int brains = pet.BrainChoices;
                 pet.Brain.Remember("what's up?", "Not much, choom.");

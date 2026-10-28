@@ -95,6 +95,10 @@ namespace CapriDesktop
             Hands.Power = delegate(string action, int seconds) { return Power(action, seconds, OnMac); };
             Hands.Unlisted = delegate { return Blind; };
             Hands.Presses = false;
+            Hands.SetVolume = delegate(double level) { return SetLevel(level, OnMac); };
+            Hands.VolumeNow = delegate { return Level(OnMac); };
+            Hands.MuteState = delegate { return Muted(OnMac); };
+            Hands.SetMute = delegate(bool on) { return Mute(on, OnMac); };
             Hands.Chord = delegate { throw new PlatformNotSupportedException("keyboard shortcuts only work on Windows for now"); };
             // A look is already in her transcript; anything else she did goes in as a job, like on Windows.
             brain.Act = delegate(string tool, ToolArguments args)
@@ -171,6 +175,38 @@ namespace CapriDesktop
             }
             string[] pactl = key == 0xAF ? new[] { "set-sink-volume", "@DEFAULT_SINK@", "+2%" } : key == 0xAE ? new[] { "set-sink-volume", "@DEFAULT_SINK@", "-2%" } : key == 0xAD ? new[] { "set-sink-mute", "@DEFAULT_SINK@", "toggle" } : null;
             if (pactl != null && Music.Run("pactl", pactl) == null) Music.Run("amixer", new[] { "-q", "sset", "Master", key == 0xAF ? "2%+" : key == 0xAE ? "2%-" : "toggle" });
+        }
+
+        // The volume as a number, like Windows' audio API: osascript on Mac, pactl (PulseAudio or PipeWire) on Linux, then ALSA's amixer.
+        internal static bool SetLevel(double level, bool mac)
+        {
+            int percent = (int)Math.Round(Math.Max(0, Math.Min(1, level)) * 100);
+            if (mac) return Music.Run("osascript", new[] { "-e", "set volume output volume " + percent }) != null;
+            return Music.Run("pactl", new[] { "set-sink-volume", "@DEFAULT_SINK@", percent + "%" }) != null || Music.Run("amixer", new[] { "-q", "sset", "Master", percent + "%" }) != null;
+        }
+
+        internal static double? Level(bool mac)
+        {
+            string shown = mac ? Music.Run("osascript", new[] { "-e", "output volume of (get volume settings)" }) : Music.Run("pactl", new[] { "get-sink-volume", "@DEFAULT_SINK@" }) ?? Music.Run("amixer", new[] { "sget", "Master" });
+            Match number = Regex.Match(shown ?? "", mac ? @"^\s*(\d{1,3})\s*$" : @"(\d{1,3})%");
+            return number.Success ? int.Parse(number.Groups[1].Value) / 100.0 : (double?)null;
+        }
+
+        internal static bool? Muted(bool mac)
+        {
+            string shown = mac ? Music.Run("osascript", new[] { "-e", "output muted of (get volume settings)" }) : Music.Run("pactl", new[] { "get-sink-mute", "@DEFAULT_SINK@" }) ?? Music.Run("amixer", new[] { "sget", "Master" });
+            string said = (shown ?? "").Trim();
+            if (mac) return said == "true" ? true : said == "false" ? false : (bool?)null;
+            // pactl says "Mute: yes"; amixer shows [off] for muted and [on] for playing.
+            if (Regex.IsMatch(said, @"Mute:\s*yes") || said.Contains("[off]")) return true;
+            if (Regex.IsMatch(said, @"Mute:\s*no") || said.Contains("[on]")) return false;
+            return null;
+        }
+
+        internal static bool Mute(bool on, bool mac)
+        {
+            if (mac) return Music.Run("osascript", new[] { "-e", "set volume output muted " + (on ? "true" : "false") }) != null;
+            return Music.Run("pactl", new[] { "set-sink-mute", "@DEFAULT_SINK@", on ? "1" : "0" }) != null || Music.Run("amixer", new[] { "-q", "sset", "Master", on ? "mute" : "unmute" }) != null;
         }
 
         internal static string Song(bool mac)

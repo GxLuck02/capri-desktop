@@ -1076,12 +1076,12 @@ namespace CapriDesktop
         }
 
 #if CROSS
-        // Mac and Linux have no Windows audio API (Speakers lives in Ears.cs), so mute toggles with the key and a set level isn't possible.
+        // Mac and Linux have no Windows audio API (Speakers lives in Ears.cs); Limbs sets these from osascript, pactl or amixer.
         internal static Func<bool?> MuteState = delegate { return (bool?)null; };
         internal static Func<bool, bool> SetMute = delegate { return false; };
         internal static Func<double?> VolumeNow = delegate { return (double?)null; };
         internal static Func<double, bool> SetVolume = delegate { return false; };
-        private const string VolumeRefused = "Couldn't set the volume: here I can only turn it up or down.";
+        private const string VolumeRefused = "Couldn't set the volume: the system's sound control didn't answer.";
 #else
         internal static Func<bool?> MuteState = Speakers.Muted;
         internal static Func<bool, bool> SetMute = Speakers.Mute;
