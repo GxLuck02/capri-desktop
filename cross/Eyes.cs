@@ -47,7 +47,8 @@ namespace CapriDesktop
                 if (!where.Contains("gnome")) tools.Add(gnome);
                 return tools;
             }
-            tools.Add(new[] { "import", "-window", "root", "{0}" });
+            // ImageMagick's import rings the bell once before it grabs the screen and twice after, unless it's told to be silent.
+            tools.Add(new[] { "import", "-silent", "-window", "root", "{0}" });
             tools.Add(new[] { "scrot", "{0}" });
             tools.Add(new[] { "maim", "{0}" });
             tools.Add(gnome);

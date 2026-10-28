@@ -1130,7 +1130,7 @@ namespace CapriDesktop
                 if (pet.Glancing) return false;
                 string told = pet.Talk.Reply;
                 List<string[]> gnome = Eyes.QuietTools(false, "wayland", "ubuntu:GNOME"), x11 = Eyes.QuietTools(false, "x11", "XFCE"), kde = Eyes.QuietTools(false, "wayland", "KDE");
-                bool quietRight = gnome.Count == 1 && gnome[0][0] == "grim" && x11.Count == 4 && x11[0][0] == "import" && kde[0][0] == "spectacle" && Eyes.QuietTools(true, null, null)[0][0] == "screencapture";
+                bool quietRight = gnome.Count == 1 && gnome[0][0] == "grim" && x11.Count == 4 && x11[0][0] == "import" && Array.IndexOf(x11[0], "-silent") == 1 && kde[0][0] == "spectacle" && Eyes.QuietTools(true, null, null)[0][0] == "screencapture";
                 if (told != Eyes.Unwatchable || !quietRight) throw new Exception("Watching without a quiet screenshot tool went wrong: " + told + " | " + quietRight);
                 checks.Add("PASS watch my screen: she glances, comments on what she sees, skips a screen that hasn't changed and a line she already said, and says once when this desktop can't take quiet screenshots");
                 // A new screen with a new line, but Quiet goes on while she's looking.
