@@ -115,6 +115,7 @@ namespace CapriDesktop
         private readonly Key speechModels;
         private readonly ContextMenuStrip speechModelMenu;
         private readonly Label voiceNote;
+        private bool speechFix;
         private readonly Label keysNote;
         private readonly Label blackwallNote;
         private readonly Label updateNote;
@@ -337,6 +338,7 @@ namespace CapriDesktop
             muteShortcut.Click += delegate { ShowSettings(true); PickKeys(1); };
             Deactivate += delegate { CancelKeys(); };
             voiceNote = Lower(Caption("", 28, InstallAt, Font, Look.Dim));
+            voiceNote.Click += delegate { if (speechFix) capri.OpenSpeechSettings(); };
             installNote = Caption("", 28, InstallAt + 2, Font, Look.Ink);
             installNote.Visible = false;
             int v = VoiceHeight;
@@ -1607,11 +1609,17 @@ namespace CapriDesktop
 
         internal string MicStatus { get { return "mic | " + mics.Text + " | " + (keyHelp.Visible ? "help" : "-") + " | " + (shortcut.Visible ? (shortcutReady ? "keys" : "taken") : "-") + " | " + (muteShortcut.Visible ? (muteReady ? "mute" : "taken") : "-"); } }
 
+        // Windows' Online speech recognition switch is hard to find (Baguettboy couldn't), so a note that asks for it opens its page.
         internal void VoiceNote(string text, bool problem)
         {
-            voiceNote.Text = text;
+            speechFix = text != null && text.IndexOf("Online speech recognition", StringComparison.Ordinal) >= 0;
+            voiceNote.Text = speechFix ? text + OpenSpeech : text;
             voiceNote.ForeColor = problem ? Look.Red : Look.Dim;
+            voiceNote.Cursor = speechFix ? Cursors.Hand : Cursors.Default;
         }
+
+        internal const string OpenSpeech = " Click to open it.";
+        internal bool SpeechFixShown { get { return speechFix && voiceNote.Cursor == Cursors.Hand && voiceNote.Text.EndsWith(OpenSpeech, StringComparison.Ordinal); } }
 
         internal string VoiceNoteText { get { return voiceNote.Text; } }
 

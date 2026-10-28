@@ -669,7 +669,7 @@ Voice chat follows your pick under VOICE. With FREE VOICE picked, or no ElevenLa
 - She listens with her own offline ears, a download the first time: "My ears are still downloading, so type to me for now. I'll say when I can hear you."
 - Her ears hear English and 24 other European languages, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian and Ukrainian among them. English and the rest are separate downloads, so switching between them downloads the other pack once.
 - She listens for her language from Settings. When she's on English and Windows isn't, she listens for your Windows language.
-- Turkish, Vietnamese, Indonesian, Malay, Filipino, Swahili, Norwegian, Catalan, Serbian, Chinese, Japanese, Korean, Thai, Hindi, Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada, Malayalam, Arabic, Urdu, Persian and Hebrew use Windows speech instead.
+- Her other languages (Turkish, Norwegian, Chinese, Hindi, Arabic and the rest) use Windows speech instead.
 - If her ears don't download, she says so and tries again by herself after 30 seconds, then 1, 2 and 4 minutes, then every 5.
 - "One sec, opening my ears." then "Free voice chat is on; talk and I'll type back." or similar.
 
@@ -1300,6 +1300,7 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 - "My ears didn't download, so type to me for now. ... I'll try again in 30 seconds.": the reason is in the middle. She retries by herself; check your internet and free space on the drive she named.
 - "I can't hear anything from your mic.": 20 seconds of free voice chat brought no sound at all. Pick your mic under VOICE > Mic. If it's right, open Windows Settings > Privacy & security > Microphone and turn on "Let desktop apps access your microphone".
 - "Free voice chat on, but Windows speech only hears your default mic": while her own ears download, or in a language they don't know, Windows speech uses your Windows default mic. Make the mic you want the default in Windows.
+- "Free voice chat on, but I'm hearing offline, so I'll miss some words. Turn on Online speech recognition...": in a language her own ears don't know, Windows speech needs Online speech recognition, in Windows Settings > Privacy & security > Speech. In newer versions, click the line under VOICE in the Mainframe to open that page. If the switch isn't there or is greyed out, your organisation, a family account or your region has turned it off; she still hears you offline, just less well.
 - "Out of ElevenLabs credits, so voice chat is off.": wait for your credits to refill, or upgrade.
 - "Can't open my voice link. Right-click me and open Capri Mainframe. The reason and the fix are under VOICE.": open the Mainframe and read the line under VOICE.
 - "ElevenLabs didn't make the agent." or "ElevenLabs didn't open a voice link.": make a new key with Restrict key off and paste it.

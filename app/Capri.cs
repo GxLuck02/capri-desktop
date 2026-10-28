@@ -4211,6 +4211,10 @@ namespace CapriDesktop
 
         internal void OpenHelp() { OpenPage(HelpPage); }
 
+        // Windows Settings > Privacy & security > Speech, where Online speech recognition is.
+        internal const string SpeechSettings = "ms-settings:privacy-speech";
+        internal void OpenSpeechSettings() { Browse(SpeechSettings); }
+
         private void Tell(string shown, string line)
         {
             if (hidden) SetHidden(false);
@@ -13856,10 +13860,16 @@ namespace CapriDesktop
                             Dictation.Make = delegate { return privacyOff; };
                             StartLocal();
                             if (!privacyOff.Disposed || dictation != null || !local || !earsReady || reply.IndexOf("Turn on Online speech recognition in Windows Settings", StringComparison.Ordinal) < 0 || mainframe.VoiceStatus.IndexOf(Dictation.PrivacyOff, StringComparison.Ordinal) != 0) throw new Exception("Online speech recognition being off did not explain the switch: " + reply);
+                            System.Collections.Generic.List<string> speechOpened = new System.Collections.Generic.List<string>();
+                            Action<string> browseBefore = Browse;
+                            Browse = speechOpened.Add;
+                            try { OpenSpeechSettings(); }
+                            finally { Browse = browseBefore; }
+                            if (!mainframe.SpeechFixShown || speechOpened.Count != 1 || speechOpened[0] != SpeechSettings) throw new Exception("The Online speech recognition note didn't open Windows' Speech page: " + mainframe.VoiceStatus);
                             StopChat();
                             Dictation.Make = delegate { throw new TypeLoadException("Test missing WinRT."); };
                             StartLocal();
-                            if (!local || !earsReady || mainframe.VoiceStatus.IndexOf("Windows speech recognition isn't on this PC", StringComparison.Ordinal) != 0) throw new Exception("A PC without Windows speech did not fall back to offline hearing: " + mainframe.VoiceStatus);
+                            if (!local || !earsReady || mainframe.VoiceStatus.IndexOf("Windows speech recognition isn't on this PC", StringComparison.Ordinal) != 0 || mainframe.SpeechFixShown) throw new Exception("A PC without Windows speech did not fall back to offline hearing: " + mainframe.VoiceStatus);
                             StopChat();
                             if (Dictation.Explain(new AggregateException(new COMException("Test privacy.", unchecked((int)0x80045509)))) != Dictation.PrivacyOff || Dictation.Explain(new UnauthorizedAccessException()) != Dictation.MicBlocked || Dictation.Explain(new COMException("Test no mic.", unchecked((int)0xC00DABE0))) != Dictation.NoMic || Dictation.Explain(new IOException("Test other.")) != "Windows speech recognition didn't start: Test other.") throw new Exception("Windows speech errors were not explained.");
                             string otherWith = @"\\?\SWD#MMDEVAPI#{0.0.1.00000000}.{B76A5175-3F7C}#{2eef81be}";
@@ -13998,7 +14008,7 @@ namespace CapriDesktop
                             StopChat();
                             preferences.Quiet = quietBeforeCredits;
                             mainframe.Sync();
-                            checks.Add("PASS free voice ears: Windows speech opens before the mic counts as ready, the offline ears stay out of its way, mute holds it and drops its words, words while she thinks are dropped, stopping closes it and ignores late results, and Online speech recognition being off, a lost session or a PC without it falls back to offline hearing with the reason; privacy, mic and no-mic errors are explained; the credit fallback explains the switch");
+                            checks.Add("PASS free voice ears: Windows speech opens before the mic counts as ready, the offline ears stay out of its way, mute holds it and drops its words, words while she thinks are dropped, stopping closes it and ignores late results, and Online speech recognition being off, a lost session or a PC without it falls back to offline hearing with the reason, and the Online speech recognition note opens Windows' Speech page when clicked; privacy, mic and no-mic errors are explained; the credit fallback explains the switch");
                             pill.Press(2);
                             if (!pill.Chatting || !chatting || !local) throw new Exception("Wave without a key did not start free voice chat.");
                             pill.Press(2);
