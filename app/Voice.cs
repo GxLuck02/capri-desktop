@@ -2605,6 +2605,67 @@ namespace CapriDesktop
             return voices;
         }
 
+        [DataContract]
+        internal sealed class FishMade
+        {
+            [DataMember(Name = "_id")] public string Id;
+        }
+
+        // A new private Fish Audio voice from a clip of someone talking, in Fish Audio's fast mode so it's ready at once
+        // (POST /model). Fish Audio writes down what's said in it. Returns its ID.
+        internal static string MakeFishVoice(string url, string key, string clip)
+        {
+            if (string.IsNullOrEmpty(key)) throw new VoiceException("Paste your Fish Audio key first.");
+            FileInfo file = new FileInfo(clip);
+            if (!file.Exists) throw new VoiceException("That clip isn't there anymore. Pick it again.");
+            if (file.Length > 50L << 20) throw new VoiceException("That clip is too big. Pick 10 to 30 seconds of talking.");
+            Uri tts = Endpoint(url, Fish);
+            string boundary = "capri" + Guid.NewGuid().ToString("N");
+            Func<string, string, string> field = delegate(string name, string value) { return "--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n"; };
+            byte[] head = Encoding.UTF8.GetBytes(field("type", "tts") + field("title", "Capri · " + Path.GetFileNameWithoutExtension(file.Name)) + field("train_mode", "fast") + field("visibility", "private")
+                + "--" + boundary + "\r\nContent-Disposition: form-data; name=\"voices\"; filename=\"" + Regex.Replace(file.Name, "[\"\\r\\n]", "_") + "\"\r\nContent-Type: application/octet-stream\r\n\r\n");
+            byte[] tail = Encoding.UTF8.GetBytes("\r\n--" + boundary + "--\r\n");
+            if (tts.Scheme == Uri.UriSchemeHttps) ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(new UriBuilder(tts.Scheme, tts.Host, tts.Port, "/model").Uri);
+            request.Method = "POST";
+            request.UserAgent = "Capri-Desktop";
+            if (tts.IsLoopback) request.Proxy = null;
+            request.Headers[HttpRequestHeader.Authorization] = "Bearer " + key;
+            request.ContentType = "multipart/form-data; boundary=" + boundary;
+            request.ContentLength = head.Length + file.Length + tail.Length;
+            request.ServicePoint.Expect100Continue = false;
+            request.Timeout = 120000;
+            request.ReadWriteTimeout = 120000;
+            try
+            {
+                using (Stream upload = request.GetRequestStream())
+                {
+                    upload.Write(head, 0, head.Length);
+                    using (FileStream sound = file.OpenRead()) sound.CopyTo(upload);
+                    upload.Write(tail, 0, tail.Length);
+                }
+                FishMade made;
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (Stream stream = response.GetResponseStream())
+                    made = (FishMade)new DataContractJsonSerializer(typeof(FishMade)).ReadObject(stream);
+                if (made == null || string.IsNullOrEmpty(made.Id)) throw new VoiceException("Fish Audio didn't say which voice it made. Look for it on fish.audio.");
+                return made.Id;
+            }
+            catch (WebException error)
+            {
+                HttpWebResponse response = error.Response as HttpWebResponse;
+                if (response == null) throw new VoiceException("Can't reach Fish Audio. Check your internet connection.");
+                int status = (int)response.StatusCode;
+                string detail;
+                using (response)
+                using (StreamReader reader = new StreamReader(response.GetResponseStream())) detail = Said(reader.ReadToEnd());
+                if (status == 401 || status == 403) throw new VoiceException("Fish Audio turned down its key (HTTP " + status + ").");
+                throw new VoiceException("Fish Audio couldn't make that voice (HTTP " + status + ")" + (detail.Length > 0 ? ": " + Voice.Short(detail) : "."));
+            }
+            catch (SerializationException) { throw new VoiceException("Fish Audio didn't say which voice it made. Look for it on fish.audio."); }
+            catch (IOException) { throw new VoiceException("Can't reach Fish Audio. Check your internet connection."); }
+        }
+
         // A Fish Audio voice's ID, taken from its fish.audio link if that's what they pasted.
         internal static string FishVoice(string typed)
         {

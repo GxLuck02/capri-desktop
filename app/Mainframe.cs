@@ -1420,6 +1420,8 @@ namespace CapriDesktop
 
         internal void PickFishVoice(string name) { sheet.PickVoice(name); }
 
+        internal void MakeFishVoice(string clip) { sheet.MakeVoice(clip); }
+
         internal void PressServer(string button) { sheet.Press(button); }
 
         internal Form ServerPanel { get { return sheet; } }
@@ -2071,9 +2073,35 @@ namespace CapriDesktop
                         string id = each.Key;
                         voices.Items.Add(Choice(each.Value, VoiceServer.FishVoice(speaker.Box.Text) == id, delegate { speaker.Box.Text = id; }));
                     }
-                    if (voices.Items.Count == 0) { Say("No voices of your own on Fish Audio yet. Paste a voice's link from its library.", false); return; }
+                    if (voices.Items.Count > 0) voices.Items.Add(new ToolStripSeparator());
+                    voices.Items.Add(Choice(NewFishVoice, false, delegate { MakeVoice(); }));
                     Say("", false);
                     voices.Show(speaker, new Point(0, speaker.Height));
+                });
+            }
+
+            internal const string NewFishVoice = "New voice from a clip...";
+
+            private void MakeVoice()
+            {
+                using (OpenFileDialog dialog = new OpenFileDialog())
+                {
+                    dialog.Title = "Pick 10 to 30 seconds of someone talking, with their OK";
+                    dialog.Filter = "Voice clips (*.wav;*.mp3;*.m4a;*.flac)|*.wav;*.mp3;*.m4a;*.flac|All files (*.*)|*.*";
+                    if (dialog.ShowDialog(this) == DialogResult.OK) MakeVoice(dialog.FileName);
+                }
+            }
+
+            // A new private Fish Audio voice from the clip; its ID goes in the Voice box.
+            internal void MakeVoice(string clip)
+            {
+                Say("Making your Fish Audio voice...", false);
+                owner.capri.MakeFishVoice(url.Box.Text, key.Box.Text, clip, delegate(string id, string problem)
+                {
+                    if (IsDisposed) return;
+                    if (problem != null) { Say(problem, true); return; }
+                    speaker.Box.Text = id;
+                    Say("Made your Fish Audio voice. Press Test to hear it.", false);
                 });
             }
 
@@ -2083,7 +2111,7 @@ namespace CapriDesktop
                 get
                 {
                     List<string> names = new List<string>();
-                    foreach (ToolStripItem item in voices.Items) names.Add(item.Text + (((ToolStripMenuItem)item).Checked ? " (picked)" : ""));
+                    foreach (ToolStripItem item in voices.Items) names.Add(item is ToolStripMenuItem ? item.Text + (((ToolStripMenuItem)item).Checked ? " (picked)" : "") : "-");
                     return string.Join(", ", names.ToArray());
                 }
             }

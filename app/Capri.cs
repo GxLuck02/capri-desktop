@@ -4600,6 +4600,21 @@ namespace CapriDesktop
             return text.Length == 0 ? null : text;
         }
 
+        // A new Fish Audio voice from a clip they pick, with the key they typed or the one saved for Fish Audio. `done` gets its ID.
+        internal void MakeFishVoice(string url, string key, string clip, Action<string, string> done)
+        {
+            string address = ServerAddress(url, VoiceServer.Fish);
+            string sent = Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? (VoiceServer.Same(server.Url, server.Api, address, VoiceServer.Fish) ? server.Key : null);
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string id = null, problem = null;
+                try { id = VoiceServer.MakeFishVoice(address, sent, clip); }
+                catch (VoiceException error) { problem = error.Message; }
+                catch (Exception error) { problem = Voice.Short("Couldn't make your Fish Audio voice: " + error.Message); }
+                Post(delegate { done(id, problem); });
+            });
+        }
+
         // Their own Fish Audio voices for its panel's Voice menu, with the key they typed or the one saved for Fish Audio.
         internal void FishVoices(string url, string key, Action<System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, string>>, string> done)
         {
@@ -13229,7 +13244,7 @@ namespace CapriDesktop
                                             lock (vsAsked) vsAsked.Add(vsRequest);
                                             if (vsNow == "slow") Thread.Sleep(3000);
                                             int vsStatus = vsNow == "missing" ? 404 : vsNow == "broken" ? 500 : vsNow == "locked" ? 401 : 200;
-                                            byte[] vsAnswer = vsNow == "float" ? vsFloat : vsNow == "mp3" ? vsMp3 : vsNow == "fishlist" ? System.Text.Encoding.UTF8.GetBytes("{\"total\":2,\"items\":[{\"_id\":\"0123456789abcdef0123456789abcdef\",\"title\":\"Capri (Nox)\",\"state\":\"trained\"},{\"_id\":\"fedcba9876543210fedcba9876543210\",\"title\":\"Night City\"}],\"has_more\":false}") : vsStatus != 200 ? System.Text.Encoding.UTF8.GetBytes(vsNow == "missing" ? "{\"detail\":\"Not Found\"}" : vsNow == "broken" ? "{\"detail\":\"Model is still loading\"}" : "{\"error\":{\"message\":\"Invalid API key\"}}") : vsPlain;
+                                            byte[] vsAnswer = vsNow == "float" ? vsFloat : vsNow == "mp3" ? vsMp3 : vsNow == "fishmade" ? System.Text.Encoding.UTF8.GetBytes("{\"_id\":\"abcdefabcdefabcdefabcdefabcdef12\",\"type\":\"tts\",\"state\":\"trained\"}") : vsNow == "fishlist" ? System.Text.Encoding.UTF8.GetBytes("{\"total\":2,\"items\":[{\"_id\":\"0123456789abcdef0123456789abcdef\",\"title\":\"Capri (Nox)\",\"state\":\"trained\"},{\"_id\":\"fedcba9876543210fedcba9876543210\",\"title\":\"Night City\"}],\"has_more\":false}") : vsStatus != 200 ? System.Text.Encoding.UTF8.GetBytes(vsNow == "missing" ? "{\"detail\":\"Not Found\"}" : vsNow == "broken" ? "{\"detail\":\"Model is still loading\"}" : "{\"error\":{\"message\":\"Invalid API key\"}}") : vsPlain;
                                             if (vsNow == "float")
                                             {
                                                 // Streamed in chunks, as Kokoro-FastAPI sends it.
@@ -13248,7 +13263,7 @@ namespace CapriDesktop
                                             }
                                             else
                                             {
-                                                byte[] vsHead = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 " + vsStatus + " Reply\r\nContent-Type: " + (vsNow == "fishlist" || vsStatus != 200 ? "application/json" : vsNow == "mp3" ? "audio/mpeg" : "audio/wav") + "\r\nContent-Length: " + vsAnswer.Length + "\r\nConnection: close\r\n\r\n");
+                                                byte[] vsHead = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 " + vsStatus + " Reply\r\nContent-Type: " + (vsNow == "fishlist" || vsNow == "fishmade" || vsStatus != 200 ? "application/json" : vsNow == "mp3" ? "audio/mpeg" : "audio/wav") + "\r\nContent-Length: " + vsAnswer.Length + "\r\nConnection: close\r\n\r\n");
                                                 vsStream.Write(vsHead, 0, vsHead.Length);
                                                 vsStream.Write(vsAnswer, 0, vsAnswer.Length);
                                             }
@@ -13464,7 +13479,7 @@ namespace CapriDesktop
                             // Her check line is up with its sound handed to her speaker. Still playing would be too narrow: one slow DoEvents can outlast it.
                             Func<bool> vsTalking = delegate { return reply == TestLine && voiceUntil > 0; };
                             string vsMenu, vsOpened, vsKokoro, vsTyped, vsTested, vsUsedNote, vsUsedStatus, vsUsedMenu, vsSliders, vsPage, vsFellNote, vsFellState, vsOnceNote, vsKept, vsForgot, vsSly, vsTestBody, vsUseBody;
-                            string vsHostBody, vsFishStatus, vsFishNote, vsFishMenu, vsFileShown, vsFileTaken, vsFishList, vsListBody, vsFishPicked, vsHostTest = null;
+                            string vsHostBody, vsFishStatus, vsFishNote, vsFishMenu, vsFileShown, vsFileTaken, vsFishList, vsListBody, vsFishPicked, vsCloned, vsClonedBody, vsHostTest = null;
                             bool vsTestSpoke, vsTestUnsaved, vsUseSpoke, vsFellSpoke, vsOnceSpoke, vsSealed, vsRound, vsOldRound, vsSlyOff, vsHdOff, vsHostDropped;
                             int vsAskedBefore;
                             test.Stop();
@@ -13508,6 +13523,15 @@ namespace CapriDesktop
                                 lock (vsAsked) vsListBody = vsAsked.Count > vsAskedBefore ? vsAsked[vsAsked.Count - 1] : "";
                                 if (vsFishList.Length > 0) mainframe.PickFishVoice("Capri (Nox)");
                                 vsFishPicked = mainframe.ServerShown;
+                                // A new voice from a clip: a private, fast-mode voice on Fish Audio, its ID in the Voice box.
+                                vsMode = "fishmade";
+                                string vsClip = Path.Combine(vsModels, "clip.wav");
+                                File.WriteAllBytes(vsClip, vsPlain);
+                                vsAskedBefore = vsCount();
+                                mainframe.MakeFishVoice(vsClip);
+                                vsPump(delegate { return !mainframe.ServerShown.EndsWith("Making your Fish Audio voice...", StringComparison.Ordinal); });
+                                vsCloned = mainframe.ServerShown;
+                                lock (vsAsked) vsClonedBody = vsAsked.Count > vsAskedBefore ? vsAsked[vsAsked.Count - 1] : "";
                                 vsMode = "wav";
                                 // A voice model file asks for its folder, language and speaker instead, with Browse in place of a key.
                                 mainframe.PickService("Voice model file · on your PC");
@@ -13671,12 +13695,17 @@ namespace CapriDesktop
                                 || vsKokoro != "Kokoro · on your PC | " + VoiceServer.Address + " | kokoro | af_heart | Optional | - |  / Address | Model | Voice | Key | -"
                                 || vsFileShown != "Voice model file · on your PC |  |  |  | Optional | - |  / Model folder | Language | Speaker | no key | Browse..."
                                 || vsFileTaken != "Voice model file · on your PC | " + vsKitten + " |  |  | Optional | - | "
-                                || vsFishList != "Capri (Nox), Night City" || vsListBody.IndexOf("GET /model?self=true&page_size=100&page_number=1 HTTP/1.1\r\n", StringComparison.Ordinal) != 0
+                                || vsFishList != "Capri (Nox), Night City, -, " + "New voice from a clip..." || vsListBody.IndexOf("GET /model?self=true&page_size=100&page_number=1 HTTP/1.1\r\n", StringComparison.Ordinal) != 0
+                                || vsCloned != "Fish Audio · cloud | " + vsUrl + " | " + VoiceServer.FishFree + " | abcdefabcdefabcdefabcdefabcdef12 | Paste your Fish Audio key | - | Made your Fish Audio voice. Press Test to hear it."
+                                || vsClonedBody.IndexOf("POST /model HTTP/1.1\r\n", StringComparison.Ordinal) != 0 || vsClonedBody.IndexOf("\r\nAuthorization: Bearer fish-list-key\r\n", StringComparison.Ordinal) < 0
+                                || vsClonedBody.IndexOf("\r\nContent-Type: multipart/form-data; boundary=capri", StringComparison.Ordinal) < 0 || vsClonedBody.IndexOf("name=\"type\"\r\n\r\ntts\r\n", StringComparison.Ordinal) < 0
+                                || vsClonedBody.IndexOf("name=\"train_mode\"\r\n\r\nfast\r\n", StringComparison.Ordinal) < 0 || vsClonedBody.IndexOf("name=\"visibility\"\r\n\r\nprivate\r\n", StringComparison.Ordinal) < 0
+                                || vsClonedBody.IndexOf("name=\"voices\"; filename=\"clip.wav\"", StringComparison.Ordinal) < 0
                                 || vsListBody.IndexOf("\r\nAuthorization: Bearer fish-list-key\r\n", StringComparison.Ordinal) < 0
                                 || vsFishPicked != "Fish Audio · cloud | " + vsUrl + " | " + VoiceServer.FishFree + " | 0123456789abcdef0123456789abcdef | Paste your Fish Audio key | - | "
                                 || vsTyped != "Kokoro · on your PC | " + vsUrl + " |  kokoro  | af_heart | Optional | - | " || !vsTested.StartsWith("Kokoro · on your PC | " + vsUrl + " |  kokoro  | af_heart | Optional | - | It works. Your server said that in ", StringComparison.Ordinal) || !vsTestSpoke || !vsTestUnsaved
                                 || vsTestBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || !vsTestBody.EndsWith("{\"model\":\"kokoro\",\"input\":\"Voice link online. Miss me, chewm?\",\"voice\":\"af_heart\",\"response_format\":\"wav\"}", StringComparison.Ordinal))
-                                throw new Exception("Their voice server's panel didn't open or test right: " + vsMenu + " / " + vsOpened + " / " + vsFishList + " / " + vsFishPicked + " / " + vsListBody + " / " + vsFileShown + " / " + vsFileTaken + " / " + vsKokoro + " / " + vsTyped + " / " + vsTested + " / spoke " + vsTestSpoke + ", unsaved " + vsTestUnsaved);
+                                throw new Exception("Their voice server's panel didn't open or test right: " + vsMenu + " / " + vsOpened + " / " + vsFishList + " / " + vsFishPicked + " / " + vsCloned + " / " + (vsClonedBody.Length > 600 ? vsClonedBody.Substring(0, 600) : vsClonedBody) + " / " + vsListBody + " / " + vsFileShown + " / " + vsFileTaken + " / " + vsKokoro + " / " + vsTyped + " / " + vsTested + " / spoke " + vsTestSpoke + ", unsaved " + vsTestUnsaved);
                             if (!vsUseSpoke || !vsSealed || vsUseBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || vsUsedNote != "Your voice server at " + vsWhere + "." + (kokoro.Installed ? " Her free voice fills in if it's down." : "")
                                 || !vsUsedStatus.StartsWith("Free voice: " + VoiceServer.Style + " | ", StringComparison.Ordinal) || !vsUsedMenu.EndsWith(vsMenuEnd + " (picked)", StringComparison.Ordinal) || vsUsedMenu.IndexOf("Her own (picked)", StringComparison.Ordinal) >= 0)
                                 throw new Exception("Use this server didn't keep it and speak through it: spoke " + vsUseSpoke + ", sealed " + vsSealed + " / " + vsUsedNote + " / " + vsUsedStatus + " / " + vsUsedMenu);
