@@ -581,17 +581,20 @@ If a clip doesn't work, the note under VOICE says why, in red:
 
 Her other free voice styles (Her own, Bright, Sly and Sharp) are set voices and can't copy yours. With one of them picked, the note under VOICE says "Your voice only works with HD." For ElevenLabs, clone your voice on elevenlabs.io instead (Voice Creation > Instant Voice Clone, needs Starter or above, the same steps as cloning her below), then paste its Voice ID under VOICE.
 
-### Use your own voice model (from 0.7.5)
-Any speech model you run yourself can be her voice, if its server speaks OpenAI's speech API (POST /v1/audio/speech). Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI and Qwen3-TTS through vLLM-Omni all do. The model runs on your PC, or wherever you run its server, not inside Capri. Windows only for now.
-1. Start the server:
-   - Kokoro-FastAPI (https://github.com/remsky/Kokoro-FastAPI): `docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest`, or on an NVIDIA card `docker run --gpus all -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-gpu:latest`. Address: http://localhost:8880/v1. Voice: af_heart, or another Kokoro voice like af_bella.
-   - Qwen3-TTS through vLLM-Omni (NVIDIA graphics card, Linux or WSL; https://github.com/vllm-project/vllm-omni/blob/main/recipes/Qwen/Qwen3-TTS.md): from the vLLM-Omni folder, `vllm serve Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice --deploy-config vllm_omni/deploy/qwen3_tts.yaml --omni --port 8091`. Address: http://localhost:8091/v1. Voice: vivian, or another of its speakers.
-2. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "Your voice server...".
-3. Type the address. Model, Voice and Key are optional: leave them blank to use the server's own defaults. A key goes to your server as a Bearer key, and Capri keeps it encrypted on your PC like her other keys. Forget removes it.
-4. Press Test. She says "Voice link online. Miss me, choom?" through your server, and the panel says how long it took. Nothing is saved yet.
-5. Press Use this server. The menu shows "Free voice: Your server", and she says the line again.
+### Any voice model: Fish Audio, OpenAI or your own (from 0.7.5)
+Her voice can come from Fish Audio's cloud, OpenAI, or any speech model you run yourself. Windows only for now.
+1. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "Any voice model...".
+2. Under "Voice from", pick where her voice comes from. It fills in the address, model and voice:
+   - Fish Audio · cloud (https://fish.audio): make an API key on fish.audio and paste it under Key. Under Voice, paste a voice's link or ID from Fish Audio's voice library (a link like https://fish.audio/m/ followed by its ID works as it is). Model s2.1-pro-free is Fish Audio's free developer tier; with credit on your account, type s2.1-pro, s2-pro or s1 instead.
+   - Fish Speech · on your PC (https://github.com/fishaudio/fish-speech): start its server with `python tools/api_server.py --listen 0.0.0.0:8080` plus its model paths. Address: http://127.0.0.1:8080. Voice: a reference ID you added to it (POST /v1/references/add), or blank.
+   - OpenAI · cloud: your OpenAI API key. Model gpt-4o-mini-tts; voices marin, cedar, coral, alloy and more.
+   - Kokoro · on your PC (https://github.com/remsky/Kokoro-FastAPI): `docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest`, or on an NVIDIA card `docker run --gpus all -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-gpu:latest`. Voice: af_heart, or another Kokoro voice like af_bella.
+   - Any OpenAI-style server: anything that speaks OpenAI's speech API (POST /v1/audio/speech), like openedai-speech, AllTalk, LocalAI, or Qwen3-TTS through vLLM-Omni (NVIDIA graphics card, Linux or WSL; https://github.com/vllm-project/vllm-omni/blob/main/recipes/Qwen/Qwen3-TTS.md): from the vLLM-Omni folder, `vllm serve Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice --deploy-config vllm_omni/deploy/qwen3_tts.yaml --omni --port 8091`. Address: http://localhost:8091/v1. Voice: vivian, or another of its speakers.
+3. Model, Voice and Key are optional for servers on your PC: leave them blank to use the server's own defaults. A key goes only to the server it was typed for, as a Bearer key, and Capri keeps it encrypted on your PC like her other keys. Switching to another server with Key left blank drops the old key, so it never reaches the new one. Forget removes it.
+4. Press Test. She says "Voice link online. Miss me, choom?" through it, and the panel says how long it took. Nothing is saved yet.
+5. Press Use this server. The menu shows "Free voice: Fish Audio" (or "OpenAI", or "Your server"), and she says the line again.
 
-What your server gets: only the words she says out loud (with "choom" respelled "chewm" so it's said right), plus the model and voice you typed. Never your chats, notes, screen or other keys. She asks it for WAV; MP3, or any other sound Windows can play, works too. Long replies go a few sentences at a time.
+What it gets: only the words she says out loud (with "choom" respelled "chewm" so it's said right), plus the model and voice you picked. Never your chats, notes, screen or other keys. She asks for WAV; MP3, or any other sound Windows can play, works too. Long replies go a few sentences at a time.
 
 Pitch and Speed change it like her other voices. Robot and Glitch keep their own values for it, shown with "· server" after them ("Off · server"), and both start at Off.
 
@@ -599,12 +602,14 @@ If your server can't say a line, her free voice says that line instead, and the 
 - "Can't reach your voice server at localhost:8880. Is it running?"
 - "Your voice server took over 20 s to answer." It has 20 seconds to start answering each line.
 - "Your voice server has no /v1/audio/speech (HTTP 404). Check its address."
-- "Your voice server wants a key (HTTP 401). Add it under Your voice server." or "Your voice server turned down its key (HTTP 401)."
+- "Your voice server wants a key (HTTP 401). Add it under Any voice model." or "Your voice server turned down its key (HTTP 401)."
 - "Your voice server said HTTP 500: ..." with the server's own words.
+- Fish Audio and OpenAI go by name: "Fish Audio turned down its key (HTTP 401).", "Can't reach Fish Audio. Check your internet connection."
+- "Fish Audio wants credit for s2.1-pro (HTTP 402). For its free tier, set Model to s2.1-pro-free." Fish Audio's paid models need credit on your Fish Audio account.
 
 Without her free voice installed, she types that line instead.
 
-Back to her own voice: pick Her own, another style or HD in the menu. Your server's address, model, voice and key stay saved for next time.
+Back to her own voice: pick Her own, another style or HD in the menu. The address, model, voice and key you picked stay saved for next time.
 
 ### Step 1: make an ElevenLabs account
 Sign up at https://elevenlabs.io. The free plan works.

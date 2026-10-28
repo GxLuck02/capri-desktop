@@ -104,7 +104,7 @@ namespace CapriDesktop
         private readonly Key herVoice;
         private bool freeReady;
         private bool yoursShown;
-        internal const string ServerChoice = "Your voice server...";
+        internal const string ServerChoice = VoiceServer.Menu + "...";
         private ServerSheet sheet;
         private readonly Slider gap;
         private readonly Label gapName;
@@ -1302,13 +1302,14 @@ namespace CapriDesktop
             speechModels.Invalidate();
         }
 
-        // `yours`: their clip is what her HD voice clones. `kept`: one is saved but she's on her own.
-        internal void ShowFree(bool ready, string chosen, bool busy, bool hdFits, bool yours, bool kept)
+        // `yours`: their clip is what her HD voice clones. `kept`: one is saved but she's on her own. `served`: the name of the voice
+        // server she speaks through, like Fish Audio, when it's picked.
+        internal void ShowFree(bool ready, string chosen, bool busy, bool hdFits, bool yours, bool kept, string served = null)
         {
             bool hd = chosen == QwenVoice.Style;
             freeReady = ready;
             yoursShown = hd && yours;
-            freeVoices.Text = "Free voice: " + (yoursShown ? "Your voice" : chosen);
+            freeVoices.Text = "Free voice: " + (yoursShown ? "Your voice" : served ?? chosen);
             freeSetup.Text = busy ? "Cancel" : "Get free voice";
             freeSetup.Visible = !eleven && !off && !ready;
             herVoice.Visible = !eleven && !off && ready && yoursShown;
@@ -1333,7 +1334,7 @@ namespace CapriDesktop
             ToolStripMenuItem pick = Choice(yours || kept ? "Pick a new clip of you..." : "Your voice (HD) · pick a clip of you...", false, delegate { PickYourVoice(); });
             pick.Enabled = hdFits;
             freeMenu.Items.Add(pick);
-            // Any speech model they run themselves, through its own server.
+            // Any other voice model: Fish Audio, OpenAI, or one they run themselves behind a server.
             freeMenu.Items.Add(new ToolStripSeparator());
             freeMenu.Items.Add(Choice(ServerChoice, chosen == VoiceServer.Style, delegate { OpenServer(); }));
             freeVoices.Invalidate();
@@ -1392,19 +1393,22 @@ namespace CapriDesktop
             }
         }
 
-        // Their own voice server's address, model, voice and key, in a panel of its own over the Mainframe.
+        // Any voice model: a ready-made choice or their own server, its address, model, voice and key, in a panel of its own over
+        // the Mainframe.
         private void OpenServer()
         {
             if (sheet == null || sheet.IsDisposed) sheet = new ServerSheet(this);
-            sheet.Fill(capri.ServerUrl, capri.ServerModel, capri.ServerSpeaker, capri.ServerKeyTail);
+            sheet.Fill(capri.ServerSaved, capri.ServerApi, capri.ServerUrl, capri.ServerModel, capri.ServerSpeaker, capri.ServerKeyTail);
             if (!sheet.Visible) sheet.Show(this);
             sheet.Activate();
         }
 
-        // Their voice server's panel for the smoke test: what it shows, typing into it, its buttons, and a picture of it.
+        // Their voice server's panel for the smoke test: what it shows, typing into it, its choices and buttons, and a picture of it.
         internal string ServerShown { get { return sheet == null || sheet.IsDisposed || !sheet.Visible ? "-" : sheet.Showing; } }
 
         internal void TypeServer(string address, string name, string voice, string secret) { sheet.Type(address, name, voice, secret); }
+
+        internal void PickService(string name) { sheet.Choose(name); }
 
         internal void PressServer(string button) { sheet.Press(button); }
 
@@ -1908,10 +1912,14 @@ namespace CapriDesktop
             }
         }
 
-        // Their own voice server: its address, an optional model, voice and key, Test, and Use this server.
+        // Any voice model: a ready-made choice like Fish Audio, or their own server. Its address, an optional model, voice and key,
+        // Test, and Use this server.
         private sealed class ServerSheet : Form
         {
             private readonly Mainframe owner;
+            private readonly Label hint;
+            private readonly Key service;
+            private readonly ContextMenuStrip services;
             private readonly Entry url;
             private readonly Entry model;
             private readonly Entry speaker;
@@ -1919,11 +1927,16 @@ namespace CapriDesktop
             private readonly Key forget;
             private readonly Key test;
             private readonly Label note;
+            private VoiceServer.Service picked = VoiceServer.Services[0];
+            // The server their saved key belongs to, and its last characters. The key only shows as kept for that server.
+            private string savedUrl;
+            private string savedApi;
+            private string savedTail;
 
             internal ServerSheet(Mainframe owner)
             {
                 this.owner = owner;
-                Text = "Your voice server";
+                Text = VoiceServer.Menu;
                 Icon = owner.Icon;
                 ShowInTaskbar = false;
                 FormBorderStyle = FormBorderStyle.None;
@@ -1934,47 +1947,89 @@ namespace CapriDesktop
                 BackColor = Look.Panel;
                 ForeColor = Look.Ink;
                 DoubleBuffered = true;
-                ClientSize = new Size(Wide, 356);
-                Caption("YOUR VOICE SERVER >", 28, 22, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
+                ClientSize = new Size(Wide, 420);
+                Caption(VoiceServer.Menu.ToUpperInvariant() + " >", 28, 22, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
                 Key shut = Make("", 330, 20, 26, 22, delegate { Close(); });
                 shut.Glyph = 2;
                 shut.AccessibleName = "Close";
-                Caption("Any speech model you run, if its server speaks OpenAI's speech API, like Kokoro-FastAPI or Qwen3-TTS. It only gets the words she says.", 28, 48, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
-                Caption("Address", 28, 104, Font, Look.Dim);
-                url = Input(28, 124, 328, VoiceServer.Address, "Voice server address");
-                Caption("Model", 28, 160, Font, Look.Dim);
-                model = Input(28, 180, 160, "Optional", "Model name, optional");
-                Caption("Voice", 196, 160, Font, Look.Dim);
-                speaker = Input(196, 180, 160, "Optional", "Voice name, optional");
-                Caption("Key", 28, 216, Font, Look.Dim);
-                key = Input(28, 236, 244, "Optional", "Key, optional. It goes to the server as a Bearer key");
+                hint = Caption("", 28, 48, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+                Caption("Voice from", 28, 112, Font, Look.Dim);
+                services = owner.Dropdown();
+                foreach (VoiceServer.Service choice in VoiceServer.Services)
+                {
+                    VoiceServer.Service each = choice;
+                    services.Items.Add(Choice(each.Name, false, delegate { Pick(each, true); }));
+                }
+                service = Make(picked.Name, 28, 132, 328, 28, delegate { services.Show(service, new Point(0, service.Height)); });
+                service.Chevron = true;
+                service.AccessibleName = "Voice from";
+                Caption("Address", 28, 168, Font, Look.Dim);
+                url = Input(28, 188, 328, VoiceServer.Address, "Voice server address");
+                url.Box.TextChanged += delegate { Kept(); };
+                Caption("Model", 28, 224, Font, Look.Dim);
+                model = Input(28, 244, 160, "Optional", "Model name, optional");
+                Caption("Voice", 196, 224, Font, Look.Dim);
+                speaker = Input(196, 244, 160, "Optional", "Voice name or ID, optional");
+                Caption("Key", 28, 280, Font, Look.Dim);
+                key = Input(28, 300, 244, "Optional", "Key. It goes only to this server, as a Bearer key");
                 key.Box.UseSystemPasswordChar = true;
-                forget = Make("Forget", 280, 236, 76, 28, delegate { owner.capri.ForgetServerKey(); Kept(null); Say("Key forgotten.", false); });
+                forget = Make("Forget", 280, 300, 76, 28, delegate { owner.capri.ForgetServerKey(); savedTail = null; Kept(); Say("Key forgotten.", false); });
                 forget.Accent = Look.Red;
-                test = Make("Test", 28, 280, 84, 28, delegate { Try(); });
-                Key use = Make("Use this server", 120, 280, 150, 28, delegate { Use(); });
+                test = Make("Test", 28, 344, 84, 28, delegate { Try(); });
+                Key use = Make("Use this server", 120, 344, 150, 28, delegate { Use(); });
                 use.Accent = Look.Cyan;
                 use.Loud = true;
                 AcceptButton = use;
-                CancelButton = Make("Cancel", 278, 280, 78, 28, delegate { Close(); });
-                note = Caption("", 28, 320, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+                CancelButton = Make("Cancel", 278, 344, 78, 28, delegate { Close(); });
+                note = Caption("", 28, 384, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             }
 
-            // What's saved, or the usual address. A saved key shows only its last four characters.
-            internal void Fill(string address, string name, string voice, string tail)
+            // What's saved, or Fish Audio ready to go. A saved key shows only its last four characters.
+            internal void Fill(bool saved, string api, string address, string name, string voice, string tail)
             {
-                url.Box.Text = address ?? "";
-                model.Box.Text = name ?? "";
-                speaker.Box.Text = voice ?? "";
+                savedUrl = saved ? address : null;
+                savedApi = api;
+                savedTail = tail;
                 key.Box.Text = "";
-                Kept(tail);
+                if (saved)
+                {
+                    url.Box.Text = address ?? "";
+                    model.Box.Text = name ?? "";
+                    speaker.Box.Text = voice ?? "";
+                    Pick(VoiceServer.Find(api, address), false);
+                }
+                else Pick(VoiceServer.Services[0], true);
                 Say("", false);
             }
 
-            private void Kept(string tail)
+            // A ready-made choice fills in its address, model and voice. The last one, any server, keeps what's typed.
+            private void Pick(VoiceServer.Service choice, bool fill)
             {
-                key.Cue = tail == null ? "Optional" : "Key saved, ends " + tail;
-                forget.Visible = tail != null;
+                picked = choice;
+                service.Text = choice.Name;
+                hint.Text = choice.Hint + " It only gets the words she says.";
+                speaker.Cue = choice.VoiceCue;
+                if (fill && choice.Url != null)
+                {
+                    url.Box.Text = choice.Url;
+                    model.Box.Text = choice.Model;
+                    speaker.Box.Text = choice.Speaker;
+                }
+                foreach (ToolStripItem item in services.Items) ((ToolStripMenuItem)item).Checked = item.Text == choice.Name;
+                Kept();
+            }
+
+            internal void Choose(string name)
+            {
+                foreach (ToolStripItem item in services.Items) if (item.Text == name) { item.PerformClick(); return; }
+                throw new InvalidOperationException("The voice model panel has no " + name + " to pick.");
+            }
+
+            private void Kept()
+            {
+                bool kept = savedTail != null && savedUrl != null && VoiceServer.Same(savedUrl, savedApi, url.Box.Text, picked.Api);
+                key.Cue = kept ? "Key saved, ends " + savedTail : picked.KeyCue;
+                forget.Visible = kept;
             }
 
             private void Say(string text, bool problem)
@@ -1987,7 +2042,7 @@ namespace CapriDesktop
             {
                 test.Enabled = false;
                 Say("Asking your server...", false);
-                owner.capri.TestVoiceServer(url.Box.Text, model.Box.Text, speaker.Box.Text, key.Box.Text, delegate(string said, bool problem)
+                owner.capri.TestVoiceServer(url.Box.Text, model.Box.Text, speaker.Box.Text, key.Box.Text, picked.Api, delegate(string said, bool problem)
                 {
                     if (IsDisposed) return;
                     test.Enabled = true;
@@ -1997,11 +2052,11 @@ namespace CapriDesktop
 
             private void Use()
             {
-                owner.capri.UseVoiceServer(url.Box.Text, model.Box.Text, speaker.Box.Text, key.Box.Text);
+                owner.capri.UseVoiceServer(url.Box.Text, model.Box.Text, speaker.Box.Text, key.Box.Text, picked.Api);
                 Close();
             }
 
-            internal string Showing { get { return url.Box.Text + " | " + model.Box.Text + " | " + speaker.Box.Text + " | " + key.Cue + " | " + (forget.Visible ? "Forget" : "-") + " | " + note.Text; } }
+            internal string Showing { get { return picked.Name + " | " + url.Box.Text + " | " + model.Box.Text + " | " + speaker.Box.Text + " | " + key.Cue + " | " + (forget.Visible ? "Forget" : "-") + " | " + note.Text; } }
 
             internal void Type(string address, string name, string voice, string secret)
             {
@@ -2023,6 +2078,12 @@ namespace CapriDesktop
             {
                 base.OnShown(e);
                 url.Box.Focus();
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) services.Dispose();
+                base.Dispose(disposing);
             }
 
             // Wrapped notes and a spot over the Mainframe, once Windows has scaled the panel to the screen.
@@ -2053,7 +2114,7 @@ namespace CapriDesktop
                 Graphics graphics = e.Graphics;
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 Backdrop(graphics, this, s);
-                using (Brush red = new SolidBrush(Look.Red)) graphics.FillRectangle(red, 13 * s, 22 * s, 3 * s, 286 * s);
+                using (Brush red = new SolidBrush(Look.Red)) graphics.FillRectangle(red, 13 * s, 22 * s, 3 * s, 350 * s);
                 using (GraphicsPath edge = Look.Plate(new RectangleF(s, s, Width - 2 * s - 1, Height - 2 * s - 1), 12 * s, -1, Height / 2f, 0, true))
                 using (Pen cyan = new Pen(Look.Cyan, 2 * s))
                     graphics.DrawPath(cyan, edge);

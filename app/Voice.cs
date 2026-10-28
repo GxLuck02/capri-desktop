@@ -2205,74 +2205,198 @@ namespace CapriDesktop
         public void Dispose() { Stop(); }
     }
 
-    // Their own voice model, through any server with OpenAI's speech API (POST /v1/audio/speech): Kokoro-FastAPI, openedai-speech,
-    // AllTalk, LocalAI, Qwen3-TTS behind vLLM-Omni and the like. It gets only the words she says. Its sound goes through her
+    // Their own voice model, through a server that speaks OpenAI's speech API (POST /v1/audio/speech), like Kokoro-FastAPI,
+    // openedai-speech, AllTalk, LocalAI, Qwen3-TTS behind vLLM-Omni or OpenAI itself, or one that speaks Fish Audio's (POST /v1/tts),
+    // as fish.audio's cloud and Fish Speech on their own PC both do. It gets only the words she says. Its sound goes through her
     // pitch and speed like her other voices, with a robot and glitch of its own.
     internal sealed class VoiceServer
     {
         internal const string Style = "Your server";
+        internal const string Menu = "Any voice model";
         internal const string Address = "http://localhost:8880/v1";
         internal const string Filling = " Her free voice is filling in.";
+        internal const string OpenAi = "openai";
+        internal const string Fish = "fish";
+        internal const string FishCloud = "https://api.fish.audio";
+        internal const string FishFree = "s2.1-pro-free";
+        internal const string Theirs = "Your voice server";
         // How long a server has to start answering a line, in milliseconds, before her free voice says it.
         internal static int Patience = 20000;
         internal volatile string Url = Address;
+        internal volatile string Api = OpenAi;
         internal volatile string Model;
         internal volatile string Speaker;
         internal volatile string Key;
         // The last problem she noted, so a server that stays down is said once, until it answers again.
         private volatile string noted;
 
-        // Their address as typed, with http:// when it has no scheme, /v1 when it has no path, and /audio/speech unless it ends there.
-        internal static Uri Endpoint(string url)
+        // Ready-made choices for its panel. Picking one fills in its API, address, model and voice; the last keeps what's typed.
+        internal static readonly Service[] Services =
         {
+            new Service("Fish Audio · cloud", Fish, FishCloud, FishFree, "", "Voice ID or fish.audio link", "Paste your Fish Audio key",
+                "Fish Audio's voices. Paste a key from fish.audio and a voice's link or ID from its library. " + FishFree + " is its free tier."),
+            new Service("Fish Speech · on your PC", Fish, "http://127.0.0.1:8080", "", "", "Reference ID, optional", "Optional",
+                "Fish Speech running on your PC with tools/api_server.py. Voice is a reference ID you added to it, or blank."),
+            new Service("OpenAI · cloud", OpenAi, "https://api.openai.com/v1", "gpt-4o-mini-tts", "marin", "Optional", "Paste your OpenAI key",
+                "OpenAI's voices with your OpenAI key: marin, cedar, coral, alloy and more."),
+            new Service("Kokoro · on your PC", OpenAi, Address, "kokoro", "af_heart", "Optional", "Optional",
+                "Kokoro-FastAPI running on your PC, with voices like af_heart, af_bella and am_adam."),
+            new Service("Any OpenAI-style server", OpenAi, null, null, null, "Optional", "Optional",
+                "Any speech model you run whose server speaks OpenAI's speech API, like Qwen3-TTS through vLLM-Omni, AllTalk or LocalAI.")
+        };
+
+        internal sealed class Service
+        {
+            internal readonly string Name;
+            internal readonly string Api;
+            internal readonly string Url;
+            internal readonly string Model;
+            internal readonly string Speaker;
+            internal readonly string VoiceCue;
+            internal readonly string KeyCue;
+            internal readonly string Hint;
+
+            internal Service(string name, string api, string url, string model, string speaker, string voiceCue, string keyCue, string hint)
+            {
+                Name = name;
+                Api = api;
+                Url = url;
+                Model = model;
+                Speaker = speaker;
+                VoiceCue = voiceCue;
+                KeyCue = keyCue;
+                Hint = hint;
+            }
+        }
+
+        // The choice a saved setup came from: the one with its API and server, or else the last one with its API.
+        internal static Service Find(string api, string url)
+        {
+            Service last = Services[Services.Length - 1];
+            foreach (Service service in Services)
+            {
+                if (service.Api != api) continue;
+                if (service.Url != null && Same(service.Url, api, url, api)) return service;
+                last = service;
+            }
+            return last;
+        }
+
+        // Their address as typed. With no scheme it gets https:// for a named host on the internet, and http:// for one on their PC
+        // or network. OpenAI's API gets /v1 when it has no path and /audio/speech unless it ends there; Fish Audio's gets /v1/tts.
+        internal static Uri Endpoint(string url) { return Endpoint(url, OpenAi); }
+
+        internal static Uri Endpoint(string url, string api)
+        {
+            bool fish = api == Fish;
+            string usual = fish ? FishCloud : Address;
             string typed = (url ?? "").Trim();
-            if (typed.Length == 0) typed = Address;
-            if (!Regex.IsMatch(typed, "^[a-z][a-z0-9+.-]*://", RegexOptions.IgnoreCase)) typed = "http://" + typed;
+            if (typed.Length == 0) typed = usual;
+            if (!Regex.IsMatch(typed, "^[a-z][a-z0-9+.-]*://", RegexOptions.IgnoreCase))
+                typed = (Regex.IsMatch(typed, @"^[^/:]+\.[a-z]{2,}(/|$)", RegexOptions.IgnoreCase) && !Regex.IsMatch(typed, @"^[^/:]+\.(local|lan|home|internal)(/|$)", RegexOptions.IgnoreCase) ? "https://" : "http://") + typed;
             Uri parsed;
             if (!Uri.TryCreate(typed, UriKind.Absolute, out parsed) || (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps) || parsed.Host.Length == 0)
-                throw new VoiceException("Your voice server's address doesn't work. Try " + Address + ".");
+                throw new VoiceException("Your voice server's address doesn't work. Try " + usual + ".");
             string path = parsed.AbsolutePath.TrimEnd('/');
-            if (path.Length == 0) path = "/v1";
-            if (!path.EndsWith("/audio/speech", StringComparison.OrdinalIgnoreCase)) path += "/audio/speech";
+            if (fish)
+            {
+                if (!path.EndsWith("/tts", StringComparison.OrdinalIgnoreCase)) path += path.EndsWith("/v1", StringComparison.OrdinalIgnoreCase) ? "/tts" : "/v1/tts";
+            }
+            else
+            {
+                if (path.Length == 0) path = "/v1";
+                if (!path.EndsWith("/audio/speech", StringComparison.OrdinalIgnoreCase)) path += "/audio/speech";
+            }
             UriBuilder built = new UriBuilder(parsed);
             built.Path = path;
             return built.Uri;
         }
 
         // Its host and port, for her notes.
-        internal static string Where(string url)
+        internal static string Where(string url) { return Where(url, OpenAi); }
+
+        internal static string Where(string url, string api)
         {
-            try { return Where(Endpoint(url)); }
+            try { return Where(Endpoint(url, api)); }
             catch (VoiceException) { return (url ?? "").Trim(); }
         }
 
         private static string Where(Uri at) { return at.IsDefaultPort ? at.Host : at.Host + ":" + at.Port; }
 
-        private static string Slow { get { return "Your voice server took over " + (Patience / 1000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " s to answer."; } }
+        // Whether two addresses reach the same server, so a key saved for one never goes to another.
+        internal static bool Same(string url, string api, string other, string otherApi)
+        {
+            try
+            {
+                Uri one = Endpoint(url, api), two = Endpoint(other, otherApi);
+                return one.Scheme == two.Scheme && one.Port == two.Port && string.Equals(one.Host, two.Host, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (VoiceException) { return false; }
+        }
+
+        // What she calls it: Fish Audio and OpenAI by name, anything else their voice server.
+        internal static string Name(string url, string api)
+        {
+            string host;
+            try { host = Endpoint(url, api).Host.ToLowerInvariant(); }
+            catch (VoiceException) { return Theirs; }
+            if (host == "fish.audio" || host.EndsWith(".fish.audio", StringComparison.Ordinal)) return "Fish Audio";
+            return host == "api.openai.com" ? "OpenAI" : Theirs;
+        }
+
+        // Its name on the free voice button.
+        internal static string Label(string url, string api)
+        {
+            string name = Name(url, api);
+            return name == Theirs ? Style : name;
+        }
+
+        // A Fish Audio voice's ID, taken from its fish.audio link if that's what they pasted.
+        internal static string FishVoice(string typed)
+        {
+            string voice = (typed ?? "").Trim();
+            Match link = Regex.Match(voice, @"fish\.audio/\S*?([0-9a-f]{32})", RegexOptions.IgnoreCase);
+            return link.Success ? link.Groups[1].Value.ToLowerInvariant() : voice;
+        }
+
+        private static string Slow(string name) { return name + " took over " + (Patience / 1000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " s to answer."; }
 
         internal byte[] Speak(string text)
         {
-            Uri endpoint = Endpoint(Url);
-            string model = Model, speaker = Speaker, key = Key;
+            string url = Url, api = Api, model = Model, speaker = Speaker, key = Key;
+            bool fish = api == Fish;
+            Uri endpoint = Endpoint(url, api);
+            string name = Name(url, api);
             int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, robot = VoiceFx.ServerRobot, glitch = VoiceFx.ServerGlitch;
             List<short> said = new List<short>();
             // A long reply goes a few sentences at a time, so no one call has to make all of it before it starts answering.
             foreach (string piece in QwenVoice.Pieces(Voice.Sayable(text)))
             {
                 StringBuilder body = new StringBuilder("{");
-                if (!string.IsNullOrEmpty(model)) body.Append("\"model\":").Append(Voice.Quote(model)).Append(',');
-                body.Append("\"input\":").Append(Voice.Quote(piece));
-                if (!string.IsNullOrEmpty(speaker)) body.Append(",\"voice\":").Append(Voice.Quote(speaker));
-                body.Append(",\"response_format\":\"wav\"}");
-                said.AddRange(Ask(endpoint, key, body.ToString()));
+                if (fish)
+                {
+                    // Fish Audio's API takes its voice as a reference ID, and its model in a header.
+                    body.Append("\"text\":").Append(Voice.Quote(piece));
+                    if (!string.IsNullOrEmpty(speaker)) body.Append(",\"reference_id\":").Append(Voice.Quote(FishVoice(speaker)));
+                    body.Append(",\"format\":\"wav\"}");
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(model)) body.Append("\"model\":").Append(Voice.Quote(model)).Append(',');
+                    body.Append("\"input\":").Append(Voice.Quote(piece));
+                    if (!string.IsNullOrEmpty(speaker)) body.Append(",\"voice\":").Append(Voice.Quote(speaker));
+                    body.Append(",\"response_format\":\"wav\"}");
+                }
+                said.AddRange(Ask(endpoint, key, fish ? model : null, body.ToString(), name));
             }
             short[] samples = said.ToArray();
-            if (samples.Length == 0) throw new VoiceException("Your voice server sent back no sound.");
+            if (samples.Length == 0) throw new VoiceException(name + " sent back no sound.");
             if (pitch != 0 || speed != 100 || robot > 0 || glitch > 0) samples = VoiceFx.Restyled(samples, YourVoice.Rate, pitch, speed, robot, glitch, VoiceFx.Seed(text));
             return Voice.Wave(samples, YourVoice.Rate);
         }
 
-        private static short[] Ask(Uri endpoint, string key, string json)
+        // `model` goes in a header, where Fish Audio's API takes it. `name` is what her notes call the server.
+        private static short[] Ask(Uri endpoint, string key, string model, string json, string name)
         {
             byte[] payload = Encoding.UTF8.GetBytes(json);
             if (endpoint.Scheme == Uri.UriSchemeHttps) ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;
@@ -2284,9 +2408,11 @@ namespace CapriDesktop
             request.ContentType = "application/json";
             request.ContentLength = payload.Length;
             if (!string.IsNullOrEmpty(key)) request.Headers[HttpRequestHeader.Authorization] = "Bearer " + key;
+            if (!string.IsNullOrEmpty(model)) request.Headers["model"] = model;
             request.ServicePoint.Expect100Continue = false;
             request.Timeout = Patience;
             request.ReadWriteTimeout = Patience;
+            bool theirs = name == Theirs;
             try
             {
                 using (Stream upload = request.GetRequestStream()) upload.Write(payload, 0, payload.Length);
@@ -2295,7 +2421,7 @@ namespace CapriDesktop
                 using (MemoryStream copy = new MemoryStream())
                 {
                     stream.CopyTo(copy);
-                    return Sound(copy.ToArray(), response.ContentType);
+                    return Sound(copy.ToArray(), response.ContentType, name);
                 }
             }
             catch (WebException error)
@@ -2303,28 +2429,31 @@ namespace CapriDesktop
                 HttpWebResponse response = error.Response as HttpWebResponse;
                 if (response == null)
                 {
-                    if (error.Status == WebExceptionStatus.Timeout) throw new VoiceException(Slow);
-                    if (error.Status == WebExceptionStatus.ConnectFailure || error.Status == WebExceptionStatus.NameResolutionFailure) throw new VoiceException("Can't reach your voice server at " + Where(endpoint) + ". Is it running?");
-                    throw new VoiceException("Your voice server at " + Where(endpoint) + " stopped answering.");
+                    if (error.Status == WebExceptionStatus.Timeout) throw new VoiceException(Slow(name));
+                    if (error.Status == WebExceptionStatus.ConnectFailure || error.Status == WebExceptionStatus.NameResolutionFailure)
+                        throw new VoiceException(theirs ? "Can't reach your voice server at " + Where(endpoint) + ". Is it running?" : "Can't reach " + name + ". Check your internet connection.");
+                    throw new VoiceException(name + " at " + Where(endpoint) + " stopped answering.");
                 }
                 int status = (int)response.StatusCode;
                 string detail;
                 using (response)
                 using (StreamReader reader = new StreamReader(response.GetResponseStream())) detail = Said(reader.ReadToEnd());
-                if (status == 404) throw new VoiceException("Your voice server has no " + endpoint.AbsolutePath + " (HTTP 404). Check its address.");
-                if (status == 401 || status == 403) throw new VoiceException(string.IsNullOrEmpty(key) ? "Your voice server wants a key (HTTP " + status + "). Add it under Your voice server." : "Your voice server turned down its key (HTTP " + status + ").");
-                throw new VoiceException("Your voice server said HTTP " + status + (detail.Length > 0 ? ": " + Voice.Short(detail) : "."));
+                if (status == 404) throw new VoiceException(name + " has no " + endpoint.AbsolutePath + " (HTTP 404). Check its address.");
+                if (status == 401 || status == 403) throw new VoiceException(string.IsNullOrEmpty(key) ? name + " wants a key (HTTP " + status + "). Add it under " + Menu + "." : name + " turned down its key (HTTP " + status + ").");
+                // Fish Audio's paid models answer 402 on an account with no credit. Its free tier is a model of its own.
+                if (status == 402 && name == "Fish Audio" && model != FishFree) throw new VoiceException("Fish Audio wants credit for " + (string.IsNullOrEmpty(model) ? "its usual model" : model) + " (HTTP 402). For its free tier, set Model to " + FishFree + ".");
+                throw new VoiceException(name + " said HTTP " + status + (detail.Length > 0 ? ": " + Voice.Short(detail) : "."));
             }
-            catch (IOException) { throw new VoiceException("Your voice server at " + Where(endpoint) + " stopped answering."); }
+            catch (IOException) { throw new VoiceException(name + " at " + Where(endpoint) + " stopped answering."); }
         }
 
         // Its sound as 24 kHz mono: a WAV in any coding YourVoice reads, or anything Windows' own decoders can, like MP3.
-        private static short[] Sound(byte[] reply, string type)
+        private static short[] Sound(byte[] reply, string type, string name)
         {
-            if (reply.Length == 0) throw new VoiceException("Your voice server sent back no sound.");
+            if (reply.Length == 0) throw new VoiceException(name + " sent back no sound.");
             int rate;
             float[] mono = YourVoice.Wav(reply, out rate);
-            if (mono == null && Regex.IsMatch(type ?? "", "json|text|html", RegexOptions.IgnoreCase)) throw new VoiceException("Your voice server sent words, not sound: " + Voice.Short(Said(Encoding.UTF8.GetString(reply))));
+            if (mono == null && Regex.IsMatch(type ?? "", "json|text|html", RegexOptions.IgnoreCase)) throw new VoiceException(name + " sent words, not sound: " + Voice.Short(Said(Encoding.UTF8.GetString(reply))));
             if (mono == null)
             {
                 byte[] decoded = null;
@@ -2332,7 +2461,7 @@ namespace CapriDesktop
                 catch (Exception) { }
                 if (decoded != null) mono = YourVoice.Wav(decoded, out rate);
             }
-            if (mono == null) throw new VoiceException("Capri couldn't read the sound your voice server sent.");
+            if (mono == null) throw new VoiceException("Capri couldn't read the sound " + (name == Theirs ? "your voice server" : name) + " sent.");
             short[] pcm = new short[mono.Length];
             for (int i = 0; i < mono.Length; i++) pcm[i] = (short)Math.Max(-32768, Math.Min(32767, Math.Round(mono[i] * 32767)));
             return rate == YourVoice.Rate ? pcm : VoiceFx.Resample(pcm, rate / (double)YourVoice.Rate);
