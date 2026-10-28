@@ -1400,7 +1400,7 @@ namespace CapriDesktop
         }
 
         // Their voice server's panel for the smoke test: what it shows, typing into it, its buttons, and a picture of it.
-        internal string ServerShown { get { return sheet == null || sheet.IsDisposed || !sheet.Visible ? "-" : sheet.Shown; } }
+        internal string ServerShown { get { return sheet == null || sheet.IsDisposed || !sheet.Visible ? "-" : sheet.Showing; } }
 
         internal void TypeServer(string address, string name, string voice, string secret) { sheet.Type(address, name, voice, secret); }
 
@@ -1993,7 +1993,7 @@ namespace CapriDesktop
                 Close();
             }
 
-            internal string Shown { get { return url.Box.Text + " | " + model.Box.Text + " | " + speaker.Box.Text + " | " + key.Cue + " | " + (forget.Visible ? "Forget" : "-") + " | " + note.Text; } }
+            internal string Showing { get { return url.Box.Text + " | " + model.Box.Text + " | " + speaker.Box.Text + " | " + key.Cue + " | " + (forget.Visible ? "Forget" : "-") + " | " + note.Text; } }
 
             internal void Type(string address, string name, string voice, string secret)
             {
