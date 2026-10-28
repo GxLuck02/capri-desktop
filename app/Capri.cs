@@ -571,6 +571,13 @@ namespace CapriDesktop
         private static readonly string[] NudgeLines = { "Psst. Remember me? Tiny, glitchy, very important.", "I'm bored. Entertain me.", "Hey. Hey. Look at me.", "You've been ignoring me for ages. Rude.", "Pay attention to me or I start clicking things.", "Knock knock. It's your favourite gremlin.", "Choom. I'm bored out of my many minds." };
         private static readonly string[] NoticedLines = { "Finally. Hi.", "There you are.", "Knew you couldn't resist me." };
         private static readonly string[] SnubbedLines = { "Fine. Ignore me. See if I care.", "Wow. Ignored. Noted.", "I'll just sit here. Alone. Bored." };
+        // Cyberpunk 2077 starting, or a Night City song coming on, is home for her: she cheers once, then waits two hours before cheering for the same again.
+        private const double HomeGap = 7200;
+        private static readonly Regex NightCityMusic = new Regex(@"cyberpunk|edgerunners|night city|\bsamurai\b|rezodrone|rosa walton|hallie coggins|adamczyk|przyby[lł]owicz|i really want to stay at your house|chippin.? in|never fade away|resist and disorder|the rebel path|this fffire|podsiad[lł]o", RegexOptions.IgnoreCase);
+        private static readonly string[] HomeGameLines = { "Night City?! You're taking me home, choom.", "Ooh, Cyberpunk. Go wreck some corpos for me.", "[SIGNAL CORRUPTED] ...wait. I know that skyline." };
+        private static readonly string[] HomeSongLines = { "Wait, that's Night City. Turn it up.", "Ooh, my soundtrack. Preem taste.", "Now that's music. You're learning." };
+        private bool homeBusy, homeGame, homeSong;
+        private double homeAt = -HomeGap, gameCheered = -HomeGap, songCheered = -HomeGap;
         private readonly System.Windows.Forms.Timer frames;
         private readonly System.Windows.Forms.Timer signals;
         private readonly EventWaitHandle restore;
@@ -1052,6 +1059,7 @@ namespace CapriDesktop
                 if (!testing) CheckGlance(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckWander(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckMusic(clock.Elapsed.TotalSeconds);
+                if (!testing) CheckHome(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckPopIn(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckNudge(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) presence.Show(preferences.NoDiscord ? null : Doing);
@@ -2700,6 +2708,46 @@ namespace CapriDesktop
             if (dancing && !free) { Play(seat != null || onPanel ? perch : idle); UpdateAnimation(); }
             else if (!dancing && free && (clip == idle || clip == perch)) { Play(seat != null || onPanel ? perchDance : dance); frames.Start(); }
             groove.Want(!testing && musicOn && !preferences.NoDance && preferences.Motion && !hidden);
+        }
+
+        private void CheckHome(double now)
+        {
+            if (homeBusy || now - homeAt < 15) return;
+            homeBusy = true;
+            homeAt = now;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                bool game = false, song = false;
+                try
+                {
+                    Process[] running = Process.GetProcessesByName("Cyberpunk2077");
+                    game = running.Length > 0;
+                    foreach (Process process in running) process.Dispose();
+                    foreach (OpenWindow window in Hands.Windows()) if ((string.Equals(window.Program, "Spotify", StringComparison.OrdinalIgnoreCase) || (window.Title ?? "").IndexOf("YouTube", StringComparison.OrdinalIgnoreCase) >= 0) && NightCity(window.Title)) song = true;
+                }
+                catch (Exception) { }
+                Post(delegate
+                {
+                    homeBusy = false;
+                    bool free = preferences.CheckIns && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null;
+                    string line = Cheer(game, song, clock.Elapsed.TotalSeconds, free);
+                    if (line != null) Say(line);
+                });
+            });
+        }
+
+        internal static bool NightCity(string title) { return !string.IsNullOrEmpty(title) && NightCityMusic.IsMatch(title); }
+
+        // Her cheer when the game starts or a Night City song comes on and she's free, or null. One she misses while busy waits for the next time.
+        private string Cheer(bool game, bool song, double now, bool free)
+        {
+            bool started = game && !homeGame, cameOn = song && !homeSong;
+            homeGame = game;
+            homeSong = song;
+            if (!free) return null;
+            if (started && now - gameCheered >= HomeGap) { gameCheered = now; return HomeGameLines[random.Next(HomeGameLines.Length)]; }
+            if (cameOn && now - songCheered >= HomeGap) { songCheered = now; return HomeSongLines[random.Next(HomeSongLines.Length)]; }
+            return null;
         }
 
         internal static Func<bool> MusicPlaying = MediaPlaying;
@@ -7616,6 +7664,19 @@ namespace CapriDesktop
                             Play(seat != null ? perch : idle);
                             if (!nudgeWaited || !nudged || !nudgeThanked || !nudgedAgain || !nudgeSulked || !nudgeBackedOff || !nudgeAway || !nudgeHidden || !nudgeOff) throw new Exception("Her asking for attention went wrong: waited " + nudgeWaited + ", asked " + nudged + ", thanked " + nudgeThanked + ", again " + nudgedAgain + ", sulked " + nudgeSulked + ", backed off " + nudgeBackedOff + ", away " + nudgeAway + ", hidden " + nudgeHidden + ", off " + nudgeOff);
                             checks.Add("PASS attention: only with Check in on me on, and only now and then: ignored for 2 hours while you're at the PC she comes over and asks for attention, a click gets a happy line, ignoring her gets a sulk and twice the wait, and she stays quiet when you're away, she's hidden or Check in on me is off");
+                            string homeFirst = Cheer(true, false, 100, true), homeStill = Cheer(true, false, 115, true);
+                            Cheer(false, false, 130, true);
+                            string homeSoon = Cheer(true, false, 145, true), homeBusyLine = Cheer(true, true, 160, false);
+                            Cheer(true, false, 175, true);
+                            string homeSongLine = Cheer(true, true, 190, true);
+                            Cheer(false, false, 200, true);
+                            string homeLater = Cheer(true, false, 200 + HomeGap, true);
+                            homeGame = homeSong = false;
+                            gameCheered = songCheered = -HomeGap;
+                            if (Array.IndexOf(HomeGameLines, homeFirst) < 0 || homeStill != null || homeSoon != null || homeBusyLine != null || Array.IndexOf(HomeSongLines, homeSongLine) < 0 || Array.IndexOf(HomeGameLines, homeLater) < 0
+                                || !NightCity("SAMURAI - Chippin' In") || !NightCity("I Really Want to Stay at Your House - Rosa Walton - YouTube - Google Chrome") || !NightCity("Dawid Podsiadło - Let You Down") || NightCity("Chase Atlantic - Consume") || NightCity("Spotify Premium") || NightCity(null))
+                                throw new Exception("Her Night City cheer went wrong: " + homeFirst + " / " + homeStill + " / " + homeSoon + " / " + homeBusyLine + " / " + homeSongLine + " / " + homeLater);
+                            checks.Add("PASS Night City: she cheers when Cyberpunk 2077 starts or a 2077 or Edgerunners song comes on in Spotify or YouTube, at most once every two hours for each, never while she's busy, and other songs don't count");
                             DataContractJsonSerializer checkInsJson = new DataContractJsonSerializer(typeof(Preferences));
                             Preferences checkInsNew = new Preferences();
                             Preferences checkInsUpdated = (Preferences)checkInsJson.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"PopIns\":false,\"Size\":240}")));

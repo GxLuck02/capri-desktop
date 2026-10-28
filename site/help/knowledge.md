@@ -228,7 +228,7 @@ That was 0.7.0 to 0.7.2: she gushed over everything, sometimes said "On it" or "
 Before 0.7.3, ElevenLabs voice calls made her say something like "you still there?" whenever you went quiet or muted. In 0.7.3 she stays quiet until you talk to her. Update (right-click her > Check for updates). Going back to 0.7.1 doesn't help: it has the same brain as 0.7.2.
 
 ### She keeps popping up or asking for attention
-That's Check in on me (called Pop in on me before 0.7.3), on by default since 0.7.3. Every 8 to 20 minutes she glitches in to say hi, and if you're using your PC but haven't clicked or talked to her for about 2 hours, she asks for some attention. To stop both, open Capri Mainframe, click Settings, and turn off Check in on me under CAPRI. It stays off after updates.
+That's Check in on me (called Pop in on me before 0.7.3), on by default since 0.7.3. Every 8 to 20 minutes she glitches in to say hi, and if you're using your PC but haven't clicked or talked to her for about 2 hours, she asks for some attention. She also cheers when Cyberpunk 2077 starts or a 2077 or Edgerunners song comes on in Spotify or YouTube, at most once every two hours for each. To stop all of it, open Capri Mainframe, click Settings, and turn off Check in on me under CAPRI. It stays off after updates.
 
 ### She keeps asking me to confirm things
 From 0.7.3 anything you ask counts as already allowed: she does every part of it, picks the song or video herself when you leave it to her, and doesn't ask if you're sure. She still asks before buying or paying, or before sending, posting, deleting or installing something you didn't mention. To stop even that, turn on Blackwall mode in Capri Mainframe > Settings > HABITS (before 0.7.4 it was called Bypass all permissions).
