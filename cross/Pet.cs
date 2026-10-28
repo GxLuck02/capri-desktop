@@ -320,6 +320,8 @@ namespace CapriDesktop
         private int watchTicket;
         private bool glancing;
         private bool watchTold;
+        // The last glance failure written to errors.txt: one that keeps happening, like a text-only Ollama model's, goes in once.
+        private string glanceFailed;
         private byte[] lastPrint;
         private readonly List<Tuple<double, string>> glanced = new List<Tuple<double, string>>();
         // Her brain's look at a glance, and how long they've been away from the computer. The smoke test hands in its own.
@@ -2494,9 +2496,13 @@ namespace CapriDesktop
                 }
                 catch (Exception error)
                 {
-                    looked = true;
-                    problem = error.Message;
-                    Brain.Log("glance", -1, error.GetType().Name + ": " + error.Message);
+                    // Talking to her cancels a glance; that isn't a problem, like on Windows.
+                    System.Net.WebException web = error as System.Net.WebException;
+                    if (web == null || web.Status != System.Net.WebExceptionStatus.RequestCanceled)
+                    {
+                        looked = true;
+                        problem = error.GetType().Name + ": " + error.Message;
+                    }
                 }
                 Dispatcher.UIThread.Post(delegate { FinishGlance(ticket, watch, print, looked, blind, said, saw, problem); });
             });
@@ -2518,11 +2524,13 @@ namespace CapriDesktop
             if (problem != null)
             {
                 lastPrint = null;
+                if (problem != glanceFailed) { glanceFailed = problem; Brain.Log("glance", -1, problem); }
                 // A brain that turned out not to see gets said once, like Windows' Mainframe note; other errors go in errors.txt.
                 string unseen = Unseeing();
                 if (unseen != null && !watchTold && Talk.Quiet && !away && !shushed) { watchTold = true; Blurt("(watch my screen)", unseen); }
                 return;
             }
+            glanceFailed = null;
             if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
             // Quiet going on while she looked drops the line too, like on Windows.
             if (ticket != asking || away || shushed || dragging || !Talk.Quiet) { lastPrint = null; Glimpsed(saw); return; }
