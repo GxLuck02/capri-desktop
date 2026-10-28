@@ -173,7 +173,13 @@ namespace CapriDesktop
             @"|^((nyisd|indítsd|játssz|játszd|zárd|keress|keresd|mutasd|állítsd|tedd|kapcsold|hangosítsd|halkítsd)(?!\w)|((meg|el|be|le) )?tudnád\b.*\b(nyitni|indítani|játszani|zárni|keresni|mutatni|kapcsolni)(?!\w))" +
             @"|^((deschide|pune|închide|caută|arată(-mi)?|pornește|porneste|oprește|opreste|redă|dă mai (tare|încet)|da mai (tare|incet))(?!\w)|(poți|poti|ai putea) (să |sa )?(deschizi|pui|închizi|inchizi|cauți|cauti|arăți|pornești|oprești|redai)(?!\w))" +
             @"|^((άνοιξε|ανοιξε|βάλε|βαλε|κλείσε|κλεισε|ψάξε|ψαξε|δείξε|δειξε|παίξε|παιξε|σταμάτα|σταματα|δυνάμωσε|χαμήλωσε|ξεκίνα)(?!\w)|(μπορείς|μπορεις|θα μπορούσες) να (ανοίξεις|ανοιξεις|βάλεις|βαλεις|κλείσεις|κλεισεις|ψάξεις|ψαξεις|δείξεις|δειξεις|παίξεις|παιξεις)(?!\w))" +
-            @"|^((buksan|patugtugin|tugtugin|magpatugtog|isara|hanapin|ipakita|lakasan|hinaan|ihinto|i-?play|i-?open|i-?close)(?!\w)|paki(-\w+|bukas|buksan|patugtog|sara|isara|hanap|lakas|hina|play|open|close)(?!\w)|pa-(open|play|close|on|off)(?!\w)|(pwede|puwede|kaya) (mo )?(bang? )?(buksan|patugtugin|isara|hanapin|ipakita|i-?play|i-?open)(?!\w))", RegexOptions.IgnoreCase);
+            @"|^((buksan|patugtugin|tugtugin|magpatugtog|isara|hanapin|ipakita|lakasan|hinaan|ihinto|i-?play|i-?open|i-?close)(?!\w)|paki(-\w+|bukas|buksan|patugtog|sara|isara|hanap|lakas|hina|play|open|close)(?!\w)|pa-(open|play|close|on|off)(?!\w)|(pwede|puwede|kaya) (mo )?(bang? )?(buksan|patugtugin|isara|hanapin|ipakita|i-?play|i-?open)(?!\w))" +
+            // Malay, Swahili, Catalan, and Serbian, which covers Croatian and Bosnian too.
+            @"|^(tolong |boleh(kah)? (tak |tidak )?|(awak|engkau) )*(buka(kan)?|pasang(kan)?|mainkan|tutup|cari(kan)?|kuatkan|perlahankan|hentikan|tunjuk(kan)?|hantar(kan)?|tengok (skrin|ni|tu))(?!\w)|^lagu apa (ni|ini)(?!\w)" +
+            @"|^((tafadhali |naomba )*(fungua|cheza|funga|tafuta|onyesha|zima|washa|ongeza sauti|punguza sauti|simamisha|tuma)(?!\w)|(je )?(unaweza|waweza) (ku)?(fungua|cheza|funga|tafuta|onyesha|zima|washa|ongeza|punguza|tuma)(?!\w))" +
+            @"|^((obre|posa(-me)?|tanca|mostra'?m|atura|reprodueix|engega|a?puja (el )?(volum|so|música)|a?baixa (el )?(volum|so|música))(?!\w)|(em )?(pots|podries) (obrir|posar|tancar|cercar|buscar|mostrar|aturar|reproduir|apujar|abaixar|engegar|apagar)(?!\w))" +
+            @"|^((otvori|pusti|zatvori|pronađi|pronadji|nađi|nadji|traži|trazi|pokaži|pokazi|pojačaj|pojacaj|utišaj|utisaj|ugasi|upali|zaustavi|pošalji|posalji)(?!\w)|(možeš li|mozes li|da li možeš|da li mozes|možete li|mozete li) (mi )?(da )?(otvoriš|otvoris|otvoriti|pustiš|pustis|pustiti|zatvoriš|zatvoris|zatvoriti|pronađeš|pronadjes|pronaći|pronaci|pokažeš|pokazes|pokazati|pojačaš|pojacas|pojačati|pojacati|ugasiš|ugasis|ugasiti|upališ|upalis|upaliti)(?!\w))" +
+            @"|^((отвори|пусти|затвори|пронађи|нађи|тражи|покажи|појачај|утишај|угаси|упали|заустави|пошаљи)(?!\w)|(можеш ли|да ли можеш|можете ли) (ми )?(да )?(отвориш|пустиш|затвориш|пронађеш|нађеш|покажеш|појачаш|угасиш|упалиш)(?!\w))", RegexOptions.IgnoreCase);
 
         private static readonly Regex Errands = new Regex(
             @"^(send|dm|pm|reply to|respond to)\b(?!\s+(me|us|help)\b)|^(message|msg|text|ping) (?!(is|was|are|were|from|looks|said|says|me|us)\b)\w|^(post|tweet) (this|that|it|a|an|my|our|something|on|in|to)\b" +
@@ -488,7 +494,11 @@ namespace CapriDesktop
             @"|\bnem tudom (megnyitni|elindítani|lejátszani|bezárni|irányítani)(?!\w)|\bnincs hozzáférésem(?!\w)|\bnem (tudok hozzáférni|férek hozzá)(?!\w)" +
             @"|\bnu pot (să |sa )?(deschid|deschide|pornesc|porni|reda|controla|închide|inchide)(?!\w)|\bnu am acces(?!\w)" +
             @"|δεν μπορώ να (ανοίξω|βάλω|παίξω|ξεκινήσω|ελέγξω|κλείσω)|δεν έχω πρόσβαση" +
-            @"|\bhindi ko (kayang |magawang )?(mabuksan|buksan|mapatugtog|patugtugin|maisara|ma-?open|ma-?play)(?!\w)|\bwala akong access(?!\w)", RegexOptions.IgnoreCase);
+            @"|\bhindi ko (kayang |magawang )?(mabuksan|buksan|mapatugtog|patugtugin|maisara|ma-?open|ma-?play)(?!\w)|\bwala akong access(?!\w)" +
+            @"|\b(saya|aku) (tidak|tak) (boleh|dapat|mampu) (membuka|buka|memainkan|mainkan|memasang|pasang|mengakses|akses|mengawal|menutup|mencari)(?!\w)|\b(saya|aku) tiada akses(?!\w)" +
+            @"|\bsiwezi (ku)?(fungua|cheza|funga|tafuta|washa|zima|dhibiti|fikia)(?!\w)|\bsina (ufikiaji|uwezo wa (ku)?(fungua|cheza|fikia))(?!\w)" +
+            @"|\bno puc (obrir|reproduir|posar|engegar|controlar|accedir|tancar)(?!\w)|\bno tinc accés(?!\w)" +
+            @"|\bne mogu (da )?(otvorim|pustim|pokrenem|kontrolišem|kontrolisem|otvoriti|pustiti|pokrenuti|kontrolirati|pristupiti)(?!\w)|\bnemam pristup(?!\w)|\bне могу (да )?(отворим|пустим|покренем|контролишем)(?!\w)|\bнемам приступ(?!\w)", RegexOptions.IgnoreCase);
         private const string Able = @"(open|launch|start|run|play|pause|resume|skip|control|access|use|search|google|close|mute|unmute|put on|turn (up|down|on|off)|change)\b";
 
         internal static bool Refused(string reply) { return Refusal.IsMatch((reply ?? "").Replace('’', '\'')); }
@@ -498,12 +508,13 @@ namespace CapriDesktop
         {
             string text = (said ?? "").Trim();
             // Greek asks with ";" for a question mark.
-            if (Regex.IsMatch(text, @"[Ͱ-Ͽἀ-῿]")) text = Regex.Replace(text, @"[;;]\s*$", "?");
+            if (Regex.IsMatch(text, @"[\u0370-\u03FF\u1F00-\u1FFF]")) text = Regex.Replace(text, @"[;\u037E]\s*$", "?");
             if (!Regex.IsMatch(text, @"[?？؟]\s*$")) return true;
             text = Regex.Replace(Opener.Replace(text, ""), @"^[\s¿¡]+", "");
             return Regex.IsMatch(text, @"^((hey|yo|ok|okay|oye|hola|hallo|ol[aá]|ciao|cze[śs][ćc]|hoi|привет)[\s,]+)?(capri[\s,]+)?((can|could|would|will) (you|u)|(me )?(puedes|podr[ií]as|pones|abres)|(est-ce que )?tu (peux|pourrais)|peux-tu|pourrais-tu|kannst du|k[öo]nntest du|w[üu]rdest du|(voc[eê] |vc )?(pode|poderia|consegue)s?|puoi|potresti|riesci a|mo[żz]esz|m[óo]g[łl]by[śs]|mog[łl]aby[śs]|(kun|kan|wil) je|можешь|можете|мог бы|могла бы|не могла бы" +
                 @"|làm ơn|hãy|bạn có thể|tolong|bisa(kah)?|(kamu|kau|anda) bisa|ممكن|هل (يمكنك|تستطيع)|من فضلك|لو سمحت|можеш|чи можеш|чи можете" +
-                @"|kan du|kunde du|skulle du|vil du|voisitko|voitko|můžeš|mohl bys|mohla bys|môžeš|((meg|el|be|le) )?tudnád|poți|poti|ai putea|μπορείς να|μπορεις να|θα μπορούσες να|pwede mo bang|puwede mo bang|pwede bang|kaya mo bang)(?!\w)", RegexOptions.IgnoreCase)
+                @"|kan du|kunde du|skulle du|vil du|voisitko|voitko|můžeš|mohl bys|mohla bys|môžeš|((meg|el|be|le) )?tudnád|poți|poti|ai putea|μπορείς να|μπορεις να|θα μπορούσες να|pwede mo bang|puwede mo bang|pwede bang|kaya mo bang" +
+                @"|boleh(kah)?|(je )?(unaweza|waweza)|tafadhali|naomba|(em )?(pots|podries)|možeš li|mozes li|da li možeš|da li mozes|možete li|mozete li|да ли можеш)(?!\w)", RegexOptions.IgnoreCase)
                 // Chinese and Thai ask at the start without spaces; Japanese, Korean, Turkish and Hindi ask at the end.
                 || Regex.IsMatch(text, @"^(capri[\s,，]*)?((你|您)?(能不能|可不可以|能|可以|会不会|會不會)?(帮|幫|给|給|替)我|(你|您)(能|可以)|请|請|麻烦|麻煩|ช่วย|กรุณา|รบกวน)", RegexOptions.IgnoreCase)
                 || Regex.IsMatch(text, @"(くれる|くれない|くれます|くれませんか|もらえる|もらえない|もらえます|もらえませんか|ください|줄래|줄래요|줄 ?수 ?있어|줄 ?수 ?있어요|주세요|주실래요|줘|줘요|r m[ıi]s[ıi]n|bilir misin|सकते हो|सकती हो|सकोगे|सकोगी|सकते हैं|सकती हैं|ได้ไหม|ได้มั้ย|ได้มั๊ย|หน่อย)\s*(か)?\s*[?？؟]\s*$", RegexOptions.IgnoreCase);
