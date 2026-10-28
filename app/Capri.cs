@@ -10177,7 +10177,9 @@ namespace CapriDesktop
                                         { "this song sucks, skip it", "", "true" },
                                         { "gg, open Spotify", "", "true" },
                                         { "playing Valorant rn", "", "false" },
-                                        { "that song is fire, I love it", "", "false" }
+                                        { "that song is fire, I love it", "", "false" },
+                                        { "嘿，打开Spotify", "", "true" },
+                                        { "昨日Spotifyを開いて、いい曲を見つけた。", "", "false" }
                                     };
                                     for (int i = 0; i < intents.GetLength(0); i++)
                                     {
@@ -10191,7 +10193,7 @@ namespace CapriDesktop
                                         || !Hands.Follows("YouTube stp", "mets de la musique", "Spotify ou YouTube ?") || !Hands.Follows("le deuxième", "ouvre minecraft", "Minecraft Launcher ou Minecraft: Java Edition ?")
                                         || !Hands.Follows("same again", "open Spotify", "Opened Spotify.") || Hands.Follows("yes", "open Spotify", "Opened Spotify.")
                                         || Hands.Follows("no thanks", "play some music", "Spotify or YouTube?") || Hands.Follows("the second one", "which game is better?", "Which one do you like?")) throw new Exception("Follow-up routing was wrong.");
-                                    checks.Add("PASS request routing: 282 messages in 76 languages, casual game and music chat, named commands, unknown games and follow-up choices");
+                                    checks.Add("PASS request routing: " + intents.GetLength(0) + " messages in 76 languages, casual game and music chat, named commands, unknown games and follow-up choices");
                                     string[,] loudAsks =
                                     {
                                         { "turn up the volume", "volume_up||" }, { "can you turn the volume up a bit please", "volume_up|6|" }, { "crank it up", "volume_up||" }, { "make it louder", "volume_up||" },

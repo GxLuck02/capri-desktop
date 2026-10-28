@@ -420,7 +420,7 @@ namespace CapriDesktop
         internal static bool Wants(string said)
         {
             if (Regex.IsMatch(said ?? "", @"\b(please|pls|plz|stp)\s*[.!?]*$", RegexOptions.IgnoreCase) && Site(Asked(said))) return true;
-            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？、。．،؟।።፣፧]\s*|\.\s+"))
+            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？。．،؟।።፣፧]\s*|\.\s+"))
             {
                 string text = Asked(part);
                 if (!Chatter.IsMatch(text) && Asks.IsMatch(text)) return true;
@@ -509,7 +509,7 @@ namespace CapriDesktop
 
         internal static bool Errand(string said)
         {
-            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？、。．،؟।።፣፧]\s*|\.\s+"))
+            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？。．،؟।።፣፧]\s*|\.\s+"))
             {
                 string text = Asked(part);
                 if (!Chatter.IsMatch(text) && Errands.IsMatch(text)) return true;
