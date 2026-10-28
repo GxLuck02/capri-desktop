@@ -220,7 +220,11 @@ namespace CapriDesktop
             Match message = Regex.Match(detail, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
             string text = message.Success ? Regex.Unescape(message.Groups[1].Value).Trim() : "";
             if (Regex.IsMatch(text, @"empty text|non-empty", RegexOptions.IgnoreCase)) return Silent;
-            if (status == 403 || Regex.IsMatch(text, @"permission|not allowed|forbidden|unauthori[sz]ed|access", RegexOptions.IgnoreCase)) return "Key can't do that. Make a new ElevenLabs key with Restrict key turned off.";
+            // It's only the key's fault when ElevenLabs says so (Lichen's report: two keys with Restrict key off still got the key
+            // line). A 403 can also be a voice, model or plan they can't use, or their network being turned away, so ElevenLabs'
+            // own words show instead.
+            if (Regex.IsMatch(text, @"permission|api.?key|unauthori[sz]ed", RegexOptions.IgnoreCase)) return "Key can't do that. Make a new ElevenLabs key with Restrict key turned off.";
+            if (status == 403 && text.Length == 0) return Refused;
             // A new key can't fix a voice, model or plan problem, so those skip the key hint.
             if (text.Length > 0) return Short(text) + (status == 401 || status == 402 || status == 429 || Regex.IsMatch(text, @"unusual activity|\b(voices?|models?|plans?|subscription|upgrade)\b", RegexOptions.IgnoreCase) ? "" : RestrictHint);
             if (status == 401) return Rejected;
@@ -231,6 +235,7 @@ namespace CapriDesktop
         internal const string Silent = "That reply had nothing to say out loud.";
         internal const string LibraryVoice = "ElevenLabs only lets paid plans use Voice Library voices in apps. Pick a voice you made or a default one.";
         internal const string RestrictHint = " Still failing? Make a new key with Restrict key turned off.";
+        internal const string Refused = "ElevenLabs turned her voice away (error 403) without saying why. A VPN or proxy can do that." + RestrictHint;
 
         internal static string Short(string text)
         {

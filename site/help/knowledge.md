@@ -1264,7 +1264,7 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 
 ### Voice (ElevenLabs)
 - "ElevenLabs rejected the key." or "ElevenLabs rejected that key.": that isn't the key, or it was deleted. ElevenLabs keys start with sk_. Make a new one and paste it.
-- "Key is missing permissions." or "Key can't do that.": make a new key with Restrict key turned off. Delete the old key in the Capri box (Forget), paste the new one, press Connect. Some people still see it with Restrict key off, and there's no known fix yet: check you can make speech on elevenlabs.io with the same account, then send Copy error details in the Discord.
+- "Key is missing permissions." or "Key can't do that.": make a new key with Restrict key turned off. Delete the old key in the Capri box (Forget), paste the new one, press Connect. Older versions said "Key can't do that." whenever ElevenLabs refused, so with Restrict key off it can be something else: check you can make speech on elevenlabs.io with the same account, try without a VPN, then send Copy error details in the Discord. Newer versions only say it when ElevenLabs' answer is about the key, and show ElevenLabs' own reason otherwise.
 - "Voice not found. Add it to your ElevenLabs voices.": paste the Voice ID of a voice in your My Voices, not its name. A voice from the ElevenLabs library has to be added to My Voices first.
 - "Paste your Voice ID first." or "Needs your Voice ID.": paste a Voice ID under VOICE, or pick one from the list.
 - "Out of ElevenLabs credits. Pick FREE VOICE in the Mainframe.": your monthly credits are used up. They refill each month, or you can upgrade on ElevenLabs. Pick FREE VOICE to keep talking with no credits. With her free voice installed she switches to it by herself. If ElevenLabs shows "10,000 / 10,000", that means all of them are used, not all left. A "Total 10,000" line alone doesn't show what's left: check the used and remaining amounts on elevenlabs.io.
@@ -1275,6 +1275,7 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 - "Can't reach ElevenLabs. Check your internet."
 - "ElevenLabs is busy. Try again in a moment."
 - "ElevenLabs error N. Still failing? Make a new key with Restrict key turned off."
+- "ElevenLabs turned her voice away (error 403) without saying why.": ElevenLabs, or something on the way to it, blocked the request. Try without a VPN or proxy, and check you can make speech on elevenlabs.io with the same account. Still failing? Make a new key with Restrict key off, then send Copy error details in the Discord.
 - "Error deserializing object..." (old versions): update Capri.
 - Test shows her words but you hear nothing (even "Voice link online"): that text doesn't mean the sound played. Check Windows plays sound on the device you want, make it the default output in Settings > System > Sound, check Volume isn't on Mute in Mainframe > Settings, then quit Capri (right-click her > Quit Capri) and open her again. Press Test and listen. A full restart fixed it for one user.
 - "Can't open your speakers: Windows has no speakers or headphones on.": pick one in Settings > System > Sound. If every other app plays sound fine, update Capri: newer versions try WASAPI, the way most apps play sound, when Windows' older wave sound won't open for her, and note it in her error details.
@@ -1359,7 +1360,7 @@ Right-click her > Help > Copy error details, then ask in the Discord: https://di
 ## 24. Needs checking
 Things in this file the team should confirm before the support chat relies on them:
 1. Mac data folder. Written as ~/.config/Capri (the code uses .NET's ApplicationData folder; Linux confirmed by a user screenshot, Mac not checked).
-2. The ElevenLabs permissions for a restricted key (from the old setup guide screenshot: Text to Speech and Models Access, ElevenAgents and Voices Read, ElevenAgents Write). Several testers still got "Key can't do that" with Restrict key off. Cause unknown.
+2. The ElevenLabs permissions for a restricted key (from the old setup guide screenshot: Text to Speech and Models Access, ElevenAgents and Voices Read, ElevenAgents Write). Several testers still got "Key can't do that" with Restrict key off. Cause unknown: older versions said it for every refusal. Newer versions show ElevenLabs' own reason, so the next report should name it.
 3. How many credits ElevenLabs voice chat uses (ElevenLabs bills agent minutes differently from text to speech). The free plan's credit amount isn't stated on purpose.
 4. Voice chat in other languages hasn't been tested with a real key.
 5. Whether a browser playing YouTube or Spotify Web counts as music for dancing.
