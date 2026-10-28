@@ -714,6 +714,8 @@ She uses it now and then. To go back to "choom", type choom or clear the box and
 ### Language
 Mainframe > Settings > Language. She replies in that language. Changing it starts a fresh chat.
 
+On a new install she starts in your PC's own display language when it's one she speaks, and in English otherwise. Change it any time.
+
 ---
 
 ## 14. Moving her around

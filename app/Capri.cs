@@ -5964,7 +5964,8 @@ namespace CapriDesktop
                     return value;
                 }
             }
-            catch { return new Preferences(); }
+            // A new install, or settings that can't be read: she starts in the PC's own language when she speaks it.
+            catch { return new Preferences { Language = Brain.SystemLanguage(System.Globalization.CultureInfo.CurrentUICulture) }; }
         }
 
         private void SavePreferences()
@@ -11016,6 +11017,24 @@ namespace CapriDesktop
                             if (!preferences.Wander || preferences.WanderPace != 2 || WanderLevel != 3 || Brain.Wordiness != 1 || Brain.Budget != 180 || Brain.Recall != 16 || Brain.Window != 8192 || preferences.Language != "French" || Brain.LanguageCode(Language) != "fr") throw new Exception("Settings were not saved.");
                             if (Brain.Character.IndexOf("Always reply in French", StringComparison.Ordinal) < 0 || Brain.Character.IndexOf("up to four sentences", StringComparison.Ordinal) < 0 || Brain.Clean(new string('a', 300)).Length != 300) throw new Exception("Language or reply length did not reach her prompt.");
                             if (parakeet.Language != "fr" || parakeet.Model != LocalEars.EuropeanPack || parakeet.Size != LocalEars.EuropeanSize) throw new Exception("Picking French did not point her ears at the European pack: " + parakeet.Language + " / " + parakeet.Model);
+                            System.Globalization.CultureInfo uiWas = Thread.CurrentThread.CurrentUICulture;
+                            string heldSettings = settingsPath + ".held";
+                            Preferences newInstall;
+                            try
+                            {
+                                if (File.Exists(heldSettings)) File.Delete(heldSettings);
+                                if (File.Exists(settingsPath)) File.Move(settingsPath, heldSettings);
+                                Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("es-ES");
+                                newInstall = LoadPreferences();
+                            }
+                            finally
+                            {
+                                Thread.CurrentThread.CurrentUICulture = uiWas;
+                                if (File.Exists(heldSettings)) { if (File.Exists(settingsPath)) File.Delete(settingsPath); File.Move(heldSettings, settingsPath); }
+                            }
+                            if (newInstall.Language != "Spanish" || Brain.SystemLanguage(new System.Globalization.CultureInfo("nb-NO")) != "Norwegian" || Brain.SystemLanguage(new System.Globalization.CultureInfo("fil-PH")) != "Filipino"
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("en-AU")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("ja-JP")) != null || Brain.SystemLanguage(System.Globalization.CultureInfo.InvariantCulture) != null) throw new Exception("A new install didn't start in the PC's own language: " + newInstall.Language);
+                            checks.Add("PASS a new install starts in the PC's own language when she speaks it (Spanish Windows gets Spanish, Norwegian Bokmål gets Norsk), and English or a language she doesn't speak yet stays English");
                             if (mainframe.SettingsStatus != "Fran\u00e7ais | 50% | 30% | Often | 10 min | dance | - | Medium | Medium | Quick" || BubbleHold(100) != 4.5 || !preferences.NoIntro || preferences.Sounds != 30 || Sfx.Level != 30 || SleepDue(599000) || !SleepDue(600000)) throw new Exception("The settings page showed the wrong values: " + mainframe.SettingsStatus);
                             mainframe.TypeNickname("  Lachy!!  ");
                             bool namedRight = Nickname == "Lachy" && preferences.Nickname == "Lachy" && mainframe.NicknameShown == "Lachy" && reply == "Got it, Lachy." && Brain.Character.IndexOf("call them: Lachy.", StringComparison.Ordinal) >= 0;

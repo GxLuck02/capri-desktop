@@ -447,6 +447,15 @@ namespace CapriDesktop
             return "en";
         }
 
+        // Her language on a new install: the PC's own display language when she speaks it, otherwise English.
+        internal static string SystemLanguage(System.Globalization.CultureInfo culture)
+        {
+            string code = culture == null ? "" : culture.TwoLetterISOLanguageName;
+            if (code == "nb" || code == "nn") code = "no";
+            for (int i = 1; i < Languages.GetLength(0); i++) if (Languages[i, 2] == code) return Languages[i, 1];
+            return null;
+        }
+
         internal static string Character { get { return Persona + Speech() + Called() + Longer(); } }
 
         internal static string Nick(string typed)

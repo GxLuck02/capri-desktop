@@ -1566,7 +1566,8 @@ namespace CapriDesktop
             {
                 using (FileStream stream = File.OpenRead(Path.Combine(folder, "cross.json"))) return (Settings)new DataContractJsonSerializer(typeof(Settings)).ReadObject(stream);
             }
-            catch (Exception) { return new Settings(); }
+            // A new install starts in the computer's own language when she speaks it.
+            catch (Exception) { return new Settings { Language = Brain.SystemLanguage(System.Globalization.CultureInfo.CurrentUICulture) }; }
         }
 
         internal void Save()
