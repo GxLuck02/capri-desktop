@@ -766,6 +766,8 @@ Mainframe > Settings > Language. She replies in that language. Changing it start
 
 On a new install she starts in your PC's own display language when it's one she speaks, and in English otherwise. Change it any time.
 
+Ask her to do things in any of her languages: "öffne Spotify", "abre Discord" and "打开Spotify" all work. Volume, mute, pause and skip ("mach lauter", "wycisz", "下一首") work instantly, even before she has a brain, in English, Spanish, French, German, Portuguese, Italian, Polish, Dutch, Russian, Ukrainian, Turkish, Indonesian, Japanese, Chinese and Korean. In her other languages her brain handles them.
+
 ---
 
 ## 14. Moving her around
