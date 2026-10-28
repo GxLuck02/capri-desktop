@@ -646,12 +646,21 @@ namespace CapriDesktop
         private Point panelGrabbed;
         // Their real cursor is lent out to her for a press, so her windows let clicks through.
         private bool lentOut;
-        private static readonly string[] PetLines = { "Heh. Okay, I'll allow it.", "Pets logged. Morale up twelve percent.", "Careful, choom. I bite viruses." };
+        private static readonly string[] PetLines =
+        {
+            "Heh. Okay, I'll allow it.", "Pets logged. Morale up twelve percent.", "Careful, choom. I bite viruses.",
+            "Head pats? On my chrome? Bold.", "Okay, that's nice. Don't tell anyone.", "System status: very patted.",
+            "You're gonna wear a groove in my firmware, choom.", "Easy on the hair. It took three patches to get it like this.",
+            "Affection detected. Sending some back. Hi.", "Keep going. This beats defragging.", "Hehe. My cooling fans just kicked in.",
+            "Ten out of ten pats. Would get patted again.", "Is this a bribe? Because it's working.", "Mmm. If I start glitch-purring, that's on you."
+        };
         private readonly System.Collections.Generic.List<long> petTurns = new System.Collections.Generic.List<long>();
         private int petX;
         private int petWay;
         private long petAt = -60000;
-        private int petLine;
+        // Pat lines come out of a shuffled bag: every line once a round, never the same one twice in a row.
+        private readonly System.Collections.Generic.List<int> petBag = new System.Collections.Generic.List<int>();
+        private int lastPet = -1;
         private int petTicket;
         private const int PetPause = 1300;
         private const int GreetPause = 1800;
@@ -1684,7 +1693,19 @@ namespace CapriDesktop
             heard = "pets you";
             box.Prompt = "> sys: ";
             // Pat lines use the same voice as everything else she says: their ElevenLabs voice and model when they've set one.
-            Answer(++asking, PetLines[petLine++ % PetLines.Length], TalkState.Talking);
+            Answer(++asking, NextPetLine(), TalkState.Talking);
+        }
+
+        internal string NextPetLine()
+        {
+            if (petBag.Count == 0)
+            {
+                for (int i = 0; i < PetLines.Length; i++) petBag.Insert(random.Next(petBag.Count + 1), i);
+                if (petBag[0] == lastPet) { petBag[0] = petBag[petBag.Count - 1]; petBag[petBag.Count - 1] = lastPet; }
+            }
+            lastPet = petBag[0];
+            petBag.RemoveAt(0);
+            return PetLines[lastPet];
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
@@ -6504,6 +6525,23 @@ namespace CapriDesktop
                             Play(seat != null ? perch : idle);
                             if (earlyPet || !smiled || !spoke || !cooled) throw new Exception("Petting her went wrong: early " + earlyPet + ", smiled " + smiled + ", spoke " + spoke + ", cooled " + cooled + " (" + petReply + ")");
                             checks.Add("PASS petting: rubbing the cursor back and forth over her makes her smile and say a short line, not too easily, not again for 20 s, and not when she moves under a still cursor");
+                            // Three rounds of pat lines: each round says every line once, and no line comes twice in a row, across rounds too.
+                            petBag.Clear();
+                            string[] patsSaid = new string[PetLines.Length * 3];
+                            for (int i = 0; i < patsSaid.Length; i++) patsSaid[i] = NextPetLine();
+                            string patsWrong = null;
+                            string[] everyPat = (string[])PetLines.Clone();
+                            Array.Sort(everyPat, StringComparer.Ordinal);
+                            for (int patRound = 0; patRound < 3 && patsWrong == null; patRound++)
+                            {
+                                string[] roundPats = new string[PetLines.Length];
+                                Array.Copy(patsSaid, patRound * PetLines.Length, roundPats, 0, PetLines.Length);
+                                Array.Sort(roundPats, StringComparer.Ordinal);
+                                if (string.Join("|", roundPats) != string.Join("|", everyPat)) patsWrong = "round " + patRound + " said " + string.Join(" / ", roundPats);
+                            }
+                            for (int i = 1; i < patsSaid.Length && patsWrong == null; i++) if (patsSaid[i] == patsSaid[i - 1]) patsWrong = "twice in a row: " + patsSaid[i];
+                            if (patsWrong != null || PetLines.Length < 12) throw new Exception("Her pat lines went wrong: " + patsWrong);
+                            checks.Add("PASS pat lines: " + PetLines.Length + " lines, each said once a round in a fresh order, never the same one twice in a row");
                             string[] greetings = new string[24];
                             for (int hour = 0; hour < 24; hour++) greetings[hour] = Brain.Greeting(hour) ?? "-";
                             string greetDay = string.Join("|", greetings);

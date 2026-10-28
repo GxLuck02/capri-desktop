@@ -219,7 +219,7 @@ For things she should never forget, use her notes (section 13).
 - Click: she glitches and reacts.
 - Double-click: she rides your cursor (section 14).
 - Right-click: her menu.
-- Rub your cursor back and forth over her: she likes being petted and says something, about once every 20 seconds at most.
+- Rub your cursor back and forth over her: she likes being petted and says something, about once every 20 seconds at most. She has 14 pat lines and says every one before she repeats any.
 
 ### She sounds like ChatGPT, or says she did something she didn't
 That was 0.7.0 to 0.7.2: she gushed over everything, sometimes said "On it" or "Call ended" without doing anything, and after a job sometimes said you did it ("nice, you opened Notepad"). 0.7.3 fixes all three. She's a playful, teasing chaos gremlin again who's openly fond of you, when she says she's doing a job she either does it or tells you she hasn't, and she says what she did.

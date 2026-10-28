@@ -156,7 +156,14 @@ namespace CapriDesktop
         private readonly Clip perchArrive = new Clip("perch_arrive", 14, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip perchLeave = new Clip("perch_leave", 12, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip grin = new Clip("grin", 16, 8, 1.11);
-        internal static readonly string[] PetLines = { "Heh. Okay, I'll allow it.", "Pets logged. Morale up twelve percent.", "Careful, choom. I bite viruses." };
+        internal static readonly string[] PetLines =
+        {
+            "Heh. Okay, I'll allow it.", "Pets logged. Morale up twelve percent.", "Careful, choom. I bite viruses.",
+            "Head pats? On my chrome? Bold.", "Okay, that's nice. Don't tell anyone.", "System status: very patted.",
+            "You're gonna wear a groove in my firmware, choom.", "Easy on the hair. It took three patches to get it like this.",
+            "Affection detected. Sending some back. Hi.", "Keep going. This beats defragging.", "Hehe. My cooling fans just kicked in.",
+            "Ten out of ten pats. Would get patted again.", "Is this a bribe? Because it's working.", "Mmm. If I start glitch-purring, that's on you."
+        };
         private readonly List<double> petTurns = new List<double>();
         private int petX;
         private int petWay;
