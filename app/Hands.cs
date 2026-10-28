@@ -434,7 +434,7 @@ namespace CapriDesktop
             if (Regex.IsMatch(said ?? "", @"\b(please|pls|plz|stp)\s*[.!?]*$", RegexOptions.IgnoreCase) && Site(Asked(said))) return true;
             foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？。．،؟।።፣፧။၊։՝]\s*|\.\s+"))
             {
-                string text = Asked(part);
+                string text = Asked(WithoutMouthOrEyes(part));
                 if (!Chatter.IsMatch(text) && Asks.IsMatch(text)) return true;
             }
             return false;
@@ -654,6 +654,39 @@ namespace CapriDesktop
                 || Regex.IsMatch(text, @"^(capri[\s,，]*)?((你|您)?(能不能|可不可以|能|可以|会不会|會不會)?(帮|幫|给|給|替)我|(你|您)(能|可以)|请|請|麻烦|麻煩|ช่วย|กรุณา|รบกวน|ກະລຸນາ|ຊ່ວຍ|សូម|ជួយ|ကျေးဇူးပြု၍|ကျေးဇူးပြုပြီး)", RegexOptions.IgnoreCase)
                 || Regex.IsMatch(text, @"(くれる|くれない|くれます|くれませんか|もらえる|もらえない|もらえます|もらえませんか|ください|줄래|줄래요|줄 ?수 ?있어|줄 ?수 ?있어요|주세요|주실래요|줘|줘요|r m[ıi]s[ıi]n|bilir misin|सकते हो|सकती हो|सकोगे|सकोगी|सकते हैं|सकती हैं|سکتے ہو|سکتی ہو|سکتے ہیں|سکتی ہیں|سکو گے|سکو گی|পারবে|পারবেন|পারবি|शकतेस का|शकतोस का|शकता का|शकाल का|શકે|શકીશ|શકો|શકશો|ਸਕਦੇ ਹੋ|ਸਕਦੀ ਹੋ|ਸਕਦੀ ਹੈਂ|ਸਕੋਗੇ|ਸਕੋਗੀ|முடியுமா|గలవా|గలరా|ಬಹುದಾ|ാമോ|പറ്റുമോ|ได้ไหม|ได้มั้ย|ได้มั๊ย|หน่อย" +
                     @"|dezakezu|ahal duzu|al duzu|bilərsən|bilərsənmi|bilərsiniz|bilərsinizmi|olasanmi|olasizmi|berasanmi|berasizmi|аласың ба|аласыз ба|бересің бе|бересіз бе|чадах уу|өгөх үү|өгнө үү|өгөөч|सक्छौ|सक्नुहुन्छ|सक्छस्|दिनुहुन्छ|दिन्छौ|kartaa|kartid|ትችላለህ|ትችያለሽ|ትችላላችሁ|ይችላሉ|ໄດ້ບໍ|ໄດ້ບໍ່|បានទេ|បានអត់|နိုင်မလား|နိုင်လား|ပေးမလား|လို့ ?ရမလား|လို့ ?ရလား|შეგიძლია|შეძლებ|կարո՞ղ ես|կարող ես|կարո՞ղ եք|կարող եք)\s*(か)?\s*[?？؟፧]\s*$", RegexOptions.IgnoreCase);
+        }
+
+        // "Close your mouth" (shut up) and "open your eyes" use her open and close words in every language, but they're said
+        // to her, not about the PC, so they're taken out before her request check, with the "and" after them: "zamknij się i
+        // włącz muzykę" (shut up and play music) still plays music.
+        private static readonly Regex MouthOrEyes = new Regex(
+            @"\b(close|shut) (your|ur|ya|that) (damn |fucking )?(mouth|trap|gob|eyes)\b|\bopen (your|ur|ya) (eyes|mind|heart|mouth)\b" +
+            @"|\bcierra (la|tu|esa) boca\b|\bcierra el pico\b|\b(cierra|abre) (los|tus) ojos\b|\bferme(-la\b|[- ]la\s*[.!?]*$|[- ]ta (gueule|bouche)\b|[- ]ton clapet\b|[- ](les|tes) yeux\b)|\bouvre (les|tes) yeux\b" +
+            @"|\bfecha (a|essa|tua|sua) (boca|matraca)\b|\b(fecha|abre) (os|teus|seus) olhos\b|\bchiudi (la|quella|sta|la tua) bocca\b|\bchiudi il becco\b|\b(chiudi|apri) gli occhi\b" +
+            @"|\bmach(e)? (die|deine) augen (auf|zu)\b|\bmach(e)? (den|deinen) mund (auf|zu)\b|\b(schlie(ß|ss)e?|[öo]ffne) (die|deine) augen\b" +
+            @"|\bzamknij (się|sie|mordę|morde|japę|jape|ryj|buzię|buzie|dziób|dziob|pysk|gębę|gebe|oczy)(?!\w)|\botw[óo]rz oczy\b" +
+            @"|(?<!\w)(закрой|закрий|зачыні|затвори) (свой |свій |си )?(рот|рота|пасть|хлебало|варежку|пельку|писок|уста|устата|губицу|глаза|очі|вочы|очи)(?!\w)|(?<!\w)(открой|відкрий|адкрый|отвори) (глаза|очі|вочы|очи)(?!\w)" +
+            @"|\b(zatvori|zapri) (usta|gubicu|labrnju|gobec|oči|oci)\b|\botvori (oči|oci)\b|\btutup (mulut|mulutmu|mata|matamu)\b|\bbuka (mata|matamu)\b|\btutupen cangkem(mu)?\b" +
+            @"|\bg[öo]zlerini (kapat|aç)\b|\bağzını bağla\b|\bgözlərini (bağla|aç)\b|\bog['ʻ‘`]?zingni yop\b|\bko['ʻ‘`]?zingni (yop|och)\b|аузыңды жап" +
+            @"|\bstäng (munnen|käften|truten|ögonen)\b|\böppna ögonen\b|\blukk (munnen|kjeften|trynet|øynene)\b|\båpne øynene\b|\bluk (munden|kæften|øjnene)\b|\båbn øjnene\b" +
+            @"|\bsulje (suusi|turpasi|silmäsi)\b|\bavaa silmäsi\b|\bzavři (hubu|pusu|zobák|tlamu|klapačku|oči)\b|\botevři oči\b|\bzatvor (hubu|ústa|zobák|oči)\b|\botvor oči\b" +
+            @"|\bzárd be a (szád|szádat|pofád|pofádat|szemed)\b|\bnyisd ki a szemed\b|\b[îi]nchide(-[țt]i)? (gura|pliscul|ochii)\b|\bdeschide(-[țt]i)? ochii\b" +
+            @"|κλε[ίι]σε το στ[όο]μα|κλε[ίι]σε τα μ[άα]τια|[άα]νοιξε τα μ[άα]τια|\bisara (mo )?(ang )?(bibig|mata)\b|\bbuksan (mo )?(ang )?mata\b|\bfunga (mdomo|domo|macho)\b|\bfungua macho\b" +
+            @"|\btanca (la boca|el bec|els ulls)\b|\bobre els ulls\b|\bpecha (a boca|os ollos)\b|\bitxi (ahoa|muturra|begiak)\b|\bireki begiak\b|\bmaak (jou )?(bek|mond|smoel|oë) toe\b|\bmaak (jou )?oë oop\b" +
+            @"|\bloka(ð|d)u (munninum|kjaftinum|augunum)\b|\bmbylle goj[ëe]n\b|\bmbylli syt[ëe]\b|\bhape syt[ëe]\b|\bdún do (bhéal|shúile)\b|\bcae(a|wch) (dy|eich) (geg|ceg|llygaid)\b" +
+            @"|\buždaryk (burną|burna|snukį|akis)\b|\baizver (muti|purnu|acis)\b|\batver acis\b|\bpane (suu|silmad) kinni\b|\bagħlaq (ħalqek|għajnejk)\b|\baghlaq (halqek|ghajnejk)\b" +
+            @"|\brufe (bakin|idanu)|\bmechie (ọnụ|onu|anya)|\bvala (umlomo|amehlo)\b|\bđóng (mồm|miệng|mõm)\b|\bmở mắt\b|\b(muh|munh|mooh|muhh|mu) band\b|\baankhen (band|kholo)\b" +
+            @"|(סגור|סגרי|תסגור|תסגרי) את (הפה|העיניים)|(פתח|פתחי|תפתח|תפתחי) את העיניים|(سكر|سكّر|اغلق|أغلق|إغلق|سد|سدّ) (تمك|فمك|بقك|نيعك|عيونك|عينيك)|(افتح|إفتح) (عيونك|عينيك)" +
+            @"|(دهنتو|دهنت رو|دهانت را|دهنت|چشماتو|چشمانت را) ببند|چشماتو باز کن|منہ بند|آنکھیں (بند|کھولو)|(मुंह|मुँह) बंद|मुख बन्द|तोंड बंद|(आंखें|आँखें) (बंद|खोलो)" +
+            @"|মুখ বন্ধ|চোখ (বন্ধ|খোলো)|મોઢું બંધ|આંખો બંધ|ਮੂੰਹ ਬੰਦ|ਅੱਖਾਂ ਬੰਦ|வாயை மூடு|(கண்களை|கண்ணை) மூடு|ಬಾಯಿ ಮುಚ್ಚು|ಕಣ್ಣು ಮುಚ್ಚು|വായ അടയ്ക്ക|കണ്ണ് ?അടയ്ക്ക" +
+            @"|አፍህን ዝጋ|አፍሽን ዝጊ|አፋችሁን ዝጉ|បិទមាត់|បិទភ្នែក|ປິດປາກ|ປິດຕາ|ปิดปาก|ปิดตา|เปิดตา|目を(閉じて|とじて|開けて|あけて)|口を(閉じて|とじて)|입 ?(닫아|다물어)" +
+            @"|բերանդ փակիր|աչքերդ (փակիր|բացիր)|မျက်လုံး ?(ပိတ်|ဖွင့်)", RegexOptions.IgnoreCase);
+
+        // What's left of a message without "close your mouth" or "open your eyes", and the "and" after it.
+        private static string WithoutMouthOrEyes(string said)
+        {
+            if (!MouthOrEyes.IsMatch(said ?? "")) return said;
+            return Regex.Replace(MouthOrEyes.Replace(said, " ").Trim(), @"^[\s,]*(and|then|i|y|e|et|und|и|і|та|ve|dan|và|en|och|og|ja|és|și|και|at|na|dhe|ac|a)\s+", "", RegexOptions.IgnoreCase);
         }
 
         private static readonly Regex Chatter = new Regex(@"^(play (with|along|around|dead|dumb|nice|fair|a game with|a joke)|open up (to|about)|start (a story|a joke|an argument)|run (a mile|a race)|kill (the boss|me|time)|look (at it this way|forward)|show me (how|why)|check my (spelling|grammar)|rate my joke|mets-toi)\b", RegexOptions.IgnoreCase);

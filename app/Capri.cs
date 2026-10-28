@@ -10195,7 +10195,10 @@ namespace CapriDesktop
                                         { "Spotify-ს გახსენი გთხოვ", "", "true" }, { "მუსიკა ჩართე", "", "true" }, { "გუშინ Spotify გავხსენი", "", "false" }, { "ეს რა სიმღერაა?", "", "true" },
                                         { "Spotify-ը բացիր, խնդրում եմ", "", "true" }, { "երաժշտություն միացրու", "", "true" }, { "երեկ Spotify-ը բացեցի", "", "false" }, { "ինչ երգ է սա", "", "true" },
                                         { "karnım aç", "", "false" }, { "çok aç", "", "false" }, { "çeneni kapat", "", "false" }, { "müzik aç", "", "true" }, { "kapıyı aç", "", "true" }, { "қарным аш", "", "false" },
-                                        { "बकवास बंद करो", "", "false" }, { "bakwas band karo", "", "false" }, { "بکواس بند کرو", "", "false" }, { "Spotify बंद करो", "", "true" }, { "Spotify band karo", "", "true" }
+                                        { "बकवास बंद करो", "", "false" }, { "bakwas band karo", "", "false" }, { "بکواس بند کرو", "", "false" }, { "Spotify बंद करो", "", "true" }, { "Spotify band karo", "", "true" },
+                                        { "close your mouth", "", "false" }, { "close your eyes and imagine", "", "false" }, { "cierra la boca", "", "false" }, { "ferme ta gueule", "", "false" }, { "zamknij się", "", "false" },
+                                        { "закрой рот", "", "false" }, { "tutup mulut", "", "false" }, { "मुंह बंद करो", "", "false" }, { "سكر تمك", "", "false" }, { "目を閉じて", "", "false" },
+                                        { "zamknij się i włącz muzykę", "", "true" }, { "close your eyes and open Spotify", "", "true" }, { "cierra Discord", "", "true" }
                                     };
                                     for (int i = 0; i < intents.GetLength(0); i++)
                                     {
