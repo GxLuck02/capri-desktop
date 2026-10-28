@@ -1163,6 +1163,9 @@ namespace CapriDesktop
             if (!testing) DefaultStartup(Installed());
             if (!testing) GreetSoon();
             if (!testing && FreeChatOn) { GetFreeVoice(); GetFreeEars(); }
+            // An update can move her HD voice to a new engine: the old pack goes, and with HD on, the new one comes down.
+            if (!testing) ThreadPool.QueueUserWorkItem(delegate { qwen.Tidy(); });
+            if (!testing && preferences.HdVoice && !qwen.Installed) SetUpHd();
             if (!testing && voice.Key != null) ListVoices(voice.Key, false);
             if (!testing) talkKey = ByMouse(preferences.TalkVk) || Native.RegisterHotKey(Handle, TalkKeyId, preferences.TalkMods | 0x4000, preferences.TalkVk);
             bool muteFree = !testing && (ByMouse(preferences.MuteVk) || (Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk) && Native.UnregisterHotKey(Handle, MuteKeyId)));
