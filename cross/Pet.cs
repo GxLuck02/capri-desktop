@@ -497,7 +497,9 @@ namespace CapriDesktop
         {
             string system = System.Runtime.InteropServices.RuntimeInformation.OSDescription + " " + System.Runtime.InteropServices.RuntimeInformation.OSArchitecture;
             if (OperatingSystem.IsLinux()) system += " " + (Environment.GetEnvironmentVariable("XDG_SESSION_TYPE") ?? "?") + " " + (Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP") ?? "?");
-            string head = "Capri v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3) + " | " + system + " | brain: " + (Brain.Model != null ? "Ollama " + Brain.Model : "none") + " | voice: " + (voice.Key != null ? "ElevenLabs" : "none");
+            Cloud remote = Brain.Remote;
+            string brain = remote != null ? remote.Name + " " + remote.Model : Brain.Model != null ? "Ollama " + Brain.Model : "none";
+            string head = "Capri v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3) + " | " + system + " | brain: " + brain + " | voice: " + (voice.Key != null ? "ElevenLabs" : "none");
             string[] lines = new string[0];
             try { if (Brain.LogPath != null && File.Exists(Brain.LogPath)) lines = File.ReadAllLines(Brain.LogPath); } catch (IOException) { }
             int from = Math.Max(0, lines.Length - 25);

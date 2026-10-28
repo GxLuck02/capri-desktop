@@ -282,6 +282,7 @@ namespace CapriDesktop
                 pet.UseCloud("nvapi-smoke-1234", "meta/llama-3.3-70b-instruct", new List<string> { "meta/llama-3.3-70b-instruct", "qwen/qwen3-235b-a22b" });
                 pet.ShowBrains(new[] { "qwen3:8b" });
                 string cloudMenu = pet.BrainMenu;
+                bool cloudDetails = pet.ErrorDetails().IndexOf(" | brain: NVIDIA meta/llama-3.3-70b-instruct | ", StringComparison.Ordinal) > 0;
                 pet.PickCloud("qwen/qwen3-235b-a22b");
                 bool cloudPicked = pet.Brain.Remote != null && pet.Brain.Remote.Model == "qwen/qwen3-235b-a22b" && pet.Brain.Model == "qwen/qwen3-235b-a22b" && pet.Saved.CloudModel == "qwen/qwen3-235b-a22b";
                 File.WriteAllText(Path.Combine(folder, "brain-key"), "nvapi-smoke-1234");
@@ -291,7 +292,7 @@ namespace CapriDesktop
                 pet.Talk.Dismiss();
                 if (ollamaMenu != "*qwen3:8b | - | Get a free NVIDIA key | " + Pet.KeyChoice) throw new Exception("The Brain menu didn't offer a cloud key: " + ollamaMenu);
                 if (freeKey != Pet.FreeKeySteps || !keyAsked || notKey != Pet.NotAKey || !keyHidden) throw new Exception("The key choices didn't say where to paste, ask in a hidden box or explain a bad key: " + freeKey + " | " + keyAsked + " | " + notKey + " | " + keyHidden);
-                if (cloudMenu != "NVIDIA key ending 1234 (off) | *meta/llama-3.3-70b-instruct | qwen/qwen3-235b-a22b | - | Forget the key and use Ollama" || !cloudPicked || !cloudGone) throw new Exception("The cloud key's Brain menu went wrong: " + cloudMenu + " | " + cloudPicked + " | " + cloudGone);
+                if (cloudMenu != "NVIDIA key ending 1234 (off) | *meta/llama-3.3-70b-instruct | qwen/qwen3-235b-a22b | - | Forget the key and use Ollama" || !cloudPicked || !cloudGone || !cloudDetails) throw new Exception("The cloud key's Brain menu went wrong: " + cloudMenu + " | " + cloudPicked + " | " + cloudGone + " | " + cloudDetails);
                 checks.Add("PASS cloud brain: Brain offers a free NVIDIA key or any API key in a hidden box, explains one that isn't a key, lists a key's models to pick from, and Forget goes back to Ollama");
                 // Her Discord status: the switch, plain states, and Discord's socket found by name in its temp folder.
                 string ipcFolder = Path.Combine(folder, "ipc");
