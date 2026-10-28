@@ -685,7 +685,7 @@ If you go quiet, she stays quiet too: she doesn't ask if you're still there. Aft
 Yes. Ask her to open apps, play music and so on, the same as in text. A job with her cursor (playing a song, searching YouTube, anything with clicks) can take a minute, so in ElevenLabs voice chat she says she's on it straight away and tells you how it went when it's done. Asking again while it runs doesn't start it twice. With no brain set up, she plays music and changes the volume with her quick tools instead.
 
 ### Does she comment on my screen during voice chat?
-No. Watch my screen pauses during voice chat. Ask her "check my screen" and she looks. She still remembers what she saw before the call.
+Only while your mic is muted. Watch my screen pauses while your mic is on, so she doesn't talk over you, and carries on when you mute it. Ask her "check my screen" and she looks any time. She still remembers what she saw before the call.
 
 ### How does ElevenLabs voice chat work?
 Capri makes a voice agent called "Capri" in your own ElevenLabs account and talks through it. Your voice goes to ElevenLabs while it's on. Free voice chat with her own ears stays on your PC (Windows speech, used for languages her ears don't know, goes through Microsoft).
@@ -1259,7 +1259,7 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 ### Mainframe and screen watching
 - Mainframe squashed or cut off: what's your Windows display scale? On 0.6.2, testing 100% (Settings > System > Display > Scale) and reopening Capri fixed it for one user at 150%.
 - Can't find the Mainframe: right-click her > Open Capri Mainframe.
-- She never comments: Watch my screen must be on (Mainframe > Settings > WATCH), and she skips unchanged or blank screens. She doesn't comment during voice chat.
+- She never comments: Watch my screen must be on (Mainframe > Settings > WATCH), and she skips unchanged or blank screens. In voice chat she only comments while your mic is muted.
 - "This brain can't see. Press Free key to fix.": use the free NVIDIA key.
 - "DeepSeek can't see. Use an NVIDIA key to watch."
 - "<model> can't see screens.": most NVIDIA models can't. Pick nvidia/nemotron-3.5-super-vl-120b-a12b.

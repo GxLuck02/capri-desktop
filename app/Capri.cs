@@ -3336,11 +3336,14 @@ namespace CapriDesktop
             return "You looked at their screen. You see: " + seen;
         }
 
+        // Voice chat pauses her glances only while their mic is on. Muted, she keeps commenting on their screen.
+        private bool MicOpen { get { return chatting && !ears.Muted; } }
+
         private void CheckGlance(double now, long quiet)
         {
             if (!preferences.Watch || glancing) return;
             if (nextGlance < 0) nextGlance = now + Math.Min(20, GlanceGap);
-            if (now < nextGlance || quiet > 600000 || brain.Model == null || hidden || chatting || dragging || typer.Visible || talkState != TalkState.Off) return;
+            if (now < nextGlance || quiet > 600000 || brain.Model == null || hidden || MicOpen || dragging || typer.Visible || talkState != TalkState.Off) return;
             nextGlance = now + GlanceGap * (0.8 + random.NextDouble() * 0.4);
             if (Unseeing() != null) return;
             byte[] shot;
@@ -3425,7 +3428,7 @@ namespace CapriDesktop
             string unseen = Unseeing();
             if (unseen != null || problem != null) { lastPrint = null; mainframe.ShowProblem(unseen ?? problem); return; }
             if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
-            if (ticket != asking || talkState != TalkState.Off || typer.Visible || chatting || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
+            if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
             // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
             if (Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) { Glimpsed(saw); return; }
             glanced.Add(Tuple.Create(clock.Elapsed.TotalSeconds, said));
@@ -14320,6 +14323,13 @@ namespace CapriDesktop
                             brain.Unsighted = brain.Model; paused(); brain.Unsighted = null;
                             CheckGlance(1000, 600001);
                             if (captures != 0) throw new Exception("She glanced after they'd been away for over ten minutes.");
+                            chatting = true;
+                            ears.Muted = true;
+                            CheckGlance(1000, 130000);
+                            chatting = false;
+                            ears.Muted = false;
+                            if (captures != 1) throw new Exception("A voice chat with the mic muted stopped her glancing.");
+                            captures = 0;
                             nextGlance = 1000;
                             Play(sleep);
                             CheckGlance(1000, 130000);
@@ -14355,7 +14365,7 @@ namespace CapriDesktop
                             lastPrint = new byte[64 * 36 * 3];
                             FinishGlance(asking, watchTicket, null, "Couldn't read the screen. I'll try again.");
                             if (reply != null || lastPrint != null || mainframe.Status.IndexOf("Couldn't read the screen.", StringComparison.Ordinal) < 0) throw new Exception("A failed vision request did not allow a retry or show its reason.");
-                            checks.Add("PASS glance gates: watch, busy, hidden, dragging, typing, voice chat, talk states, unsighted models and 10 minutes away pause capture; her sleep pose does not; black frames stay local; failures retry; stopped or interrupted glances stay silent");
+                            checks.Add("PASS glance gates: watch, busy, hidden, dragging, typing, voice chat with the mic on, talk states, unsighted models and 10 minutes away pause capture; her sleep pose and a muted voice chat do not; black frames stay local; failures retry; stopped or interrupted glances stay silent");
                             Grab = delegate(Rectangle place)
                             {
                                 Bitmap shot = new Bitmap(place.Width, place.Height, PixelFormat.Format24bppRgb);
