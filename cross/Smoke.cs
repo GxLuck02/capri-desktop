@@ -235,6 +235,20 @@ namespace CapriDesktop
                     List<InstalledApp> linuxApps = Limbs.LinuxApps(new[] { tempApps });
                     List<InstalledApp> macApps = Limbs.MacApps(new[] { tempApps });
                     if (linuxApps.Count != 1 || linuxApps[0].Name != "Spotify" || linuxApps[0].Id != "exec:spotify" || macApps.Count != 1 || macApps[0].Id != Path.Combine(tempApps, "Spotify.app")) throw new Exception("Installed apps were read wrong.");
+                    // Steam games come from Steam's own library too (here the Flatpak install), without its runtimes.
+                    string steamHome = Path.Combine(folder, "home");
+                    string steamRoot = Path.Combine(steamHome, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam");
+                    Directory.CreateDirectory(Path.Combine(steamRoot, "steamapps"));
+                    File.WriteAllText(Path.Combine(steamRoot, "steamapps", "libraryfolders.vdf"), "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"" + steamRoot + "\"\n\t}\n}\n");
+                    File.WriteAllText(Path.Combine(steamRoot, "steamapps", "appmanifest_1145360.acf"), "\"AppState\"\n{\n\t\"appid\"\t\t\"1145360\"\n\t\"name\"\t\t\"Hades\"\n\t\"StateFlags\"\t\t\"4\"\n}\n");
+                    File.WriteAllText(Path.Combine(steamRoot, "steamapps", "appmanifest_1628350.acf"), "\"AppState\"\n{\n\t\"appid\"\t\t\"1628350\"\n\t\"name\"\t\t\"Steam Linux Runtime 3.0 (sniper)\"\n\t\"StateFlags\"\t\t\"4\"\n}\n");
+                    List<InstalledApp> steamGames = Hands.SteamApps(Limbs.SteamRoot(steamHome, false));
+                    if (Limbs.SteamRoot(steamHome, false) != steamRoot || Limbs.SteamRoot(steamHome, true) != null || steamGames.Count != 1 || steamGames[0].Name != "Hades" || steamGames[0].Id != "steam://rungameid/1145360")
+                        throw new Exception("Steam's library was read wrong: " + steamGames.Count);
+                    Hands.Catalog = delegate { return Hands.WithSteam(Limbs.LinuxApps(new[] { tempApps }), Hands.SteamApps(Limbs.SteamRoot(steamHome, false))); };
+                    Hands.Forget();
+                    string hades = Hands.Do("open_app", new ToolArguments { Name = "hades" });
+                    if (hades != "Opened Hades." || !did.Contains((OperatingSystem.IsMacOS() ? "launch open " : "launch xdg-open ") + "steam://rungameid/1145360")) throw new Exception("A Steam game didn't open: " + hades + " / " + string.Join(" / ", did));
                     Hands.Catalog = delegate { return Limbs.LinuxApps(new[] { tempApps }); };
                     Hands.Forget();
                     string opened = Hands.Do("open_app", new ToolArguments { Name = "spotify" });

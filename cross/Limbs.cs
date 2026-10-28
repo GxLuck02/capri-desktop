@@ -88,7 +88,11 @@ namespace CapriDesktop
         {
             Hands.Run = delegate(string id) { Open(id, OnMac); };
             Hands.Press = delegate(byte key) { Key(key, OnMac); };
-            Hands.Catalog = delegate { return OnMac ? MacApps(MacFolders()) : LinuxApps(LinuxFolders()); };
+            Hands.Catalog = delegate
+            {
+                List<InstalledApp> apps = OnMac ? MacApps(MacFolders()) : LinuxApps(LinuxFolders());
+                return Hands.WithSteam(apps, Hands.SteamApps(SteamRoot(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), OnMac)));
+            };
             Hands.NowPlaying = delegate { return Song(OnMac); };
             Hands.Windows = delegate { return Windows(OnMac); };
             Hands.Steer = delegate(OpenWindow window, string action) { return Steer(window, action, OnMac); };
@@ -437,6 +441,15 @@ namespace CapriDesktop
                 catch (Exception) { }
             }
             return apps;
+        }
+
+        // Steam's own library, for games with no .desktop file or .app of their own: the normal, Flatpak and Snap installs on Linux.
+        internal static string SteamRoot(string home, bool mac)
+        {
+            string[] roots = mac ? new[] { Path.Combine(home, "Library", "Application Support", "Steam") }
+                : new[] { Path.Combine(home, ".steam", "steam"), Path.Combine(home, ".local", "share", "Steam"), Path.Combine(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"), Path.Combine(home, "snap", "steam", "common", ".local", "share", "Steam") };
+            foreach (string root in roots) if (Directory.Exists(Path.Combine(root, "steamapps"))) return root;
+            return null;
         }
 
         internal static string[] LinuxFolders()

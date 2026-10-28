@@ -986,7 +986,7 @@ namespace CapriDesktop
             try
             {
                 List<string> libraries = new List<string> { steam };
-                string folders = Path.Combine(steam, @"steamapps\libraryfolders.vdf");
+                string folders = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
                 if (File.Exists(folders))
                     foreach (Match library in Regex.Matches(File.ReadAllText(folders), @"""path""\s+""([^""]+)"""))
                         libraries.Add(library.Groups[1].Value.Replace(@"\\", @"\"));
