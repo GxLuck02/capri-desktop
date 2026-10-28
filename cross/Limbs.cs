@@ -227,6 +227,40 @@ namespace CapriDesktop
             return Music.Song(Music.Run("dbus-send", new[] { "--session", "--print-reply", "--dest=org.mpris.MediaPlayer2.spotify", "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties.Get", "string:org.mpris.MediaPlayer2.Player", "string:Metadata" }));
         }
 
+        [System.Runtime.InteropServices.DllImport("/usr/lib/libSystem.dylib")] private static extern uint mach_host_self();
+        [System.Runtime.InteropServices.DllImport("/usr/lib/libSystem.dylib")] private static extern int host_statistics(uint host, int flavor, int[] info, ref uint count);
+        private static uint machHost;
+
+        // The whole computer's CPU time so far, idle and in all, like Windows' GetSystemTimes: /proc/stat on Linux, and on Mac
+        // the kernel's tick counts (HOST_CPU_LOAD_INFO: user, system, idle, nice). False when it can't be read.
+        internal static bool CpuTimes(out long idle, out long total)
+        {
+            idle = 0;
+            total = 0;
+            try
+            {
+                if (OnMac)
+                {
+                    if (machHost == 0) machHost = mach_host_self();
+                    int[] ticks = new int[4];
+                    uint count = 4;
+                    if (host_statistics(machHost, 3, ticks, ref count) != 0 || count < 4) return false;
+                    foreach (int tick in ticks) total += (uint)tick;
+                    idle = (uint)ticks[2];
+                    return total > 0;
+                }
+                string line;
+                using (StreamReader stat = new StreamReader("/proc/stat")) line = stat.ReadLine();
+                string[] parts = (line ?? "").Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 6 || parts[0] != "cpu") return false;
+                // user, nice, system, idle, iowait, irq, softirq and steal; guest time is already inside user.
+                for (int i = 1; i < Math.Min(parts.Length, 9); i++) total += long.Parse(parts[i]);
+                idle = long.Parse(parts[4]) + long.Parse(parts[5]);
+                return total > 0;
+            }
+            catch (Exception) { return false; }
+        }
+
         // Cyberpunk 2077 running: the Mac game, or the Windows one under Proton or Wine on Linux.
         internal static bool CyberpunkRunning() { return Music.Run("pgrep", new[] { "-i", "-f", "[/\\\\]cyberpunk ?2077(\\.exe)?( |$)" }) != null; }
 

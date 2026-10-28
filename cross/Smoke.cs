@@ -197,6 +197,17 @@ namespace CapriDesktop
                 pet.ForgetCheers();
                 if (Array.IndexOf(Pet.HomeGameLines, homeFirst) < 0 || homeStill != null || homeSoon != null || homeBusy != null || Array.IndexOf(Pet.HomeSongLines, homeSong) < 0 || Array.IndexOf(Pet.HomeGameLines, homeLater) < 0) throw new Exception("Her Night City cheers came at the wrong times: " + homeFirst + " | " + homeStill + " | " + homeSoon + " | " + homeBusy + " | " + homeSong + " | " + homeLater);
                 checks.Add("PASS Night City cheer: she cheers once when Cyberpunk 2077 starts or a Night City song comes on, not while she's busy, and not again for two hours");
+                string lagEarly = pet.Lagging(0.95, 10, true) ?? pet.Lagging(0.95, 25, true) ?? pet.Lagging(0.95, 40, true), lagLine = pet.Lagging(0.97, 55, true);
+                string lagSoon = null, lagBusy = null, lagCooled = null, lagLater = null;
+                for (int i = 0; i < 4; i++) lagSoon = lagSoon ?? pet.Lagging(0.99, 70 + i * 15, true);
+                for (int i = 0; i < 4; i++) lagBusy = lagBusy ?? pet.Lagging(0.99, 2000 + i * 15, false);
+                for (int i = 0; i < 4; i++) lagCooled = lagCooled ?? pet.Lagging(i == 0 ? 0.4 : 0.99, 2100 + i * 15, true);
+                for (int i = 0; i < 4; i++) lagLater = lagLater ?? pet.Lagging(0.99, 2200 + i * 15, true);
+                pet.ForgetLag();
+                long cpuIdle, cpuTotal;
+                bool cpuRead = Limbs.CpuTimes(out cpuIdle, out cpuTotal) && cpuIdle >= 0 && cpuIdle <= cpuTotal;
+                if (lagEarly != null || Array.IndexOf(Pet.LagLines, lagLine) < 0 || lagSoon != null || lagBusy != null || lagCooled != null || Array.IndexOf(Pet.LagLines, lagLater) < 0 || !cpuRead) throw new Exception("Her lag joke came at the wrong times, or the CPU didn't read: " + lagEarly + " | " + lagLine + " | " + lagSoon + " | " + lagBusy + " | " + lagCooled + " | " + lagLater + " | " + cpuRead + " " + cpuIdle + "/" + cpuTotal);
+                checks.Add("PASS lag joke: she jokes once the CPU has been over 90% busy for about a minute while she's free, and not again for half an hour; this computer's CPU time reads");
                 Func<string, string[], string> runWas = Music.Run;
                 List<string> ran = new List<string>();
                 string status = "Playing";

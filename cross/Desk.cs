@@ -44,6 +44,13 @@ namespace CapriDesktop
             return false;
         }
 
+        // A window covering a whole screen, like a full-screen game or video.
+        internal bool Covering(List<Spot> windows)
+        {
+            foreach (Spot spot in windows) if (spot.Solid && Fills(spot.Bounds)) return true;
+            return false;
+        }
+
         protected Spot Make(long window, PixelRect bounds, bool seat)
         {
             bool big = bounds.Width >= 120 && bounds.Height >= 60;

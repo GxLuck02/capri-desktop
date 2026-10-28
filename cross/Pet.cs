@@ -271,6 +271,13 @@ namespace CapriDesktop
         internal static readonly string[] HomeSongLines = { "Wait, that's Night City. Turn it up.", "Ooh, my soundtrack. Preem taste.", "Now that's music. You're learning." };
         private bool homeBusy, homeGame, homeSong;
         private double homeAt = -HomeGap, gameCheered = -HomeGap, songCheered = -HomeGap;
+        // A computer stuck near full CPU for about a minute gets a joke from her, at most once every half hour and never over a
+        // full-screen window, like on Windows (Zenni's idea).
+        internal const double LagGap = 1800;
+        internal static readonly string[] LagLines = { "Your CPU's cooking, choom. Careful, I might go cyberpsycho.", "Everything's lagging. One more tab and I go full cyberpsycho.", "[SIGNAL CORRUPTED] ...this lag is making me cyberpsycho. Close something." };
+        private long lagIdle, lagTotal;
+        private int lagHot;
+        private double lagAt = -LagGap, lagSaid = -LagGap;
         // Tells the tray menu whether to offer Hide her or Show her, since a pop-in or Talk to her brings her out too.
         internal Action AwayChanged;
         private readonly DispatcherTimer frames = new DispatcherTimer();
@@ -543,6 +550,7 @@ namespace CapriDesktop
                 CheckMusic(now);
                 if (Program.Smoke == null) CheckPopIn(now);
                 if (Program.Smoke == null) CheckHome(now);
+                if (Program.Smoke == null) CheckLag(now);
             }
             Advance(now);
             Talk.Update(now);
@@ -1756,6 +1764,42 @@ namespace CapriDesktop
         {
             homeGame = homeSong = false;
             gameCheered = songCheered = -HomeGap;
+        }
+
+        private void CheckLag(double now)
+        {
+            if (now - lagAt < 15) return;
+            lagAt = now;
+            long idle, total;
+            if (!Limbs.CpuTimes(out idle, out total)) return;
+            double busy = lagTotal == 0 || total <= lagTotal ? 0 : 1 - (double)(idle - lagIdle) / (total - lagTotal);
+            lagIdle = idle;
+            lagTotal = total;
+            string line = Lagging(busy, now, Free && !FullScreen());
+            if (line != null) Blurt("(CPU near 100%)", line);
+        }
+
+        // Her joke once the CPU has been over 90% busy four checks in a row, about a minute, while she's free, or null.
+        internal string Lagging(double busy, double now, bool free)
+        {
+            lagHot = busy >= 0.9 ? lagHot + 1 : 0;
+            if (lagHot < 4 || !free || now - lagSaid < LagGap) return null;
+            lagHot = 0;
+            lagSaid = now;
+            return LagLines[random.Next(LagLines.Length)];
+        }
+
+        internal void ForgetLag()
+        {
+            lagHot = 0;
+            lagSaid = -LagGap;
+        }
+
+        private bool FullScreen()
+        {
+            Desk.Screens.Clear();
+            foreach (Screen screen in Screens.All) Desk.Screens.Add(screen.Bounds);
+            return Desk.Covering(Windows());
         }
 
         internal double PopOut { get { return popOut; } }
