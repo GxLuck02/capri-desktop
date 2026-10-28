@@ -97,7 +97,7 @@ If you downloaded it from the Capri website or GitHub, it's a false alarm on a n
 - Microsoft Defender: Trojan:Win32/Wacatac.H!ml
 - Bitdefender: Gen:Variant.Zusy or Gen:Suspicious.Cloud
 - Malwarebytes: MachineLearning/Anomalous.100%
-- Kaspersky: PDM:Trojan.Win32.Bazon.a. PDM means Kaspersky's behaviour check flagged what the app does, not a known virus. Capri reads your shortcut keys, takes screenshots when you ask and moves the mouse for jobs, which behaviour checks can mistake for spyware. Kaspersky Endpoint Security is usually run by a school or work IT team, so ask them to allow it.
+- Kaspersky: PDM:Trojan.Win32.Bazon.a on Capri.exe, HEUR:Trojan.MSIL.Startun.gen or UDS:Trojan.MSIL.Startun.gen on Capri-Setup.exe, and UDS:DangerousObject.Multi.Generic on Uninstall.exe or an older installer. PDM means Kaspersky's behaviour check flagged what the app does, not a known virus. Capri reads your shortcut keys, takes screenshots when you ask and moves the mouse for jobs, which behaviour checks can mistake for spyware. HEUR is a rule-of-thumb guess, and UDS is Kaspersky's cloud flagging a file that few people have run yet. MSIL only means a .NET app, which Capri is. Kaspersky Endpoint Security is usually run by a school or work IT team, so ask them to allow it.
 
 These are generic, machine-learning or behaviour detections. They often flag new apps that aren't signed yet. Restore the file from quarantine (or allow it in your antivirus), then run it again. If you want to be sure, check the code on GitHub or check the download's SHA256 (below).
 
