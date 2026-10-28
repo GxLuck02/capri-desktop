@@ -77,15 +77,15 @@ namespace CapriDesktop
             return cells;
         }
 
-        // True when the text has an Indian script in it, Devanagari to Malayalam.
+        // True when the text has an Indian script in it, Devanagari to Malayalam, or Ethiopic, which Amharic is written in.
         internal static bool Indic(string text)
         {
-            foreach (char c in text ?? "") if (c >= 0x0900 && c <= 0x0DFF) return true;
+            foreach (char c in text ?? "") if ((c >= 0x0900 && c <= 0x0DFF) || (c >= 0x1200 && c <= 0x139F)) return true;
             return false;
         }
 
-        // Indian scripts join letters and marks into one shape, and Tamil, Kannada and Malayalam draw wider than her columns,
-        // so their words are measured in her bubble's font instead of counted, the same as on Windows.
+        // Indian scripts join letters and marks into one shape, and Tamil, Kannada, Malayalam and Ethiopic draw wider than her
+        // columns, so their words are measured in her bubble's font instead of counted, the same as on Windows.
         private static readonly Dictionary<string, double> measured = new Dictionary<string, double>();
 
         private static double Span(string text)
