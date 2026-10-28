@@ -649,8 +649,9 @@ namespace CapriDesktop
         }
         // Volume, mute and music in everyday words, so they never wait on a brain: English, Spanish and French in full, and the
         // plain commands and "what song is this" in German, Portuguese, Italian, Polish, Dutch, Russian, Ukrainian, Turkish,
-        // Indonesian, Japanese, Chinese and Korean. Words that also tell a person to hush or carry on ("тише", "avanti",
-        // "continua") stay with her brain, and so does "was läuft" (what's up).
+        // Indonesian, Japanese, Chinese and Korean. Words that also tell a person to hush, carry on or keep playing a game
+        // ("тише", "потише", "avanti", "continua", "weiterspielen") stay with her brain, since pause and resume both press
+        // play/pause, and so do "was läuft" (what's up), "harder" and "声音小" (it's quiet).
         // Volume means the PC's volume: Spotify's own slider only when they say Spotify.
         private const string Owner = @"(?:(?:the|my|ur|your|our|this|that|all the|pc'?s?|computer'?s?|laptop'?s?|spotify'?s?|youtube'?s?|game'?s?|video'?s?|music'?s?|song'?s?)\s+)*";
         private const string Noise = Owner + @"(?:volume|vol|sound|sounds|audio|music|song|track|tune|tunes|video|game|pc|computer|laptop|speakers?|headphones?|headset|everything|spotify|youtube)";
@@ -694,34 +695,34 @@ namespace CapriDesktop
             @"^(?:(?:it'?s|its|it is|that'?s|thats|this is|the (?:volume|sound|music|audio|game|video|song) is)\s+)?(?:(?:way|so|really|kinda|a bit|bit)\s+)?too (?:quiet|soft|low)$|^i can'?t hear (?:it|that|anything|the (?:music|video|game|sound|audio|song))$", "volume_up", "",
             @"^(?:sube(?:le)?|s[u\u00fa]bele|subir|aumenta(?:r)?|alza|pon(?:le)? m[a\u00e1]s alto|m[a\u00e1]s alto|m[a\u00e1]s volumen)(?:\s+(?:el|la|al)\s+(?:volumen|sonido|m[u\u00fa]sica|audio|canci[o\u00f3]n))?$|^(?:monte(?:r)?|augmente(?:r)?|mets plus fort|plus fort)(?:\s+(?:le|la)\s+(?:son|volume|musique))?$", "volume_up", "",
             @"^(?:(?:mach|mache|dreh|drehe)\s+(?:(?:es|das|die musik|den ton|den sound|die lautstärke)\s+)?)?(?:etwas\s+|ein bisschen\s+|ein wenig\s+|viel\s+)?lauter$|^(?:dreh|drehe)\s+(?:(?:es|die musik|den ton|den sound|die lautstärke)\s+)?auf$|^(?:die\s+)?lautstärke\s+(?:hoch|rauf|erhöhen|lauter)$|^(?:erhöhe|erhöh)\s+(?:die\s+)?lautstärke$" +
-            @"|^(?:aumenta|aumente|sobe|suba|alza)(?:\s+(?:o\s+|il\s+)?(?:volume|som|áudio|audio|música|musica|suono))?(?:\s+(?:um pouco|um pouquinho|bastante|un po'?|di più|di piu))?$|^(?:mais alto|mais volume|più forte|piu forte|più alto|piu alto)$" +
+            @"|^(?:aumenta|aumente|sobe|suba|alza)(?:\s+(?:o\s+|il\s+)?(?:volume|som|áudio|audio|música|musica|suono))?(?:\s+(?:um pouco|um pouquinho|bastante|un po'?|di più|di piu))?$|^(?:mais alto|mais volume|più forte|piu forte)$" +
             @"|^(?:podgłoś|podglos|pogłośnij|poglosnij|zrób głośniej|zrob glosniej|głośniej|glosniej|daj głośniej|daj glosniej)(?:\s+(?:muzykę|muzyke|dźwięk|dzwiek))?$" +
-            @"|^(?:(?:zet|doe|draai)\s+(?:(?:het|de muziek|het geluid|het volume)\s+)?)?(?:wat\s+|iets\s+)?harder$|^(?:het\s+)?volume\s+(?:omhoog|hoger)$|^(?:zet|draai)\s+(?:het\s+)?(?:volume|geluid)\s+(?:omhoog|hoger)$" +
+            @"|^(?:(?:zet|doe|draai)\s+(?:(?:het|de muziek|het geluid|het volume)\s+)?(?:wat\s+|iets\s+)?|(?:wat|iets)\s+)harder$|^(?:het\s+)?volume\s+(?:omhoog|hoger)$|^(?:zet|draai)\s+(?:het\s+)?(?:volume|geluid)\s+(?:omhoog|hoger)$" +
             @"|^(?:сделай\s+)?(?:погромче|громче)(?:\s+(?:музыку|звук))?$|^(?:прибавь|увеличь)\s+(?:громкость|звук)$|^(?:зроби\s+)?гучніше(?:\s+(?:музику|звук))?$" +
-            @"|^sesi\s+(?:biraz\s+)?(?:arttır|artır|yükselt)$|^(?:besarkan|kencangkan|keraskan|naikkan|gedein|kerasin)(?:\s+(?:volume|suara|volumenya|suaranya))?$" +
-            @"|^(?:音量|ボリューム|音)を?(?:上げて|あげて|大きくして)(?:ください)?$|^(?:请|請)?(?:把)?(?:音量|声音|聲音)(?:调|調)?(?:大|高)(?:一点|一點|点|點)?$|^(?:请|請)?(?:调|調)(?:大|高)(?:音量|声音|聲音)$|^(?:볼륨|소리|음량)\s*(?:좀\s*)?(?:키워|올려|높여)(?:줘|줘요|주세요)?$", "volume_up", "",
+            @"|^sesi\s+(?:biraz\s+)?(?:arttır|artır|yükselt)$|^(?:keraskan|kerasin)(?:\s+(?:volume|suara|volumenya|suaranya))?$|^(?:besarkan|kencangkan|naikkan|gedein)\s+(?:volume|suara|volumenya|suaranya)$" +
+            @"|^(?:音量|ボリューム|音)を?(?:上げて|あげて|大きくして)(?:ください)?$|^(?:请|請)?(?:把)?(?:音量|声音|聲音)(?:(?:调|調)(?:大|高)(?:一点|一點|点|點)?|(?:大|高)(?:一点|一點|点|點))$|^(?:请|請)?(?:调|調)(?:大|高)(?:音量|声音|聲音)$|^(?:볼륨|소리|음량)\s*(?:좀\s*)?(?:키워|올려|높여)(?:줘|줘요|주세요)?$", "volume_up", "",
             @"^(?:turn|crank|bring|knock|dial|drop)\s+" + Thing + @"\s+down$|^(?:turn|crank|knock|dial|drop|bring)\s+down\s+" + Thing + @"$|^(?:lower|decrease|reduce|quieten)\s+" + Thing + @"$|^(?:drop|soften)\s+" + Noise + @"$|^(?:make|get)\s+" + Thing + @"\s+(?:quieter|softer|lower|less loud)$|^(?:quieter|softer)$|^" + Loud + @"\s+(?:down|quieter|softer|lower)$|^less (?:volume|sound)$", "volume_down", "",
             @"^(?:(?:it'?s|its|it is|that'?s|thats|this is|you'?re|ur|the (?:volume|sound|music|audio|game|video|song) is)\s+)?(?:(?:way|so|really|kinda|a bit|bit)\s+)?too loud$", "volume_down", "",
             @"^(?:baja(?:le)?|b[a\u00e1]jale|bajar|disminuye|reduce|pon(?:le)? m[a\u00e1]s bajo|m[a\u00e1]s bajo|menos volumen)(?:\s+(?:el|la|al)\s+(?:volumen|sonido|m[u\u00fa]sica|audio|canci[o\u00f3]n))?$|^(?:baisse(?:r)?|diminue(?:r)?|moins fort|mets moins fort)(?:\s+(?:le|la)\s+(?:son|volume|musique))?$", "volume_down", "",
             @"^(?:(?:mach|mache|dreh|drehe)\s+(?:(?:es|das|die musik|den ton|den sound|die lautstärke)\s+)?)?(?:etwas\s+|ein bisschen\s+|ein wenig\s+|viel\s+)?leiser$|^(?:dreh|drehe)\s+(?:(?:es|die musik|den ton|den sound|die lautstärke)\s+)?(?:runter|ab)$|^(?:die\s+)?lautstärke\s+(?:runter|senken|leiser)$|^(?:senke|senk)\s+(?:die\s+)?lautstärke$" +
-            @"|^(?:abaixa|abaixe|diminui|diminua|baixa|baixe|abbassa|diminuisci)(?:\s+(?:o\s+|il\s+)?(?:volume|som|áudio|audio|música|musica|suono))?(?:\s+(?:um pouco|um pouquinho|bastante|un po'?))?$|^(?:mais baixo|menos volume|più piano|piu piano|più basso|piu basso)$" +
+            @"|^(?:abaixa|abaixe|diminui|diminua|baixa|baixe|abbassa|diminuisci)(?:\s+(?:o\s+|il\s+)?(?:volume|som|áudio|audio|música|musica|suono))?(?:\s+(?:um pouco|um pouquinho|bastante|un po'?))?$|^(?:mais baixo|menos volume|più piano|piu piano)$" +
             @"|^(?:przycisz|ścisz|scisz|zrób ciszej|zrob ciszej|daj ciszej)(?:\s+(?:muzykę|muzyke|dźwięk|dzwiek))?$" +
             @"|^(?:(?:zet|doe|draai)\s+(?:(?:het|de muziek|het geluid|het volume)\s+)?)?(?:wat\s+|iets\s+)?zachter$|^(?:het\s+)?volume\s+(?:omlaag|lager)$|^(?:zet|draai)\s+(?:het\s+)?(?:volume|geluid)\s+(?:omlaag|lager)$" +
-            @"|^(?:сделай\s+)?потише(?:\s+(?:музыку|звук))?$|^сделай\s+тише(?:\s+(?:музыку|звук))?$|^(?:убавь|уменьши)\s+(?:громкость|звук)$|^зроби\s+тихіше(?:\s+(?:музику|звук))?$" +
-            @"|^sesi\s+(?:biraz\s+)?(?:kıs|azalt|düşür)$|^(?:kecilkan|pelankan|turunkan|kecilin|pelanin)(?:\s+(?:volume|suara|volumenya|suaranya))?$" +
-            @"|^(?:音量|ボリューム|音)を?(?:下げて|さげて|小さくして)(?:ください)?$|^(?:请|請)?(?:把)?(?:音量|声音|聲音)(?:调|調)?(?:小|低)(?:一点|一點|点|點)?$|^(?:请|請)?(?:调|調)(?:小|低)(?:音量|声音|聲音)$|^(?:볼륨|소리|음량)\s*(?:좀\s*)?(?:줄여|낮춰|내려)(?:줘|줘요|주세요)?$", "volume_down", "",
+            @"|^сделай\s+потише(?:\s+(?:музыку|звук))?$|^потише\s+(?:музыку|звук)$|^сделай\s+тише(?:\s+(?:музыку|звук))?$|^(?:убавь|уменьши)\s+(?:громкость|звук)$|^зроби\s+тихіше(?:\s+(?:музику|звук))?$" +
+            @"|^sesi\s+(?:biraz\s+)?(?:kıs|azalt|düşür)$|^(?:kecilkan|pelankan|turunkan|kecilin|pelanin)\s+(?:volume|suara|volumenya|suaranya)$" +
+            @"|^(?:音量|ボリューム|音)を?(?:下げて|さげて|小さくして)(?:ください)?$|^(?:请|請)?(?:把)?(?:音量|声音|聲音)(?:(?:调|調)(?:小|低)(?:一点|一點|点|點)?|(?:小|低)(?:一点|一點|点|點))$|^(?:请|請)?(?:调|調)(?:小|低)(?:音量|声音|聲音)$|^(?:볼륨|소리|음량)\s*(?:좀\s*)?(?:줄여|낮춰|내려)(?:줘|줘요|주세요)?$", "volume_down", "",
             // The music itself.
             @"^pause(?:\s+" + Tune + @"|\s+(?:it|this|that))?$|^(?:stop|hold|freeze)\s+" + Tune + @"$|^(?:turn|switch|shut)\s+off\s+(?:the\s+)?(?:music|song|video|podcast)$|^(?:turn|switch|shut)\s+(?:the\s+)?(?:music|song|video|podcast)\s+off$", "pause", "",
             @"^(?:pausa(?:r)?|pon pausa|pausa la (?:m[u\u00fa]sica|canci[o\u00f3]n)|det[e\u00e9]n la (?:m[u\u00fa]sica|canci[o\u00f3]n)|para la (?:m[u\u00fa]sica|canci[o\u00f3]n))$|^(?:mets(?: la musique)? en pause|pause la musique)$", "pause", "",
-            @"^(?:pausier(?:e|en)?|pause machen|(?:musik|lied|song|video)\s+(?:pausieren|anhalten|stoppen)|(?:halt|halte|stopp|stoppe)\s+(?:die\s+musik|das\s+lied|den\s+song|das\s+video)(?:\s+an)?)$" +
+            @"^(?:pausier(?:e|en)?|(?:musik|lied|song|video)\s+(?:pausieren|anhalten|stoppen)|(?:halt|halte|stopp|stoppe)\s+(?:die\s+musik|das\s+lied|den\s+song|das\s+video)(?:\s+an)?)$" +
             @"|^(?:pausa a (?:música|musica)|para a (?:música|musica)|metti in pausa|ferma la musica|stoppa la musica|pauza|zapauzuj|wstrzymaj(?:\s+muzykę|\s+muzyke)?|zatrzymaj muzykę|zatrzymaj muzyke|pauzeer|pauzeren|pauze|pauzeer de muziek)$" +
             @"|^(?:пауза|поставь на паузу|останови музыку|постав на паузу|зупини музику|duraklat|(?:müziği|şarkıyı|videoyu)\s+(?:durdur|duraklat)|jeda(?:\s+lagu(?:nya)?)?|hentikan lagu(?:nya)?)$" +
             @"|^(?:一時停止して|(?:曲|音楽)を?止めて)(?:ください)?$|^(?:请|請)?(?:暂停|暫停)(?:一下|音乐|音樂|播放)?$|^(?:일시\s*정지(?:해|해줘)?|(?:노래|음악)\s*멈춰(?:줘)?)$", "pause", "",
             @"^(?:resume|unpause)(?:\s+" + Tune + @"|\s+(?:it|this|that))?$|^continue\s+" + Tune + @"$|^(?:keep playing|hit play|press play|play|play it again)$|^(?:turn|switch|put)\s+(?:the\s+)?(?:music|song|video|podcast)\s+back\s+on$", "resume", "",
             @"^(?:reanuda(?:r)?|contin[u\u00fa]a la (?:m[u\u00fa]sica|canci[o\u00f3]n)|dale play|quita la pausa|sigue con la m[u\u00fa]sica)$|^(?:reprends|relance|remets)(?: la musique)?$", "resume", "",
-            @"^(?:weiterspielen|musik\s+weiter|(?:spiel|spiele|mach|mache)\s+(?:die\s+)?(?:musik|das lied|den song)\s+weiter)$" +
-            @"|^(?:continua a (?:música|musica)|continue a (?:música|musica)|despausa|despausar|volta a tocar|riprendi(?: la musica)?|fai ripartire la musica|wznów|wznow|wznów muzykę|wznow muzyke|odpauzuj|graj dalej|hervat|speel verder|verder spelen)$" +
-            @"|^(?:продолжи музыку|сними с паузы|сними паузу|играй дальше|продовж музику|зніми з паузи|(?:müziği|şarkıyı)\s+(?:devam ettir|sürdür)|devam ettir|lanjutkan (?:lagu|musik)(?:nya)?|putar lagi)$" +
+            @"^(?:musik\s+weiter|(?:spiel|spiele|mach|mache)\s+(?:die\s+)?(?:musik|das lied|den song)\s+weiter)$" +
+            @"|^(?:continua a (?:música|musica)|continue a (?:música|musica)|despausa|despausar|volta a tocar|riprendi la musica|fai ripartire la musica|wznów|wznow|wznów muzykę|wznow muzyke|odpauzuj|hervat)$" +
+            @"|^(?:продолжи музыку|сними с паузы|сними паузу|продовж музику|зніми з паузи|(?:müziği|şarkıyı)\s+(?:devam ettir|sürdür)|lanjutkan (?:lagu|musik)(?:nya)?|putar lagi)$" +
             @"|^(?:再生して|続きを再生して|再開して)(?:ください)?$|^(?:请|請)?(?:继续播放|繼續播放|继续放|繼續放)$|^(?:다시\s*재생(?:해|해줘)?|계속\s*재생(?:해|해줘)?)$", "resume", "",
             @"^(?:skip|next)(?:\s+(?:to\s+)?(?:the\s+)?(?:next\s+)?(?:(?:this|that|current)\s+)?(?:song|track|one|tune|it|this|that))?$|^(?:play|go to|put on)\s+(?:the\s+)?next\s+(?:song|track|one|tune)$|^(?:change|switch)\s+(?:the\s+)?(?:song|track|tune)$|^(?:another|different|new)\s+(?:song|track|tune)$|^skip\s+(?:ahead|forward)$", "next", "",
             @"^(?:siguiente(?: canci[o\u00f3]n)?|la siguiente|pasa(?: la)? canci[o\u00f3]n|p[a\u00e1]sala|salta(?: esta| la)?(?: canci[o\u00f3]n)?|s[a\u00e1]ltala|otra canci[o\u00f3]n|cambia(?: la)? canci[o\u00f3]n)$|^(?:suivant(?:e)?|chanson suivante|passe (?:la chanson|[a\u00e0] la suivante)|la suivante)$", "next", "",

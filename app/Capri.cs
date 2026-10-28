@@ -10215,13 +10215,14 @@ namespace CapriDesktop
                                         { "alza il volume", "volume_up||" }, { "abbassa il volume per favore", "volume_down||" }, { "metti in pausa", "pause||" }, { "canzone successiva", "next||" },
                                         { "podgłoś", "volume_up||" }, { "przycisz muzykę", "volume_down||" }, { "wycisz", "mute||" }, { "następna piosenka", "next||" }, { "ustaw głośność na 40", "volume_set|40|" },
                                         { "zet het harder", "volume_up||" }, { "zachter", "volume_down||" }, { "geluid uit", "mute||" }, { "volgende nummer", "next||" },
-                                        { "сделай погромче", "volume_up||" }, { "потише", "volume_down||" }, { "выключи звук", "mute||" }, { "включи звук", "unmute||" }, { "следующая песня", "next||" }, { "громкость на 50", "volume_set|50|" },
+                                        { "сделай погромче", "volume_up||" }, { "сделай потише", "volume_down||" },{ "выключи звук", "mute||" }, { "включи звук", "unmute||" }, { "следующая песня", "next||" }, { "громкость на 50", "volume_set|50|" },
                                         { "зроби гучніше", "volume_up||" }, { "наступна пісня", "next||" }, { "sesi kıs", "volume_down||" }, { "sesi kapat", "mute||" }, { "sonraki şarkı", "next||" }, { "sesi 50 yap", "volume_set|50|" },
                                         { "kecilkan suara", "volume_down||" }, { "lagu berikutnya", "next||" }, { "音量を上げて", "volume_up||" }, { "ミュートして", "mute||" }, { "次の曲", "next||" },
                                         { "把音量调小一点", "volume_down||" }, { "暂停", "pause||" }, { "下一首", "next||" }, { "取消静音", "unmute||" }, { "볼륨 좀 키워줘", "volume_up||" }, { "다음 곡", "next||" }, { "음소거 해제", "unmute||" },
                                         { "下一首。", "next||" }, { "音量を上げて。", "volume_up||" }, { "静音！", "mute||" }, { "次の曲にして！", "next||" }, { "what song is this?", "now_playing||" }, { "c'est quoi cette chanson ?", "now_playing||" }, { "qu'est-ce qu'on écoute", "now_playing||" },{ "Welches Lied ist das?", "now_playing||" },
                                         { "que música é essa?", "now_playing||" }, { "che canzone è questa?", "now_playing||" }, { "co to za piosenka?", "now_playing||" }, { "welk nummer is dit?", "now_playing||" }, { "что за песня?", "now_playing||" }, { "що це за пісня?", "now_playing||" },
-                                        { "bu şarkı ne?", "now_playing||" }, { "lagu apa ini?", "now_playing||" }, { "この曲は何？", "now_playing||" }, { "这是什么歌？", "now_playing||" }, { "이 노래 뭐야?", "now_playing||" }
+                                        { "bu şarkı ne?", "now_playing||" }, { "lagu apa ini?", "now_playing||" }, { "この曲は何？", "now_playing||" }, { "这是什么歌？", "now_playing||" }, { "이 노래 뭐야?", "now_playing||" },
+                                        { "zet het wat harder", "volume_up||" }, { "声音大一点", "volume_up||" }, { "把声音调小", "volume_down||" }
                                     };
                                     string loudWrong = "";
                                     for (int i = 0; i < loudAsks.GetLength(0); i++)
@@ -10233,7 +10234,8 @@ namespace CapriDesktop
                                     }
                                     string[] loudChats = { "I love this song", "turn up for the weekend", "the volume on this game is weird", "how do I turn up the bass", "don't mute it", "should I mute discord", "mute my mic", "is spotify down?", "play with me", "stop it", "skip it if it's bad", "my game is too laggy", "why is it so loud?", "I muted my mic", "this song is loud", "turn it off", "drop it", "volume 500", "hush",
                                         "das Lied ist laut", "mach es auf", "mach den PC aus", "nächstes Mal", "тише", "продолжи", "avanti", "continua", "ciszej", "sesi aç", "próxima vez", "volgende keer", "下一首歌很好听", "다음에 보자",
-                                        "was läuft gerade?", "c'est quoi ce truc", "これは何ですか", "这是什么", "이거 뭐야", "что это?", "下一首歌很好听。", "co słychać" };
+                                        "was läuft gerade?", "c'est quoi ce truc", "これは何ですか", "这是什么", "이거 뭐야", "что это?", "下一首歌很好听。", "co słychać",
+                                        "harder", "Capri, harder!", "声音小", "声音大", "pause machen", "weiterspielen", "graj dalej", "speel verder", "играй дальше", "devam ettir", "riprendi", "più alto", "потише", "gedein", "pelanin dong" };
                                     foreach (string chat in loudChats)
                                     {
                                         string loudTool;
