@@ -374,8 +374,29 @@ namespace CapriDesktop
         }
 
         internal const string SayPlease = "Say please.";
-        private static readonly Regex Polite = new Regex(@"\b(please|pls|plz|pleas|thank you|thanks|por favor|porfa|porfis|gracias|merci|s'il (te|vous) pla[iî]t|stp|svp)\b", RegexOptions.IgnoreCase);
-        private static readonly Regex JustPlease = new Regex(@"^\W*((ok|okay|fine|sorry|vale|perd[oó]n|d[ée]sol[ée])\W+)?(pretty\s+)?(please+|pls|plz|pleas+e*|por favor|porfa|porfis|s'il (te|vous) pla[iî]t|stp|svp)(\s+capri)?\W*$", RegexOptions.IgnoreCase);
+        // Please and thanks in all her languages, so "öffne bitte Spotify" never gets Say please and "bitte" runs what was held.
+        // Chinese, Japanese, Korean, Thai and the Indian scripts have no word breaks a \b can see, so they match anywhere.
+        private static readonly Regex Polite = new Regex(@"\b(please|pls|plz|pleas|thank you|thanks|por favor|porfa|porfis|gracias|merci|s'il (te|vous) pla[iî]t|stp|svp" +
+            @"|bitte|danke|per favore|per piacere|grazie|pfv|obrigad[oa]|si us plau|sisplau|siusplau|gr[àa]cies|grazas|mesedez|eskerrik asko|alsjeblieft|alstublieft|a\.?u\.?b|dank je|dankjewel|bedankt|asseblief|dankie" +
+            @"|snälla|snalla|tack|vær så snill|vennligst|venligst|takk|tak|vinsamlegast|ole hyvä|ole kiltti|kiitos|palun|aitäh|aitah|lūdzu|ludzu|paldies|prašau|prasau|ačiū|aciu" +
+            @"|proszę|prosze|dzięki|dzieki|dziękuję|dziekuje|prosím|prosim|díky|diky|děkuji|dekuji|ďakujem|dakujem|kérlek|kerlek|légyszi|legyszi|köszi|koszi|köszönöm|hvala|molim|молим|хвала" +
+            @"|të lutem|te lutem|ju lutem|faleminderit|te rog|vă rog|va rog|mersi|mulțumesc|multumesc|le do thoil|go raibh maith agat|plîs|plis|os gwelwch yn dda|diolch|jekk jogħġbok|jekk joghgbok|grazzi" +
+            @"|lütfen|lutfen|teşekkürler|tesekkurler|sağ ?ol|sag ?ol|zəhmət olmasa|xahiş edirəm|təşəkkürlər|iltimos|rahmat" +
+            @"|пожалуйста|пожалуста|плиз|пж|спасибо|будь ласка|дякую|калі ласка|дзякуй|моля|благодаря|мерси|те молам|ве молам|фала|благодарам|өтінемін|рахмет|гуйя|баярлалаа|παρακαλώ|παρακαλω|ευχαριστώ|ευχαριστω" +
+            @"|làm ơn|lam on|cảm ơn|cám ơn|cam on|tolong|mohon|terima kasih|makasih|sila|tulung|mangga|matur nuwun|suwun|pakiusap|paki\w*|salamat|tafadhali|asante|don allah|dan allah|na gode" +
+            @"|jọ̀wọ́|jọwọ|jowo|o ṣeun|o seun|biko|daalụ|daalu|ngiyacela|ngicela|sicela|ngiyabonga|siyabonga|ndiyacela|ndicela|enkosi|fadlan|mahadsanid" +
+            @"|من فضلك|لو سمحت|رجاء|رجاءً|الرجاء|شكرا|شكراً|براہ کرم|مہربانی|پلیز|شکریہ|لطفا|لطفاً|ممنون|مرسی|בבקשה|תודה)\b" +
+            @"|请|請|麻烦|麻煩|拜托|拜託|谢谢|謝謝|ください|下さい|お願い|おねがい|ありがとう|주세요|부탁|제발|고마워|감사|กรุณา|รบกวน|ขอบคุณ" +
+            @"|कृपया|प्लीज़|प्लीज|प्लिज|धन्यवाद|शुक्रिया|দয়া করে|প্লিজ|প্লীজ|ধন্যবাদ|કૃપા કરીને|પ્લીઝ|આભાર|ਕਿਰਪਾ ਕਰਕੇ|ਪਲੀਜ਼|ਪਲੀਜ|ਧੰਨਵਾਦ" +
+            @"|தயவுசெய்து|ப்ளீஸ்|பிளீஸ்|நன்றி|దయచేసి|ప్లీజ్|ధన్యవాదాలు|ದಯವಿಟ್ಟು|ಪ್ಲೀಸ್|ಧನ್ಯವಾದ|ദയവായി|പ്ലീസ്|നന്ദി", RegexOptions.IgnoreCase);
+        private static readonly Regex JustPlease = new Regex(@"^\W*((ok|okay|fine|sorry|vale|perd[oó]n|d[ée]sol[ée])\W+)?(pretty\s+)?(please+|pls|plz|pleas+e*|por favor|porfa|porfis|s'il (te|vous) pla[iî]t|stp|svp" +
+            @"|bitte( sehr| schön)?|per favore|per piacere|pfv|si us plau|sisplau|siusplau|mesedez|alsjeblieft|alstublieft|a\.?u\.?b\.?|asseblief|snälla|snalla|vær så snill|vennligst|venligst|vinsamlegast|ole hyvä|ole kiltti|palun|lūdzu|ludzu|prašau|prasau" +
+            @"|proszę|prosze|prosím|prosim|kérlek|kerlek|légyszi|legyszi|molim( te| vas)?|молим( те)?|të lutem|te lutem|ju lutem|te rog|vă rog|va rog|le do thoil|plîs|plis|os gwelwch yn dda|jekk jogħġbok|jekk joghgbok" +
+            @"|lütfen|lutfen|zəhmət olmasa|xahiş edirəm|iltimos|пожалуйста|пожалуста|плиз|пж|будь ласка|калі ласка|моля|те молам|ве молам|өтінемін|гуйя|παρακαλώ|παρακαλω" +
+            @"|làm ơn|lam on|tolong|mohon|sila|tulung|mangga|pakiusap|tafadhali|don allah|dan allah|jọ̀wọ́|jọwọ|jowo|biko|ngiyacela|ngicela|sicela|ndiyacela|ndicela|fadlan" +
+            @"|请|請|拜托|拜託|お願い(します)?|おねがい(します)?|ください|부탁(해|해요|합니다)|제발|กรุณา|ขอร้อง" +
+            @"|कृपया|प्लीज़|प्लीज|प्लिज|দয়া করে|প্লিজ|প্লীজ|કૃપા કરીને|પ્લીઝ|ਕਿਰਪਾ ਕਰਕੇ|ਪਲੀਜ਼|ਪਲੀਜ|தயவுசெய்து|ப்ளீஸ்|பிளீஸ்|దయచేసి|ప్లీజ్|ದಯವಿಟ್ಟು|ಪ್ಲೀಸ್|ദയവായി|പ്ലീസ്" +
+            @"|من فضلك|لو سمحت|رجاء|رجاءً|الرجاء|براہ کرم|پلیز|لطفا|لطفاً|בבקשה)(\s+capri)?\W*$", RegexOptions.IgnoreCase);
         private static readonly Random Dice = new Random();
         internal static Func<int> PleaseRoll = delegate { lock (Dice) return Dice.Next(10); };
         private static string heldForPlease;

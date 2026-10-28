@@ -11659,6 +11659,16 @@ namespace CapriDesktop
                             string movedOn = Hands.Manners("actually never mind", out droppedAsked);
                             string latePlease = Hands.Manners("please", out forgotAsked);
                             bool letGo = movedOn == "actually never mind" && latePlease == "please" && !droppedAsked && !forgotAsked;
+                            bool germanAsked, germanKept, germanPolite, japanesePolite, hindiPolite, turkishPolite, arabicAsked, arabicKept;
+                            Hands.Manners("öffne Spotify", out germanAsked);
+                            string bitte = Hands.Manners("bitte", out germanKept);
+                            Hands.Manners("öffne bitte Spotify", out germanPolite);
+                            Hands.Manners("Spotifyを開いてください", out japanesePolite);
+                            Hands.Manners("Spotify खोलो प्लीज", out hindiPolite);
+                            Hands.Manners("Spotify'ı aç lütfen", out turkishPolite);
+                            Hands.Manners("افتح سبوتيفاي", out arabicAsked);
+                            string minFadlak = Hands.Manners("من فضلك", out arabicKept);
+                            bool anyLanguage = germanAsked && !germanKept && bitte == "öffne Spotify please" && !germanPolite && !japanesePolite && !hindiPolite && !turkishPolite && arabicAsked && minFadlak == "افتح سبوتيفاي please" && !arabicKept;
                             Hear("open spotify");
                             bool askedInChat = reply == Hands.SayPlease;
                             CloseTalk();
@@ -11666,8 +11676,8 @@ namespace CapriDesktop
                             Hands.Manners("never mind", out droppedAsked);
                             bool rareAsked;
                             Hands.Manners("open spotify", out rareAsked);
-                            if (!heldRequest || politeAsked || chatAsked || !letGo || !askedInChat || rareAsked) throw new Exception("Say please went wrong: held " + heldRequest + ", polite " + politeAsked + ", chat " + chatAsked + ", let go " + letGo + ", asked in chat " + askedInChat + ", other rolls " + rareAsked);
-                            checks.Add("PASS say please: on a 1 in 10 roll a request without please gets Say please, a reply of please runs the request, polite asks and plain chat never get it, and moving on drops the held request");
+                            if (!heldRequest || politeAsked || chatAsked || !letGo || !askedInChat || rareAsked || !anyLanguage) throw new Exception("Say please went wrong: held " + heldRequest + ", polite " + politeAsked + ", chat " + chatAsked + ", let go " + letGo + ", asked in chat " + askedInChat + ", other rolls " + rareAsked + ", other languages " + anyLanguage);
+                            checks.Add("PASS say please: on a 1 in 10 roll a request without please gets Say please, a reply of please in any of her languages (bitte, من فضلك) runs the request, polite asks in any of her languages and plain chat never get it, and moving on drops the held request");
                             SetVolume(150);
                             if (Voice.Louder(new short[] { 30000 })[0] != 32767) throw new Exception("A loud voice was not clipped.");
                             SetVolume(100);
