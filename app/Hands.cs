@@ -149,7 +149,7 @@ namespace CapriDesktop
             @"|^(abra|abrir|toque|tocar|coloca|coloque|p[õo]e|bota|fecha|feche|fechar|procura|procure|pesquisa|pesquise|mostra|mostre|pula|pule|aumenta|diminui|(voc[eê] |vc )?(pode|poderia|consegue)s? (me )?(abrir|tocar|colocar|p[ôo]r|fechar|procurar|pesquisar|mostrar|iniciar|pausar))\b" +
             @"|^(apri|aprire|avvia|avviare|lancia|metti|mettimi|riproduci|suona|chiudi|chiudere|cerca|cercare|mostrami|fammi (vedere|sentire)|alza|abbassa|(puoi|potresti|riesci a) (aprire|avviare|mettere|riprodurre|chiudere|cercare|mostrarmi|suonare|alzare|abbassare))\b" +
             @"|^(otw[óo]rz|uruchom|w[łl][aą]cz|pu[śs][ćc]|zamknij|wyszukaj|szukaj|znajd[źz]|poka[żz]|zatrzymaj|(mo[żz]esz|m[óo]g[łl]by[śs]|mog[łl]aby[śs]) (mi )?(otworzy[ćc]|uruchomi[ćc]|w[łl][aą]czy[ćc]|pu[śs]ci[ćc]|zamkn[aą][ćc]|wyszuka[ćc]|znale[źz][ćc]|pokaza[ćc]))(?!\w)" +
-            @"|^((speel|sluit|zoek|toon|laat (me )?zien|pauzeer)\b|zet .+ op$|(kun|kan|wil) je\b.*\b(openen|starten|spelen|afspelen|opzetten|sluiten|zoeken|laten zien)\b)" +
+            @"|^(((speel|sluit|zoek|toon|pauzeer)\b(?! (je|jij|jy|julle|u|we|wij|ons)\b)|laat (me )?zien\b)|zet .+ op$|(kun|kan|wil) je\b.*\b(openen|starten|spelen|afspelen|opzetten|sluiten|zoeken|laten zien)\b)" +
             @"|^(открой|открыть|запусти|запустить|включи|включить|поставь|поставить|закрой|закрыть|найди|найти|покажи|показать|выключи|сделай (громче|тише)|(можешь|можете|мог бы|могла бы|не могла бы) (ты )?(открыть|запустить|включить|поставить|закрыть|найти|показать))(?!\w)" +
             // Chinese, Japanese, Korean, Thai, Vietnamese, Indonesian, Turkish, Ukrainian, Arabic and Hindi too. Chinese and Thai write
             // no spaces, and Japanese, Korean, Turkish and Hindi put the verb last, so those match where the verb sits.
@@ -187,6 +187,31 @@ namespace CapriDesktop
             @"|^((odpri|predvajaj|zapri|poišči|išči|ustavi|vklopi|izklopi|zaženi|pošlji)(?!\w)|(ali |a )?(mi )?(lahko|bi lahko) (mi )?(odpreš|predvajaš|zapreš|poiščeš|pokažeš|vklopiš|izklopiš|zaženeš|odprl|odprla|predvajal|predvajala)(?!\w))" +
             @"|^((пусни|намери|потърси|спри|увеличи|намали|изключи|прати)(?!\w)|(можеш ли|би ли могла|би ли могъл|може ли) (да )?(отвориш|пуснеш|затвориш|намериш|потърсиш|покажеш|спреш|включиш|изключиш)(?!\w))" +
             @"|^((iftaħ|iftah|doqq|agħlaq|aghlaq|fittex|urini|waqqaf|ixgħel|ixghel|itfi|għolli|gholli|baxxi)(?!\w)|(tista'?|tistax|tistgħu) (tiftaħ|tiftah|iddoqq|tagħlaq|taghlaq|tfittex|turini|twaqqaf|tixgħel|titfi)(?!\w))" +
+            // Galician, Basque, Afrikaans, Icelandic, Albanian, Irish and Welsh. Words that are everyday chat in another of her
+            // languages, like Portuguese "agora", Vietnamese "cau" or Spanish "vale", are left out.
+            @"|^((pecha(me|o|a|lo|la)?|am[oó]sa(me)?)(?!\w)|(podes|poder[ií]as) (abrir|po[ñn]er|pechar|buscar|amosar|reproducir|tocar)(?!\w))" +
+            @"|^(ireki|itxi|bilatu|erakutsi|gelditu|bidali|erreproduzitu|piztu|itzali)(?!\w)|(^|\s)(ireki|itxi|bilatu|erakutsi|gelditu|bidali|erreproduzitu|piztu|itzali)( ezazu| ezazue| mesedez)?$|(ireki|itxi|bilatu|erakutsi|gelditu|bidali|piztu|itzali) (dezakezu|ahal duzu|al duzu)(?!\w)" +
+            @"|^((soek|wys my|stuur)(?!\w)|maak .+ (oop|toe)$|sit .+ (aan|af|harder|sagter)$|(kan|sal) jy\b.*\b(oopmaak|toemaak|speel|soek|wys|stuur|aansit|afsit)(?!\w))" +
+            @"|^((opnaðu|opnadu|spilaðu|spiladu|lokaðu|lokadu|leitaðu|leitadu|sýndu|syndu|stöðvaðu|stodvadu|stoppaðu|stoppadu|sendu|hækkaðu|haekkadu|lækkaðu|laekkadu|kveiktu|slökktu|slokktu|settu)(?!\w)|(geturðu|geturdu|gætirðu|gaetirdu)\b.*\b(opnað|opnad|spilað|spilad|lokað|lokad|leitað|leitad|sýnt|synt|sett|kveikt|slökkt)(?!\w)|viltu (opna|loka|leita|sýna|syna|setja|kveikja|slökkva|slokkva|senda)(?!\w))" +
+            @"|^((hap|hape|luaj|mbyll|mbylle|kërko|kerko|më trego|me trego|ndalo|dërgo|dergo|ndiz)(?!\w)|(a )?(mund|mundesh|mundeni) (të |te |ta |t'i )?(hapësh|hapesh|luash|mbyllësh|mbyllesh|kërkosh|kerkosh|tregosh|ndezësh|ndezesh|dërgosh|dergosh)(?!\w))" +
+            @"|^((oscail|seinn|dún|cuardaigh|taispeáin|taispeain|seol|ardaigh|ísligh|isligh|múch)(?!\w)|an (féidir|feidir) leat\b.*\b(oscailt|sheinm|sheinnt|chasadh|dhúnadh|dhunadh|chuardach|thaispeáint|thaispeaint|mhúchadh)(?!\w))" +
+            @"|^((agor|agorwch|chwarae|chwaraea|chwaraewch|caea|caewch|chwilia|chwiliwch|dangos|dangosa|dangoswch|stopia|anfon|anfona|anfonwch|diffodd|diffodda)(?!\w)|(alli di|allet ti|wnei di|fedri di|gallwch chi|wnewch chi) (plîs |plis )?(agor|chwarae|cau|chwilio|dangos|anfon|diffodd|troi)(?!\w))" +
+            // Belarusian and Macedonian; Azerbaijani, Uzbek, Kazakh, Mongolian and Nepali put the verb last.
+            @"|^(адкрый|ўключы|уключы|прайграй|пастаў|зачыні|знайдзі|пакажы|спыні|выключы|дашлі|зрабі (гучней|цішэй)|(можаш|можаце|ці можаш|ці можаце) (ты |вы )?(адкрыць|уключыць|ўключыць|прайграць|паставіць|зачыніць|знайсці|паказаць|выключыць))(?!\w)" +
+            @"|^((пушти|најди|пребарај|запри|стопирај|испрати|засили|вклучи|исклучи)(?!\w)|(можеш ли|дали можеш|може ли) (да )?(го |ја |ги )?(отвориш|пуштиш|затвориш|најдеш|пребараш|покажеш|вклучиш|исклучиш|испратиш)(?!\w))" +
+            @"|(^|\s)(aç|bağla|oxut|qoş|axtar|göstər|dayandır|göndər|açarsan|aça bilərsən|bağlaya bilərsən|səsi artır|səsi azalt)( zəhmət olmasa)?$" +
+            @"|(^|\s)(och|oching|ochib ber|yop|yoping|qo['ʻ‘`]?y|qo['ʻ‘`]?ying|ijro et|ijro eting|qidir|qidiring|ko['ʻ‘`]?rsat|ko['ʻ‘`]?rsating|to['ʻ‘`]?xtat|to['ʻ‘`]?xtating|yubor|yuboring)( iltimos)?$" +
+            @"|(^|\s)(аш|ашшы|ашыңыз|ашып бер|жап|жапшы|жабыңыз|қос|қосшы|қосыңыз|ойнат|ойнатшы|ізде|іздеші|іздеңіз|көрсет|көрсетші|көрсетіңіз|тоқтат|тоқтатшы|жібер|жіберші)( өтінемін)?$" +
+            @"|(^|\s)(нээ|нээгээч|нээж өг|нээнэ үү|хаагаач|тоглуул|тоглуулаач|тоглуулна уу|хайгаач|хайна уу|харуул|харуулаач|харуулна уу|зогсоо|зогсоогоорой|зогсооно уу|илгээ|илгээгээч|илгээнэ үү|асаа|асаагаач|асаана уу|унтраа|унтраагаач|унтраана уу)( л| дээ)?$" +
+            @"|(^|\s)(खोल|खोलिदेऊ|खोलिदिनुहोस्|खोल्नुहोस्|बजाऊ|बजाइदेऊ|बजाउनुहोस्|चलाऊ|चलाइदेऊ|चलाउनुहोस्|बन्द गर|बन्द गरिदेऊ|बन्द गर्नुहोस्|खोज|खोजिदेऊ|खोज्नुहोस्|देखाऊ|देखाइदेऊ|देखाउनुहोस्|रोक|रोक्नुहोस्|पठाऊ|पठाइदेऊ|पठाउनुहोस्)( न| है| प्लिज)?[।.!?\s]*$" +
+            // Javanese, Hausa, Yoruba, Igbo, Zulu, Xhosa and Somali.
+            @"|^((tulung|mbok|coba) )*(bukak(en|na|ke)?|bukaen|puter(en|na|ke)|setel(en|na|ke)?|tutupen|tutupna|golek(na|ke|ana)|goleki|tuduh(na|ke)|mandheg(na|ke)|kirim(na|ke|en))(?!\w)" +
+            @"|^((don|dan) allah )?((ka|ki|ku) )?(buɗe|bude|kunna|rufe|nuna min|tsayar|dakatar|kashe)(?!\w)|\b(za ka iya|za ki iya|kana iya|kina iya) (buɗe|bude|kunna|rufe|nemo|nuna|aika|kashe)(?!\w)" +
+            @"|^((jọ̀wọ́|jọwọ|jowo) )?(ṣí|ṣi|ṣe orin|kọ orin|wá|fi hàn mí|fi han mi|dá dúró|fi ránṣẹ́|fi ranse)(?!\w)" +
+            @"|^(biko )?(meghee|mepee|kpọọ|kpoo|mechie|chọọ|gosi m|kwụsị|kwusi|ziga|gbanye|gbanyụọ|gbanyuo)(?!\w)" +
+            @"|^((ngicela|ndicela|sicela) )?(vula|uvule|dlala|udlale|vala|uvale|sesha|usesha|khombisa|ukhombise|thumela|uthumele|khangela|ukhangele|bonisa|ubonise|yeka)(?!\w)|\bunga(vula|dlala|vala|sesha|khombisa|thumela|khangela|bonisa)(?!\w)" +
+            // Somali puts the verb last, after a word ending in an article like "-ga" ("Spotify-ga fur"), so English "your fur" stays chat.
+            @"|^fadlan\b.*\b(fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami|tus|dir)$|(\w|-)(ka|ga|ha|ta|da) (fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami)( fadlan)?$|\bi tus( fadlan)?$" +
             // Hebrew, Urdu and Persian. Urdu and Persian put the verb last.
             @"|^(בבקשה )?(פתח|פתחי|תפתח|תפתחי|נגן|נגני|תנגן|תנגני|סגור(?= )|סגרי|תסגור|תסגרי|חפש|חפשי|תחפש|תחפשי|תראה לי|תראי לי|הראה לי|הראי לי|עצור|עצרי|תעצור|תעצרי|הגבר|תגביר|תגבירי|הנמך|תנמיך|תנמיכי|שים(?! לב)|שימי(?! לב)|תשים|תשימי|הפעל|הפעילי|תפעיל|תפעילי|כבה|כבי|תכבה|תכבי|שלח|שלחי|תשלח|תשלחי)(?!\w)|^(את יכולה|אתה יכול|תוכלי|תוכל|אפשר) (בבקשה )?ל(פתוח|נגן|סגור|חפש|הראות|הפעיל|כבות|שים|הגביר|הנמיך|שלוח)(?!\w)" +
             @"|(کھولو|کھول دو|کھولیں|کھول دیں|چلاؤ|چلا دو|چلائیں|چلا دیں|بجاؤ|بجا دو|بجائیں|بند کرو|بند کر دو|بند کریں|بند کر دیں|ڈھونڈو|ڈھونڈ دو|تلاش کرو|تلاش کریں|دکھاؤ|دکھا دو|دکھائیں|روکو|روک دو|روکیں|بڑھاؤ|بڑھا دو|کم کرو|کم کر دو|بھیجو|بھیج دو)( نا| پلیز| پلز)?[۔.!?؟\s]*$|(کھول|چلا|بجا|بند کر|دکھا|ڈھونڈ) (سکتے|سکتی|سکو) (ہو|ہیں|گے|گی)|کون سا گانا" +
@@ -537,7 +562,29 @@ namespace CapriDesktop
             @"|(திறக்க|இயக்க|மூட|கட்டுப்படுத்த|அணுக|போட) (முடியாது|இயலாது)|அணுகல் இல்லை" +
             @"|(తెరవ|ప్లే చేయ|నియంత్రించ|యాక్సెస్ చేయ|మూసివేయ)లేను|యాక్సెస్ లేదు" +
             @"|(ತೆರೆಯಲು|ಪ್ಲೇ ಮಾಡಲು|ನಿಯಂತ್ರಿಸಲು|ಪ್ರವೇಶಿಸಲು|ಮುಚ್ಚಲು) (ಸಾಧ್ಯವಿಲ್ಲ|ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ|ಆಗುವುದಿಲ್ಲ|ಆಗಲ್ಲ)|ಆಕ್ಸೆಸ್ ಇಲ್ಲ" +
-            @"|(തുറക്കാൻ|പ്ലേ ചെയ്യാൻ|നിയന്ത്രിക്കാൻ|ആക്സസ് ചെയ്യാൻ|അടയ്ക്കാൻ) (കഴിയില്ല|പറ്റില്ല|സാധിക്കില്ല)|ആക്സസ് ഇല്ല", RegexOptions.IgnoreCase);
+            @"|(തുറക്കാൻ|പ്ലേ ചെയ്യാൻ|നിയന്ത്രിക്കാൻ|ആക്സസ് ചെയ്യാൻ|അടയ്ക്കാൻ) (കഴിയില്ല|പറ്റില്ല|സാധിക്കില്ല)|ആക്സസ് ഇല്ല" +
+            // Galician, Basque, Afrikaans, Icelandic, Albanian, Irish, Welsh, Belarusian, Macedonian, Azerbaijani, Uzbek, Kazakh,
+            // Mongolian, Nepali, Javanese, Hausa, Yoruba, Igbo, Zulu, Xhosa and Somali.
+            @"|\bnon (podo|son quen de) (abrir|reproducir|poñer|poner|acceder|controlar|pechar|iniciar)(?!\w)|\bnon teño acceso(?!\w)" +
+            @"|\bezin (dut|dizut) (\w+ ){0,3}(ireki|erreproduzitu|jarri|itxi|kontrolatu|bilatu|piztu|itzali|abiarazi)(?!\w)|\b(ireki|erreproduzitu|jarri|itxi|kontrolatu|piztu) ezin (dut|dizut)(?!\w)|\bez (dut|daukat) sarbiderik(?!\w)" +
+            @"|\bek kan nie (\w+\s+){0,3}(oopmaak|speel|afspeel|beheer|toemaak|aansit|begin|bykom)(?!\w)|\bek kan (\w+\s+){0,3}nie (oopmaak|speel|afspeel|beheer|toemaak|aansit|begin|bykom)(?!\w)|\bek het (nie|geen) toegang(?!\w)" +
+            @"|\b(ég get|get ég) (ekki|ei) (\w+ ){0,2}(opnað|opnad|spilað|spilad|stjórnað|stjornad|lokað|lokad|ræst|raest|nálgast|nalgast)(?!\w)|\b(ég hef|hef ég) ekki aðgang(?!\w)" +
+            @"|\bnuk (mund|mundem|jam në gjendje|jam ne gjendje) (të |te |ta |t'i )?(hap|luaj|mbyll|kontrolloj|aksesoj|nis|ndez|vë|ve)(?!\w)|\bnuk kam (qasje|akses)(?!\w)" +
+            @"|\bní (féidir|feidir|thig) liom (\w+ ){0,3}(a )?(oscailt|sheinm|sheinnt|rialú|rialu|dhúnadh|dhunadh|rochtain|chur ar siúl)(?!\w)|\bníl rochtain agam(?!\w)" +
+            @"|\b(dw i ddim yn gallu|dydw i ddim yn gallu|alla i ddim|fedra i ddim|ni allaf) (\w+ ){0,2}(agor|chwarae|rheoli|cau|cyrchu|cael mynediad|dechrau)(?!\w)|\b(does gen i ddim|does dim) mynediad(?!\w)" +
+            @"|\bне магу (адкрыць|уключыць|ўключыць|запусціць|прайграць|паставіць|атрымаць доступ|зачыніць)(?!\w)|\bу мяне няма доступу(?!\w)" +
+            @"|\bне можам (да )?(го |ја |ги )?(отворам|пуштам|вклучам|контролирам|стартувам|пристапам|затворам)(?!\w)|\bнемам пристап(?!\w)" +
+            @"|\b(aça|oxuda|qoşa|işə sala|ise sala|idarə edə|idare ede|bağlaya|baglaya) bilmirəm(?!\w)|\b(girişim|çıxışım|icazəm) yoxdur(?!\w)" +
+            @"|\b(ocha|ochib bera|ijro eta|boshqara|yopa|qo['ʻ‘`]?ya|ishga tushira) olmayman(?!\w)|\b(kirish|ruxsat|ruxsatim|kirishim) yo['ʻ‘`]?q(?!\w)" +
+            @"|(аша|ойната|қоса|басқара|жаба|іске қоса) алмаймын(?!\w)|(қолжетімділігім|рұқсатым|кіру мүмкіндігім) жоқ(?!\w)" +
+            @"|(нээж|тоглуулж|асааж|удирдаж|хааж|хандаж) (чадахгүй|чадсангүй)|(хандах эрх|хандалт) (байхгүй|алга)" +
+            @"|(खोल्न|बजाउन|चलाउन|बन्द गर्न|नियन्त्रण गर्न|पहुँच गर्न) (सक्दिनँ|सक्दिन|सक्दिँन|सक्तिनँ)|पहुँच छैन" +
+            @"|\b(aku|kula) (ora|mboten) (iso|isa|bisa|saged) (mbukak|bukak|mbikak|muter|nyetel|ngakses|ngontrol|nutup|nggoleki|nglakokake)(?!\w)|\b(aku|kula) (ora|mboten) (duwe|nduwe|gadhah) akses(?!\w)" +
+            @"|\bba (zan|na) iya (buɗe|bude|kunna|rufe|sarrafa|samun dama)(?!\w)|\bba ni da (damar|izinin|ikon)(?!\w)" +
+            @"|\b(mi ò lè|mi o le|mi kò lè|mi ko le|n kò lè|n ko le|èmi kò lè|emi ko le) (ṣí|ṣi|si|ṣe|se|ṣàkóso|sakoso|wọlé|wole|pa)(?!\w)" +
+            @"|\b(enweghị m ike|enweghi m ike|apụghị m|apughi m) (imeghe|imepe|ịkpọ|ikpo|imechi|ịchịkwa|ichikwa|ịbanye|ibanye)(?!\w)|\benweghị m (ohere|ikike)(?!\w)" +
+            @"|\b(angikwazi|andikwazi|andinako) uku(vula|dlala|vala|lawula|finyelela|fikelela|qala|cisha|qalisa)(?!\w)|\b(anginayo|andinayo|andinalo) (imvume|ukufinyelela|ufikelelo)(?!\w)" +
+            @"|\bma (awoodo|kari karo|karo) (inaan )?(furo|daaro|shido|xiro|xidho|maamulo|galo|bilaabo)(?!\w)|\bma (furi|daari|shidi|xiri|xidhi|maamuli|gali|bilaabi) karo(?!\w)|\bma haysto (oggolaansho|fursad|marin)(?!\w)", RegexOptions.IgnoreCase);
         private const string Able = @"(open|launch|start|run|play|pause|resume|skip|control|access|use|search|google|close|mute|unmute|put on|turn (up|down|on|off)|change)\b";
 
         internal static bool Refused(string reply) { return Refusal.IsMatch((reply ?? "").Replace('’', '\'')); }
@@ -555,10 +602,13 @@ namespace CapriDesktop
                 @"|kan du|kunde du|skulle du|vil du|voisitko|voitko|můžeš|mohl bys|mohla bys|môžeš|((meg|el|be|le) )?tudnád|poți|poti|ai putea|μπορείς να|μπορεις να|θα μπορούσες να|pwede mo bang|puwede mo bang|pwede bang|kaya mo bang" +
                 @"|boleh(kah)?|(je )?(unaweza|waweza)|tafadhali|naomba|(em )?(pots|podries)|možeš li|mozes li|da li možeš|da li mozes|možete li|mozete li|да ли можеш" +
                 @"|kas (sa |te )?(saad|saate|võiksid|võiksite|saaksid|saaksite)|vai (tu )?(vari|varētu)|ar (gali|galėtum|galite)|(ali |a )?(mi )?lahko|bi (mi )?lahko|би ли|може ли|tista'?|tistax|tistgħu" +
+                @"|podes|poder[ií]as|mesedez|kan jy|sal jy|geturðu|geturdu|gætirðu|gaetirdu|viltu|(a )?mund(esh)? (të|te|ta)|an (féidir|feidir) leat|alli di|allet ti|wnei di|fedri di|gallwch chi|wnewch chi" +
+                @"|(ці )?можаш|(ці )?можаце|дали можеш|za (ka|ki) iya|(don|dan) allah|ṣé o lè|se o le|jọ̀wọ́|jọwọ|jowo|biko|(i|ị) nwere ike|ungakwazi|ngicela|ndicela|sicela|fadlan|tulung" +
                 @"|את יכולה|אתה יכול|תוכלי|תוכל|אפשר|בבקשה|می[\u200C ]?(تونی|توانی)|می[\u200C ]?شه|لطفا|لطفاً)(?!\w)", RegexOptions.IgnoreCase)
-                // Chinese and Thai ask at the start without spaces; Japanese, Korean, Turkish and Hindi ask at the end.
+                // Chinese and Thai ask at the start without spaces; Japanese, Korean, Turkish, Hindi and the other verb-last languages ask at the end.
                 || Regex.IsMatch(text, @"^(capri[\s,，]*)?((你|您)?(能不能|可不可以|能|可以|会不会|會不會)?(帮|幫|给|給|替)我|(你|您)(能|可以)|请|請|麻烦|麻煩|ช่วย|กรุณา|รบกวน)", RegexOptions.IgnoreCase)
-                || Regex.IsMatch(text, @"(くれる|くれない|くれます|くれませんか|もらえる|もらえない|もらえます|もらえませんか|ください|줄래|줄래요|줄 ?수 ?있어|줄 ?수 ?있어요|주세요|주실래요|줘|줘요|r m[ıi]s[ıi]n|bilir misin|सकते हो|सकती हो|सकोगे|सकोगी|सकते हैं|सकती हैं|سکتے ہو|سکتی ہو|سکتے ہیں|سکتی ہیں|سکو گے|سکو گی|পারবে|পারবেন|পারবি|शकतेस का|शकतोस का|शकता का|शकाल का|શકે|શકીશ|શકો|શકશો|ਸਕਦੇ ਹੋ|ਸਕਦੀ ਹੋ|ਸਕਦੀ ਹੈਂ|ਸਕੋਗੇ|ਸਕੋਗੀ|முடியுமா|గలవా|గలరా|ಬಹುದಾ|ാമോ|പറ്റുമോ|ได้ไหม|ได้มั้ย|ได้มั๊ย|หน่อย)\s*(か)?\s*[?？؟]\s*$", RegexOptions.IgnoreCase);
+                || Regex.IsMatch(text, @"(くれる|くれない|くれます|くれませんか|もらえる|もらえない|もらえます|もらえませんか|ください|줄래|줄래요|줄 ?수 ?있어|줄 ?수 ?있어요|주세요|주실래요|줘|줘요|r m[ıi]s[ıi]n|bilir misin|सकते हो|सकती हो|सकोगे|सकोगी|सकते हैं|सकती हैं|سکتے ہو|سکتی ہو|سکتے ہیں|سکتی ہیں|سکو گے|سکو گی|পারবে|পারবেন|পারবি|शकतेस का|शकतोस का|शकता का|शकाल का|શકે|શકીશ|શકો|શકશો|ਸਕਦੇ ਹੋ|ਸਕਦੀ ਹੋ|ਸਕਦੀ ਹੈਂ|ਸਕੋਗੇ|ਸਕੋਗੀ|முடியுமா|గలవా|గలరా|ಬಹುದಾ|ാമോ|പറ്റുമോ|ได้ไหม|ได้มั้ย|ได้มั๊ย|หน่อย" +
+                    @"|dezakezu|ahal duzu|al duzu|bilərsən|bilərsənmi|bilərsiniz|bilərsinizmi|olasanmi|olasizmi|berasanmi|berasizmi|аласың ба|аласыз ба|бересің бе|бересіз бе|чадах уу|өгөх үү|өгнө үү|өгөөч|सक्छौ|सक्नुहुन्छ|सक्छस्|दिनुहुन्छ|दिन्छौ|kartaa|kartid)\s*(か)?\s*[?？؟]\s*$", RegexOptions.IgnoreCase);
         }
 
         private static readonly Regex Chatter = new Regex(@"^(play (with|along|around|dead|dumb|nice|fair|a game with|a joke)|open up (to|about)|start (a story|a joke|an argument)|run (a mile|a race)|kill (the boss|me|time)|look (at it this way|forward)|show me (how|why)|check my (spelling|grammar)|rate my joke|mets-toi)\b", RegexOptions.IgnoreCase);

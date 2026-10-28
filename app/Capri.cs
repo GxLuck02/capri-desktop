@@ -10092,6 +10092,57 @@ namespace CapriDesktop
                                         { "ನನಗೆ ಈ ಹಾಡು ಇಷ್ಟ", "", "false" },
                                         { "Spotify തുറക്കൂ", "", "true" },
                                         { "എനിക്ക് ഈ പാട്ട് ഇഷ്ടമാണ്", "", "false" },
+                                        { "pecha Discord", "", "true" },
+                                        { "gústame moito esta canción", "", "false" },
+                                        { "ireki Spotify", "", "true" },
+                                        { "Spotify ireki mesedez", "", "true" },
+                                        { "abesti hau asko gustatzen zait", "", "false" },
+                                        { "maak Spotify oop", "", "true" },
+                                        { "ek is lief vir hierdie liedjie", "", "false" },
+                                        { "opnaðu Spotify", "", "true" },
+                                        { "ég elska þetta lag", "", "false" },
+                                        { "hap Spotify", "", "true" },
+                                        { "më pëlqen shumë kjo këngë", "", "false" },
+                                        { "oscail Spotify", "", "true" },
+                                        { "is breá liom an t-amhrán seo", "", "false" },
+                                        { "agor Spotify", "", "true" },
+                                        { "dw i'n caru'r gân yma", "", "false" },
+                                        { "адкрый Spotify", "", "true" },
+                                        { "мне вельмі падабаецца гэтая песня", "", "false" },
+                                        { "пушти музика", "", "true" },
+                                        { "ја сакам оваа песна", "", "false" },
+                                        { "musiqini qoş", "", "true" },
+                                        { "bu mahnını çox sevirəm", "", "false" },
+                                        { "Spotify'ni och", "", "true" },
+                                        { "bu qo'shiq menga juda yoqadi", "", "false" },
+                                        { "Spotify-ды аш", "", "true" },
+                                        { "бұл әнді жақсы көремін", "", "false" },
+                                        { "Spotify нээ", "", "true" },
+                                        { "энэ дуунд би их дуртай", "", "false" },
+                                        { "Spotify खोल", "", "true" },
+                                        { "मलाई यो गीत मन पर्छ", "", "false" },
+                                        { "bukaken Spotify", "", "true" },
+                                        { "aku seneng banget karo lagu iki", "", "false" },
+                                        { "buɗe Spotify", "", "true" },
+                                        { "ina son wannan waƙar sosai", "", "false" },
+                                        { "jọwọ ṣi Spotify", "", "true" },
+                                        { "mo fẹ́ràn orin yìí", "", "false" },
+                                        { "biko meghee Spotify", "", "true" },
+                                        { "ọ masịrị m egwu a", "", "false" },
+                                        { "vula i-Spotify", "", "true" },
+                                        { "ngiyayithanda le ngoma", "", "false" },
+                                        { "ndicela uvule i-Spotify", "", "true" },
+                                        { "ndiyayithanda le ngoma", "", "false" },
+                                        { "fadlan Spotify-ga fur", "", "true" },
+                                        { "aad ayaan u jeclahay heestan", "", "false" },
+                                        { "pusti muziku", "", "true" },
+                                        { "volim ovu pjesmu", "", "false" },
+                                        { "agora vou dormir", "", "false" },
+                                        { "cau oi, hom nay the nao", "", "false" },
+                                        { "Nemo is my favourite fish", "", "false" },
+                                        { "I love your fur", "", "false" },
+                                        { "speel jy graag speletjies?", "", "false" },
+                                        { "speel je graag games?", "", "false" },
                                         { "open spotify and shuffle my liked songs", "play_music|Liked Songs|playlist|spotify", "true" },
                                         { "play After Hours on YouTube", "play_music|After Hours|song|youtube", "true" },
                                         { "play something", "play_music|Chippin' In|song|", "true" },
@@ -10134,7 +10185,7 @@ namespace CapriDesktop
                                         || !Hands.Follows("YouTube stp", "mets de la musique", "Spotify ou YouTube ?") || !Hands.Follows("le deuxième", "ouvre minecraft", "Minecraft Launcher ou Minecraft: Java Edition ?")
                                         || !Hands.Follows("same again", "open Spotify", "Opened Spotify.") || Hands.Follows("yes", "open Spotify", "Opened Spotify.")
                                         || Hands.Follows("no thanks", "play some music", "Spotify or YouTube?") || Hands.Follows("the second one", "which game is better?", "Which one do you like?")) throw new Exception("Follow-up routing was wrong.");
-                                    checks.Add("PASS request routing: 225 messages in 51 languages, casual game and music chat, named commands, unknown games and follow-up choices");
+                                    checks.Add("PASS request routing: 276 messages in 73 languages, casual game and music chat, named commands, unknown games and follow-up choices");
                                     string[,] loudAsks =
                                     {
                                         { "turn up the volume", "volume_up||" }, { "can you turn the volume up a bit please", "volume_up|6|" }, { "crank it up", "volume_up||" }, { "make it louder", "volume_up||" },
@@ -10459,6 +10510,15 @@ namespace CapriDesktop
                                         || !Hands.Requested("کیا تم سپوٹیفائی کھول سکتی ہو؟") || Hands.Requested("کیا تم ویلورنٹ کھیلتی ہو؟") || !Hands.Requested("میتونی اسپاتیفای رو باز کنی؟") || !Hands.Requested("את יכולה לפתוח את ספוטיפיי?") || Hands.Requested("את משחקת ולורנט?")
                                         || !Hands.Requested("তুমি কি স্পটিফাই খুলতে পারবে?") || Hands.Requested("তুমি কি ভ্যালোরেন্ট খেলো?") || !Hands.Requested("Spotify-ஐ திறக்க முடியுமா?") || Hands.Requested("நீ Valorant விளையாடுவாயா?")
                                         || !Hands.Requested("Spotify తెరవగలవా?") || !Hands.Requested("Spotify ತೆರೆಯಬಹುದಾ?") || !Hands.Requested("Spotify തുറക്കാമോ?") || Hands.Requested("നീ Valorant കളിക്കുമോ?")) throw new Exception("Requests and questions about her were told apart wrong.");
+                                    if (!Hands.Refused("Síntoo, non podo abrir Spotify.") || !Hands.Refused("Barkatu, ezin dut Spotify ireki.") || !Hands.Refused("Jammer, ek kan nie Spotify oopmaak nie.") || !Hands.Refused("Því miður get ég ekki opnað Spotify.")
+                                        || !Hands.Refused("Më vjen keq, nuk mund ta hap Spotify.") || !Hands.Refused("Tá brón orm, ní féidir liom Spotify a oscailt.") || !Hands.Refused("Sori, dw i ddim yn gallu agor Spotify.") || !Hands.Refused("Прабач, я не магу адкрыць Spotify.")
+                                        || !Hands.Refused("Извини, не можам да го отворам Spotify.") || !Hands.Refused("Bağışla, Spotify-ı aça bilmirəm.") || !Hands.Refused("Kechirasiz, Spotify'ni ocha olmayman.") || !Hands.Refused("Кешір, Spotify-ды аша алмаймын.")
+                                        || !Hands.Refused("Уучлаарай, би Spotify нээж чадахгүй.") || !Hands.Refused("माफ गर्नुहोस्, म Spotify खोल्न सक्दिनँ।") || !Hands.Refused("Ngapunten, aku ora iso mbukak Spotify.") || !Hands.Refused("Yi hakuri, ba zan iya buɗe Spotify ba.")
+                                        || !Hands.Refused("Ẹ má bínú, mi ò lè ṣí Spotify.") || !Hands.Refused("Ndo, enweghị m ike imeghe Spotify.") || !Hands.Refused("Uxolo, angikwazi ukuvula i-Spotify.") || !Hands.Refused("Uxolo, andikwazi ukuvula i-Spotify.") || !Hands.Refused("Waan ka xumahay, ma furi karo Spotify.")
+                                        || Hands.Refused("Ek kan nie wag nie!") || Hands.Refused("Ezin dut itxaron!") || Hands.Refused("Не магу дачакацца!") || Hands.Refused("Ba zan iya jira ba!") || Hands.Refused("Angikwazi ukulinda!")
+                                        || !Hands.Requested("kan jy Spotify oopmaak?") || Hands.Requested("speel jy Valorant?") || !Hands.Requested("geturðu opnað Spotify?") || Hands.Requested("spilar þú Valorant?")
+                                        || !Hands.Requested("Spotify ireki dezakezu?") || !Hands.Requested("Spotify-ı aça bilərsən?") || !Hands.Requested("Spotify-ды аша аласың ба?") || !Hands.Requested("Spotify खोल्न सक्छौ?")
+                                        || !Hands.Requested("za ka iya buɗe Spotify?") || !Hands.Requested("ungakwazi ukuvula i-Spotify?") || Hands.Requested("uyadlala i-Valorant?") || !Hands.Requested("Spotify ma furi kartaa?")) throw new Exception("Refusals or requests in her newer languages were spotted wrong.");
                                     System.Collections.Generic.List<string> refusedAsked = new System.Collections.Generic.List<string>();
                                     System.Net.Sockets.TcpListener refusedFake;
                                     Brain.Ollama = FakeServer(new string[]
@@ -10485,7 +10545,7 @@ namespace CapriDesktop
                                         if (refusedTunes != "Lofi's on, choom." || refusedGame != "I can't play Valorant, I'm a desktop pet." || refusedThing != "I can't open that one." || refusedRan != "play_music|lofi beats" || refusedCalls != 6) throw new Exception("A refusal of something she can do wasn't tried with her hands: " + refusedTunes + " / " + refusedGame + " / " + refusedThing + " / " + refusedRan + " / " + refusedCalls);
                                     }
                                     finally { Brain.Ollama = splitOllama; refusedFake.Stop(); }
-                                    checks.Add("PASS no false refusals: when her reply says she can't open, play or access something they asked for (in 51 languages), her hands try it first; questions about her, and things her hands can't do, keep the reply");
+                                    checks.Add("PASS no false refusals: when her reply says she can't open, play or access something they asked for (in 73 languages), her hands try it first; questions about her, and things her hands can't do, keep the reply");
 
                                     System.Collections.Generic.List<string> reachAsked = new System.Collections.Generic.List<string>();
                                     System.Net.Sockets.TcpListener reachFake;
