@@ -2157,15 +2157,14 @@ namespace CapriDesktop
         // She asks where she is when she's near the mouse or the desktop won't say where it is; otherwise she glitches over beside it.
         internal void Nudge(double now, PixelPoint? mouse)
         {
-            nudgeOut = now + 20;
-            nudgeAsked = asking;
             string line = NudgeLines[random.Next(NudgeLines.Length)];
             PixelPoint hip = Hip;
             PixelRect area = mouse == null ? Area : WorkAt(mouse.Value);
             int wide = Px(body.Size);
-            if (mouse == null || (area.Contains(hip) && Math.Abs(hip.X - mouse.Value.X) <= Math.Max(Px(300), wide * 2))) { Blurt(NudgeHeard, line); return; }
+            if (mouse == null || (area.Contains(hip) && Math.Abs(hip.X - mouse.Value.X) <= Math.Max(Px(300), wide * 2))) { Plead(now, line); return; }
             int x = mouse.Value.X - area.X < area.Width / 2 ? mouse.Value.X + wide / 2 : mouse.Value.X - wide - wide / 2;
             x = Math.Max(area.X, Math.Min(area.Right - wide, x));
+            // Her wait to be noticed starts once she's there and has asked: a glitch-out cut short, by her window closing say, never asked.
             GlitchOut(delegate
             {
                 walking = false;
@@ -2173,8 +2172,15 @@ namespace CapriDesktop
                 falling = false;
                 Move(new PixelPoint(x, area.Y));
                 Arrive();
-                Blurt(NudgeHeard, line);
+                Plead(Now, line);
             });
+        }
+
+        private void Plead(double now, string line)
+        {
+            nudgeOut = now + 20;
+            nudgeAsked = asking;
+            Blurt(NudgeHeard, line);
         }
 
         internal void ForgetNudges()
