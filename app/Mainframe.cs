@@ -1414,6 +1414,12 @@ namespace CapriDesktop
 
         internal string ServerFields { get { return sheet.Fields; } }
 
+        internal void DropFishVoices() { sheet.DropVoices(); }
+
+        internal string FishVoicesShown { get { return sheet.Voices; } }
+
+        internal void PickFishVoice(string name) { sheet.PickVoice(name); }
+
         internal void PressServer(string button) { sheet.Press(button); }
 
         internal Form ServerPanel { get { return sheet; } }
@@ -1924,6 +1930,7 @@ namespace CapriDesktop
             private readonly Label hint;
             private readonly Key service;
             private readonly ContextMenuStrip services;
+            private readonly ContextMenuStrip voices;
             private readonly Label place;
             private readonly Entry url;
             private readonly Label modelName;
@@ -1979,6 +1986,9 @@ namespace CapriDesktop
                 model = Input(28, 244, 160, "Optional", "Model name, optional");
                 voiceName = Caption("Voice", 196, 224, Font, Look.Dim);
                 speaker = Input(196, 244, 160, "Optional", "Voice name or ID, optional");
+                // Fish Audio's cloud lists their own voices under the Voice box's arrow.
+                voices = owner.Dropdown();
+                speaker.Drop += delegate { ListVoices(); };
                 keyName = Caption("Key", 28, 280, Font, Look.Dim);
                 key = Input(28, 300, 244, "Optional", "Key. It goes only to this server, as a Bearer key");
                 key.Box.UseSystemPasswordChar = true;
@@ -2030,6 +2040,7 @@ namespace CapriDesktop
                 keyName.Visible = key.Visible = !file;
                 browse.Visible = file;
                 speaker.Cue = choice.VoiceCue;
+                speaker.Chevron = choice.Api == VoiceServer.Fish && choice.Url == VoiceServer.FishCloud;
                 if (fill && choice.Url != null)
                 {
                     url.Box.Text = choice.Url;
@@ -2045,6 +2056,45 @@ namespace CapriDesktop
                 foreach (ToolStripItem item in services.Items) if (item.Text == name) { item.PerformClick(); return; }
                 throw new InvalidOperationException("The voice model panel has no " + name + " to pick.");
             }
+
+            // Their own Fish Audio voices, listed with the key they typed or the one saved, to pick from.
+            private void ListVoices()
+            {
+                Say("Getting your Fish Audio voices...", false);
+                owner.capri.FishVoices(url.Box.Text, key.Box.Text, delegate(List<KeyValuePair<string, string>> found, string problem)
+                {
+                    if (IsDisposed) return;
+                    if (problem != null) { Say(problem, true); return; }
+                    voices.Items.Clear();
+                    foreach (KeyValuePair<string, string> each in found)
+                    {
+                        string id = each.Key;
+                        voices.Items.Add(Choice(each.Value, VoiceServer.FishVoice(speaker.Box.Text) == id, delegate { speaker.Box.Text = id; }));
+                    }
+                    if (voices.Items.Count == 0) { Say("No voices of your own on Fish Audio yet. Paste a voice's link from its library.", false); return; }
+                    Say("", false);
+                    voices.Show(speaker, new Point(0, speaker.Height));
+                });
+            }
+
+            // Their Fish Audio voices' names in its Voice menu, for the smoke test.
+            internal string Voices
+            {
+                get
+                {
+                    List<string> names = new List<string>();
+                    foreach (ToolStripItem item in voices.Items) names.Add(item.Text + (((ToolStripMenuItem)item).Checked ? " (picked)" : ""));
+                    return string.Join(", ", names.ToArray());
+                }
+            }
+
+            internal void PickVoice(string name)
+            {
+                foreach (ToolStripItem item in voices.Items) if (item.Text == name) { item.PerformClick(); return; }
+                throw new InvalidOperationException("Fish Audio's voice menu has no " + name + ".");
+            }
+
+            internal void DropVoices() { ListVoices(); }
 
             private void Browse()
             {
@@ -2145,7 +2195,11 @@ namespace CapriDesktop
 
             protected override void Dispose(bool disposing)
             {
-                if (disposing) services.Dispose();
+                if (disposing)
+                {
+                    services.Dispose();
+                    voices.Dispose();
+                }
                 base.Dispose(disposing);
             }
 

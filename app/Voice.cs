@@ -2548,6 +2548,63 @@ namespace CapriDesktop
             return name == Theirs ? Style : name;
         }
 
+        [DataContract]
+        internal sealed class FishPage
+        {
+            [DataMember(Name = "items")] public List<FishModel> Items;
+            [DataMember(Name = "has_more")] public bool More;
+        }
+
+        [DataContract]
+        internal sealed class FishModel
+        {
+            [DataMember(Name = "_id")] public string Id;
+            [DataMember(Name = "title")] public string Title;
+        }
+
+        // Their own voices on Fish Audio, as ID and title, from its voice list (GET /model?self=true), up to 500 of them.
+        internal static List<KeyValuePair<string, string>> FishVoices(string url, string key)
+        {
+            Uri tts = Endpoint(url, Fish);
+            List<KeyValuePair<string, string>> voices = new List<KeyValuePair<string, string>>();
+            for (int page = 1; page <= 5; page++)
+            {
+                UriBuilder at = new UriBuilder(tts.Scheme, tts.Host, tts.Port, "/model");
+                at.Query = "self=true&page_size=100&page_number=" + page;
+                if (tts.Scheme == Uri.UriSchemeHttps) ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(at.Uri);
+                request.Method = "GET";
+                request.UserAgent = "Capri-Desktop";
+                if (tts.IsLoopback) request.Proxy = null;
+                if (!string.IsNullOrEmpty(key)) request.Headers[HttpRequestHeader.Authorization] = "Bearer " + key;
+                request.Timeout = Patience;
+                request.ReadWriteTimeout = Patience;
+                FishPage found;
+                try
+                {
+                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                    using (Stream stream = response.GetResponseStream())
+                        found = (FishPage)new DataContractJsonSerializer(typeof(FishPage)).ReadObject(stream);
+                }
+                catch (WebException error)
+                {
+                    HttpWebResponse response = error.Response as HttpWebResponse;
+                    if (response == null) throw new VoiceException("Can't reach Fish Audio. Check your internet connection.");
+                    int status = (int)response.StatusCode;
+                    response.Close();
+                    if (status == 401 || status == 403) throw new VoiceException(string.IsNullOrEmpty(key) ? "Paste your Fish Audio key first." : "Fish Audio turned down its key (HTTP " + status + ").");
+                    throw new VoiceException("Fish Audio said HTTP " + status + ".");
+                }
+                catch (SerializationException) { throw new VoiceException("Fish Audio sent a voice list Capri can't read."); }
+                catch (IOException) { throw new VoiceException("Can't reach Fish Audio. Check your internet connection."); }
+                if (found == null || found.Items == null) break;
+                foreach (FishModel model in found.Items)
+                    if (!string.IsNullOrEmpty(model.Id)) voices.Add(new KeyValuePair<string, string>(model.Id, string.IsNullOrEmpty(model.Title) ? model.Id : model.Title));
+                if (!found.More || found.Items.Count == 0) break;
+            }
+            return voices;
+        }
+
         // A Fish Audio voice's ID, taken from its fish.audio link if that's what they pasted.
         internal static string FishVoice(string typed)
         {
