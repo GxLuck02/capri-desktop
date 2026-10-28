@@ -169,7 +169,13 @@ The Mac preview uses Ollama for her brain. See "Ollama" in section 9.
 
 ### X11 or Wayland?
 - X11: she sits on your windows.
-- Wayland: she sits on the bottom of your screen only.
+- Wayland: she sits on the bottom of your screen only. She runs through XWayland there, so keep XWayland on.
+
+### Hyprland, Sway and other tiling desktops
+They tile new windows, so Capri gets squeezed into a tile.
+1. With Capri open, find her window's class: on Hyprland run hyprctl clients. It's usually Capri.
+2. Add window rules for that class that make it float and pin it, so she's on every workspace. If a border, shadow or blur shows around her, turn those off for her class too.
+3. The rule syntax changes between Hyprland versions, so check the Window Rules page of the Hyprland wiki for yours. On Sway it's a for_window rule with floating enable and sticky enable.
 
 ### Her brain on Linux
 The Linux preview uses Ollama. If you installed Ollama but she says her brain is offline or disconnected, you haven't pulled a model yet. Run: ollama pull gemma4:e4b, then right-click her > Brain and pick it.
