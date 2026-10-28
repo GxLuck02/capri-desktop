@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
+using System.Text;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
@@ -35,6 +36,9 @@ namespace CapriDesktop
         [DataMember] internal string VoiceId;
         [DataMember] internal bool Silent;
         [DataMember] internal int Typing;
+        [DataMember] internal int Tier;
+        [DataMember] internal string NvidiaModel;
+        [DataMember] internal string PaidModel;
     }
 
     internal sealed class Clip
@@ -121,7 +125,11 @@ namespace CapriDesktop
         private static readonly int[] Recalls = { 8, 16, 32 };
         private static readonly string[] SoundNames = { "Off", "Quiet", "Normal", "Loud" };
         private static readonly int[] SoundLevels = { 0, 30, 60, 100 };
-        internal const string Offline = "My brain's offline. Install Ollama from ollama.com, then run: ollama pull gemma4:e4b";
+        internal const string Offline = "My brain's offline. Install Ollama from ollama.com, then run: ollama pull gemma4:e2b, or open Capri Mainframe for a free NVIDIA key.";
+        internal const string OllamaPage = "https://ollama.com/download";
+        internal const string FreeKeyPage = "https://build.nvidia.com/settings/api-keys";
+        internal const string KeychainLocked = "Couldn't read your key from Keychain.";
+        private const string BrainHeard = "(brain key)";
         internal const string DiscordPage = "https://discord.gg/F4fDHfGtFk";
         internal static readonly double[] Sizes = { 140, 170, 240, 320, 440, 560 };
         private static readonly string[] SizeNames = { "Tiny", "Small", "Medium", "Large", "Huge", "Giant" };
@@ -165,6 +173,9 @@ namespace CapriDesktop
         private MenuItem danceItem;
         private MenuItem musicItem;
         private MenuItem brainMenu;
+        private string[] ollamaModels;
+        private List<string> cloudModels;
+        internal string BrainProblem;
         internal Func<bool> MusicPlaying = Music.Playing;
         private bool musicOn;
         private bool musicBusy;
@@ -242,6 +253,9 @@ namespace CapriDesktop
             try { Keys.Migrate(); }
             catch (Exception error) { Brain.Log(Path.Combine(Keys.Folder, "voice-key"), -1, "Couldn't move the voice key into Keychain: " + error.Message); }
             voice.Key = Keys.Read("voice");
+            Saved.Tier = Math.Max(0, Math.Min(2, Saved.Tier));
+            Brain.Remote = TierCloud();
+            if (Brain.Remote != null) Brain.Model = Brain.Remote.Model;
             voice.VoiceId = string.IsNullOrEmpty(Saved.VoiceId) ? null : Saved.VoiceId;
             if (Program.Smoke == null) { Voice.Playback = Limbs.Speak; Voice.Silence = Limbs.Hush; }
             if (Program.Smoke == null)
@@ -1044,8 +1058,10 @@ namespace CapriDesktop
             Sfx.Play(Cue.Hop);
         }
 
-        private void RefreshBrains()
+        internal void RefreshBrains()
         {
+            Cloud remote = Brain.Remote;
+            if (remote != null) { ShowBrains(ollamaModels); ListCloud(remote.Key, false); return; }
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string[] found = null;
@@ -1057,19 +1073,37 @@ namespace CapriDesktop
 
         internal void ShowBrains(string[] found)
         {
+            ollamaModels = found;
             brainMenu.Items.Clear();
-            if (found == null || found.Length == 0)
+            Cloud remote = Brain.Remote;
+            if (remote != null)
             {
-                brainMenu.Items.Add(new MenuItem { Header = "No models yet. Install Ollama, then pull one.", IsEnabled = false });
-                return;
+                if (cloudModels == null) brainMenu.Items.Add(new MenuItem { Header = "Loading " + remote.Name + " models...", IsEnabled = false });
+                else
+                {
+                    int shown = 0;
+                    foreach (string name in cloudModels)
+                    {
+                        if (shown++ >= 30) break;
+                        string model = name;
+                        MenuItem pick = new MenuItem { Header = model, ToggleType = MenuItemToggleType.Radio, GroupName = "brain", IsChecked = model == remote.Model };
+                        pick.Click += delegate { PickModel(model); };
+                        brainMenu.Items.Add(pick);
+                    }
+                }
             }
-            foreach (string name in found)
+            else if (found == null || found.Length == 0) brainMenu.Items.Add(new MenuItem { Header = "No models yet. Install Ollama, then pull one.", IsEnabled = false });
+            else
             {
-                string model = name;
-                MenuItem pick = new MenuItem { Header = model, ToggleType = MenuItemToggleType.Radio, GroupName = "brain", IsChecked = model == Brain.Model };
-                pick.Click += delegate { PickBrain(model); };
-                brainMenu.Items.Add(pick);
+                foreach (string name in found)
+                {
+                    string model = name;
+                    MenuItem pick = new MenuItem { Header = model, ToggleType = MenuItemToggleType.Radio, GroupName = "brain", IsChecked = model == Brain.Model };
+                    pick.Click += delegate { PickModel(model); };
+                    brainMenu.Items.Add(pick);
+                }
             }
+            ShowState();
         }
 
         internal int BrainChoices { get { return brainMenu.Items.Count; } }
@@ -1082,6 +1116,7 @@ namespace CapriDesktop
             Brain.Forget();
             Saved.Model = model;
             Save();
+            ShowState();
         }
 
         internal string OpenNotes()
@@ -1251,8 +1286,162 @@ namespace CapriDesktop
             catch (Exception) { }
         }
 
+        internal string[] OllamaModels { get { return ollamaModels; } }
+        internal List<string> CloudModels { get { return cloudModels; } }
+
+        internal string SettingsJson
+        {
+            get
+            {
+                using (MemoryStream stream = new MemoryStream())
+                {
+                    new DataContractJsonSerializer(typeof(Settings)).WriteObject(stream, Saved);
+                    return Encoding.UTF8.GetString(stream.ToArray());
+                }
+            }
+        }
+
+        private Cloud TierCloud()
+        {
+            if (Saved.Tier == 0) return null;
+            string key = Keys.Read(Saved.Tier == 1 ? "nvidia" : "paid");
+            if (key == null)
+            {
+                if (Keys.Problem != null) BrainProblem = KeychainLocked;
+                return null;
+            }
+            return new Cloud(key, Saved.Tier == 1 ? Saved.NvidiaModel : Saved.PaidModel);
+        }
+
+        internal void ChooseTier(int tier)
+        {
+            tier = Math.Max(0, Math.Min(2, tier));
+            if (tier == Saved.Tier) return;
+            Brain.Cancel();
+            ++asking;
+            Saved.Tier = tier;
+            Save();
+            BrainProblem = null;
+            cloudModels = null;
+            Brain.Remote = TierCloud();
+            Brain.Model = Brain.Remote == null ? null : Brain.Remote.Model;
+            Brain.Forget();
+            FindBrain();
+            ShowState();
+        }
+
+        internal void ConnectText(string key)
+        {
+            key = (key ?? "").Trim();
+            if (Cloud.KindOf(key) == null) { ShowProblem("That isn't an NVIDIA, OpenAI, Claude or DeepSeek key."); return; }
+            ListCloud(key, true);
+        }
+
+        internal void ForgetText()
+        {
+            string name = Saved.Tier == 1 ? "nvidia" : "paid";
+            try { Keys.Forget(name); }
+            catch (Exception error) { Brain.Log(Keys.Folder, -1, "Couldn't forget the " + name + " key: " + error.Message); ShowProblem("Couldn't remove your key from Keychain."); return; }
+            Brain.Cancel();
+            ++asking;
+            if (Saved.Tier == 1) Saved.NvidiaModel = null;
+            else Saved.PaidModel = null;
+            Brain.Remote = null;
+            Brain.Model = null;
+            Brain.Forget();
+            cloudModels = null;
+            BrainProblem = null;
+            Saved.Tier = 0;
+            Save();
+            FindBrain();
+            ShowState();
+        }
+
+        internal void PickModel(string model)
+        {
+            Cloud remote = Brain.Remote;
+            if (remote == null) { PickBrain(model); return; }
+            if (string.IsNullOrEmpty(model) || model == remote.Model) return;
+            Brain.Cancel();
+            ++asking;
+            remote.Model = model;
+            Brain.Model = model;
+            Brain.Forget();
+            Keep(remote);
+            ShowState();
+        }
+
+        private void Keep(Cloud remote)
+        {
+            if (remote.Kind == "nvidia") Saved.NvidiaModel = remote.Model;
+            else Saved.PaidModel = remote.Model;
+            Save();
+        }
+
+        private void ListCloud(string key, bool connecting)
+        {
+            Cloud probe = new Cloud(key, null);
+            if (connecting) ShowProblem("Checking key...");
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                List<string> found = null;
+                string problem = null;
+                try { found = Brain.CloudModels(key); }
+                catch (BrainException error) { problem = error.Message; }
+                catch (Exception error)
+                {
+                    Brain.Log("https://" + probe.Company.ToLowerInvariant() + "/models", -1, error.Message);
+                    Cloud now = Brain.Remote;
+                    problem = now != null && now.Key == key && now.Model != null ? probe.Company + " is slow. Using " + now.Model + "." : "Couldn't reach " + probe.Company + ". Check your internet.";
+                }
+                Dispatcher.UIThread.Post(delegate
+                {
+                    if (problem != null)
+                    {
+                        if (connecting || Brain.Remote != null) ShowProblem(Brain.Brief(problem) ?? (problem.Length > 60 ? problem.Substring(0, 57) + "..." : problem));
+                        return;
+                    }
+                    if (connecting)
+                    {
+                        Cloud remote = new Cloud(key, Brain.DefaultCloudModel(probe.Kind, found));
+                        if (remote.Model == null) { ShowProblem("That key can't use any chat models."); return; }
+                        try { Keys.Save(remote.Kind == "nvidia" ? "nvidia" : "paid", key); }
+                        catch (Exception error) { Brain.Log(Keys.Folder, -1, "Couldn't save the brain key: " + error.Message); ShowProblem("Couldn't save your key in Keychain."); return; }
+                        Brain.Cancel();
+                        ++asking;
+                        Brain.Remote = remote;
+                        Brain.Forget();
+                        Saved.Tier = remote.Kind == "nvidia" ? 1 : 2;
+                        Keep(remote);
+                    }
+                    Cloud current = Brain.Remote;
+                    if (current == null || current.Key != key) return;
+                    BrainProblem = null;
+                    cloudModels = found;
+                    if (current.Model == null || !found.Contains(current.Model))
+                    {
+                        current.Model = Brain.DefaultCloudModel(current.Kind, found) ?? current.Model;
+                        Keep(current);
+                    }
+                    Brain.Model = current.Model;
+                    ShowBrains(ollamaModels);
+                    if (connecting) Reply(++asking, BrainHeard, "Brain online. I'm thinking with " + current.Name + " " + current.Model + " now.");
+                });
+            });
+        }
+
+        private void ShowProblem(string problem)
+        {
+            BrainProblem = problem;
+            ShowState();
+        }
+
+        private void ShowState() { }
+
         internal void FindBrain()
         {
+            Cloud remote = Brain.Remote;
+            if (remote != null) { ListCloud(remote.Key, false); return; }
             string saved = Saved.Model;
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -1261,7 +1450,7 @@ namespace CapriDesktop
                 catch (Exception) { }
                 Dispatcher.UIThread.Post(delegate
                 {
-                    if (Brain.Model != null || model == null) return;
+                    if (Brain.Remote != null || Brain.Model != null || model == null) return;
                     Brain.Model = model;
                     Saved.Model = model;
                     Save();

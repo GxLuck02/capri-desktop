@@ -39,6 +39,7 @@ namespace CapriDesktop
         private int arrivalsBefore;
         private double outFrom = -1;
         private TcpListener fakeVoice;
+        private TcpListener fakeBrain;
         private readonly List<string> voiceAsked = new List<string>();
         private readonly List<byte[]> spoken = new List<byte[]>();
 
@@ -581,6 +582,51 @@ namespace CapriDesktop
                     if (File.Exists(old) || moved != "old-key-9876") throw new Exception("The old voice-key file didn't move into Keychain: " + moved);
                 }
                 checks.Add("PASS keys: API keys save, read back and are forgotten " + (OperatingSystem.IsMacOS() ? "in Keychain, and the old voice-key file moves in and is deleted only once it's safely there" : "in a file only they can read"));
+                Brain.Nvidia = FakeBrain();
+                Brain.Ollama = Brain.Nvidia;
+                pet.RefreshBrains();
+                return true;
+            }
+            if (step == 23)
+            {
+                if (pet.OllamaModels == null) return false;
+                if (string.Join(" | ", pet.OllamaModels) != "gemma4:e2b | qwen3:4b") throw new Exception("NORMAL didn't list her Ollama models: " + string.Join(" | ", pet.OllamaModels));
+                pet.ChooseTier(1);
+                if (pet.Saved.Tier != 1 || pet.Brain.Remote != null) throw new Exception("HIGHER with no key didn't stay on her local brain.");
+                pet.ConnectText("hello");
+                if (pet.BrainProblem != "That isn't an NVIDIA, OpenAI, Claude or DeepSeek key.") throw new Exception("A key in no known format wasn't refused: " + pet.BrainProblem);
+                pet.ConnectText("nvapi-bad-0000");
+                return true;
+            }
+            if (step == 24)
+            {
+                if (pet.BrainProblem == "Checking key...") return false;
+                if (pet.BrainProblem != "Key rejected. Press Forget, then paste it again." || pet.Brain.Remote != null || Keys.Read("nvidia") != null) throw new Exception("A rejected NVIDIA key was kept or not explained: " + pet.BrainProblem);
+                pet.ConnectText("nvapi-good-1234");
+                return true;
+            }
+            if (step == 25)
+            {
+                const string Nemotron = "nvidia/nemotron-3.5-super-vl-120b-a12b";
+                if (pet.Brain.Remote == null || pet.CloudModels == null)
+                {
+                    if (pet.BrainProblem != "Checking key...") throw new Exception("A good NVIDIA key didn't connect: " + pet.BrainProblem);
+                    return false;
+                }
+                string json = pet.SettingsJson;
+                if (pet.Saved.Tier != 1 || pet.Brain.Remote.Model != Nemotron || pet.Brain.Model != Nemotron || pet.Saved.NvidiaModel != Nemotron || Keys.Read("nvidia") != "nvapi-good-1234") throw new Exception("A good NVIDIA key didn't become her brain: " + pet.Saved.Tier + " | " + pet.Brain.Model + " | " + pet.Saved.NvidiaModel);
+                if (json.IndexOf("nvapi", StringComparison.Ordinal) >= 0 || json.IndexOf("\"Tier\":1", StringComparison.Ordinal) < 0) throw new Exception("cross.json holds the key, or not the tier: " + json);
+                pet.ShowBrains(pet.OllamaModels);
+                if (string.Join(" | ", pet.CloudModels) != Nemotron + " | openai/gpt-oss-20b" || pet.BrainChoices != 2) throw new Exception("The Brain menu didn't list the NVIDIA models: " + string.Join(" | ", pet.CloudModels));
+                pet.PickModel("openai/gpt-oss-20b");
+                if (pet.Brain.Model != "openai/gpt-oss-20b" || pet.Saved.NvidiaModel != "openai/gpt-oss-20b") throw new Exception("Picking an NVIDIA model didn't stick.");
+                checks.Add("PASS brain tiers: a key in no known format and a rejected key are explained and dropped, a good NVIDIA key goes in Keychain, picks its best model and never lands in cross.json");
+                pet.ForgetText();
+                if (pet.Saved.Tier != 0 || pet.Brain.Remote != null || Keys.Read("nvidia") != null || pet.Saved.NvidiaModel != null || pet.CloudModels != null) throw new Exception("Forget didn't drop the NVIDIA key and go back to NORMAL.");
+                pet.ShowBrains(pet.OllamaModels);
+                if (pet.BrainChoices != 2) throw new Exception("Back on NORMAL, the Brain menu didn't list Ollama models again.");
+                checks.Add("PASS forget: Forget removes the key from Keychain and she goes back to her local brain");
+                fakeBrain.Stop();
                 Send(shelf, "quit");
                 Finish(null);
                 return true;
@@ -590,37 +636,81 @@ namespace CapriDesktop
 
         private string FakeVoice()
         {
-            fakeVoice = new TcpListener(IPAddress.Loopback, 0);
-            fakeVoice.Start();
-            TcpListener listener = fakeVoice;
-            Thread serve = new Thread(delegate()
+            fakeVoice = Listen(Serve);
+            return "http://127.0.0.1:" + ((IPEndPoint)fakeVoice.LocalEndpoint).Port;
+        }
+
+        // Stands in for NVIDIA's /v1/models and Ollama's /api/tags.
+        private string FakeBrain()
+        {
+            fakeBrain = Listen(ServeBrain);
+            return "http://127.0.0.1:" + ((IPEndPoint)fakeBrain.LocalEndpoint).Port;
+        }
+
+        private static TcpListener Listen(Action<NetworkStream> serve)
+        {
+            TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            Thread loop = new Thread(delegate()
             {
                 while (true)
                 {
                     TcpClient client;
                     try { client = listener.AcceptTcpClient(); }
                     catch (Exception) { return; }
-                    try { using (client) Serve(client.GetStream()); }
+                    try { using (client) serve(client.GetStream()); }
                     catch (Exception) { }
                 }
             });
-            serve.IsBackground = true;
-            serve.Start();
-            return "http://127.0.0.1:" + ((IPEndPoint)fakeVoice.LocalEndpoint).Port;
+            loop.IsBackground = true;
+            loop.Start();
+            return listener;
+        }
+
+        // Reads up to the blank line after the headers; whatever came after it stays in read.
+        private static int ReadHead(NetworkStream stream, List<byte> read)
+        {
+            byte[] chunk = new byte[4096];
+            int end = -1;
+            while (end < 0)
+            {
+                int got = stream.Read(chunk, 0, chunk.Length);
+                if (got <= 0) return -1;
+                for (int i = 0; i < got; i++) read.Add(chunk[i]);
+                for (int i = 3; i < read.Count && end < 0; i++) if (read[i - 3] == 13 && read[i - 2] == 10 && read[i - 1] == 13 && read[i] == 10) end = i + 1;
+            }
+            return end;
+        }
+
+        private static void Answer(NetworkStream stream, int status, string type, byte[] reply)
+        {
+            byte[] top = Encoding.ASCII.GetBytes("HTTP/1.1 " + status + " " + (status == 200 ? "OK" : "Error") + "\r\nContent-Type: " + type + "\r\nContent-Length: " + reply.Length + "\r\nConnection: close\r\n\r\n");
+            stream.Write(top, 0, top.Length);
+            stream.Write(reply, 0, reply.Length);
+            stream.Flush();
+        }
+
+        private void ServeBrain(NetworkStream stream)
+        {
+            List<byte> read = new List<byte>();
+            int end = ReadHead(stream, read);
+            if (end < 0) return;
+            string[] lines = Encoding.ASCII.GetString(read.ToArray(), 0, end).Split(new[] { "\r\n" }, StringSplitOptions.None);
+            string path = lines[0].Split(' ')[1];
+            string key = "";
+            foreach (string line in lines) if (line.StartsWith("Authorization: Bearer ", StringComparison.OrdinalIgnoreCase)) key = line.Substring(22).Trim();
+            if (path.StartsWith("/api/tags", StringComparison.Ordinal)) Answer(stream, 200, "application/json", Encoding.UTF8.GetBytes("{\"models\":[{\"name\":\"gemma4:e2b\"},{\"name\":\"qwen3:4b\"}]}"));
+            else if (path.StartsWith("/v1/models", StringComparison.Ordinal) && key == "nvapi-good-1234") Answer(stream, 200, "application/json", Encoding.UTF8.GetBytes("{\"data\":[{\"id\":\"openai/gpt-oss-20b\"},{\"id\":\"nvidia/nemotron-3.5-super-vl-120b-a12b\"}]}"));
+            else if (path.StartsWith("/v1/models", StringComparison.Ordinal)) Answer(stream, 401, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"Invalid key\"}"));
+            else Answer(stream, 404, "application/json", Encoding.UTF8.GetBytes("{}"));
         }
 
         private void Serve(NetworkStream stream)
         {
             List<byte> read = new List<byte>();
             byte[] chunk = new byte[4096];
-            int end = -1;
-            while (end < 0)
-            {
-                int got = stream.Read(chunk, 0, chunk.Length);
-                if (got <= 0) return;
-                for (int i = 0; i < got; i++) read.Add(chunk[i]);
-                for (int i = 3; i < read.Count && end < 0; i++) if (read[i - 3] == 13 && read[i - 2] == 10 && read[i - 1] == 13 && read[i] == 10) end = i + 1;
-            }
+            int end = ReadHead(stream, read);
+            if (end < 0) return;
             string head = Encoding.ASCII.GetString(read.ToArray(), 0, end);
             string[] lines = head.Split(new[] { "\r\n" }, StringSplitOptions.None);
             string[] first = lines[0].Split(' ');
@@ -657,10 +747,7 @@ namespace CapriDesktop
                 type = "audio/wav";
             }
             else { status = 404; reply = Encoding.UTF8.GetBytes("{}"); }
-            byte[] top = Encoding.ASCII.GetBytes("HTTP/1.1 " + status + " " + (status == 200 ? "OK" : "Error") + "\r\nContent-Type: " + type + "\r\nContent-Length: " + reply.Length + "\r\nConnection: close\r\n\r\n");
-            stream.Write(top, 0, top.Length);
-            stream.Write(reply, 0, reply.Length);
-            stream.Flush();
+            Answer(stream, status, type, reply);
         }
 
         private Process Shelf(PixelRect rect)
