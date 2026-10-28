@@ -46,6 +46,7 @@ namespace CapriDesktop
         private bool slept;
         private double noticedBefore = -1;
         private bool poppedAgain;
+        private bool hushGlance;
         private int attention;
         private string attentionAsk, attentionSulk;
         private bool attentionAsked, attentionSulked;
@@ -1110,19 +1111,37 @@ namespace CapriDesktop
                 if (!repeatDropped) throw new Exception("A changed screen with the same line wasn't dropped as a repeat: " + asks + " | " + pet.Talk.Reply);
                 return true;
             }
+            if (step == 29 && hushGlance)
+            {
+                if (pet.Glancing) return false;
+                bool hushedQuiet = pet.Talk.Quiet;
+                pet.ToggleShush();
+                pet.Talk.Dismiss();
+                Eyes.Peek = peekWas;
+                pet.Seeing = null;
+                pet.SetWatch(false);
+                if (!hushedQuiet || pet.Shushed || pet.WatchShown) throw new Exception("A glance that came back after Quiet went on was said: " + pet.Talk.Reply);
+                checks.Add("PASS quiet glance: a glance still out when Quiet goes on is dropped, like Windows");
+                Finish(null);
+                return true;
+            }
             if (step == 29)
             {
                 if (pet.Glancing) return false;
                 string told = pet.Talk.Reply;
-                Eyes.Peek = peekWas;
-                pet.Seeing = null;
-                pet.SetWatch(false);
                 List<string[]> gnome = Eyes.QuietTools(false, "wayland", "ubuntu:GNOME"), x11 = Eyes.QuietTools(false, "x11", "XFCE"), kde = Eyes.QuietTools(false, "wayland", "KDE");
                 bool quietRight = gnome.Count == 1 && gnome[0][0] == "grim" && x11.Count == 4 && x11[0][0] == "import" && kde[0][0] == "spectacle" && Eyes.QuietTools(true, null, null)[0][0] == "screencapture";
-                if (told != Eyes.Unwatchable || pet.WatchShown || !quietRight) throw new Exception("Watching without a quiet screenshot tool went wrong: " + told + " | " + quietRight);
+                if (told != Eyes.Unwatchable || !quietRight) throw new Exception("Watching without a quiet screenshot tool went wrong: " + told + " | " + quietRight);
                 checks.Add("PASS watch my screen: she glances, comments on what she sees, skips a screen that hasn't changed and a line she already said, and says once when this desktop can't take quiet screenshots");
-                Finish(null);
-                return true;
+                // A new screen with a new line, but Quiet goes on while she's looking.
+                pet.Talk.Dismiss();
+                Eyes.Peek = delegate { return FakeScreen(new SkiaSharp.SKColor(240, 200, 20)); };
+                pet.Seeing = delegate(byte[] shot, string question) { return "SAW: a yellow spreadsheet. SAY: Spreadsheets at this hour, choom?"; };
+                pet.Glance(pet.Now);
+                pet.ToggleShush();
+                pet.Talk.Dismiss();
+                hushGlance = true;
+                return false;
             }
             return false;
         }

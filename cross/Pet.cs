@@ -2167,7 +2167,7 @@ namespace CapriDesktop
                 try { idle = read(); }
                 catch (Exception) { }
                 // Only while someone's at the computer, like on Windows. A desktop that doesn't say counts as someone there.
-                Dispatcher.UIThread.Post(delegate { popChecking = false; if (idle <= 60 && CanPop) PopIn(); });
+                Dispatcher.UIThread.Post(delegate { popChecking = false; if (idle <= 60 && CanPop && !shushed && !Saved.NoCheckIns) PopIn(); });
             });
         }
 
@@ -2501,7 +2501,7 @@ namespace CapriDesktop
             if (blind)
             {
                 // Said once each time Watch my screen goes on; she keeps trying quietly in case a tool turns up.
-                if (!watchTold && Talk.Quiet && !away) { watchTold = true; Blurt("(watch my screen)", Eyes.Unwatchable); }
+                if (!watchTold && Talk.Quiet && !away && !shushed) { watchTold = true; Blurt("(watch my screen)", Eyes.Unwatchable); }
                 return;
             }
             if (!looked) return;
@@ -2512,11 +2512,12 @@ namespace CapriDesktop
                 lastPrint = null;
                 // A brain that turned out not to see gets said once, like Windows' Mainframe note; other errors go in errors.txt.
                 string unseen = Unseeing();
-                if (unseen != null && !watchTold && Talk.Quiet && !away) { watchTold = true; Blurt("(watch my screen)", unseen); }
+                if (unseen != null && !watchTold && Talk.Quiet && !away && !shushed) { watchTold = true; Blurt("(watch my screen)", unseen); }
                 return;
             }
             if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
-            if (ticket != asking || away || dragging || !Talk.Quiet) { lastPrint = null; Glimpsed(saw); return; }
+            // Quiet going on while she looked drops the line too, like on Windows.
+            if (ticket != asking || away || shushed || dragging || !Talk.Quiet) { lastPrint = null; Glimpsed(saw); return; }
             // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
             if (Glances.Repeats(said, RecentGlances(Now), Brain.Nickname)) { Glimpsed(saw); return; }
             glanced.Add(Tuple.Create(Now, said));
