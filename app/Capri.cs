@@ -10211,6 +10211,23 @@ namespace CapriDesktop
                                         { "این آهنگ رو دوست دارم", "", "false" },
                                         { "פתח את ספוטיפיי", "", "true" },
                                         { "סגור, נדבר מחר", "", "false" },
+                                        { "স্পটিফাই খোলো", "", "true" },
+                                        { "আমি এই গানটা ভালোবাসি", "", "false" },
+                                        { "स्पॉटिफाय उघड", "", "true" },
+                                        { "मला हे गाणं आवडतं", "", "false" },
+                                        { "સ્પોટિફાય ખોલ", "", "true" },
+                                        { "મને આ ગીત ગમે છે", "", "false" },
+                                        { "ਸਪੋਟੀਫਾਈ ਖੋਲ੍ਹੋ", "", "true" },
+                                        { "ਮੈਨੂੰ ਇਹ ਗੀਤ ਪਸੰਦ ਹੈ", "", "false" },
+                                        { "Spotify-ஐ திற", "", "true" },
+                                        { "எனக்கு இந்த பாட்டு பிடிக்கும்", "", "false" },
+                                        { "Spotify open pannu", "", "true" },
+                                        { "Spotify తెరువు", "", "true" },
+                                        { "నాకు ఈ పాట ఇష్టం", "", "false" },
+                                        { "Spotify ತೆರೆ", "", "true" },
+                                        { "ನನಗೆ ಈ ಹಾಡು ಇಷ್ಟ", "", "false" },
+                                        { "Spotify തുറക്കൂ", "", "true" },
+                                        { "എനിക്ക് ഈ പാട്ട് ഇഷ്ടമാണ്", "", "false" },
                                         { "open spotify and shuffle my liked songs", "play_music|Liked Songs|playlist|spotify", "true" },
                                         { "play After Hours on YouTube", "play_music|After Hours|song|youtube", "true" },
                                         { "play something", "play_music|Chippin' In|song|", "true" },
@@ -10253,7 +10270,7 @@ namespace CapriDesktop
                                         || !Hands.Follows("YouTube stp", "mets de la musique", "Spotify ou YouTube ?") || !Hands.Follows("le deuxième", "ouvre minecraft", "Minecraft Launcher ou Minecraft: Java Edition ?")
                                         || !Hands.Follows("same again", "open Spotify", "Opened Spotify.") || Hands.Follows("yes", "open Spotify", "Opened Spotify.")
                                         || Hands.Follows("no thanks", "play some music", "Spotify or YouTube?") || Hands.Follows("the second one", "which game is better?", "Which one do you like?")) throw new Exception("Follow-up routing was wrong.");
-                                    checks.Add("PASS request routing: 208 messages in 43 languages, casual game and music chat, named commands, unknown games and follow-up choices");
+                                    checks.Add("PASS request routing: 225 messages in 51 languages, casual game and music chat, named commands, unknown games and follow-up choices");
                                     string[,] loudAsks =
                                     {
                                         { "turn up the volume", "volume_up||" }, { "can you turn the volume up a bit please", "volume_up|6|" }, { "crank it up", "volume_up||" }, { "make it louder", "volume_up||" },
@@ -10562,6 +10579,9 @@ namespace CapriDesktop
                                         || !Hands.Refused("За съжаление не мога да отворя Spotify.") || !Hands.Refused("Skużani, ma nistax niftaħ Spotify.") || Hands.Refused("Ma ei saa oodata!") || Hands.Refused("Ne morem čakati!") || Hands.Refused("Не мога да чакам!")
                                         || !Hands.Refused("معاف کیجیے، میں سپوٹیفائی نہیں کھول سکتی۔") || !Hands.Refused("متأسفم، نمی تونم اسپاتیفای رو باز کنم.") || !Hands.Refused("متاسفانه به کامپیوترت دسترسی ندارم.") || !Hands.Refused("מצטערת, אני לא יכולה לפתוח את ספוטיפיי.")
                                         || Hands.Refused("میں انتظار نہیں کر سکتی!") || Hands.Refused("אני לא יכולה לחכות!")
+                                        || !Hands.Refused("দুঃখিত, আমি স্পটিফাই খুলতে পারব না।") || !Hands.Refused("माफ कर, मी स्पॉटिफाय उघडू शकत नाही.") || !Hands.Refused("માફ કરજો, હું સ્પોટિફાય ખોલી શકતી નથી.") || !Hands.Refused("ਮਾਫ਼ ਕਰਨਾ, ਮੈਂ ਸਪੋਟੀਫਾਈ ਨਹੀਂ ਖੋਲ੍ਹ ਸਕਦੀ।")
+                                        || !Hands.Refused("மன்னிக்கவும், என்னால் Spotify-ஐ திறக்க முடியாது.") || !Hands.Refused("క్షమించండి, నేను Spotify తెరవలేను.") || !Hands.Refused("ಕ್ಷಮಿಸಿ, ನನಗೆ Spotify ತೆರೆಯಲು ಸಾಧ್ಯವಿಲ್ಲ.") || !Hands.Refused("ക്ഷമിക്കണം, എനിക്ക് Spotify തുറക്കാൻ കഴിയില്ല.")
+                                        || Hands.Refused("আমি অপেক্ষা করতে পারছি না!") || Hands.Refused("என்னால் காத்திருக்க முடியாது!") || Hands.Refused("నేను వేచి ఉండలేను!") || Hands.Refused("എനിക്ക് കാത്തിരിക്കാൻ കഴിയില്ല!")
                                         || Hands.Refused("我等不及了！") || Hands.Refused("待ちきれません！") || Hands.Refused("너무 좋아서 멈출 수 없어") || Hands.Refused("Aku tidak bisa berhenti mendengarkan lagu ini")) throw new Exception("Refusals were spotted wrong.");
                                     if (!Hands.Requested("can you get me some tunes?") || !Hands.Requested("gimme some tunes") || !Hands.Requested("¿me pones música?") || !Hands.Requested("kannst du Musik abspielen?") || !Hands.Requested("можешь включить музыку?") || Hands.Requested("do you play valorant?") || Hands.Requested("what can you do?") || Hands.Requested("spielst du Valorant?")
                                         || !Hands.Requested("你能放首歌吗？") || Hands.Requested("你玩Valorant吗？") || !Hands.Requested("音楽をかけてくれる？") || Hands.Requested("Valorantやってる？") || !Hands.Requested("음악 틀어 줄래?") || Hands.Requested("발로란트 해?")
@@ -10572,7 +10592,9 @@ namespace CapriDesktop
                                         || !Hands.Requested("pots obrir Spotify?") || Hands.Requested("jugues a Valorant?") || !Hands.Requested("možeš li da otvoriš Spotify?") || Hands.Requested("igraš li Valorant?")
                                         || !Hands.Requested("kas sa saad avada Spotify?") || Hands.Requested("kas sa mängid Valoranti?") || !Hands.Requested("lahko odpreš Spotify?") || Hands.Requested("ali igraš Valorant?")
                                         || !Hands.Requested("tista' tiftaħ Spotify?") || Hands.Requested("tilgħab Valorant?")
-                                        || !Hands.Requested("کیا تم سپوٹیفائی کھول سکتی ہو؟") || Hands.Requested("کیا تم ویلورنٹ کھیلتی ہو؟") || !Hands.Requested("میتونی اسپاتیفای رو باز کنی؟") || !Hands.Requested("את יכולה לפתוח את ספוטיפיי?") || Hands.Requested("את משחקת ולורנט?")) throw new Exception("Requests and questions about her were told apart wrong.");
+                                        || !Hands.Requested("کیا تم سپوٹیفائی کھول سکتی ہو؟") || Hands.Requested("کیا تم ویلورنٹ کھیلتی ہو؟") || !Hands.Requested("میتونی اسپاتیفای رو باز کنی؟") || !Hands.Requested("את יכולה לפתוח את ספוטיפיי?") || Hands.Requested("את משחקת ולורנט?")
+                                        || !Hands.Requested("তুমি কি স্পটিফাই খুলতে পারবে?") || Hands.Requested("তুমি কি ভ্যালোরেন্ট খেলো?") || !Hands.Requested("Spotify-ஐ திறக்க முடியுமா?") || Hands.Requested("நீ Valorant விளையாடுவாயா?")
+                                        || !Hands.Requested("Spotify తెరవగలవా?") || !Hands.Requested("Spotify ತೆರೆಯಬಹುದಾ?") || !Hands.Requested("Spotify തുറക്കാമോ?") || Hands.Requested("നീ Valorant കളിക്കുമോ?")) throw new Exception("Requests and questions about her were told apart wrong.");
                                     System.Collections.Generic.List<string> refusedAsked = new System.Collections.Generic.List<string>();
                                     System.Net.Sockets.TcpListener refusedFake;
                                     Brain.Ollama = FakeServer(new string[]
@@ -10599,7 +10621,7 @@ namespace CapriDesktop
                                         if (refusedTunes != "Lofi's on, choom." || refusedGame != "I can't play Valorant, I'm a desktop pet." || refusedThing != "I can't open that one." || refusedRan != "play_music|lofi beats" || refusedCalls != 6) throw new Exception("A refusal of something she can do wasn't tried with her hands: " + refusedTunes + " / " + refusedGame + " / " + refusedThing + " / " + refusedRan + " / " + refusedCalls);
                                     }
                                     finally { Brain.Ollama = splitOllama; refusedFake.Stop(); }
-                                    checks.Add("PASS no false refusals: when her reply says she can't open, play or access something they asked for (in 43 languages), her hands try it first; questions about her, and things her hands can't do, keep the reply");
+                                    checks.Add("PASS no false refusals: when her reply says she can't open, play or access something they asked for (in 51 languages), her hands try it first; questions about her, and things her hands can't do, keep the reply");
 
                                     System.Collections.Generic.List<string> reachAsked = new System.Collections.Generic.List<string>();
                                     System.Net.Sockets.TcpListener reachFake;
