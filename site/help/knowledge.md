@@ -1089,12 +1089,13 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Opening apps and websites, playing songs on Spotify, skipping tracks, what's playing, volume
 - "Playing Capri" on your Discord profile, with Show on Discord in Settings
 - Right-click her > Help > Copy error details, with your system, desktop and her brain at the top
+- "Check my screen": she looks when you ask (see "Check my screen on Mac and Linux" below)
 
 ### Not yet
 - No Mainframe. Everything is in her right-click menu.
 - No voice chat: "Voice chat isn't on Mac and Linux yet. Type to me for now, choom."
 - No built-in brain. Use Ollama or an API key.
-- No keyboard shortcuts, closing or switching windows, screen watching or mouse and keyboard jobs.
+- No keyboard shortcuts, closing or switching windows, Watch my screen (she only looks when you ask) or mouse and keyboard jobs.
 - No automatic updates. She says when a new version is out, and right-click her > Get Capri X opens its download page.
 - No transcripts or memories.md yet. She remembers the recent chat and her notes.
 
@@ -1121,6 +1122,12 @@ Tray or menu bar icon: Talk to her, Hide her / Show her, Bring her back, Quit Ca
 - "Key saved, but your ElevenLabs account has no voices yet. Add one at elevenlabs.io." Make a voice first (section 11).
 - "ElevenLabs rejected the key. Settings > Voice > New key."
 - Remove key ending XXXX removes it.
+
+### Check my screen on Mac and Linux
+Ask "check my screen", "what's on my screen?" or "can you see this?". She takes a screenshot and her brain looks at it.
+- Her brain has to see pictures: a free NVIDIA key (nvidia/nemotron-3.5-super-vl-120b-a12b), a Claude or OpenAI key, or an Ollama model that can see pictures. DeepSeek can't.
+- Mac: the first time, macOS asks to let Capri record the screen. If she only describes your wallpaper, allow Capri under System Settings > Privacy & Security > Screen Recording, then reopen her.
+- Linux: she uses your desktop's screenshot tool: spectacle (KDE), gnome-screenshot (GNOME), grim (Sway, Hyprland and other wlroots desktops), or ImageMagick, scrot or maim on X11. If none is installed she says so; install one and ask again. GNOME on Wayland may refuse apps' screenshots.
 
 ### A free NVIDIA key on Mac and Linux
 No Ollama needed, and nothing to download.

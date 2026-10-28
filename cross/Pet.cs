@@ -294,6 +294,7 @@ namespace CapriDesktop
             if (Program.Smoke == null) Sfx.Out = Limbs.Sound;
             if (Program.Smoke == null) Brain.Load(Path.Combine(folder, "chat.json"));
             Limbs.Attach(Brain);
+            Hands.Look = LookAt;
             if (Program.Smoke == null) presence = new Presence(System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
             // A cloud key they saved thinks for her instead of Ollama, on the model they picked.
             string brainKey = ReadSecret(BrainKeyFile);
@@ -514,6 +515,29 @@ namespace CapriDesktop
                 if (clip == dance || clip == perchDance) return "Dancing to music";
                 return "Hanging out";
             }
+        }
+
+        // "Check my screen": her brain looks at a screenshot, like on Windows. Only when they ask, since she doesn't watch by herself here yet.
+        private string LookAt(string focus)
+        {
+            Cloud remote = Brain.Remote;
+            if (Brain.Model == null) return "You can't see their screen: your brain is offline.";
+            if (remote != null && remote.Kind == "deepseek") return "You can't see their screen: DeepSeek can't look at pictures. Tell them a free NVIDIA key can (right-click you > Brain > Get a free NVIDIA key).";
+            byte[] shot = Eyes.Jpeg(Eyes.Shoot(), 1280);
+            if (shot == null) return Eyes.Missing;
+            string seen;
+            try
+            {
+                seen = Brain.See(shot, "You describe screenshots accurately and briefly.", "Describe what's on this screen in two or three plain sentences: what kind of game or app it is (name it only if the name is on screen), what's happening, and any text or numbers that matter. Don't guess who a person is from their face; name someone only if their name is written on screen." + (string.IsNullOrWhiteSpace(focus) ? "" : " Pay attention to: " + focus.Trim()), 160);
+            }
+            catch (BrainException error)
+            {
+                if (remote == null || error.Message != Brain.Sightless(remote)) throw;
+                return "You can't see their screen: " + remote.Model + " can't look at pictures. Tell them to pick one that can " + Brain.BrainMenu + (remote.Kind == "nvidia" ? ", like nvidia/nemotron-3.5-super-vl-120b-a12b." : ".");
+            }
+            if (seen.Length == 0) return "You looked but couldn't make out their screen.";
+            Brain.Saw(seen, null, true);
+            return "You looked at their screen. You see: " + seen;
         }
 
         // Her version, the system, her brain and voice, then the last 25 lines of errors.txt, for pasting in the Discord.

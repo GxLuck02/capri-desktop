@@ -322,6 +322,25 @@ namespace CapriDesktop
                 if (updateChoice != "Get Capri 99.1.0" || updateNews != "Capri 99.1.0 is out. Right-click me > Get Capri 99.1.0." || updatePage != "https://github.com/lachydotmcg/capri-desktop/releases/tag/v99.1.0") throw new Exception("A newer release wasn't offered: " + updateChoice + " | " + updateNews + " | " + updatePage);
                 if (updateAgain != null || updateKept != "Get Capri 99.1.0" || draftChoice != null || oddPage != "https://github.com/lachydotmcg/capri-desktop/releases/latest" || olderChoice != null || pet.UpdateChoice != null || !oddTags) throw new Exception("The update notice went wrong: " + updateAgain + " | " + updateKept + " | " + draftChoice + " | " + oddPage + " | " + olderChoice + " | " + pet.UpdateChoice + " | " + oddTags);
                 checks.Add("PASS updates: a newer GitHub release puts Get Capri X in her right-click menu and she says so once; older releases, drafts, odd tags and other sites don't");
+                // Check my screen: the right screenshot tool for the desktop, shrunk to a JPEG, and a plain answer when no tool works.
+                bool toolsRight = Eyes.Tools(true, null, null)[0][0] == "screencapture" && Eyes.Tools(false, "x11", "XFCE")[0][0] == "import" && Eyes.Tools(false, "wayland", "KDE")[0][0] == "spectacle"
+                    && Eyes.Tools(false, "wayland", "ubuntu:GNOME")[0][0] == "gnome-screenshot" && Eyes.Tools(false, "wayland", "Hyprland")[0][0] == "grim" && Eyes.Tools(false, "wayland", "Hyprland").Count == 3;
+                byte[] wideShot;
+                using (SkiaSharp.SKBitmap wide = new SkiaSharp.SKBitmap(2000, 1000))
+                {
+                    wide.Erase(new SkiaSharp.SKColor(30, 200, 120));
+                    using (SkiaSharp.SKImage image = SkiaSharp.SKImage.FromBitmap(wide))
+                    using (SkiaSharp.SKData png = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100)) wideShot = png.ToArray();
+                }
+                byte[] smallShot = Eyes.Jpeg(wideShot, 1280);
+                bool shrunk = smallShot != null && smallShot.Length > 3 && smallShot[0] == 0xFF && smallShot[1] == 0xD8;
+                if (shrunk) using (SkiaSharp.SKBitmap back = SkiaSharp.SKBitmap.Decode(smallShot)) shrunk = back != null && back.Width == 1280 && back.Height == 640;
+                Func<byte[]> shootWas = Eyes.Shoot;
+                Eyes.Shoot = delegate { return null; };
+                string noShot = Hands.Do("look_at_screen", new ToolArguments());
+                Eyes.Shoot = shootWas;
+                if (!toolsRight || !shrunk || noShot != Eyes.Missing || Eyes.Jpeg(new byte[] { 1, 2, 3 }, 1280) != null) throw new Exception("Check my screen went wrong: " + toolsRight + " | " + shrunk + " | " + noShot);
+                checks.Add("PASS check my screen: the right screenshot tool for Mac, X11, KDE, GNOME or wlroots desktops, shrunk to a 1280-wide JPEG for her brain, and a plain answer when no tool works");
                 // Her Discord status: the switch, plain states, and Discord's socket found by name in its temp folder.
                 string ipcFolder = Path.Combine(folder, "ipc");
                 Directory.CreateDirectory(ipcFolder);
