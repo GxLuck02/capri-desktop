@@ -9764,6 +9764,25 @@ namespace CapriDesktop
                                     if (!Speaker.Speakers(2).Contains("no speakers or headphones") || !Speaker.Speakers(4).Contains("another app") || !Speaker.Speakers(32).Contains("error 32")) throw new Exception("Speaker errors read wrong: " + Speaker.Speakers(4));
                                     if (stay != "Playing I Really Want to Stay at Your House on Spotify." || stayRun != "spotify:track:42W7fJXB7razFefTxMSyYp" || stayShort != stay || stayShortRun != stayRun) throw new Exception("I Really Want to Stay at Your House didn't play the Rosa Walton track: " + stay + " / " + stayShort);
                                     checks.Add("PASS Spotify discovery: Store names and IDs, classic shortcuts, French paths, and an executable without a shortcut all open and play with no running window");
+                                    // When Windows' wave API won't open the speakers, her voice goes out through WASAPI: a moment of silence here.
+                                    Speaker.SkipWave = true;
+                                    Speaker wasapi = new Speaker(false);
+                                    string wasapiProblem = null;
+                                    try { wasapi.Open(24000); }
+                                    catch (VoiceException error) { wasapiProblem = error.Message; }
+                                    finally { Speaker.SkipWave = false; }
+                                    if (wasapiProblem != null) checks.Add("LIMIT her WASAPI speakers didn't open here: " + wasapiProblem);
+                                    else
+                                    {
+                                        wasapi.Play(new short[2400]);
+                                        Stopwatch wasapiWait = Stopwatch.StartNew();
+                                        while (wasapi.ModernFed <= 0 && wasapiWait.ElapsedMilliseconds < 1000) Thread.Sleep(10);
+                                        long wasapiFed = wasapi.ModernFed;
+                                        bool wasapiUsed = wasapi.Modern;
+                                        wasapi.Close();
+                                        if (!wasapiUsed || wasapiFed <= 0 || wasapi.Modern) throw new Exception("Her WASAPI speakers didn't play: modern " + wasapiUsed + ", fed " + wasapiFed);
+                                        checks.Add("PASS speakers: when Windows' wave API won't open the speakers, her voice goes out through WASAPI (" + wasapiFed + " samples in " + wasapiWait.ElapsedMilliseconds + " ms)");
+                                    }
                                     Hands.Run = delegate(string id) { ran.Add(id); };
                                     Hands.Exists = delegate { return false; };
                                     System.Collections.Generic.List<InstalledApp> duplicates = new System.Collections.Generic.List<InstalledApp> { new InstalledApp("Musique et podcasts", spotifyId), new InstalledApp("Spotify", spotifyPath) };
