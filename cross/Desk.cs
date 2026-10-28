@@ -37,6 +37,8 @@ namespace CapriDesktop
         internal abstract Spot Find(long window);
         internal abstract bool Alive(long window);
         internal virtual string Debug() { return ""; }
+        // Where the mouse is on the whole desktop, in pixels, or null where the desktop won't say (Wayland).
+        internal virtual PixelPoint? Pointer() { return null; }
 
         protected bool Fills(PixelRect bounds)
         {
@@ -144,6 +146,9 @@ namespace CapriDesktop
         [DllImport(Foundation)] [return: MarshalAs(UnmanagedType.I1)] private static extern bool CFNumberGetValue(IntPtr number, long type, out double value);
         [DllImport(Foundation)] [return: MarshalAs(UnmanagedType.I1)] private static extern bool CFBooleanGetValue(IntPtr boolean);
         [DllImport(Foundation)] private static extern void CFRelease(IntPtr value);
+        [StructLayout(LayoutKind.Sequential)] private struct Place { internal double X, Y; }
+        [DllImport(Graphics)] private static extern IntPtr CGEventCreate(IntPtr source);
+        [DllImport(Graphics)] private static extern Place CGEventGetLocation(IntPtr e);
         private readonly IntPtr number;
         private readonly IntPtr layer;
         private readonly IntPtr frame;
@@ -168,6 +173,18 @@ namespace CapriDesktop
         internal override string Name { get { return "macOS"; } }
 
         internal override double Points { get { return CGDisplayBounds(CGMainDisplayID()).Width; } }
+
+        internal override PixelPoint? Pointer()
+        {
+            IntPtr e = CGEventCreate(IntPtr.Zero);
+            if (e == IntPtr.Zero) return null;
+            try
+            {
+                Place at = CGEventGetLocation(e);
+                return new PixelPoint((int)Math.Round(at.X * Scale), (int)Math.Round(at.Y * Scale));
+            }
+            finally { CFRelease(e); }
+        }
 
         internal override List<Spot> Windows(ICollection<long> skip) { return List(OnScreenOnly | ExcludeDesktop, 0, skip, true); }
 
@@ -260,6 +277,7 @@ namespace CapriDesktop
         [DllImport(Library)] private static extern bool XTranslateCoordinates(IntPtr display, IntPtr from, IntPtr to, int x, int y, out int toX, out int toY, out IntPtr child);
         [DllImport(Library)] private static extern IntPtr XSetErrorHandler(IntPtr handler);
         [DllImport(Library)] private static extern int XSync(IntPtr display, bool discard);
+        [DllImport(Library)] private static extern bool XQueryPointer(IntPtr display, IntPtr window, out IntPtr root, out IntPtr child, out int rootX, out int rootY, out int x, out int y, out uint mask);
         private static Handler handler;
         private static IntPtr previous;
         private static IntPtr ours;
@@ -282,6 +300,18 @@ namespace CapriDesktop
         }
 
         internal override string Name { get { return "X11"; } }
+
+        internal override PixelPoint? Pointer()
+        {
+            IntPtr top;
+            IntPtr child;
+            int x;
+            int y;
+            int inX;
+            int inY;
+            uint mask;
+            return XQueryPointer(display, root, out top, out child, out x, out y, out inX, out inY, out mask) ? new PixelPoint(x, y) : (PixelPoint?)null;
+        }
 
         private IntPtr Atom(string name)
         {

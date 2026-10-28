@@ -278,6 +278,22 @@ namespace CapriDesktop
         private long lagIdle, lagTotal;
         private int lagHot;
         private double lagAt = -LagGap, lagSaid = -LagGap;
+        // Asking for attention, like on Windows: with Check in on me on and nobody paying her any mind for about 2 hours while
+        // they're at the computer, she comes over near the mouse and asks. Noticing her gets a happy line; 20 s of nothing gets a
+        // sulk and twice the wait, up to 8 hours.
+        internal const double NudgeGap = 7200;
+        internal static readonly string[] NudgeLines = { "Psst. Remember me? Tiny, glitchy, very important.", "I'm bored. Entertain me.", "Hey. Hey. Look at me.", "You've been ignoring me for ages. Rude.", "Pay attention to me or I start clicking things.", "Knock knock. It's your favourite gremlin.", "Choom. I'm bored out of my many minds." };
+        internal static readonly string[] NoticedLines = { "Finally. Hi.", "There you are.", "Knew you couldn't resist me." };
+        internal static readonly string[] SnubbedLines = { "Fine. Ignore me. See if I care.", "Wow. Ignored. Noted.", "I'll just sit here. Alone. Bored." };
+        private const string NudgeHeard = "(wants attention)";
+        private double noticed = -1;
+        private int noticedClicks, noticedAsked, noticedPets;
+        private double nudgeGap = NudgeGap;
+        private double nudgeOut = -1;
+        private int nudgeAsked;
+        private double nudgeLook;
+        private bool nudgeChecking;
+        private int clicks;
         // Tells the tray menu whether to offer Hide her or Show her, since a pop-in or Talk to her brings her out too.
         internal Action AwayChanged;
         private readonly DispatcherTimer frames = new DispatcherTimer();
@@ -490,6 +506,7 @@ namespace CapriDesktop
         private void SetAway(bool on)
         {
             away = on;
+            ForgetNudges();
             if (AwayChanged != null) AwayChanged();
         }
 
@@ -551,6 +568,7 @@ namespace CapriDesktop
                 if (Program.Smoke == null) CheckPopIn(now);
                 if (Program.Smoke == null) CheckHome(now);
                 if (Program.Smoke == null) CheckLag(now);
+                if (Program.Smoke == null) CheckNudge(now);
             }
             Advance(now);
             Talk.Update(now);
@@ -918,6 +936,7 @@ namespace CapriDesktop
             Point at = e.GetPosition(this);
             if (!Opaque(at)) return;
             pressed = true;
+            clicks++;
             dragging = false;
             downAt = this.PointToScreen(at);
             grab = new PixelPoint(downAt.X - anchor.X, downAt.Y - anchor.Y);
@@ -1686,7 +1705,7 @@ namespace CapriDesktop
             });
         }
 
-        private bool CanPop { get { return !quitting && !dragging && !pressed && !falling && outro == null && popOut < 0 && Talk.Quiet && (ContextMenu == null || !ContextMenu.IsOpen); } }
+        private bool CanPop { get { return !quitting && !dragging && !pressed && !falling && outro == null && popOut < 0 && nudgeOut < 0 && Talk.Quiet && (ContextMenu == null || !ContextMenu.IsOpen); } }
 
         // She glitches out if she's showing, then in at a random spot along the top of her screen, says hi and drops onto a window.
         internal void PopIn()
@@ -1714,12 +1733,11 @@ namespace CapriDesktop
             else GlitchOut(arrive);
         }
 
-        // A line she says by herself, typed out like her replies.
+        // A line she says by herself, typed out like her replies. It leaves asking alone, so it never counts as them asking her something.
         private void Blurt(string heard, string line)
         {
-            int ticket = ++asking;
             Talk.Answer(heard, line);
-            TypeAlong(line, ticket);
+            TypeAlong(line, asking);
         }
 
         // Free for a line of her own: Check in on me on, showing, and not busy with them.
@@ -1802,6 +1820,87 @@ namespace CapriDesktop
             return Desk.Covering(Windows());
         }
 
+        internal void CheckNudge(double now)
+        {
+            bool attending = clicks != noticedClicks || asking != noticedAsked || petTicket != noticedPets || dragging || pressed || Talk.Typing || (ContextMenu != null && ContextMenu.IsOpen);
+            if (noticed < 0 || attending) { noticed = now; noticedClicks = clicks; noticedAsked = asking; noticedPets = petTicket; }
+            if (nudgeOut >= 0)
+            {
+                if (attending)
+                {
+                    nudgeOut = -1;
+                    nudgeGap = NudgeGap;
+                    // A click, a pat, a drag or her menu gets a happy line; talking to her gets her answer instead.
+                    if (!Talk.Typing && asking == nudgeAsked) Blurt("(you noticed)", NoticedLines[random.Next(NoticedLines.Length)]);
+                }
+                else if (now >= nudgeOut && Talk.Quiet)
+                {
+                    nudgeOut = -1;
+                    nudgeGap = Math.Min(nudgeGap * 2, NudgeGap * 4);
+                    noticed = now;
+                    if (!away) Blurt("(ignored)", SnubbedLines[random.Next(SnubbedLines.Length)]);
+                }
+                return;
+            }
+            if (Saved.NoCheckIns || away || nudgeChecking || now < nudgeLook || now - noticed < nudgeGap || !CanPop || (clip != idle && clip != perch)) return;
+            nudgeChecking = true;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                double idle = -1;
+                try { idle = Limbs.IdleSeconds(); }
+                catch (Exception) { }
+                Dispatcher.UIThread.Post(delegate
+                {
+                    nudgeChecking = false;
+                    // Only while they're using the computer, like on Windows. Away, she looks again in a minute.
+                    if (idle > 30) { nudgeLook = Now + 60; return; }
+                    if (Free && Now - noticed >= nudgeGap) Nudge(Now, Mouse());
+                });
+            });
+        }
+
+        private PixelPoint? Mouse()
+        {
+            try { return Desk.Pointer(); }
+            catch (Exception) { return null; }
+        }
+
+        // She asks where she is when she's near the mouse or the desktop won't say where it is; otherwise she glitches over beside it.
+        internal void Nudge(double now, PixelPoint? mouse)
+        {
+            nudgeOut = now + 20;
+            nudgeAsked = asking;
+            string line = NudgeLines[random.Next(NudgeLines.Length)];
+            PixelPoint hip = Hip;
+            PixelRect area = mouse == null ? Area : WorkAt(mouse.Value);
+            int wide = Px(body.Size);
+            if (mouse == null || (area.Contains(hip) && Math.Abs(hip.X - mouse.Value.X) <= Math.Max(Px(300), wide * 2))) { Blurt(NudgeHeard, line); return; }
+            int x = mouse.Value.X - area.X < area.Width / 2 ? mouse.Value.X + wide / 2 : mouse.Value.X - wide - wide / 2;
+            x = Math.Max(area.X, Math.Min(area.Right - wide, x));
+            GlitchOut(delegate
+            {
+                walking = false;
+                seat = null;
+                falling = false;
+                Move(new PixelPoint(x, area.Y));
+                Arrive();
+                Blurt(NudgeHeard, line);
+            });
+        }
+
+        internal void ForgetNudges()
+        {
+            noticed = -1;
+            nudgeOut = -1;
+            nudgeGap = NudgeGap;
+            noticedClicks = clicks;
+            noticedAsked = asking;
+            noticedPets = petTicket;
+        }
+
+        internal double NudgeOut { get { return nudgeOut; } }
+        internal double NudgeWait { get { return nudgeGap; } }
+
         internal double PopOut { get { return popOut; } }
         internal bool CheckIns { get { return !Saved.NoCheckIns; } }
         internal bool CheckInsShown { get { return checkInsItem.IsChecked; } }
@@ -1821,6 +1920,7 @@ namespace CapriDesktop
         {
             Saved.NoCheckIns = !on;
             nextPopIn = -1;
+            ForgetNudges();
             Save();
             Sync();
         }

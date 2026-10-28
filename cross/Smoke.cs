@@ -884,6 +884,26 @@ namespace CapriDesktop
                 pet.SetCheckIns(true);
                 if (!pet.IsVisible || pet.Away || pet.PopOut >= 0 || Array.IndexOf(Pet.PopLines, hello) < 0) throw new Exception("Popping in while she was out went wrong: " + hello + " | away " + pet.Away + " | out " + pet.PopOut);
                 checks.Add("PASS pop-ins while she's out: she glitches over to a new spot at the top of the screen, says hi and stays out");
+                pet.ForgetNudges();
+                pet.Talk.Dismiss();
+                pet.Nudge(pet.Now, null);
+                string ask = pet.Talk.Reply;
+                bool asked = Array.IndexOf(Pet.NudgeLines, ask) >= 0 && pet.NudgeOut > pet.Now;
+                pet.Talk.Dismiss();
+                pet.CheckNudge(pet.NudgeOut + 0.1);
+                string sulk = pet.Talk.Reply;
+                bool sulked = Array.IndexOf(Pet.SnubbedLines, sulk) >= 0 && pet.NudgeOut < 0 && pet.NudgeWait == Pet.NudgeGap * 2;
+                pet.Talk.Dismiss();
+                pet.Nudge(pet.Now, null);
+                pet.Talk.Dismiss();
+                pet.Grab();
+                pet.CheckNudge(pet.Now);
+                string glad = pet.Talk.Reply;
+                pet.Drop();
+                bool welcomed = Array.IndexOf(Pet.NoticedLines, glad) >= 0 && pet.NudgeOut < 0 && pet.NudgeWait == Pet.NudgeGap;
+                pet.ForgetNudges();
+                if (!asked || !sulked || !welcomed) throw new Exception("Asking for attention went wrong: " + ask + " | " + sulk + " | " + glad + " | wait " + pet.NudgeWait);
+                checks.Add("PASS attention: she asks for attention, sulks and waits twice as long when ignored, and picking her up gets a happy line and the usual 2 hours");
                 Finish(null);
                 return true;
             }
