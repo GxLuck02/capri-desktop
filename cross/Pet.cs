@@ -2126,7 +2126,7 @@ namespace CapriDesktop
                     nudgeOut = -1;
                     nudgeGap = Math.Min(nudgeGap * 2, NudgeGap * 4);
                     noticed = now;
-                    if (!away) Blurt("(ignored)", SnubbedLines[random.Next(SnubbedLines.Length)]);
+                    if (!away) Snub();
                 }
                 return;
             }
@@ -2181,6 +2181,19 @@ namespace CapriDesktop
             nudgeOut = now + 20;
             nudgeAsked = asking;
             Blurt(NudgeHeard, line);
+        }
+
+        // Like on Windows, she only sulks out loud when someone's touched the computer in the last 20 s; she waits twice as long either way.
+        private void Snub()
+        {
+            Func<double> read = Idle;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                double idle = -1;
+                try { idle = read(); }
+                catch (Exception) { }
+                Dispatcher.UIThread.Post(delegate { if (idle < 20 && !away && outro == null && Talk.Quiet) Blurt("(ignored)", SnubbedLines[random.Next(SnubbedLines.Length)]); });
+            });
         }
 
         internal void ForgetNudges()

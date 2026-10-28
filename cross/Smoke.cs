@@ -46,6 +46,10 @@ namespace CapriDesktop
         private bool slept;
         private double noticedBefore = -1;
         private bool poppedAgain;
+        private int attention;
+        private string attentionAsk, attentionSulk;
+        private bool attentionAsked, attentionSulked;
+        private double emptyAt;
         private Func<byte[]> peekWas;
         private readonly List<string> glanceAsks = new List<string>();
         private const string GlanceSaid = "SAW: a racing game, a red car in first place. SAY: First place? Don't choke now.";
@@ -971,6 +975,48 @@ namespace CapriDesktop
                 if (!pet.Leaving || pet.Away) throw new Exception("She didn't glitch out to pop in somewhere else.");
                 return true;
             }
+            if (step == 25 && attention == 1)
+            {
+                if (pet.Talk.Reply == null) return false;
+                attentionSulk = pet.Talk.Reply;
+                attentionSulked = Array.IndexOf(Pet.SnubbedLines, attentionSulk) >= 0 && pet.NudgeOut < 0 && pet.NudgeWait == Pet.NudgeGap * 2;
+                pet.Talk.Dismiss();
+                pet.Idle = delegate { return 30; };
+                pet.Nudge(pet.Now, null);
+                pet.Talk.Dismiss();
+                pet.CheckNudge(pet.NudgeOut + 0.1);
+                emptyAt = now;
+                attention = 2;
+                return false;
+            }
+            if (step == 25 && attention == 2)
+            {
+                if (now - emptyAt < 0.5) return false;
+                bool alone = pet.Talk.Quiet && pet.NudgeOut < 0 && pet.NudgeWait == Pet.NudgeGap * 4;
+                pet.Idle = delegate { return 0; };
+                pet.Nudge(pet.Now, null);
+                pet.Talk.Dismiss();
+                pet.Grab();
+                pet.CheckNudge(pet.Now);
+                string glad = pet.Talk.Reply;
+                pet.Drop();
+                bool welcomed = Array.IndexOf(Pet.NoticedLines, glad) >= 0 && pet.NudgeOut < 0 && pet.NudgeWait == Pet.NudgeGap;
+                pet.ForgetNudges();
+                if (!attentionAsked || !attentionSulked || !alone || !welcomed) throw new Exception("Asking for attention went wrong: " + attentionAsk + " | " + attentionSulk + " | alone " + alone + " | " + glad + " | wait " + pet.NudgeWait);
+                checks.Add("PASS attention: she asks for attention, sulks and waits twice as long when ignored, only sulks out loud when someone's at the computer, and picking her up gets a happy line and the usual 2 hours");
+                peekWas = Eyes.Peek;
+                Eyes.Peek = delegate { return FakeScreen(new SkiaSharp.SKColor(200, 30, 40)); };
+                pet.Seeing = delegate(byte[] shot, string question)
+                {
+                    lock (glanceAsks) glanceAsks.Add(question);
+                    return GlanceSaid;
+                };
+                pet.SetWatch(true);
+                if (!pet.WatchShown || pet.GapShown != "2 min" || pet.GlanceGap != 120) throw new Exception("Watch my screen didn't turn on at 2 min: " + pet.WatchShown + " | " + pet.GapShown);
+                pet.Talk.Dismiss();
+                pet.Glance(pet.Now);
+                return true;
+            }
             if (step == 25)
             {
                 if (pet.Leaving) return false;
@@ -982,39 +1028,17 @@ namespace CapriDesktop
                 if (!pet.IsVisible || pet.Away || pet.PopOut >= 0 || Array.IndexOf(Pet.PopLines, hello) < 0) throw new Exception("Popping in while she was out went wrong: " + hello + " | away " + pet.Away + " | out " + pet.PopOut);
                 if (noticedBefore < 0 || pet.Noticed != noticedBefore) throw new Exception("A pop-in restarted her 2-hour wait to ask for attention: " + noticedBefore + " then " + pet.Noticed);
                 checks.Add("PASS pop-ins while she's out: she glitches over to a new spot at the top of the screen, says hi and stays out, and her 2-hour wait to ask for attention keeps counting");
+                // Someone's at the computer, so her sulk is said; it comes once the idle time is read.
+                pet.Idle = delegate { return 0; };
                 pet.ForgetNudges();
                 pet.Talk.Dismiss();
                 pet.Nudge(pet.Now, null);
-                string ask = pet.Talk.Reply;
-                bool asked = Array.IndexOf(Pet.NudgeLines, ask) >= 0 && pet.NudgeOut > pet.Now;
+                attentionAsk = pet.Talk.Reply;
+                attentionAsked = Array.IndexOf(Pet.NudgeLines, attentionAsk) >= 0 && pet.NudgeOut > pet.Now;
                 pet.Talk.Dismiss();
                 pet.CheckNudge(pet.NudgeOut + 0.1);
-                string sulk = pet.Talk.Reply;
-                bool sulked = Array.IndexOf(Pet.SnubbedLines, sulk) >= 0 && pet.NudgeOut < 0 && pet.NudgeWait == Pet.NudgeGap * 2;
-                pet.Talk.Dismiss();
-                pet.Nudge(pet.Now, null);
-                pet.Talk.Dismiss();
-                pet.Grab();
-                pet.CheckNudge(pet.Now);
-                string glad = pet.Talk.Reply;
-                pet.Drop();
-                bool welcomed = Array.IndexOf(Pet.NoticedLines, glad) >= 0 && pet.NudgeOut < 0 && pet.NudgeWait == Pet.NudgeGap;
-                pet.ForgetNudges();
-                if (!asked || !sulked || !welcomed) throw new Exception("Asking for attention went wrong: " + ask + " | " + sulk + " | " + glad + " | wait " + pet.NudgeWait);
-                checks.Add("PASS attention: she asks for attention, sulks and waits twice as long when ignored, and picking her up gets a happy line and the usual 2 hours");
-                peekWas = Eyes.Peek;
-                Eyes.Peek = delegate { return FakeScreen(new SkiaSharp.SKColor(200, 30, 40)); };
-                pet.Idle = delegate { return 0; };
-                pet.Seeing = delegate(byte[] shot, string question)
-                {
-                    lock (glanceAsks) glanceAsks.Add(question);
-                    return GlanceSaid;
-                };
-                pet.SetWatch(true);
-                if (!pet.WatchShown || pet.GapShown != "2 min" || pet.GlanceGap != 120) throw new Exception("Watch my screen didn't turn on at 2 min: " + pet.WatchShown + " | " + pet.GapShown);
-                pet.Talk.Dismiss();
-                pet.Glance(pet.Now);
-                return true;
+                attention = 1;
+                return false;
             }
             if (step == 26)
             {
