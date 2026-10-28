@@ -426,7 +426,15 @@ namespace CapriDesktop
             Topmost = true;
             ShowInTaskbar = false;
             CanResize = false;
+            // Showing her, at the start or when she pops in, never takes the keyboard from what they're typing in, like on Windows.
+            ShowActivated = false;
             WindowStartupLocation = WindowStartupLocation.Manual;
+            try
+            {
+                IPlatformHandle own = TryGetPlatformHandle();
+                if (own != null) Desk.Unfocused(own.Handle.ToInt64());
+            }
+            catch (Exception) { }
             body.Size = Array.IndexOf(Sizes, Saved.Size) >= 0 ? Saved.Size : 240;
             body.Mouth = mouth;
             RenderOptions.SetBitmapInterpolationMode(body, BitmapInterpolationMode.HighQuality);

@@ -40,6 +40,9 @@ namespace CapriDesktop
         // Where the mouse is on the whole desktop, in pixels, or null where the desktop won't say (Wayland).
         internal virtual PixelPoint? Pointer() { return null; }
 
+        // Asks the window manager not to give this window the keyboard when it's shown.
+        internal virtual void Unfocused(long window) { }
+
         protected bool Fills(PixelRect bounds)
         {
             foreach (PixelRect screen in Screens) if (bounds.X <= screen.X && bounds.Y <= screen.Y && bounds.Right >= screen.Right && bounds.Bottom >= screen.Bottom) return true;
@@ -278,6 +281,8 @@ namespace CapriDesktop
         [DllImport(Library)] private static extern IntPtr XSetErrorHandler(IntPtr handler);
         [DllImport(Library)] private static extern int XSync(IntPtr display, bool discard);
         [DllImport(Library)] private static extern bool XQueryPointer(IntPtr display, IntPtr window, out IntPtr root, out IntPtr child, out int rootX, out int rootY, out int x, out int y, out uint mask);
+        [DllImport(Library)] private static extern int XChangeProperty(IntPtr display, IntPtr window, IntPtr property, IntPtr type, int format, int mode, IntPtr[] data, int elements);
+        [DllImport(Library)] private static extern int XFlush(IntPtr display);
         private static Handler handler;
         private static IntPtr previous;
         private static IntPtr ours;
@@ -311,6 +316,13 @@ namespace CapriDesktop
             int inY;
             uint mask;
             return XQueryPointer(display, root, out top, out child, out x, out y, out inX, out inY, out mask) ? new PixelPoint(x, y) : (PixelPoint?)null;
+        }
+
+        // Under EWMH a user time of 0 means "don't focus me when I'm mapped". 6 is XA_CARDINAL; 0 replaces the property.
+        internal override void Unfocused(long window)
+        {
+            XChangeProperty(display, new IntPtr(window), Atom("_NET_WM_USER_TIME"), new IntPtr(6), 32, 0, new[] { IntPtr.Zero }, 1);
+            XFlush(display);
         }
 
         private IntPtr Atom(string name)
