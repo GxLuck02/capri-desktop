@@ -433,7 +433,8 @@ namespace CapriDesktop
             { "Dansk", "Danish", "da" }, { "Norsk", "Norwegian", "no" }, { "Polski", "Polish", "pl" }, { "Čeština", "Czech", "cs" },
             { "Română", "Romanian", "ro" }, { "Türkçe", "Turkish", "tr" }, { "Русский", "Russian", "ru" }, { "Українська", "Ukrainian", "uk" },
             { "Ελληνικά", "Greek", "el" }, { "Tiếng Việt", "Vietnamese", "vi" }, { "Bahasa Indonesia", "Indonesian", "id" }, { "Filipino", "Filipino", "fil" },
-            { "简体中文", "Simplified Chinese", "zh" }, { "繁體中文", "Traditional Chinese", "zh" }, { "日本語", "Japanese", "ja" }, { "한국어", "Korean", "ko" }
+            { "简体中文", "Simplified Chinese", "zh" }, { "繁體中文", "Traditional Chinese", "zh" }, { "日本語", "Japanese", "ja" }, { "한국어", "Korean", "ko" },
+            { "हिन्दी", "Hindi", "hi" }, { "বাংলা", "Bengali", "bn" }
         };
         internal static volatile string Language;
         internal static volatile string Nickname;
