@@ -10222,7 +10222,10 @@ namespace CapriDesktop
                                         { "बकवास बंद करो", "", "false" }, { "bakwas band karo", "", "false" }, { "بکواس بند کرو", "", "false" }, { "Spotify बंद करो", "", "true" }, { "Spotify band karo", "", "true" },
                                         { "close your mouth", "", "false" }, { "close your eyes and imagine", "", "false" }, { "cierra la boca", "", "false" }, { "ferme ta gueule", "", "false" }, { "zamknij się", "", "false" },
                                         { "закрой рот", "", "false" }, { "tutup mulut", "", "false" }, { "मुंह बंद करो", "", "false" }, { "سكر تمك", "", "false" }, { "目を閉じて", "", "false" },
-                                        { "zamknij się i włącz muzykę", "", "true" }, { "close your eyes and open Spotify", "", "true" }, { "cierra Discord", "", "true" }
+                                        { "zamknij się i włącz muzykę", "", "true" }, { "close your eyes and open Spotify", "", "true" }, { "cierra Discord", "", "true" },
+                                        { "sesi çok aç", "", "true" }, { "müziği acayip aç", "", "true" }, { "karnım çok aç", "", "false" }, { "ben de aç", "", "false" }, { "เปิดตาราง Excel", "", "true" }, { "ปิดตาราง Excel", "", "true" },
+                                        { "ປິດຕາຕະລາງ", "", "true" }, { "ปิดตา", "", "false" }, { "ինչ երգ է քո սիրելին", "", "false" }, { "ငိုတာ ရပ်ပါ", "", "false" }, { "ရင်ဖွင့်ပါ", "", "false" }, { "နှုတ်ပိတ်ပါ", "", "false" },
+                                        { "close  your eyes", "", "false" }, { "og’zingni yop", "", "false" }
                                     };
                                     for (int i = 0; i < intents.GetLength(0); i++)
                                     {
