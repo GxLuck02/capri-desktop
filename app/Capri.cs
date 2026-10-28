@@ -11492,8 +11492,11 @@ namespace CapriDesktop
                                 if (File.Exists(heldSettings)) { if (File.Exists(settingsPath)) File.Delete(settingsPath); File.Move(heldSettings, settingsPath); }
                             }
                             if (newInstall.Language != "Spanish" || Brain.SystemLanguage(new System.Globalization.CultureInfo("nb-NO")) != "Norwegian" || Brain.SystemLanguage(new System.Globalization.CultureInfo("fil-PH")) != "Filipino"
-                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("en-AU")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("ja-JP")) != null || Brain.SystemLanguage(System.Globalization.CultureInfo.InvariantCulture) != null) throw new Exception("A new install didn't start in the PC's own language: " + newInstall.Language);
-                            checks.Add("PASS a new install starts in the PC's own language when she speaks it (Spanish Windows gets Spanish, Norwegian Bokmål gets Norsk), and English or a language she doesn't speak yet stays English");
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("en-AU")) != null || Brain.SystemLanguage(new System.Globalization.CultureInfo("th-TH")) != null || Brain.SystemLanguage(System.Globalization.CultureInfo.InvariantCulture) != null
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("ja-JP")) != "Japanese" || Brain.SystemLanguage(new System.Globalization.CultureInfo("ko-KR")) != "Korean" || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-CN")) != "Simplified Chinese"
+                                || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-TW")) != "Traditional Chinese" || Brain.SystemLanguage(new System.Globalization.CultureInfo("zh-HK")) != "Traditional Chinese" || Brain.LanguageCode("Traditional Chinese") != "zh" || Brain.LanguageCode("Korean") != "ko")
+                                throw new Exception("A new install didn't start in the PC's own language: " + newInstall.Language);
+                            checks.Add("PASS a new install starts in the PC's own language when she speaks it (Spanish Windows gets Spanish, Norwegian Bokmål gets Norsk, Japanese and Korean their own, Taiwan and Hong Kong Traditional Chinese and mainland China Simplified), and English or a language she doesn't speak yet stays English");
                             if (mainframe.SettingsStatus != "Fran\u00e7ais | 50% | 30% | Often | 10 min | dance | - | Medium | Medium | Quick" || BubbleHold(100) != 4.5 || !preferences.NoIntro || preferences.Sounds != 30 || Sfx.Level != 30 || SleepDue(599000) || !SleepDue(600000)) throw new Exception("The settings page showed the wrong values: " + mainframe.SettingsStatus);
                             mainframe.TypeNickname("  Lachy!!  ");
                             bool namedRight = Nickname == "Lachy" && preferences.Nickname == "Lachy" && mainframe.NicknameShown == "Lachy" && reply == "Got it, Lachy." && Brain.Character.IndexOf("call them: Lachy.", StringComparison.Ordinal) >= 0;
@@ -11579,6 +11582,33 @@ namespace CapriDesktop
                                 longBox.Image.Save(Path.Combine(output, "talk-long.png"), ImageFormat.Png);
                                 longBox.Hide();
                             }
+                            // Chinese, Japanese and Korean take two columns a character and have no spaces: a run fills the rest of a line and
+                            // carries on below, never past the bubble's edge, and a whole reply shows every character, as a long word does.
+                            string hanzi = "你好，朋友！今天过得怎么样？";
+                            string hanziReply = hanzi + hanzi + hanzi + hanzi;
+                            System.Collections.Generic.List<string> hanziLines = Look.Wrap("CAPRI: " + hanziReply, 34);
+                            int[] hanziTakes = Look.Takes(hanziLines, "CAPRI: " + hanziReply, 7 + hanziReply.Length);
+                            int hanziShown = 0;
+                            foreach (int take in hanziTakes) hanziShown += take;
+                            System.Collections.Generic.List<string> latinLines = Look.Wrap("CAPRI: " + new string('a', 40), 34);
+                            int[] latinTakes = Look.Takes(latinLines, "CAPRI: " + new string('a', 40), 47);
+                            bool hanziFit = hanziLines.TrueForAll(delegate(string wideRow) { return Look.Cells(wideRow) <= 34; });
+                            if (!hanziFit || hanziLines.Count != 4 || Look.Cells(hanziLines[0]) != 33 || hanziShown != 63 || latinLines.Count != 3 || latinTakes[2] != 6 || Look.Cells(hanzi) != 28 || Look.Cut(hanzi, 5) != hanzi.Substring(0, 2)
+                                || string.Join("|", Look.Wrap("CAPRI: hey choom, long day?", 12).ToArray()) != "CAPRI: hey|choom, long|day?" || SpeechBox.Fit(hanziReply) != 34 || SpeechBox.Fit(hanziReply + hanziReply) != 44 || Brain.Languages[20, 0] != "简体中文")
+                                throw new Exception("Chinese didn't fit her bubble: " + string.Join(" | ", hanziLines.ToArray()) + " / shown " + hanziShown + " / long word " + latinTakes[latinTakes.Length - 1]);
+                            using (SpeechBox hanziBox = new SpeechBox())
+                            {
+                                hanziBox.State = TalkState.Online;
+                                hanziBox.Heard = hanzi.Substring(0, 2);
+                                hanziBox.Reply = hanziReply;
+                                hanziBox.Revealed = hanziReply.Length;
+                                Rectangle hanziArea = Screen.PrimaryScreen.WorkingArea;
+                                hanziBox.Update(clock.Elapsed.TotalSeconds, 1f, new Point(hanziArea.Left + hanziArea.Width / 2, hanziArea.Bottom - 120), new Point(hanziArea.Left + hanziArea.Width / 2, hanziArea.Bottom - 10), hanziArea);
+                                if (hanziBox.Image == null) throw new Exception("A Chinese reply drew no bubble.");
+                                hanziBox.Image.Save(Path.Combine(output, "talk-chinese.png"), ImageFormat.Png);
+                                hanziBox.Hide();
+                            }
+                            checks.Add("PASS Chinese, Japanese and Korean in her bubble: each character takes two columns, a run with no spaces fills a line and carries on below, nothing passes the bubble's edge, and a whole reply shows every character, a long word too");
                             System.Collections.Generic.List<short[]> effectsHeard = new System.Collections.Generic.List<short[]>();
                             Action<short[]> soundOut = Sfx.Out;
                             Sfx.Out = delegate(short[] sound) { effectsHeard.Add(sound); };

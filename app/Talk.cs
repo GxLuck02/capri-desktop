@@ -175,6 +175,34 @@ namespace CapriDesktop
             return path;
         }
 
+        // How many columns a character takes in her mono bubbles: Chinese, Japanese and Korean characters and full-width forms
+        // take two, everything else one.
+        internal static int Cells(char c)
+        {
+            return (c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0x303E) || (c >= 0x3041 && c <= 0x33FF) || (c >= 0x3400 && c <= 0x4DBF) || (c >= 0x4E00 && c <= 0x9FFF)
+                || (c >= 0xA000 && c <= 0xA4CF) || (c >= 0xA960 && c <= 0xA97F) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xF900 && c <= 0xFAFF) || (c >= 0xFE10 && c <= 0xFE19)
+                || (c >= 0xFE30 && c <= 0xFE6F) || (c >= 0xFF00 && c <= 0xFF60) || (c >= 0xFFE0 && c <= 0xFFE6) ? 2 : 1;
+        }
+
+        internal static int Cells(string text)
+        {
+            int cells = 0;
+            foreach (char c in text ?? "") cells += Cells(c);
+            return cells;
+        }
+
+        // The longest start of the text that fits in that many columns.
+        internal static string Cut(string text, int columns)
+        {
+            text = text ?? "";
+            int cells = 0, length = 0;
+            while (length < text.Length && cells + Cells(text[length]) <= columns) cells += Cells(text[length++]);
+            return text.Substring(0, length);
+        }
+
+        // Lines by columns, so Chinese, Japanese and Korean fit the bubble too. They have no spaces to break at, so a run of
+        // them fills the rest of a line and carries on below, the way they're written. Other words only break when they're
+        // longer than a whole line.
         internal static List<string> Wrap(string text, int columns)
         {
             List<string> lines = new List<string>();
@@ -182,18 +210,43 @@ namespace CapriDesktop
             foreach (string piece in (text ?? "").Split(' '))
             {
                 string word = piece;
-                while (word.Length > columns)
+                if (word.Length > 0 && Cells(word[0]) == 2 && line.Length > 0 && Cells(line) + 1 + Cells(word) > columns)
+                {
+                    string start = Cut(word, columns - Cells(line) - 1);
+                    if (start.Length > 0) { line += " " + start; word = word.Substring(start.Length); }
+                    lines.Add(line);
+                    line = "";
+                }
+                while (Cells(word) > columns)
                 {
                     if (line.Length > 0) { lines.Add(line); line = ""; }
-                    lines.Add(word.Substring(0, columns));
-                    word = word.Substring(columns);
+                    string cut = Cut(word, columns);
+                    if (cut.Length == 0) cut = word.Substring(0, 1);
+                    lines.Add(cut);
+                    word = word.Substring(cut.Length);
                 }
                 if (line.Length == 0) line = word;
-                else if (line.Length + 1 + word.Length <= columns) line += " " + word;
+                else if (Cells(line) + 1 + Cells(word) <= columns) line += " " + word;
                 else { lines.Add(line); line = word; }
             }
             if (line.Length > 0 || lines.Count == 0) lines.Add(line);
             return lines;
+        }
+
+        // How much of each line shows once `revealed` characters of the text are out. A break between words used up spaces,
+        // which count as revealed too; a word or a run of Chinese broken across lines used none.
+        internal static int[] Takes(List<string> lines, string text, int revealed)
+        {
+            int[] takes = new int[lines.Count];
+            int at = 0;
+            for (int i = 0; i < lines.Count && revealed > 0; i++)
+            {
+                takes[i] = Math.Min(lines[i].Length, revealed);
+                revealed -= takes[i];
+                at += lines[i].Length;
+                while (at < text.Length && text[at] == ' ') { at++; revealed--; }
+            }
+            return takes;
         }
     }
 
@@ -1818,9 +1871,9 @@ namespace CapriDesktop
             {
                 float cw = Look.CharWidth(text), line = 19 * s, margin = 12 * s;
                 List<string> you = Look.Wrap("> you: " + System.Text.RegularExpressions.Regex.Replace(task ?? "", @"\s+", " ").Trim(), Columns);
-                if (you.Count > 2) { you.RemoveRange(2, you.Count - 2); you[1] = you[1].Substring(0, Math.Min(you[1].Length, Columns - 3)) + "..."; }
+                if (you.Count > 2) { you.RemoveRange(2, you.Count - 2); you[1] = Look.Cut(you[1], Columns - 3) + "..."; }
                 List<string> said = Look.Wrap(status, Columns);
-                if (said.Count > 3) { said.RemoveRange(3, said.Count - 3); said[2] = said[2].Substring(0, Math.Min(said[2].Length, Columns - 3)) + "..."; }
+                if (said.Count > 3) { said.RemoveRange(3, said.Count - 3); said[2] = Look.Cut(said[2], Columns - 3) + "..."; }
                 int hidden = steps.Count > MostRows ? steps.Count - (MostRows - 1) : 0;
                 List<string> rows = new List<string>();
                 List<Color> inks = new List<Color>();
@@ -1832,7 +1885,7 @@ namespace CapriDesktop
                 }
                 bool thinking = outcome == null && busy != null;
                 if (thinking) { rows.Add("> " + busy); inks.Add(Look.Neon); }
-                for (int i = 0; i < rows.Count; i++) if (rows[i].Length > Columns) rows[i] = rows[i].Substring(0, Columns - 3) + "...";
+                for (int i = 0; i < rows.Count; i++) if (Look.Cells(rows[i]) > Columns) rows[i] = Look.Cut(rows[i], Columns - 3) + "...";
                 bool running = outcome == null;
                 float panelWidth = 30 * s + Columns * cw;
                 float panelHeight = 12 * s + line * (you.Count + said.Count + rows.Count) + (rows.Count > 0 ? 6 * s : 0) + (running ? line : 0) + 8 * s;
@@ -1870,7 +1923,7 @@ namespace CapriDesktop
                     {
                         using (Brush ink = new SolidBrush(Color.FromArgb(a, inks[i]))) graphics.DrawString(rows[i], text, ink, x, y, StringFormat.GenericTypographic);
                         if (thinking && caret && i == rows.Count - 1)
-                            using (Brush block = new SolidBrush(Color.FromArgb(a, Look.Neon))) graphics.FillRectangle(block, x + rows[i].Length * cw + 2 * s, y + s, cw * 0.85f, line - 5 * s);
+                            using (Brush block = new SolidBrush(Color.FromArgb(a, Look.Neon))) graphics.FillRectangle(block, x + Look.Cells(rows[i]) * cw + 2 * s, y + s, cw * 0.85f, line - 5 * s);
                         y += line;
                     }
                     if (running)
@@ -1927,7 +1980,7 @@ namespace CapriDesktop
 
         internal static int Fit(string text)
         {
-            int length = (text ?? "").Length;
+            int length = Look.Cells(text);
             return length > 420 ? 56 : length > 220 ? 44 : Columns;
         }
 
@@ -2011,24 +2064,21 @@ namespace CapriDesktop
                     float x = panel.Left + 24 * s;
                     float row2 = panel.Top + 12 * s;
                     string you = Prompt + (Heard ?? "");
-                    if (you.Length > columns) you = you.Substring(0, columns - 3) + "...";
+                    if (Look.Cells(you) > columns) you = Look.Cut(you, columns - 3) + "...";
                     using (Brush dim = new SolidBrush(Look.Dim)) graphics.DrawString(you, heard, dim, x, row2, StringFormat.GenericTypographic);
                     row2 += line;
-                    int remaining = Speaker.Length + (State == TalkState.Thinking ? (Reply ?? "").Length : Math.Max(0, Revealed));
+                    int[] takes = Look.Takes(lines, Speaker + (Reply ?? ""), Speaker.Length + (State == TalkState.Thinking ? (Reply ?? "").Length : Math.Max(0, Revealed)));
                     PointF caret = new PointF(x, row2);
                     using (Brush red = new SolidBrush(Look.Red))
                     using (Brush ink = new SolidBrush(Look.Neon))
                     {
-                        for (int i = 0; i < lines.Count && remaining > 0; i++)
+                        for (int i = 0; i < lines.Count && takes[i] > 0; i++)
                         {
-                            int take = Math.Min(lines[i].Length, remaining);
-                            string shown = lines[i].Substring(0, take);
-                            int name = i == 0 ? Math.Min(take, Speaker.Length - 1) : 0;
+                            string shown = lines[i].Substring(0, takes[i]);
+                            int name = i == 0 ? Math.Min(takes[i], Speaker.Length - 1) : 0;
                             if (name > 0) graphics.DrawString(shown.Substring(0, name), bold, red, x, row2, StringFormat.GenericTypographic);
                             graphics.DrawString(shown.Substring(name), text, ink, x + name * cw, row2 + i * line, StringFormat.GenericTypographic);
-                            caret = new PointF(x + take * cw, row2 + i * line);
-                            remaining -= take + 1;
-                            if (remaining >= 0 && i + 1 < lines.Count) caret = new PointF(x, row2 + (i + 1) * line);
+                            caret = new PointF(x + Look.Cells(shown) * cw, row2 + i * line);
                         }
                         if (cursorOn) graphics.FillRectangle(ink, caret.X + s, caret.Y + s, cw * 0.85f, line - 5 * s);
                     }

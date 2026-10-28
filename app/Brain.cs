@@ -432,7 +432,8 @@ namespace CapriDesktop
             { "Italiano", "Italian", "it" }, { "Português", "Portuguese", "pt" }, { "Nederlands", "Dutch", "nl" }, { "Svenska", "Swedish", "sv" },
             { "Dansk", "Danish", "da" }, { "Norsk", "Norwegian", "no" }, { "Polski", "Polish", "pl" }, { "Čeština", "Czech", "cs" },
             { "Română", "Romanian", "ro" }, { "Türkçe", "Turkish", "tr" }, { "Русский", "Russian", "ru" }, { "Українська", "Ukrainian", "uk" },
-            { "Ελληνικά", "Greek", "el" }, { "Tiếng Việt", "Vietnamese", "vi" }, { "Bahasa Indonesia", "Indonesian", "id" }, { "Filipino", "Filipino", "fil" }
+            { "Ελληνικά", "Greek", "el" }, { "Tiếng Việt", "Vietnamese", "vi" }, { "Bahasa Indonesia", "Indonesian", "id" }, { "Filipino", "Filipino", "fil" },
+            { "简体中文", "Simplified Chinese", "zh" }, { "繁體中文", "Traditional Chinese", "zh" }, { "日本語", "Japanese", "ja" }, { "한국어", "Korean", "ko" }
         };
         internal static volatile string Language;
         internal static volatile string Nickname;
@@ -452,6 +453,8 @@ namespace CapriDesktop
         {
             string code = culture == null ? "" : culture.TwoLetterISOLanguageName;
             if (code == "nb" || code == "nn") code = "no";
+            // Taiwan, Hong Kong and Macau write Traditional Chinese; the rest of Chinese Windows, Simplified.
+            if (code == "zh") return Regex.IsMatch(culture.Name, @"Hant|-(TW|HK|MO)$", RegexOptions.IgnoreCase) ? "Traditional Chinese" : "Simplified Chinese";
             for (int i = 1; i < Languages.GetLength(0); i++) if (Languages[i, 2] == code) return Languages[i, 1];
             return null;
         }
