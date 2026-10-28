@@ -10198,7 +10198,16 @@ namespace CapriDesktop
                                         { "pause the music", "pause||" }, { "stop the song", "pause||" }, { "turn off the music", "pause||" }, { "play", "resume||" }, { "resume spotify", "resume||" },
                                         { "skip to the next song", "next||" }, { "next one", "next||" }, { "another song", "next||" }, { "play the last song again", "previous||" },
                                         { "sube el volumen", "volume_up||" }, { "¿puedes bajar el volumen por favor?", "volume_down||" }, { "silencia", "mute||" }, { "quita el silencio", "unmute||" },
-                                        { "siguiente canción", "next||" }, { "pon el volumen al 40%", "volume_set|40|" }, { "monte le son", "volume_up||" }, { "coupe le son", "mute||" }, { "chanson suivante", "next||" }
+                                        { "siguiente canción", "next||" }, { "pon el volumen al 40%", "volume_set|40|" }, { "monte le son", "volume_up||" }, { "coupe le son", "mute||" }, { "chanson suivante", "next||" },
+                                        { "mach lauter", "volume_up||" }, { "Mach die Musik leiser", "volume_down||" }, { "Lautstärke auf 30", "volume_set|30|" }, { "Ton aus", "mute||" }, { "Ton wieder an", "unmute||" }, { "nächstes Lied", "next||" },
+                                        { "bitte lauter", "volume_up||" }, { "leiser bitte", "volume_down||" }, { "aumenta o volume", "volume_up||" }, { "abaixa o som", "volume_down||" }, { "tira o mudo", "unmute||" }, { "pula essa música", "next||" },
+                                        { "alza il volume", "volume_up||" }, { "abbassa il volume per favore", "volume_down||" }, { "metti in pausa", "pause||" }, { "canzone successiva", "next||" },
+                                        { "podgłoś", "volume_up||" }, { "przycisz muzykę", "volume_down||" }, { "wycisz", "mute||" }, { "następna piosenka", "next||" }, { "ustaw głośność na 40", "volume_set|40|" },
+                                        { "zet het harder", "volume_up||" }, { "zachter", "volume_down||" }, { "geluid uit", "mute||" }, { "volgende nummer", "next||" },
+                                        { "сделай погромче", "volume_up||" }, { "потише", "volume_down||" }, { "выключи звук", "mute||" }, { "включи звук", "unmute||" }, { "следующая песня", "next||" }, { "громкость на 50", "volume_set|50|" },
+                                        { "зроби гучніше", "volume_up||" }, { "наступна пісня", "next||" }, { "sesi kıs", "volume_down||" }, { "sesi kapat", "mute||" }, { "sonraki şarkı", "next||" }, { "sesi 50 yap", "volume_set|50|" },
+                                        { "kecilkan suara", "volume_down||" }, { "lagu berikutnya", "next||" }, { "音量を上げて", "volume_up||" }, { "ミュートして", "mute||" }, { "次の曲", "next||" },
+                                        { "把音量调小一点", "volume_down||" }, { "暂停", "pause||" }, { "下一首", "next||" }, { "取消静音", "unmute||" }, { "볼륨 좀 키워줘", "volume_up||" }, { "다음 곡", "next||" }, { "음소거 해제", "unmute||" }
                                     };
                                     string loudWrong = "";
                                     for (int i = 0; i < loudAsks.GetLength(0); i++)
@@ -10208,7 +10217,8 @@ namespace CapriDesktop
                                         string got = Hands.Direct(loudAsks[i, 0], out loudTool, out loudArgs) && loudTool == "media" ? loudArgs.Action + "|" + loudArgs.Level + "|" + loudArgs.App : "";
                                         if (got != loudAsks[i, 1]) loudWrong += loudAsks[i, 0] + " -> " + got + "; ";
                                     }
-                                    foreach (string chat in new[] { "I love this song", "turn up for the weekend", "the volume on this game is weird", "how do I turn up the bass", "don't mute it", "should I mute discord", "mute my mic", "is spotify down?", "play with me", "stop it", "skip it if it's bad", "my game is too laggy", "why is it so loud?", "I muted my mic", "this song is loud", "turn it off", "drop it", "volume 500", "hush" })
+                                    foreach (string chat in new[] { "I love this song", "turn up for the weekend", "the volume on this game is weird", "how do I turn up the bass", "don't mute it", "should I mute discord", "mute my mic", "is spotify down?", "play with me", "stop it", "skip it if it's bad", "my game is too laggy", "why is it so loud?", "I muted my mic", "this song is loud", "turn it off", "drop it", "volume 500", "hush",
+                                        "das Lied ist laut", "mach es auf", "mach den PC aus", "nächstes Mal", "тише", "продолжи", "avanti", "continua", "ciszej", "sesi aç", "próxima vez", "volgende keer", "下一首歌很好听", "다음에 보자" })
                                     {
                                         string loudTool;
                                         ToolArguments loudArgs;
@@ -10260,7 +10270,7 @@ namespace CapriDesktop
                                     bool loudValid = Hands.Valid("media", new ToolArguments { Action = "volume_set", Level = "40" }) && !Hands.Valid("media", new ToolArguments { Action = "volume_set" }) && !Hands.Valid("media", new ToolArguments { Action = "volume_set", Level = "140" })
                                         && Hands.Valid("media", new ToolArguments { Action = "unmute" }) && Hands.Valid("media", new ToolArguments { Action = "volume_up", Level = "20" }) && !Hands.Valid("media", new ToolArguments { Action = "volume_up", Level = "loud" });
                                     if (aimedMute.Action != "unmute" || aimedSpotify.App != "spotify" || aimedPc.App != null || !loudValid) throw new Exception("Her brain's volume calls weren't squared with what they said: " + aimedMute.Action + " / " + aimedSpotify.App + " / " + aimedPc.App + " / valid " + loudValid);
-                                    checks.Add("PASS volume in any words: " + loudAsks.GetLength(0) + " ways to ask in English, Spanish and French (up, down, a bit, a lot, by 30%, to 50%, mute, unmute, pause, skip) work instantly with no brain call, 19 chat lines don't (\"hush\" is for her, not the PC); mute and unmute set the real state instead of toggling, \"turn the sound on\" at 0% brings it to 20%, and only saying Spotify moves Spotify's slider");
+                                    checks.Add("PASS volume in any words: " + loudAsks.GetLength(0) + " ways to ask in English, Spanish, French and 12 more languages (up, down, a bit, a lot, by 30%, to 50%, mute, unmute, pause, skip) work instantly with no brain call, 33 chat lines don't (\"hush\" and \"тише\" are for her, not the PC); mute and unmute set the real state instead of toggling, \"turn the sound on\" at 0% brings it to 20%, and only saying Spotify moves Spotify's slider");
                                     string[,] written =
                                     {
                                         { "look_at_screen{}", "look_at_screen|||" }, { "open_app{\"name\": \"Spotify\"}", "open_app|Spotify||" },
