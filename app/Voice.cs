@@ -525,9 +525,8 @@ namespace CapriDesktop
         }
     }
 
-#if !CROSS
-    // Her voices' pitch, speed, robot and glitch from the Settings page. At their defaults nothing here touches a sample,
-    // her HD voice included: it starts dry, like the clip it copies.
+    // Her voices' pitch, speed, robot and glitch from the Settings page, or her right-click Settings on Mac and Linux. At their
+    // defaults nothing here touches a sample, her HD voice included: it starts dry, like the clip it copies.
     internal static class VoiceFx
     {
         internal const int MostPitch = 6;
@@ -1472,6 +1471,7 @@ namespace CapriDesktop
         }
     }
 
+#if !CROSS
     // Their own voice for her HD voice: a clip of them talking becomes the reference it clones, reference.wav in its folder.
     // Kokoro's styles and ElevenLabs can't use it: Kokoro's voices are fixed, and ElevenLabs clones voices on its own site.
     internal static class YourVoice

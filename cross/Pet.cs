@@ -48,6 +48,10 @@ namespace CapriDesktop
         [DataMember] internal int? SleepAfter;
         [DataMember] internal int? Bubble;
         [DataMember] internal int? Volume;
+        [DataMember] internal int Pitch;
+        [DataMember] internal int? Pace;
+        [DataMember] internal int Robot;
+        [DataMember] internal int Glitch;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -344,6 +348,20 @@ namespace CapriDesktop
         internal static readonly int[] Volumes = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150 };
         internal static readonly string[] VolumeNames = { "Mute", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%", "125%", "150%" };
         private readonly List<MenuItem> volumePicks = new List<MenuItem>();
+        // Settings > Voice style, Windows' Pitch, Speed, Robot and Glitch sliders. They change her ElevenLabs voice here.
+        internal static readonly string[] PitchNames = { "-6", "-5", "-4", "-3", "-2", "-1", "Normal", "+1", "+2", "+3", "+4", "+5", "+6" };
+        internal static readonly int[] Paces = { 70, 80, 90, 100, 110, 120, 130, 140, 150 };
+        internal static readonly string[] PaceNames = { "0.7x", "0.8x", "0.9x", "Normal", "1.1x", "1.2x", "1.3x", "1.4x", "1.5x" };
+        internal static readonly int[] Amounts = { 0, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
+        internal static readonly string[] AmountNames = { "Off", "5%", "10%", "15%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" };
+        internal const string StyleLine = "How do I sound now, choom?";
+        private readonly List<MenuItem> pitchPicks = new List<MenuItem>();
+        private readonly List<MenuItem> pacePicks = new List<MenuItem>();
+        private readonly List<MenuItem> robotPicks = new List<MenuItem>();
+        private readonly List<MenuItem> glitchPicks = new List<MenuItem>();
+        // The style line as ElevenLabs said it, and in which voice, so trying another setting restyles it instead of spending credits.
+        private byte[] styleSaid;
+        private string styleVoice;
         private PixelPoint? sleptAt;
         private readonly DispatcherTimer frames = new DispatcherTimer();
         private readonly Stopwatch clock = Stopwatch.StartNew();
@@ -399,6 +417,10 @@ namespace CapriDesktop
             Saved.Wander = Math.Max(0, Math.Min(4, Saved.Wander));
             Sfx.Level = Math.Max(0, Math.Min(100, Saved.Sounds ?? 60));
             Voice.Loudness = Math.Max(0, Math.Min(150, Saved.Volume ?? 100));
+            VoiceFx.Pitch = Math.Max(-VoiceFx.MostPitch, Math.Min(VoiceFx.MostPitch, Saved.Pitch));
+            VoiceFx.Speed = Math.Max(VoiceFx.Slowest, Math.Min(VoiceFx.Fastest, Saved.Pace ?? 100));
+            VoiceFx.Robot = Math.Max(0, Math.Min(100, Saved.Robot));
+            VoiceFx.Glitch = Math.Max(0, Math.Min(100, Saved.Glitch));
             if (Program.Smoke == null) Sfx.Out = Limbs.Sound;
             if (Program.Smoke == null) Brain.Load(Path.Combine(folder, "chat.json"));
             Limbs.Attach(Brain);
@@ -1298,6 +1320,44 @@ namespace CapriDesktop
                 volume.Items.Add(pick);
             }
             settings.Items.Add(volume);
+            MenuItem style = new MenuItem { Header = "Voice style" };
+            MenuItem pitch = new MenuItem { Header = "Pitch" };
+            for (int i = 0; i < PitchNames.Length; i++)
+            {
+                int semitones = i - VoiceFx.MostPitch;
+                MenuItem pick = new MenuItem { Header = PitchNames[i], ToggleType = MenuItemToggleType.Radio, GroupName = "pitch" };
+                pick.Click += delegate { SetPitch(semitones); HearStyle(); };
+                pitchPicks.Add(pick);
+                pitch.Items.Add(pick);
+            }
+            MenuItem speed = new MenuItem { Header = "Speed" };
+            for (int i = 0; i < Paces.Length; i++)
+            {
+                int percent = Paces[i];
+                MenuItem pick = new MenuItem { Header = PaceNames[i], ToggleType = MenuItemToggleType.Radio, GroupName = "pace" };
+                pick.Click += delegate { SetPace(percent); HearStyle(); };
+                pacePicks.Add(pick);
+                speed.Items.Add(pick);
+            }
+            MenuItem robot = new MenuItem { Header = "Robot" };
+            MenuItem glitchy = new MenuItem { Header = "Glitch" };
+            for (int i = 0; i < Amounts.Length; i++)
+            {
+                int amount = Amounts[i];
+                MenuItem robotPick = new MenuItem { Header = AmountNames[i], ToggleType = MenuItemToggleType.Radio, GroupName = "robot" };
+                robotPick.Click += delegate { SetRobot(amount); HearStyle(); };
+                robotPicks.Add(robotPick);
+                robot.Items.Add(robotPick);
+                MenuItem glitchPick = new MenuItem { Header = AmountNames[i], ToggleType = MenuItemToggleType.Radio, GroupName = "glitch" };
+                glitchPick.Click += delegate { SetGlitch(amount); HearStyle(); };
+                glitchPicks.Add(glitchPick);
+                glitchy.Items.Add(glitchPick);
+            }
+            style.Items.Add(pitch);
+            style.Items.Add(speed);
+            style.Items.Add(robot);
+            style.Items.Add(glitchy);
+            settings.Items.Add(style);
             checkInsItem = new MenuItem { Header = "Check in on me", ToggleType = MenuItemToggleType.CheckBox };
             checkInsItem.Click += delegate { SetCheckIns(Saved.NoCheckIns); };
             settings.Items.Add(checkInsItem);
@@ -1397,6 +1457,94 @@ namespace CapriDesktop
             sitItem.Header = SitChoice;
             for (int i = 0; i < bubblePicks.Count; i++) bubblePicks[i].IsChecked = i == BubbleTime;
             for (int i = 0; i < volumePicks.Count; i++) volumePicks[i].IsChecked = Volumes[i] == Voice.Loudness;
+            for (int i = 0; i < pitchPicks.Count; i++) pitchPicks[i].IsChecked = i - VoiceFx.MostPitch == VoiceFx.Pitch;
+            for (int i = 0; i < pacePicks.Count; i++) pacePicks[i].IsChecked = Paces[i] == VoiceFx.Speed;
+            for (int i = 0; i < robotPicks.Count; i++) robotPicks[i].IsChecked = Amounts[i] == VoiceFx.Robot;
+            for (int i = 0; i < glitchPicks.Count; i++) glitchPicks[i].IsChecked = Amounts[i] == VoiceFx.Glitch;
+        }
+
+        // What Voice style's menus have ticked, like Windows' VOICE section: "+3 | 1.2x | 30% | 40%".
+        internal string StyleShown
+        {
+            get
+            {
+                return Ticked(pitchPicks, PitchNames) + " | " + Ticked(pacePicks, PaceNames) + " | " + Ticked(robotPicks, AmountNames) + " | " + Ticked(glitchPicks, AmountNames);
+            }
+        }
+
+        private static string Ticked(List<MenuItem> picks, string[] names)
+        {
+            for (int i = 0; i < picks.Count; i++) if (picks[i].IsChecked) return names[i];
+            return "?";
+        }
+
+        internal void SetPitch(int semitones)
+        {
+            VoiceFx.Pitch = Math.Max(-VoiceFx.MostPitch, Math.Min(VoiceFx.MostPitch, semitones));
+            Saved.Pitch = VoiceFx.Pitch;
+            Save();
+            Sync();
+        }
+
+        internal void SetPace(int percent)
+        {
+            VoiceFx.Speed = Math.Max(VoiceFx.Slowest, Math.Min(VoiceFx.Fastest, percent));
+            Saved.Pace = VoiceFx.Speed;
+            Save();
+            Sync();
+        }
+
+        internal void SetRobot(int amount)
+        {
+            VoiceFx.Robot = Math.Max(0, Math.Min(100, amount));
+            Saved.Robot = VoiceFx.Robot;
+            Save();
+            Sync();
+        }
+
+        internal void SetGlitch(int amount)
+        {
+            VoiceFx.Glitch = Math.Max(0, Math.Min(100, amount));
+            Saved.Glitch = VoiceFx.Glitch;
+            Save();
+            Sync();
+        }
+
+        // Picking a style: she says a line in it so they hear it, like on Windows. ElevenLabs says the line once per voice; after
+        // that its audio is restyled here, so trying settings spends no more credits.
+        internal void HearStyle()
+        {
+            if (!Speaks)
+            {
+                Talk.Answer("(voice check)", voice.Ready ? "My voice is off, choom. Settings > Voice > Use ElevenLabs turns it back on." : "Add an ElevenLabs key under Settings > Voice to hear that, choom.");
+                return;
+            }
+            int ticket = ++asking;
+            voice.Stop();
+            string id = voice.VoiceId;
+            byte[] said = styleVoice == id ? styleSaid : null;
+            Talk.Thinking("(voice check)");
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                byte[] wav = null;
+                string problem = null;
+                try
+                {
+                    if (said == null) said = voice.Speak(StyleLine);
+                    wav = VoiceFx.Styled(said, StyleLine);
+                }
+                catch (VoiceException error) { problem = Mac(error.Message); }
+                catch (Exception error) { problem = Voice.Short("Voice glitched: " + error.Message); }
+                Dispatcher.UIThread.Post(delegate
+                {
+                    if (said != null) { styleSaid = said; styleVoice = id; }
+                    if (ticket != asking) return;
+                    double seconds = wav == null ? 0 : Voice.Seconds(wav);
+                    if (seconds < 0.2) { Talk.Answer("(voice check)", problem ?? StyleLine); return; }
+                    Talk.Answer("(voice check)", StyleLine, seconds);
+                    voice.Play(wav);
+                });
+            });
         }
 
         internal string VolumePicked
@@ -2513,7 +2661,8 @@ namespace CapriDesktop
             {
                 byte[] wav = null;
                 string problem = null;
-                try { wav = voice.Speak(said); }
+                // ElevenLabs hands back a finished WAV, so her pitch, speed, robot and glitch go on here, like on Windows.
+                try { wav = VoiceFx.Styled(voice.Speak(said), said); }
                 catch (VoiceException error) { problem = Mac(error.Message); }
                 catch (Exception error) { problem = Voice.Short("Voice glitched: " + error.Message); }
                 Dispatcher.UIThread.Post(delegate
