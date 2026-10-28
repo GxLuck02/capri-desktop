@@ -69,7 +69,7 @@ namespace CapriDesktop
             page.Children.Add(keyRow);
             ollama.Click += delegate { Pet.Browse(Pet.OllamaPage); };
             page.Children.Add(ollama);
-            Content = new Border { BorderBrush = new SolidColorBrush(Look.Red), BorderThickness = new Thickness(1), Child = page };
+            Content = new Border { Background = new SolidColorBrush(Look.Panel), BorderBrush = new SolidColorBrush(Look.Red), BorderThickness = new Thickness(1), Child = page };
             Render();
         }
 
@@ -129,7 +129,8 @@ namespace CapriDesktop
                 pick.Click += delegate { pet.PickModel(model); };
                 menu.Items.Add(pick);
             }
-            models.Content = chosen ?? "Pick a model";
+            // NVIDIA model names run long, so the name shortens to keep Refresh on the window.
+            models.Content = new TextBlock { Text = chosen ?? "Pick a model", MaxWidth = 220, TextTrimming = TextTrimming.CharacterEllipsis };
             models.IsVisible = choices.Count > 0;
             ollama.IsVisible = remote == null && (local == null || local.Length == 0);
             tierNote.Text = tier == 1 ? "Most NVIDIA models can't see your screen." : "Pick one. Only one brain runs at a time.";
