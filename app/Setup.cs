@@ -85,6 +85,13 @@ namespace CapriSetup
                 if (Ours(Application.ExecutablePath) || Ours(Path.Combine(Environment.SystemDirectory, "notepad.exe")) || Ours(Path.Combine(output, "missing.exe"))) throw new InvalidDataException("The installer takes other programs for Capri.");
                 string home = Path.Combine(output, "Capri");
                 if (!Inside(Path.Combine(home, "Capri.exe"), home) || !Inside(Path.Combine(home, "brain", "llama-server.exe"), home + "\\") || Inside(Path.Combine(output, "Capri2", "Capri.exe"), home) || Inside(Path.Combine(Environment.SystemDirectory, "notepad.exe"), home) || Inside(home, home)) throw new InvalidDataException("The uninstaller would close the wrong programs.");
+                string link = Path.Combine(output, "Capri.lnk");
+                File.WriteAllText(link, "an old shortcut");
+                File.SetAttributes(link, FileAttributes.ReadOnly);
+                string unsaved = Shortcut(link, Path.Combine(output, "Capri.exe"));
+                if (unsaved != null || !string.Equals(LinkTarget(link), Path.Combine(output, "Capri.exe"), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The installer can't save her shortcut. " + unsaved);
+                File.Delete(link);
+                if (Shortcut(Path.Combine(output, "missing", "Capri.lnk"), Path.Combine(output, "Capri.exe")) == null) throw new InvalidDataException("A shortcut Windows can't save counts as saved.");
                 using (SetupWindow preview = new SetupWindow(false))
                 {
                     preview.Show();
@@ -96,13 +103,15 @@ namespace CapriSetup
                     Snap(preview, Path.Combine(output, "installer-speech.png"));
                     preview.Close();
                 }
-                File.WriteAllText(Path.Combine(output, "packaging-test.txt"), "PASS embedded executable extracted\nPASS PE signature\nPASS SHA-256 computed\nPASS an unmarked Capri.exe is recognised as Capri, other programs aren't\nPASS installer window rendered\nPASS the installer says it's installing the local speech model, that it may take some time, and that an API key gives a better, faster voice\nPASS the uninstaller closes Capri and anything running from her folder, like her brain, and nothing else\nLIMIT installation and uninstallation were not performed\n");
+                File.WriteAllText(Path.Combine(output, "packaging-test.txt"), "PASS embedded executable extracted\nPASS PE signature\nPASS SHA-256 computed\nPASS an unmarked Capri.exe is recognised as Capri, other programs aren't\nPASS installer window rendered\nPASS the installer says it's installing the local speech model, that it may take some time, and that an API key gives a better, faster voice\nPASS the uninstaller closes Capri and anything running from her folder, like her brain, and nothing else\nPASS her shortcut is saved through Windows' own shell link, even over an old read-only one, and points at Capri.exe\nPASS a shortcut Windows won't save comes back as its reason instead of stopping the install\nLIMIT installation and uninstallation were not performed\n");
                 return 0;
             }
             catch (Exception error) { Directory.CreateDirectory(output); File.WriteAllText(Path.Combine(output, "failure.txt"), error.ToString()); return 1; }
         }
 
-        internal static void Install(bool desktop)
+        // A shortcut Windows won't save, often because of an antivirus, doesn't stop the install. She's installed either way,
+        // so its reason comes back for the installer to show. Null means every shortcut was saved.
+        internal static string Install(bool desktop)
         {
             string destination = InstallPath;
             string marker = Path.Combine(destination, ".capri-install");
@@ -128,9 +137,8 @@ namespace CapriSetup
             }
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
             File.Copy(Application.ExecutablePath, Path.Combine(destination, "Uninstall.exe"), true);
-            string menu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Capri.lnk");
-            Shortcut(menu, Path.Combine(destination, "Capri.exe"));
-            if (desktop) Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Capri.lnk"), Path.Combine(destination, "Capri.exe"));
+            string unsaved = Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs, Environment.SpecialFolderOption.Create), "Capri.lnk"), target);
+            string onDesktop = desktop ? Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolderOption.Create), "Capri.lnk"), target) : null;
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RegistryPath))
             {
                 key.SetValue("DisplayName", "Capri");
@@ -143,6 +151,7 @@ namespace CapriSetup
                 key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
                 key.SetValue("EstimatedSize", (Payload().Length + new FileInfo(Application.ExecutablePath).Length) / 1024, RegistryValueKind.DWord);
             }
+            return unsaved ?? onDesktop;
         }
 
         private static void Snap(Form form, string path)
@@ -253,17 +262,65 @@ namespace CapriSetup
             catch (FileNotFoundException) { return false; }
         }
 
-        private static void Shortcut(string path, string target)
+        // Her shortcuts go through Windows' own shell link instead of Windows Script Host, and an old read-only one is
+        // replaced. When Windows still won't save one, its reason comes back instead of an error.
+        private static string Shortcut(string path, string target)
         {
-            Type type = Type.GetTypeFromProgID("WScript.Shell");
-            dynamic shell = Activator.CreateInstance(type);
             try
             {
-                dynamic shortcut = shell.CreateShortcut(path);
-                try { shortcut.TargetPath = target; shortcut.WorkingDirectory = Path.GetDirectoryName(target); shortcut.Description = "Capri desktop companion"; shortcut.IconLocation = target + ",0"; shortcut.Save(); }
-                finally { Marshal.FinalReleaseComObject(shortcut); }
+                if (File.Exists(path)) File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+                IShellLinkW link = (IShellLinkW)new ShellLink();
+                try
+                {
+                    link.SetPath(target);
+                    link.SetWorkingDirectory(Path.GetDirectoryName(target));
+                    link.SetDescription("Capri desktop companion");
+                    link.SetIconLocation(target, 0);
+                    ((System.Runtime.InteropServices.ComTypes.IPersistFile)link).Save(path, true);
+                }
+                finally { Marshal.FinalReleaseComObject(link); }
+                return null;
             }
-            finally { Marshal.FinalReleaseComObject(shell); }
+            catch (Exception error) { return error.Message; }
+        }
+
+        private static string LinkTarget(string path)
+        {
+            IShellLinkW link = (IShellLinkW)new ShellLink();
+            try
+            {
+                ((System.Runtime.InteropServices.ComTypes.IPersistFile)link).Load(path, 0);
+                System.Text.StringBuilder target = new System.Text.StringBuilder(1024);
+                link.GetPath(target, target.Capacity, IntPtr.Zero, 0);
+                return target.ToString();
+            }
+            finally { Marshal.FinalReleaseComObject(link); }
+        }
+
+        [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
+        private class ShellLink { }
+
+        [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid("000214F9-0000-0000-C000-000000000046")]
+        private interface IShellLinkW
+        {
+            void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder file, int size, IntPtr found, int flags);
+            void GetIDList(out IntPtr list);
+            void SetIDList(IntPtr list);
+            void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder name, int size);
+            void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
+            void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder folder, int size);
+            void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string folder);
+            void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder arguments, int size);
+            void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string arguments);
+            void GetHotkey(out short key);
+            void SetHotkey(short key);
+            void GetShowCmd(out int show);
+            void SetShowCmd(int show);
+            void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder icon, int size, out int index);
+            void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string icon, int index);
+            void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string relative, int reserved);
+            void Resolve(IntPtr window, int flags);
+            void SetPath([MarshalAs(UnmanagedType.LPWStr)] string file);
         }
 
         internal static void BeginUninstall()
@@ -346,18 +403,11 @@ namespace CapriSetup
             }
         }
 
+        // A shortcut that can't be read or removed stays behind instead of stopping the rest of the uninstall.
         private static void DeleteShortcut(string path, string destination)
         {
-            if (!File.Exists(path)) return;
-            Type type = Type.GetTypeFromProgID("WScript.Shell");
-            dynamic shell = Activator.CreateInstance(type);
-            try
-            {
-                dynamic shortcut = shell.CreateShortcut(path);
-                try { if (string.Equals((string)shortcut.TargetPath, Path.Combine(destination, "Capri.exe"), StringComparison.OrdinalIgnoreCase)) File.Delete(path); }
-                finally { Marshal.FinalReleaseComObject(shortcut); }
-            }
-            finally { Marshal.FinalReleaseComObject(shell); }
+            try { if (File.Exists(path) && string.Equals(LinkTarget(path), Path.Combine(destination, "Capri.exe"), StringComparison.OrdinalIgnoreCase)) File.Delete(path); }
+            catch (Exception) { }
         }
     }
 
@@ -373,6 +423,7 @@ namespace CapriSetup
         private readonly Label note;
         private readonly Button cancel;
         private long got, total;
+        private string noShortcut;
         private bool fetching;
         private volatile bool stopping;
 
@@ -459,16 +510,24 @@ namespace CapriSetup
             {
                 if (removing) { Program.BeginUninstall(); Close(); return; }
                 status.Text = "Making a little room for Capri…";
-                Program.Install(desktop.Checked);
+                noShortcut = Program.Install(desktop.Checked);
             }
             catch (Exception error) { status.Text = "Capri could not finish. Your files are still here."; primary.Enabled = true; MessageBox.Show(error.Message, "Capri", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
             if (Environment.Is64BitOperatingSystem && !VoicePack.Complete(VoicePack.Folder(Program.InstallPath))) FetchVoice();
             else Finish();
         }
 
+        // Without her shortcut she's still installed, so they're told why and shown Capri.exe to pin.
         private void Finish()
         {
-            if (launch.Checked) Process.Start(new ProcessStartInfo(Path.Combine(Program.InstallPath, "Capri.exe")) { UseShellExecute = true });
+            string app = Path.Combine(Program.InstallPath, "Capri.exe");
+            if (noShortcut != null)
+            {
+                MessageBox.Show(this, "Capri is installed, but Windows wouldn't let the installer save her shortcut:\n" + noShortcut + "\n\nShe's in " + Program.InstallPath + ". Right-click Capri.exe there and pick Pin to Start.", "Capri", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                try { using (Process.Start("explorer.exe", "/select,\"" + app + "\"")) { } }
+                catch (System.ComponentModel.Win32Exception) { }
+            }
+            if (launch.Checked) Process.Start(new ProcessStartInfo(app) { UseShellExecute = true });
             Close();
         }
 

@@ -119,6 +119,14 @@ Another file called Capri.exe is in the install folder. Move it out of that fold
 ### "Capri could not finish. Your files are still here."
 The install stopped partway. Nothing you saved was lost. Close Capri if it's open and run the installer again. If it keeps happening, ask in the Discord.
 
+### "Unable to save shortcut" or "Windows wouldn't let the installer save her shortcut"
+Windows, often an antivirus, stopped the installer saving her Start menu shortcut. Capri.exe is already installed.
+1. Press Win + R, type %LOCALAPPDATA%\Capri and press Enter.
+2. Right-click Capri.exe and pick Pin to Start. Double-click it to open her.
+3. For the shortcut itself, allow Capri-Setup.exe in your antivirus and run it again.
+
+Newer installers finish the install without the shortcut, say why, and show you Capri.exe.
+
 ---
 
 ## 3. Install on Mac (preview)
