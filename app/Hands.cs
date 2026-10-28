@@ -193,27 +193,27 @@ namespace CapriDesktop
             // languages, like Portuguese "agora", Vietnamese "cau" or Spanish "vale", are left out.
             @"|^((pecha(me|o|a|lo|la)?|am[oó]sa(me)?)(?!\w)|(podes|poder[ií]as) (abrir|po[ñn]er|pechar|buscar|amosar|reproducir|tocar)(?!\w))" +
             @"|^(ireki|itxi|bilatu|erakutsi|gelditu|bidali|erreproduzitu|piztu|itzali)(?!\w)|(^|\s)(ireki|itxi|bilatu|erakutsi|gelditu|bidali|erreproduzitu|piztu|itzali)( ezazu| ezazue| mesedez)?$|(ireki|itxi|bilatu|erakutsi|gelditu|bidali|piztu|itzali) (dezakezu|ahal duzu|al duzu)(?!\w)" +
-            @"|^((soek|wys my|stuur)(?!\w)|maak .+ (oop|toe)$|sit .+ (aan|af|harder|sagter)$|(kan|sal) jy\b.*\b(oopmaak|toemaak|speel|soek|wys|stuur|aansit|afsit)(?!\w))" +
+            @"|^((soek|wys my|stuur)(?!\w)|maak .+ (oop|toe)$|sit (die|dit|hom|haar)( .+)? (aan|af|harder|sagter)$|(kan|sal) jy\b.*\b(oopmaak|toemaak|speel|soek|wys|stuur|aansit|afsit)(?!\w))" +
             @"|^((opnaðu|opnadu|spilaðu|spiladu|lokaðu|lokadu|leitaðu|leitadu|sýndu|syndu|stöðvaðu|stodvadu|stoppaðu|stoppadu|sendu|hækkaðu|haekkadu|lækkaðu|laekkadu|kveiktu|slökktu|slokktu|settu)(?!\w)|(geturðu|geturdu|gætirðu|gaetirdu)\b.*\b(opnað|opnad|spilað|spilad|lokað|lokad|leitað|leitad|sýnt|synt|sett|kveikt|slökkt)(?!\w)|viltu (opna|loka|leita|sýna|syna|setja|kveikja|slökkva|slokkva|senda)(?!\w))" +
-            @"|^((hap|hape|luaj|mbyll|mbylle|kërko|kerko|më trego|me trego|ndalo|dërgo|dergo|ndiz)(?!\w)|(a )?(mund|mundesh|mundeni) (të |te |ta |t'i )?(hapësh|hapesh|luash|mbyllësh|mbyllesh|kërkosh|kerkosh|tregosh|ndezësh|ndezesh|dërgosh|dergosh)(?!\w))" +
+            @"|^((hape|luaj|mbyll|mbylle|kërko|kerko|më trego|me trego|ndalo|dërgo|dergo|ndiz)(?!\w)|(a )?(mund|mundesh|mundeni) (të |te |ta |t'i )?(hapësh|hapesh|luash|mbyllësh|mbyllesh|kërkosh|kerkosh|tregosh|ndezësh|ndezesh|dërgosh|dergosh)(?!\w))" +
             @"|^((oscail|seinn|dún|cuardaigh|taispeáin|taispeain|seol|ardaigh|ísligh|isligh|múch)(?!\w)|an (féidir|feidir) leat\b.*\b(oscailt|sheinm|sheinnt|chasadh|dhúnadh|dhunadh|chuardach|thaispeáint|thaispeaint|mhúchadh)(?!\w))" +
             @"|^((agor|agorwch|chwarae|chwaraea|chwaraewch|caea|caewch|chwilia|chwiliwch|dangos|dangosa|dangoswch|stopia|anfon|anfona|anfonwch|diffodd|diffodda)(?!\w)|(alli di|allet ti|wnei di|fedri di|gallwch chi|wnewch chi) (plîs |plis )?(agor|chwarae|cau|chwilio|dangos|anfon|diffodd|troi)(?!\w))" +
             // Belarusian and Macedonian; Azerbaijani, Uzbek, Kazakh, Mongolian and Nepali put the verb last.
             @"|^(адкрый|ўключы|уключы|прайграй|пастаў|зачыні|знайдзі|пакажы|спыні|выключы|дашлі|зрабі (гучней|цішэй)|(можаш|можаце|ці можаш|ці можаце) (ты |вы )?(адкрыць|уключыць|ўключыць|прайграць|паставіць|зачыніць|знайсці|паказаць|выключыць))(?!\w)" +
             @"|^((пушти|најди|пребарај|запри|стопирај|испрати|засили|вклучи|исклучи)(?!\w)|(можеш ли|дали можеш|може ли) (да )?(го |ја |ги )?(отвориш|пуштиш|затвориш|најдеш|пребараш|покажеш|вклучиш|исклучиш|испратиш)(?!\w))" +
             @"|(^|\s)(aç|bağla|oxut|qoş|axtar|göstər|dayandır|göndər|açarsan|aça bilərsən|bağlaya bilərsən|səsi artır|səsi azalt)( zəhmət olmasa)?$" +
-            @"|(^|\s)(och|oching|ochib ber|yop|yoping|qo['ʻ‘`]?y|qo['ʻ‘`]?ying|ijro et|ijro eting|qidir|qidiring|ko['ʻ‘`]?rsat|ko['ʻ‘`]?rsating|to['ʻ‘`]?xtat|to['ʻ‘`]?xtating|yubor|yuboring)( iltimos)?$" +
+            @"|ni (och|yop)( iltimos)?$|(^|\s)(oching|ochib ber|yoping|qo['ʻ‘`]?y|qo['ʻ‘`]?ying|ijro et|ijro eting|qidir|qidiring|ko['ʻ‘`]?rsat|ko['ʻ‘`]?rsating|to['ʻ‘`]?xtat|to['ʻ‘`]?xtating|yubor|yuboring)( iltimos)?$" +
             @"|(^|\s)(аш|ашшы|ашыңыз|ашып бер|жап|жапшы|жабыңыз|қос|қосшы|қосыңыз|ойнат|ойнатшы|ізде|іздеші|іздеңіз|көрсет|көрсетші|көрсетіңіз|тоқтат|тоқтатшы|жібер|жіберші)( өтінемін)?$" +
             @"|(^|\s)(нээ|нээгээч|нээж өг|нээнэ үү|хаагаач|тоглуул|тоглуулаач|тоглуулна уу|хайгаач|хайна уу|харуул|харуулаач|харуулна уу|зогсоо|зогсоогоорой|зогсооно уу|илгээ|илгээгээч|илгээнэ үү|асаа|асаагаач|асаана уу|унтраа|унтраагаач|унтраана уу)( л| дээ)?$" +
             @"|(^|\s)(खोल|खोलिदेऊ|खोलिदिनुहोस्|खोल्नुहोस्|बजाऊ|बजाइदेऊ|बजाउनुहोस्|चलाऊ|चलाइदेऊ|चलाउनुहोस्|बन्द गर|बन्द गरिदेऊ|बन्द गर्नुहोस्|खोज|खोजिदेऊ|खोज्नुहोस्|देखाऊ|देखाइदेऊ|देखाउनुहोस्|रोक|रोक्नुहोस्|पठाऊ|पठाइदेऊ|पठाउनुहोस्)( न| है| प्लिज)?[।.!?\s]*$" +
             // Javanese, Hausa, Yoruba, Igbo, Zulu, Xhosa and Somali.
             @"|^((tulung|mbok|coba) )*(bukak(en|na|ke)?|bukaen|puter(en|na|ke)|setel(en|na|ke)?|tutupen|tutupna|golek(na|ke|ana)|goleki|tuduh(na|ke)|mandheg(na|ke)|kirim(na|ke|en))(?!\w)" +
-            @"|^((don|dan) allah )?((ka|ki|ku) )?(buɗe|bude|kunna|rufe|nuna min|tsayar|dakatar|kashe)(?!\w)|\b(za ka iya|za ki iya|kana iya|kina iya) (buɗe|bude|kunna|rufe|nemo|nuna|aika|kashe)(?!\w)" +
+            @"|^((don|dan) allah )?((ka|ki|ku) )?(buɗe|kunna|rufe|nuna min|tsayar|dakatar|kashe)(?!\w)|^(don|dan) allah ((ka|ki|ku) )?bude(?!\w)|\b(za ka iya|za ki iya|kana iya|kina iya) (buɗe|bude|kunna|rufe|nemo|nuna|aika|kashe)(?!\w)" +
             @"|^((jọ̀wọ́|jọwọ|jowo) )?(ṣí|ṣi|ṣe orin|kọ orin|wá|fi hàn mí|fi han mi|dá dúró|fi ránṣẹ́|fi ranse)(?!\w)" +
             @"|^(biko )?(meghee|mepee|kpọọ|kpoo|mechie|chọọ|gosi m|kwụsị|kwusi|ziga|gbanye|gbanyụọ|gbanyuo)(?!\w)" +
             @"|^((ngicela|ndicela|sicela) )?(vula|uvule|dlala|udlale|vala|uvale|sesha|usesha|khombisa|ukhombise|thumela|uthumele|khangela|ukhangele|bonisa|ubonise|yeka)(?!\w)|\bunga(vula|dlala|vala|sesha|khombisa|thumela|khangela|bonisa)(?!\w)" +
             // Somali puts the verb last, after a word ending in an article like "-ga" ("Spotify-ga fur"), so English "your fur" stays chat.
-            @"|^fadlan\b.*\b(fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami|tus|dir)$|(\w|-)(ka|ga|ha|ta|da) (fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami)( fadlan)?$|\bi tus( fadlan)?$" +
+            @"|^fadlan\b.*\b(fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami|tus|dir)$|(-(ka|ga|ha|ta|da)|\b(heesta|heesaha|muusigga|muusikada|fiidiyowga|barnaamijka|codka)) (fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami)( fadlan)?$|\bi tus( fadlan)?$" +
             // Amharic puts the verb last too, and ends a sentence with "።" or asks with "፧".
             @"|(^|\s)(ክፈት|ክፈቺ|ክፈቱ|ክፈትልኝ|ክፈቺልኝ|ክፈቱልኝ|አጫውት|አጫውቺ|አጫውቱ|አጫውትልኝ|አጫውቺልኝ|አጫውቱልኝ|ዝጋ|ዝጊ|ዝጉ|ዝጋልኝ|ዝጊልኝ|ዝጉልኝ|ፈልግ|ፈልጊ|ፈልጉ|ፈልግልኝ|ፈልጊልኝ|ፈልጉልኝ|አሳየኝ|አሳይኝ|አሳዩኝ|አቁም|አቁሚ|አቁሙ|ላክ|ላኪ|ላኩ|ላክልኝ|ላኪልኝ|ላኩልኝ)( እባክህ| እባክሽ| እባካችሁ| እባክዎ)?[።፧!?.\s]*$" +
             // Hebrew, Urdu and Persian. Urdu and Persian put the verb last.

@@ -10101,7 +10101,7 @@ namespace CapriDesktop
                                         { "ek is lief vir hierdie liedjie", "", "false" },
                                         { "opnaðu Spotify", "", "true" },
                                         { "ég elska þetta lag", "", "false" },
-                                        { "hap Spotify", "", "true" },
+                                        { "hape Spotify", "", "true" },
                                         { "më pëlqen shumë kjo këngë", "", "false" },
                                         { "oscail Spotify", "", "true" },
                                         { "is breá liom an t-amhrán seo", "", "false" },
@@ -10179,7 +10179,10 @@ namespace CapriDesktop
                                         { "playing Valorant rn", "", "false" },
                                         { "that song is fire, I love it", "", "false" },
                                         { "嘿，打开Spotify", "", "true" },
-                                        { "昨日Spotifyを開いて、いい曲を見つけた。", "", "false" }
+                                        { "昨日Spotifyを開いて、いい曲を見つけた。", "", "false" },
+                                        { "Och!", "", "false" }, { "Yop, ça va ?", "", "false" }, { "bude aku lagi sakit", "", "false" }, { "Bude ist voll", "", "false" }, { "hap içtim", "", "false" },
+                                        { "I love panda fur", "", "false" }, { "sit with me im bored af", "", "false" }, { "Spotifyni och", "", "true" }, { "sit die musiek aan", "", "true" },
+                                        { "don allah bude Spotify", "", "true" }, { "hape Spotify-n", "", "true" }, { "fadlan Spotify-ga fur", "", "true" }
                                     };
                                     for (int i = 0; i < intents.GetLength(0); i++)
                                     {
