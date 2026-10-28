@@ -219,6 +219,7 @@ namespace CapriDesktop
                         if (file == "pactl" && pactlWorks && line.Contains("get-sink-volume")) return "Volume: front-left: 26214 /  40% / -23.88 dB,   front-right: 26214 /  40% / -23.88 dB\n        balance 0.00\n";
                         if (file == "pactl" && pactlWorks && line.Contains("get-sink-mute")) return "Mute: yes\n";
                         if (file == "pactl") return pactlWorks ? "" : null;
+                        if (file == "sh" && line.Contains("command -v ")) return line.EndsWith(" spectacle", StringComparison.Ordinal) || line.EndsWith(" plasma-systemmonitor", StringComparison.Ordinal) ? "/usr/bin/found\n" : null;
                         if (line == "amixer sget Master") return "Simple mixer control 'Master',0\n  Front Left: Playback 26214 [40%] [-23.88dB] [on]\n";
                         if (file == "osascript" && line.EndsWith("-e output volume of (get volume settings)", StringComparison.Ordinal)) return "40\n";
                         if (file == "osascript" && line.EndsWith("-e output muted of (get volume settings)", StringComparison.Ordinal)) return "false\n";
@@ -240,6 +241,7 @@ namespace CapriDesktop
                     string searched = Hands.Do("open_website", new ToolArguments { Site = "youtube", Search = "lofi beats" });
                     string skipped = Hands.Do("media", new ToolArguments { Action = "next" });
                     string snipped = Hands.Do("shortcut", new ToolArguments { Name = "screenshot" });
+                    string clipped = Hands.Do("shortcut", new ToolArguments { Name = "clip_that" });
                     Limbs.Key(0xB0, true);
                     Limbs.Key(0xAF, true);
                     Limbs.Key(0xAD, false);
@@ -249,7 +251,7 @@ namespace CapriDesktop
                     string linuxSong = Limbs.Song(false);
                     string log = string.Join(" / ", did);
                     if (opened != "Opened Spotify." || !log.Contains("launch /bin/sh -c spotify") || searched != "Searched youtube.com for lofi beats." || !log.Contains((OperatingSystem.IsMacOS() ? "launch open " : "launch xdg-open ") + "https://www.youtube.com/results?search_query=lofi%20beats")) throw new Exception("Opening apps or sites went wrong: " + opened + " / " + searched + " / " + log);
-                    if (skipped != "Skipped to the next track." || !log.Contains(OperatingSystem.IsMacOS() ? "osascript -e tell application \"Spotify\" to next track" : "--dest=org.mpris.MediaPlayer2.spotify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next") || !snipped.Contains("only work on Windows")) throw new Exception("Media keys or shortcuts went wrong: " + skipped + " / " + snipped + " / " + log);
+                    if (skipped != "Skipped to the next track." || !log.Contains(OperatingSystem.IsMacOS() ? "osascript -e tell application \"Spotify\" to next track" : "--dest=org.mpris.MediaPlayer2.spotify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next") || !snipped.StartsWith("Opened the screenshot picker.", StringComparison.Ordinal) || !clipped.Contains("only work on Windows")) throw new Exception("Media keys or shortcuts went wrong: " + skipped + " / " + snipped + " / " + clipped + " / " + log);
                     if (!log.Contains("osascript -e tell application \"Spotify\" to next track") || !log.Contains("+ 2)") || !log.Contains("pactl set-sink-mute @DEFAULT_SINK@ toggle / amixer -q sset Master toggle")) throw new Exception("Mac or Linux media keys went wrong: " + log);
                     if (!log.Contains("play track \"spotify:track:2iyaHQlYrR8Eyr4wOmOT5D\"") || !log.Contains("OpenUri string:spotify:track:2iyaHQlYrR8Eyr4wOmOT5D") || log.Contains("launch open spotify:") || log.Contains("launch xdg-open spotify:")) throw new Exception("Spotify tracks didn't play directly: " + log);
                     if (macSong != "Petite Meller - In Love With Myself" || linuxSong != "Chase Atlantic - Consume") throw new Exception("Now playing was read wrong: " + macSong + " / " + linuxSong);
@@ -275,6 +277,15 @@ namespace CapriDesktop
                         || !windowLog.Contains("set visible of application process \"Discord\" to false") || !linuxSteered || !windowLog.Contains("wmctrl -i -c 0x03c00007") || !windowLog.Contains("xdotool windowminimize 0x04200001") || !windowLog.Contains("wmctrl -i -a 0x04200001")
                         || closedDiscord != "Closed discord." || !noWmctrl.Contains("needs wmctrl") || !noneListed || !listedAgain || Hands.Presses)
                         throw new Exception("Closing and switching apps went wrong: " + closedDiscord + " / " + noWmctrl + " / " + windowLog);
+                    // Shortcuts with a tool of their own: the screenshot picker, the task manager and, on Linux, show desktop.
+                    did.Clear();
+                    string linuxShot = Limbs.Shortcut("screenshot", false), linuxMonitor = Limbs.Shortcut("task_manager", false), linuxDesktop = Limbs.Shortcut("show_desktop", false);
+                    string macShot = Limbs.Shortcut("screenshot", true), macMonitor = Limbs.Shortcut("task_manager", true);
+                    string shortcutLog = string.Join(" / ", did);
+                    if (linuxShot != "Opened the screenshot picker. Drag over what to grab." || linuxMonitor != "Opened the system monitor." || linuxDesktop != "Showed the desktop." || macMonitor != "Opened Activity Monitor."
+                        || !macShot.EndsWith("it goes to your clipboard.", StringComparison.Ordinal) || Limbs.Shortcut("show_desktop", true) != null || Limbs.Shortcut("clip_that", false) != null
+                        || !shortcutLog.Contains("launch spectacle -r") || !shortcutLog.Contains("launch plasma-systemmonitor") || !shortcutLog.Contains("wmctrl -k on") || !shortcutLog.Contains("launch screencapture -i -c") || !shortcutLog.Contains("launch open -a Activity Monitor") || shortcutLog.Contains("launch flameshot"))
+                        throw new Exception("Mac or Linux shortcuts went wrong: " + shortcutLog);
                     // An exact volume and the mute state: osascript on Mac, pactl on Linux, and amixer when pactl is missing.
                     did.Clear();
                     pactlWorks = true;
@@ -313,7 +324,7 @@ namespace CapriDesktop
                     Hands.Catalog = catalogWas;
                     Hands.Forget();
                 }
-                checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing, turns or sets the volume and reads the mute state on Mac and Linux, closes, minimizes and switches to apps (System Events on Mac, wmctrl on Linux, which says when it's missing), and shuts down, restarts, sleeps, locks and signs out, with cancel stopping a wait; Windows-only shortcuts say so");
+                checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing, turns or sets the volume and reads the mute state on Mac and Linux, closes, minimizes and switches to apps (System Events on Mac, wmctrl on Linux, which says when it's missing), and shuts down, restarts, sleeps, locks and signs out, with cancel stopping a wait; a screenshot, the task manager and show desktop use their own tools, and key-press shortcuts say they're Windows-only");
                 pet.ShowBrains(new[] { "gemma4:e4b", "qwen3:8b" });
                 int brains = pet.BrainChoices;
                 pet.Brain.Remember("what's up?", "Not much, choom.");

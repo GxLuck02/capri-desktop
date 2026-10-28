@@ -186,6 +186,8 @@ namespace CapriDesktop
         internal static Func<string> Unlisted = delegate { return null; };
         // False where she can't press keys yet (Mac and Linux), so a Discord shortcut says so before Discord comes to the front.
         internal static bool Presses = true;
+        // A shortcut done another way, like a screenshot tool on Mac and Linux, returns what she did; null presses the keys.
+        internal static Func<string, string> Instead = delegate { return null; };
         internal static Func<string, bool> PressPlay = ClickPlay;
         internal static Func<string> NowPlaying = SpotifyTitle;
         internal static Func<string, string, string> Work = delegate { return "Using the mouse and keyboard isn't ready on this PC yet."; };
@@ -1219,6 +1221,8 @@ namespace CapriDesktop
             int row = -1;
             for (int i = 0; i < Shortcuts.GetLength(0); i++) if (Shortcuts[i, 0] == name) row = i;
             if (row < 0) return "There's no shortcut called " + name + ".";
+            string instead = Instead(name);
+            if (instead != null) return instead;
             string[] codes = Shortcuts[row, 2].Split(' ');
             byte[] keys = new byte[codes.Length];
             for (int i = 0; i < codes.Length; i++) keys[i] = Convert.ToByte(codes[i], 16);

@@ -95,6 +95,7 @@ namespace CapriDesktop
             Hands.Power = delegate(string action, int seconds) { return Power(action, seconds, OnMac); };
             Hands.Unlisted = delegate { return Blind; };
             Hands.Presses = false;
+            Hands.Instead = delegate(string name) { return Shortcut(name, OnMac); };
             Hands.SetVolume = delegate(double level) { return SetLevel(level, OnMac); };
             Hands.VolumeNow = delegate { return Level(OnMac); };
             Hands.MuteState = delegate { return Muted(OnMac); };
@@ -319,6 +320,42 @@ namespace CapriDesktop
         }
 
         private static string Quoted(string text) { return (text ?? "").Replace("\\", "\\\\").Replace("\"", "\\\""); }
+
+        // Shortcuts with a tool of their own on Mac and Linux. The rest need key presses, which only Windows has so far.
+        internal static string Shortcut(string name, bool mac)
+        {
+            if (name == "screenshot")
+            {
+                if (mac) { Launch("screencapture", new[] { "-i", "-c" }); return "Opened the screenshot picker. Drag over what to grab, and it goes to your clipboard."; }
+                string[][] pickers = { new[] { "flameshot", "gui" }, new[] { "spectacle", "-r" }, new[] { "gnome-screenshot", "-a", "-c" }, new[] { "xfce4-screenshooter", "-r" } };
+                foreach (string[] picker in pickers)
+                {
+                    if (!Has(picker[0])) continue;
+                    string[] rest = new string[picker.Length - 1];
+                    Array.Copy(picker, 1, rest, 0, rest.Length);
+                    Launch(picker[0], rest);
+                    return "Opened the screenshot picker. Drag over what to grab.";
+                }
+                // The desktop's own screenshot window, through its portal: GNOME's on Wayland.
+                if (Has("gdbus"))
+                {
+                    Launch("gdbus", new[] { "call", "--session", "--dest", "org.freedesktop.portal.Desktop", "--object-path", "/org/freedesktop/portal/desktop", "--method", "org.freedesktop.portal.Screenshot.Screenshot", "", "{'interactive': <true>}" });
+                    return "Opened the screenshot window.";
+                }
+                return "Couldn't find a screenshot tool. Install one, like flameshot, and ask again.";
+            }
+            if (name == "task_manager")
+            {
+                if (mac) { Launch("open", new[] { "-a", "Activity Monitor" }); return "Opened Activity Monitor."; }
+                foreach (string monitor in new[] { "gnome-system-monitor", "plasma-systemmonitor", "ksysguard", "xfce4-taskmanager", "mate-system-monitor", "lxtask" })
+                    if (Has(monitor)) { Launch(monitor, new string[0]); return "Opened the system monitor."; }
+                return "Couldn't find a system monitor. Install one, like gnome-system-monitor, and ask again.";
+            }
+            if (name == "show_desktop" && !mac && Music.Run("wmctrl", new[] { "-k", "on" }) != null) return "Showed the desktop.";
+            return null;
+        }
+
+        private static bool Has(string tool) { return Music.Run("sh", new[] { "-c", "command -v " + tool }) != null; }
 
         // Her power tool on Mac and Linux, like shutdown.exe on Windows: a wait first, so her line plays and "cancel" can stop
         // it, then the first command that works.
