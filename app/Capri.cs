@@ -1146,10 +1146,12 @@ namespace CapriDesktop
             if (!testing) GreetSoon();
             if (!testing && FreeChatOn) { GetFreeVoice(); GetFreeEars(); }
             if (!testing && voice.Key != null) ListVoices(voice.Key, false);
-            if (!testing) talkKey = Native.RegisterHotKey(Handle, TalkKeyId, preferences.TalkMods | 0x4000, preferences.TalkVk);
-            bool muteFree = !testing && Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk) && Native.UnregisterHotKey(Handle, MuteKeyId);
-            if (!testing) typeKey = Native.RegisterHotKey(Handle, TypeKeyId, preferences.TypeMods | 0x4000, preferences.TypeVk);
-            if (!testing) hideKey = Native.RegisterHotKey(Handle, HideKeyId, preferences.HideMods | 0x4000, preferences.HideVk);
+            if (!testing) talkKey = ByMouse(preferences.TalkVk) || Native.RegisterHotKey(Handle, TalkKeyId, preferences.TalkMods | 0x4000, preferences.TalkVk);
+            bool muteFree = !testing && (ByMouse(preferences.MuteVk) || (Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk) && Native.UnregisterHotKey(Handle, MuteKeyId)));
+            if (!testing) typeKey = ByMouse(preferences.TypeVk) || Native.RegisterHotKey(Handle, TypeKeyId, preferences.TypeMods | 0x4000, preferences.TypeVk);
+            if (!testing) hideKey = ByMouse(preferences.HideVk) || Native.RegisterHotKey(Handle, HideKeyId, preferences.HideMods | 0x4000, preferences.HideVk);
+            mouseKeys.Tick += delegate { WatchMouseKeys(); };
+            WatchMouse();
             mainframe.Hotkeys(TalkKeyName, MuteKeyName, TypeKeyName, HideKeyName);
             mainframe.ShowShortcut(talkKey, muteFree);
             mainframe.ShowKeys(typeKey, hideKey);
@@ -2553,11 +2555,16 @@ namespace CapriDesktop
 
         internal string HideKeyName { get { return KeyName(preferences.HideMods, preferences.HideVk); } }
 
-        // Any key alone or with any of Alt (1), Ctrl (2), Shift (4) and Win (8), which are RegisterHotKey's own flags.
-        // A modifier on its own, a mouse button or an IME placeholder never counts.
+        // Any key alone or with any of Alt (1), Ctrl (2), Shift (4) and Win (8), which are RegisterHotKey's own flags, and middle click
+        // or a side mouse button too. A modifier on its own, a left or right click or an IME placeholder never counts.
         internal static bool Bindable(int mods, int vk) { return (mods & ~15) == 0 && vk > 0 && vk < 0xFF && Array.IndexOf(NotKeys, vk) < 0; }
 
-        private static readonly int[] NotKeys = { 0x01, 0x02, 0x04, 0x05, 0x06, 0x10, 0x11, 0x12, 0x5B, 0x5C, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xE5, 0xE7 };
+        private static readonly int[] NotKeys = { 0x01, 0x02, 0x10, 0x11, 0x12, 0x5B, 0x5C, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xE5, 0xE7 };
+
+        // Middle click, Mouse 4 and Mouse 5. RegisterHotKey can't take them, so a bound one is watched instead.
+        internal static bool ByMouse(int vk) { return vk >= 0x04 && vk <= 0x06; }
+
+        private static readonly string[] MouseWords = { "Middle click", "Mouse 4", "Mouse 5" };
 
         // Keys carries Ctrl, Alt and Shift. The Windows key comes separately, because Keys has no flag for it.
         internal static int HotMods(Keys keys, bool win) { return ((keys & Keys.Alt) != 0 ? 1 : 0) | ((keys & Keys.Control) != 0 ? 2 : 0) | ((keys & Keys.Shift) != 0 ? 4 : 0) | (win ? 8 : 0); }
@@ -2575,6 +2582,7 @@ namespace CapriDesktop
             if ((vk >= 0x41 && vk <= 0x5A) || (vk >= 0x30 && vk <= 0x39)) return ((char)vk).ToString();
             if (vk >= 0x70 && vk <= 0x87) return "F" + (vk - 0x6F);
             if (vk >= 0x60 && vk <= 0x69) return "Num " + (vk - 0x60);
+            if (ByMouse(vk)) return MouseWords[vk - 0x04];
             int at = Array.IndexOf(WordedKeys, vk);
             if (at >= 0) return KeyWords[at];
             // Punctuation moves around between keyboard layouts, so it's named by what this keyboard types.
@@ -2638,11 +2646,11 @@ namespace CapriDesktop
                 {
                     bool live = muteKey;
                     if (live) Native.UnregisterHotKey(Handle, MuteKeyId);
-                    bool free = Native.RegisterHotKey(Handle, MuteKeyId, mods | 0x4000, vk);
-                    if (free && !live) Native.UnregisterHotKey(Handle, MuteKeyId);
+                    bool free = ByMouse(vk) || Native.RegisterHotKey(Handle, MuteKeyId, mods | 0x4000, vk);
+                    if (free && !live && !ByMouse(vk)) Native.UnregisterHotKey(Handle, MuteKeyId);
                     if (!free)
                     {
-                        if (live) muteKey = Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk);
+                        if (live) muteKey = ByMouse(preferences.MuteVk) || Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk);
                         return name + " is taken by another app. Try another.";
                     }
                 }
@@ -2650,8 +2658,8 @@ namespace CapriDesktop
                 {
                     int id = slot == 0 ? TalkKeyId : slot == 2 ? TypeKeyId : HideKeyId;
                     if (slot == 0 ? talkKey : slot == 2 ? typeKey : hideKey) Native.UnregisterHotKey(Handle, id);
-                    bool held = Native.RegisterHotKey(Handle, id, mods | 0x4000, vk);
-                    bool kept = held || Native.RegisterHotKey(Handle, id, bound[slot * 2] | 0x4000, bound[slot * 2 + 1]);
+                    bool held = ByMouse(vk) || Native.RegisterHotKey(Handle, id, mods | 0x4000, vk);
+                    bool kept = held || ByMouse(bound[slot * 2 + 1]) || Native.RegisterHotKey(Handle, id, bound[slot * 2] | 0x4000, bound[slot * 2 + 1]);
                     if (slot == 0) talkKey = kept; else if (slot == 2) typeKey = kept; else hideKey = kept;
                     if (!held) return name + " is taken by another app. Try another.";
                 }
@@ -2661,9 +2669,40 @@ namespace CapriDesktop
             else if (slot == 2) { preferences.TypeMods = mods; preferences.TypeVk = vk; }
             else { preferences.HideMods = mods; preferences.HideVk = vk; }
             SavePreferences();
+            WatchMouse();
             if (!testing) { mainframe.ShowShortcut(talkKey, true); mainframe.ShowKeys(typeKey, hideKey); }
             mainframe.Hotkeys(TalkKeyName, MuteKeyName, TypeKeyName, HideKeyName);
             return null;
+        }
+
+        // A bound mouse button is checked about 30 times a second, only while one of her keys is a mouse button.
+        private readonly System.Windows.Forms.Timer mouseKeys = new System.Windows.Forms.Timer { Interval = 30 };
+        private readonly bool[] mouseHeld = new bool[4];
+        internal static Func<int, bool> KeyHeld = delegate(int vk) { return (Native.GetAsyncKeyState(vk) & 0x8000) != 0; };
+
+        private void WatchMouse()
+        {
+            if (!testing && (ByMouse(preferences.TalkVk) || ByMouse(preferences.MuteVk) || ByMouse(preferences.TypeVk) || ByMouse(preferences.HideVk))) mouseKeys.Start();
+            else mouseKeys.Stop();
+        }
+
+        // A press counts once, when the button goes down with exactly its modifiers held, like RegisterHotKey's keys. It isn't
+        // swallowed, so the button still does its own job in the app under it. While a new key is being picked, nothing fires.
+        internal void WatchMouseKeys()
+        {
+            int[] bound = { preferences.TalkMods, preferences.TalkVk, preferences.MuteMods, preferences.MuteVk, preferences.TypeMods, preferences.TypeVk, preferences.HideMods, preferences.HideVk };
+            int[] ids = { TalkKeyId, MuteKeyId, TypeKeyId, HideKeyId };
+            int mods = (KeyHeld(0x12) ? 1 : 0) | (KeyHeld(0x11) ? 2 : 0) | (KeyHeld(0x10) ? 4 : 0) | (KeyHeld(0x5B) || KeyHeld(0x5C) ? 8 : 0);
+            for (int slot = 0; slot < ids.Length; slot++)
+            {
+                int vk = bound[slot * 2 + 1];
+                bool down = ByMouse(vk) && KeyHeld(vk);
+                bool pressed = down && !mouseHeld[slot] && mods == bound[slot * 2];
+                mouseHeld[slot] = down;
+                if (!pressed || (slot == 1 && !muteKey) || mainframe.Picking) continue;
+                Message press = Message.Create(Handle, 0x0312, new IntPtr(ids[slot]), IntPtr.Zero);
+                WndProc(ref press);
+            }
         }
 
         internal int BubbleTime { get { return Math.Max(0, Math.Min(2, preferences.BubbleTime)); } }
@@ -4906,7 +4945,7 @@ namespace CapriDesktop
             }
             chatting = true;
             ears.Muted = false;
-            if (!testing && !muteKey) muteKey = Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk);
+            if (!testing && !muteKey) muteKey = ByMouse(preferences.MuteVk) || Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk);
             pill.SetChat(true, false);
             pillUntil = clock.Elapsed.TotalSeconds + 1.5;
             brain.Cancel();
@@ -4928,7 +4967,7 @@ namespace CapriDesktop
             micHeard = micWarned = false;
             micQuietFrom = -1;
             ears.Muted = false;
-            if (!testing && !muteKey) muteKey = Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk);
+            if (!testing && !muteKey) muteKey = ByMouse(preferences.MuteVk) || Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk);
             pill.SetChat(true, false);
             pillUntil = clock.Elapsed.TotalSeconds + 1.5;
             brain.Cancel();
@@ -5554,7 +5593,7 @@ namespace CapriDesktop
             earsAwaited = false;
             earsRetryAt = -1;
             micQuietFrom = -1;
-            if (muteKey) Native.UnregisterHotKey(Handle, MuteKeyId);
+            if (muteKey && !ByMouse(preferences.MuteVk)) Native.UnregisterHotKey(Handle, MuteKeyId);
             muteKey = false;
             chatTicket++;
             Agent closing = agent;
@@ -6206,6 +6245,7 @@ namespace CapriDesktop
             signals.Stop();
             brain.Cancel();
             StopChat();
+            mouseKeys.Stop();
             if (talkKey) Native.UnregisterHotKey(Handle, TalkKeyId);
             talkKey = false;
             if (typeKey) Native.UnregisterHotKey(Handle, TypeKeyId);
@@ -11949,6 +11989,49 @@ namespace CapriDesktop
                                 || anyShown != "Talk: F8 | Mute mic: Ctrl + Shift + K | Type: Q | Hide/show: Win + Alt + J" || !comma.StartsWith("Shift + ", StringComparison.Ordinal) || comma.Length != 9 || pageUp != "Ctrl + Page Up" || pad != "Num 5" || twelve != "Alt + F12" || f24 != "F24")
                                 throw new Exception("Any key didn't save: " + loneF8 + " / " + f8Saved + " " + ctrlShiftK + " " + winAlone + " " + winAltJ + " " + qSaved + " / " + loneLetter + " / " + loneSaved + " / " + anyShown + " / " + comma + " " + pageUp + " " + pad + " " + twelve + " " + f24);
                             checks.Add("PASS any key: F8 on its own, Ctrl + Shift + K and Win + Alt + J all save and show by name, Win alone can't be confirmed, and a lone Q says it won't type in other apps");
+                            // Middle click and the side mouse buttons are picked on the Mainframe like a key, then watched, since RegisterHotKey
+                            // can't take them. A press fires once, only with exactly its modifiers held, and never while a key is being picked.
+                            mainframe.PickKeys(3);
+                            Message middleDown = Message.Create(mainframe.Handle, 0x0207, IntPtr.Zero, IntPtr.Zero);
+                            bool middleTaken = mainframe.PreFilterMessage(ref middleDown) && mainframe.KeysShown.EndsWith("| Hide/show: Middle click", StringComparison.Ordinal);
+                            Message sideDown = Message.Create(mainframe.Handle, 0x020B, new IntPtr(2 << 16), IntPtr.Zero);
+                            bool sideTaken = mainframe.PreFilterMessage(ref sideDown);
+                            string sideNote = mainframe.KeysNoteText;
+                            mainframe.ConfirmKeys();
+                            string sideSaved = mainframe.KeysNoteText;
+                            bool mouseFive = preferences.HideMods == 0 && preferences.HideVk == 0x06 && HideKeyName == "Mouse 5" && LoadPreferences().HideVk == 0x06 && !mainframe.PreFilterMessage(ref sideDown);
+                            Func<int, bool> keyHeldWas = KeyHeld;
+                            System.Collections.Generic.List<int> fakeHeld = new System.Collections.Generic.List<int>();
+                            bool mouseStart = hidden;
+                            string mouseFlips = "";
+                            try
+                            {
+                                KeyHeld = delegate(int heldVk) { return fakeHeld.Contains(heldVk); };
+                                Action mouseTick = delegate { WatchMouseKeys(); mouseFlips += hidden != mouseStart ? "1" : "0"; };
+                                mouseTick();
+                                fakeHeld.Add(0x06);
+                                mouseTick();
+                                mouseTick();
+                                fakeHeld.Clear();
+                                mouseTick();
+                                fakeHeld.AddRange(new[] { 0x11, 0x06 });
+                                mouseTick();
+                                fakeHeld.Clear();
+                                mouseTick();
+                                mainframe.PickKeys(0);
+                                fakeHeld.Add(0x06);
+                                mouseTick();
+                                mainframe.CancelKeys();
+                                fakeHeld.Clear();
+                                mouseTick();
+                                fakeHeld.Add(0x06);
+                                mouseTick();
+                            }
+                            finally { KeyHeld = keyHeldWas; }
+                            if (!middleTaken || !sideTaken || sideNote != "Mouse 5 still does its own job in other apps too. Confirm to keep it." || sideSaved != "Saved. Mouse 5 hides or shows her. It still does its own job in other apps too." || !mouseFive
+                                || mouseFlips != "011111110" || hidden != mouseStart || KeyName(2, 0x04) != "Ctrl + Middle click" || KeyName(0, 0x05) != "Mouse 4" || !Bindable(0, 0x04) || Bindable(0, 0x01) || Bindable(0, 0x02))
+                                throw new Exception("Mouse buttons as keys went wrong: middle " + middleTaken + ", side " + sideTaken + " / " + sideNote + " / " + sideSaved + " / saved " + mouseFive + " / presses " + mouseFlips);
+                            checks.Add("PASS mouse buttons as keys: middle click, Mouse 4 and Mouse 5 can be picked on the Mainframe and save by name; a held press fires once, Ctrl + Mouse 5 isn't Mouse 5, nothing fires while a key is being picked, and left or right click never counts");
                             // Windows itself takes them: no modifier at all (F8, and F23, which nothing else uses), Ctrl with Shift, and Win with Alt.
                             int[,] probes = { { 0, 0x77 }, { 0, 0x86 }, { 6, 0x4B }, { 9, 0x4A } };
                             System.Collections.Generic.List<string> registered = new System.Collections.Generic.List<string>(), heldElsewhere = new System.Collections.Generic.List<string>();
@@ -14566,6 +14649,7 @@ namespace CapriDesktop
         [DllImport("user32.dll")] internal static extern int SetWindowLong(IntPtr window, int index, int value);
         [DllImport("user32.dll", SetLastError = true)] internal static extern bool RegisterHotKey(IntPtr window, int id, int modifiers, int key);
         [DllImport("user32.dll")] internal static extern bool UnregisterHotKey(IntPtr window, int id);
+        [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
         [DllImport("user32.dll")] internal static extern short GetKeyState(int key);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int MapVirtualKey(int code, int type);
         [DllImport("user32.dll")] internal static extern IntPtr WindowFromPoint(Point point);

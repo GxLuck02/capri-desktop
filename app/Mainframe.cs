@@ -6,7 +6,7 @@ using System.Windows.Forms;
 
 namespace CapriDesktop
 {
-    internal sealed class Mainframe : Form
+    internal sealed class Mainframe : Form, IMessageFilter
     {
         private static readonly Color Field = Color.FromArgb(17, 21, 28);
         private static readonly Color Hover = Color.FromArgb(26, 32, 42);
@@ -520,6 +520,7 @@ namespace CapriDesktop
             bottomRim.BringToFront();
             Searching();
             Sync();
+            Application.AddMessageFilter(this);
         }
 
         private Slider PageSlider(string[] names, int y, string name, int x = 0)
@@ -828,7 +829,7 @@ namespace CapriDesktop
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { modelMenu.Dispose(); voiceMenu.Dispose(); speechModelMenu.Dispose(); micMenu.Dispose(); languageMenu.Dispose(); freeMenu.Dispose(); }
+            if (disposing) { Application.RemoveMessageFilter(this); modelMenu.Dispose(); voiceMenu.Dispose(); speechModelMenu.Dispose(); micMenu.Dispose(); languageMenu.Dispose(); freeMenu.Dispose(); }
             base.Dispose(disposing);
         }
 
@@ -1476,7 +1477,8 @@ namespace CapriDesktop
             pendingVk = (int)key;
             KeyLabels();
             string name = Companion.KeyName(pendingMods, pendingVk);
-            KeysNote(Companion.Swallows(pendingMods, pendingVk) ? name + " won't type in other apps while she runs. Confirm to keep it." : "Confirm to keep " + name + ", or Cancel.", false);
+            KeysNote(Companion.Swallows(pendingMods, pendingVk) ? name + " won't type in other apps while she runs. Confirm to keep it."
+                : Companion.ByMouse(pendingVk) ? name + " still does its own job in other apps too. Confirm to keep it." : "Confirm to keep " + name + ", or Cancel.", false);
         }
 
         internal void ConfirmKeys()
@@ -1489,7 +1491,7 @@ namespace CapriDesktop
             capturing = 0;
             pendingMods = -1;
             KeyLabels();
-            KeysNote("Saved. " + (slot == 0 ? talkName + " starts voice chat." : slot == 1 ? muteName + " mutes your mic." : slot == 2 ? typeName + " opens her typing box." : hideName + " hides or shows her.") + (Companion.Swallows(mods, vk) ? " It won't type in other apps while she runs." : ""), false);
+            KeysNote("Saved. " + (slot == 0 ? talkName + " starts voice chat." : slot == 1 ? muteName + " mutes your mic." : slot == 2 ? typeName + " opens her typing box." : hideName + " hides or shows her.") + (Companion.Swallows(mods, vk) ? " It won't type in other apps while she runs." : Companion.ByMouse(vk) ? " It still does its own job in other apps too." : ""), false);
         }
 
         internal void CancelKeys()
@@ -1521,6 +1523,19 @@ namespace CapriDesktop
         {
             if (capturing == 0) return base.ProcessCmdKey(ref msg, keyData);
             TakeKeys(keyData, WinHeld());
+            return true;
+        }
+
+        internal bool Picking { get { return capturing != 0; } }
+
+        // While a key is being picked, middle click or a side mouse button anywhere on the Mainframe is picked like a key press.
+        public bool PreFilterMessage(ref Message m)
+        {
+            if (capturing == 0 || (m.Msg != 0x0207 && m.Msg != 0x0209 && m.Msg != 0x020B && m.Msg != 0x020D)) return false;
+            Control over = Control.FromChildHandle(m.HWnd);
+            if (over == null || over.FindForm() != this) return false;
+            Keys button = m.Msg == 0x0207 || m.Msg == 0x0209 ? Keys.MButton : ((m.WParam.ToInt64() >> 16) & 0xFFFF) == 2 ? Keys.XButton2 : Keys.XButton1;
+            TakeKeys(button | ModifierKeys, WinHeld());
             return true;
         }
 

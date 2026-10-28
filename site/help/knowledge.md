@@ -367,12 +367,14 @@ KEYS (bottom of the page)
 ### Changing her keys
 1. In the Mainframe, click Settings and use the KEYS row at the bottom (Talk, Mute mic, Type or Hide/show). Clicking "Ctrl + Alt + V to talk" or "Ctrl + Alt + N mutes mic" on the main page opens Settings with that key ready to change.
 2. The button says "Press new keys, then Confirm", and Confirm and Cancel show beside the keys.
-3. Press any key, alone or with Ctrl, Alt, Shift or Win. The button shows what you press as you press it, and pressing again replaces it. Enter, Esc and Tab count as keys too.
+3. Press any key, alone or with Ctrl, Alt, Shift or Win. The button shows what you press as you press it, and pressing again replaces it. Enter, Esc and Tab count as keys too. For a mouse button, middle click or press a side button (Mouse 4 or Mouse 5) with the pointer over the Mainframe.
 4. Click Confirm to save it, or Cancel to keep the old key. Clicking another key's button, Back, or into anything else in the Mainframe also keeps the old key.
 
 Before 0.7.4 her keys had to be Ctrl or Alt plus a letter, number or F-key, and Esc cancelled. An older Capri that finds a key it can't use, like F8 on its own or anything with Win, puts that key back to its default.
 
-A key that types, like Q, Space, Enter or a number, on its own or with only Shift, stops typing in other apps while she runs, because Windows gives it to her everywhere. The KEYS row says so. Pick a combination with Ctrl, Alt or Win to keep it typing. Ctrl, Alt, Shift or Win on their own can't be her key, and mouse buttons can't be yet.
+A key that types, like Q, Space, Enter or a number, on its own or with only Shift, stops typing in other apps while she runs, because Windows gives it to her everywhere. The KEYS row says so. Pick a combination with Ctrl, Alt or Win to keep it typing. Ctrl, Alt, Shift or Win on their own can't be her key.
+
+Middle click and the side mouse buttons (Mouse 4 and Mouse 5) can be her keys, on their own or with Ctrl, Alt, Shift or Win. Unlike keys, they still do their own job in other apps too: Mouse 4 still goes back in your browser, and middle click still opens links in a new tab. Left and right click can't be her key.
 
 Messages you may see:
 - "Confirm to keep <key>, or Cancel."
