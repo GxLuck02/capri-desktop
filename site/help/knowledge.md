@@ -581,7 +581,7 @@ If a clip doesn't work, the note under VOICE says why, in red:
 
 Her other free voice styles (Her own, Bright, Sly and Sharp) are set voices and can't copy yours. With one of them picked, the note under VOICE says "Your voice only works with HD." For ElevenLabs, clone your voice on elevenlabs.io instead (Voice Creation > Instant Voice Clone, needs Starter or above, the same steps as cloning her below), then paste its Voice ID under VOICE.
 
-### Any voice model: Fish Audio, OpenAI, a model file or your own server (from 0.7.5)
+### Any voice model: Fish Audio, OpenAI, a model file or your own server (from 0.7.6)
 Her voice can come from Fish Audio's cloud, OpenAI, a voice model file she runs herself, or any speech model you run behind a server. Windows only for now.
 1. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "Any voice model...".
 2. Under "Voice from", pick where her voice comes from. It fills in the address, model and voice:
@@ -608,7 +608,7 @@ If your server can't say a line, her free voice says that line instead, and the 
 - "Your voice server said HTTP 500: ..." with the server's own words.
 - Fish Audio and OpenAI go by name: "Fish Audio turned down its key (HTTP 401).", "Can't reach Fish Audio. Check your internet connection.", "Fish Audio can't find that voice (HTTP 404). Check its ID or link on fish.audio." or "Fish Audio is busy (HTTP 429). Try again in a moment."
 - "Fish Audio wants credit for s2.1-pro (HTTP 402). For its free tier, set Model to s2.1-pro-free." Fish Audio's paid models need credit on your Fish Audio account.
-- Model files: "That's no voice model Capri can run. Pick a Piper, Kokoro or Kitten model for sherpa-onnx: its .tar.bz2, or the .onnx in its folder.", "Voice model files run on her free voice. Get free voice under VOICE first." or "That voice model wouldn't start. Check it's a Piper, Kokoro or Kitten model for sherpa-onnx."
+- Model files: "That's no voice model Capri can run. Pick a Piper, Kokoro, Kitten or Pocket TTS model for sherpa-onnx: its .tar.bz2, or the .onnx in its folder.", "Voice model files run on her free voice. Get free voice under VOICE first." or "That voice model wouldn't start. Check it's a Piper, Kokoro, Kitten or Pocket TTS model for sherpa-onnx."
 
 Without her free voice installed, she types that line instead.
 
@@ -1385,5 +1385,5 @@ Things in this file the team should confirm before the support chat relies on th
 13. "Can't open your speakers." on 0.6.2: the default-output-and-restart fix didn't work for everyone, and the underlying Windows error wasn't shown then.
 14. <unused49> replies: the CPU retry in newer builds wasn't confirmed on the reporting user's PC.
 15. Free voice chat with a real mic on a fresh PC.
-16. Your voice server (0.7.5) was only tested against a fake server. A real Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI or vLLM-Omni Qwen3-TTS server hasn't been run with it. The two start commands come from their projects' pages and weren't run here.
+16. Any voice model (0.7.6): its servers were only tested against stand-ins. Fish Audio's cloud hasn't had a real key, and a real Fish Speech, Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI or vLLM-Omni Qwen3-TTS server hasn't been run with it. The start commands come from their projects' pages and weren't run here. Voice model files were run with real Piper, Kokoro and Pocket TTS models.
 
