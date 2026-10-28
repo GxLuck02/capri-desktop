@@ -723,6 +723,12 @@ namespace CapriDesktop
         private bool dropping;
         private int chatTicket;
         private const double WakeLevel = 0.02;
+        // Free voice chat wakes for sound RoomMargin times the room's level and never for less than QuietWake, so quiet mics work and a steady fan stops counting as talking. It's never stricter than the old fixed WakeLevel unless the room is within 4 dB of it.
+        private const double RoomMargin = 3;
+        private const double QuietWake = 0.006;
+        private double room = -1;
+        private double lineAt = -100;
+        private double lineLevel;
         private readonly object waking = new object();
         private readonly System.Collections.Generic.List<short[]> preroll = new System.Collections.Generic.List<short[]>();
         private System.Collections.Generic.List<short[]> backlog;
@@ -1348,7 +1354,12 @@ namespace CapriDesktop
                 string problem = null;
                 bool invalid = false;
                 try { updater.Install(ready, parent, started); }
-                catch (Exception error) { invalid = error is BrainException || !File.Exists(ready.Path); problem = error is BrainException ? error.Message : "Couldn't start the update. Capri is still running."; }
+                catch (Exception error)
+                {
+                    invalid = error is BrainException || !File.Exists(ready.Path);
+                    problem = error is BrainException ? error.Message : UpdateProblem(error);
+                    Brain.Log("update", -1, error.GetType().Name + ": " + error.Message);
+                }
                 Post(delegate
                 {
                     installing = false;
@@ -1358,6 +1369,16 @@ namespace CapriDesktop
                     updateExit();
                 });
             });
+        }
+
+        // Why the installer didn't start, so they know what to do next.
+        internal static string UpdateProblem(Exception error)
+        {
+            System.ComponentModel.Win32Exception windows = error as System.ComponentModel.Win32Exception;
+            int code = windows == null ? 0 : windows.NativeErrorCode;
+            if (code == 1223) return "The update needs a Yes in the Windows prompt. Try again.";
+            if (code == 225 || code == 226) return "Your antivirus blocked the update. Capri is still running.";
+            return "Couldn't start the update (" + Voice.Short(error.Message).TrimEnd('.') + "). Capri is still running.";
         }
 
         private static void OpenPage(string page)
@@ -4264,7 +4285,7 @@ namespace CapriDesktop
 
         private void ListenLocally()
         {
-            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); }
+            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); room = -1; lineAt = -100; }
             earsAwaited = false;
             if (OwnEars) { ListenOwn(); return; }
             Hearing.Own = null;
@@ -4319,7 +4340,7 @@ namespace CapriDesktop
         // No Windows speech and her own ears aren't in yet: they type until the ears land, then she switches on her own.
         private void AwaitEars(string why)
         {
-            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); }
+            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); room = -1; lineAt = -100; }
             earsReady = false;
             earsAwaited = true;
             Hearing.Own = null;
@@ -4342,7 +4363,7 @@ namespace CapriDesktop
         // Her own Parakeet ears hear the picked mic offline, about as well as Windows' online speech, so no warning.
         private void ListenOwn()
         {
-            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); }
+            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); room = -1; lineAt = -100; }
             earsAwaited = false;
             Hearing.Own = parakeet;
             try { if (!testing && !ears.Listening) ears.Start(); }
@@ -4360,7 +4381,7 @@ namespace CapriDesktop
 
         private void ListenOffline(string why)
         {
-            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); }
+            lock (waking) { utterance = null; quietRun = 0; loudRun = 0; noiseHold = false; preroll.Clear(); room = -1; lineAt = -100; }
             earsAwaited = false;
             try { if (!testing && !ears.Listening) ears.Start(); }
             catch (VoiceException error)
@@ -4404,10 +4425,16 @@ namespace CapriDesktop
 
         private void Gather(short[] chunk)
         {
-            bool loud = Speaker.Loudness(chunk, 0, chunk.Length) >= WakeLevel;
+            double level = VoiceLevel(chunk);
             lock (waking)
             {
                 if (!local || !earsReady || dictation != null || ears.Muted || earsShut || transcribing) { utterance = null; preroll.Clear(); loudRun = 0; quietRun = 0; return; }
+                // The room's level is its quietest moment: it drops straight to anything quieter and creeps up 2% a chunk between lines, never mid-line. It starts no higher than the old fixed level allows.
+                if (room < 0) room = Math.Min(Math.Max(level, 0.0003), WakeLevel / RoomMargin);
+                else if (level < room) room = Math.Max(level, 0.0003);
+                else if (utterance == null) room = Math.Min(level, room * 1.02);
+                double wake = RoomWake();
+                bool loud = level >= wake;
                 if (noiseHold)
                 {
                     quietRun = loud ? 0 : quietRun + 1;
@@ -4428,6 +4455,19 @@ namespace CapriDesktop
                 }
                 utterance.Add(chunk);
                 quietRun = loud ? 0 : quietRun + 1;
+                // Two seconds that never vary more than Speech's steadiness allows are a fan or a hum, not a voice: that becomes the room's level and the line is dropped.
+                if (utterance.Count >= 20)
+                {
+                    double low = 1;
+                    double high = 0;
+                    for (int i = utterance.Count - 20; i < utterance.Count; i++)
+                    {
+                        double piece = VoiceLevel(utterance[i]);
+                        low = Math.Min(low, piece);
+                        high = Math.Max(high, piece);
+                    }
+                    if (high < low * 1.2) { room = Math.Max(room, low); utterance = null; quietRun = 0; return; }
+                }
                 if (quietRun < 9 && utterance.Count < 150) return;
                 short[][] taken = utterance.ToArray();
                 bool capped = quietRun < 9;
@@ -4437,24 +4477,57 @@ namespace CapriDesktop
                 int request = asking;
                 if (capped)
                 {
+                    // 15 seconds without a pause is the room, not a line: its quietest chunk after the lead-in becomes the room's level.
+                    double quietest = 1;
+                    for (int i = 4; i < taken.Length; i++) quietest = Math.Min(quietest, VoiceLevel(taken[i]));
+                    room = Math.Max(room, quietest);
                     noiseHold = true;
                     Post(delegate { if (ticket == chatTicket && local) Missed("I heard 15 seconds without a pause. Try a shorter line or lower your mic volume.", false); });
                     return;
                 }
+                if (!LineCounts(taken, wake, clock.Elapsed.TotalSeconds)) return;
                 transcribing = true;
-                Post(delegate { Transcribe(taken, ticket, request); });
+                Post(delegate { Transcribe(taken, ticket, request, wake); });
             }
         }
 
-        private static bool Speech(short[][] taken)
+        private double RoomWake() { return Math.Max(QuietWake, Math.Min(room * RoomMargin, Math.Max(WakeLevel, room * 1.6))); }
+
+        // A finished line goes to her ears if it sounds like speech at the wake level. Within a minute of a line that came through, one under the old fixed level and over 10 dB quieter than it is someone else or the TV, not them.
+        private bool LineCounts(short[][] taken, double wake, double now)
+        {
+            if (!Speech(taken, wake)) return false;
+            double loudest = 0;
+            foreach (short[] piece in taken) loudest = Math.Max(loudest, VoiceLevel(piece));
+            if (now - lineAt < 60 && loudest < lineLevel / 3.16 && !Speech(taken)) return false;
+            lineAt = now;
+            lineLevel = loudest;
+            return true;
+        }
+
+        // Loudness under about 900 Hz, where a voice is: this low-pass keeps a voice within about 2 dB but drops key clicks and hiss about 7.
+        private static double VoiceLevel(short[] samples)
+        {
+            if (samples.Length == 0) return 0;
+            double kept = 0;
+            double sum = 0;
+            foreach (short sample in samples)
+            {
+                kept += 0.3 * (sample - kept);
+                sum += kept * kept;
+            }
+            return Math.Sqrt(sum / samples.Length) / 32768.0;
+        }
+
+        private static bool Speech(short[][] taken, double wake = WakeLevel)
         {
             int voiced = 0;
             double low = 1;
             double high = 0;
             foreach (short[] piece in taken)
             {
-                double level = Speaker.Loudness(piece, 0, piece.Length);
-                if (level < WakeLevel) continue;
+                double level = VoiceLevel(piece);
+                if (level < wake) continue;
                 voiced += piece.Length;
                 low = Math.Min(low, level);
                 high = Math.Max(high, level);
@@ -4462,11 +4535,11 @@ namespace CapriDesktop
             return voiced >= Ears.Rate * 3 / 10 && (voiced < Ears.Rate * 8 / 10 || high >= low * 1.2);
         }
 
-        private void Transcribe(short[][] taken, int ticket, int request)
+        private void Transcribe(short[][] taken, int ticket, int request, double wake = WakeLevel)
         {
             if (ticket != chatTicket || !local || !chatting) return;
             if (request != asking) { transcribing = false; CheckEars(clock.Elapsed.TotalSeconds); return; }
-            if (ears.Muted || talkState == TalkState.Thinking || clock.Elapsed.TotalSeconds < voiceUntil || !Speech(taken))
+            if (ears.Muted || talkState == TalkState.Thinking || clock.Elapsed.TotalSeconds < voiceUntil || !Speech(taken, wake))
             {
                 transcribing = false;
                 CheckEars(clock.Elapsed.TotalSeconds);
@@ -6536,9 +6609,11 @@ namespace CapriDesktop
                                 updater.Run = delegate { throw new IOException("fake start failure"); };
                                 updateItem.PerformClick();
                                 finishUpdate();
-                                if (exits != 2 || !updateItem.Enabled || mainframe.UpdateStatus != "Couldn't start the update. Capri is still running.") throw new Exception("A failed installer launch closed Capri.");
+                                if (exits != 2 || !updateItem.Enabled || mainframe.UpdateStatus != "Couldn't start the update (fake start failure). Capri is still running.") throw new Exception("A failed installer launch closed Capri: " + mainframe.UpdateStatus);
+                                if (UpdateProblem(new System.ComponentModel.Win32Exception(1223)) != "The update needs a Yes in the Windows prompt. Try again." || UpdateProblem(new System.ComponentModel.Win32Exception(225)) != "Your antivirus blocked the update. Capri is still running.")
+                                    throw new Exception("An installer launch failure didn't say why.");
                                 updater.Run = delegate(ProcessStartInfo start) { command = start; launches++; };
-                                checks.Add("PASS menu and balloon use the same fake installer command, repeated clicks ignored, launch failure keeps Capri open");
+                                checks.Add("PASS menu and balloon use the same fake installer command, repeated clicks ignored, launch failure keeps Capri open and says why (a declined Windows prompt, antivirus, or the error)");
                                 File.WriteAllText(partial, payload);
                                 bool partialRejected = false;
                                 try { updater.Install(new UpdateFile { Path = partial, Hash = digest, Size = installer.Size }, 42, 123); } catch (BrainException) { partialRejected = true; }
@@ -7085,6 +7160,38 @@ namespace CapriDesktop
                                     if (launch.UseShellExecute || !launch.CreateNoWindow || Path.GetFileName(launch.FileName) != "llama-server.exe" || launch.WorkingDirectory != Path.GetDirectoryName(launch.FileName)) throw new Exception("The brain launch window changed.");
                                     if (eyes != args.Contains(" --mmproj \"") || cpu != args.Contains(" --device none -ngl 0 --no-mmproj-offload") || (!cpu && args.Contains(" -ngl "))) throw new Exception("The brain launch changed its eyes or GPU choice.");
                                 }
+                            string crashData = Path.Combine(Path.GetDirectoryName(settingsPath), "engine-crash");
+                            Func<ProcessStartInfo, Process> spawnWas = Engine.Spawn;
+                            Engine crashing = new Engine(crashData);
+                            try
+                            {
+                                ProcessStartInfo crashLaunch = crashing.StartInfo(Engine.Picks[2], false, false, 1);
+                                string crashModel = Regex.Match(crashLaunch.Arguments, "-m \"([^\"]+)\"").Groups[1].Value;
+                                Directory.CreateDirectory(Path.GetDirectoryName(crashLaunch.FileName));
+                                Directory.CreateDirectory(Path.GetDirectoryName(crashModel));
+                                File.WriteAllText(crashLaunch.FileName, "");
+                                File.WriteAllText(crashModel, "");
+                                System.Collections.Generic.List<string> spawned = new System.Collections.Generic.List<string>();
+                                Engine.Spawn = delegate(ProcessStartInfo info)
+                                {
+                                    spawned.Add(info.Arguments.Contains(" --device none ") ? "cpu" : "gpu");
+                                    return Process.Start(new ProcessStartInfo("cmd.exe", "/c exit " + (spawned.Count == 1 ? "-1073741819" : "3")) { UseShellExecute = false, CreateNoWindow = true });
+                                };
+                                string crashSaid = null;
+                                try { crashing.Ensure(Engine.Picks[2]); }
+                                catch (BrainException error) { crashSaid = error.Message; }
+                                string[] crashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => line.Contains(" | brain | - | llama-server stopped while loading " + Engine.Picks[2].Name));
+                                if (crashSaid != "Brain crashed loading. Close games, press Refresh." || string.Join(" ", spawned.ToArray()) != "gpu cpu" || !crashing.CpuOnly || crashLines.Length != 2
+                                    || !crashLines[0].EndsWith(Engine.Picks[2].Name + " with exit code 0xC0000005, restarting it on the CPU", StringComparison.Ordinal) || !crashLines[1].EndsWith(Engine.Picks[2].Name + " on the CPU with exit code 0x00000003", StringComparison.Ordinal))
+                                    throw new Exception("A brain that crashed while loading wasn't retried on the CPU or logged: " + crashSaid + " / " + string.Join(" ", spawned.ToArray()) + " / " + string.Join(" || ", crashLines));
+                                checks.Add("PASS brain load crash: when the built-in brain's server dies while loading on the graphics card, errors.txt gets its exit code and she tries once on the CPU; a CPU crash stops with Close games, press Refresh");
+                            }
+                            finally
+                            {
+                                Engine.Spawn = spawnWas;
+                                crashing.Stop();
+                                try { Directory.Delete(crashData, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                            }
                             using (Process current = Process.GetCurrentProcess())
                             {
                                 ProcessPriorityClass priority = current.PriorityClass;
@@ -7426,6 +7533,38 @@ namespace CapriDesktop
                                 }
                                 finally { Hands.Chord = chordWas; Hands.Windows = windowsWas; Hands.Steer = steerWas; Hands.Catalog = catalogWas; Hands.Forget(); }
                                 checks.Add("PASS shortcuts: mute my mic and deafen me press Discord's keys in Discord and switch back, screenshots, clips, recording and more press Windows keys, and chat about muting doesn't");
+                                string steamRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "steam-test");
+                                Func<System.Collections.Generic.List<InstalledApp>> catalogBefore = Hands.Catalog;
+                                try
+                                {
+                                    string steamMain = Path.Combine(steamRoot, "Steam");
+                                    string steamMore = Path.Combine(steamRoot, "Games");
+                                    Directory.CreateDirectory(Path.Combine(steamMain, "steamapps"));
+                                    Directory.CreateDirectory(Path.Combine(steamMore, "steamapps"));
+                                    File.WriteAllText(Path.Combine(steamMain, @"steamapps\libraryfolders.vdf"), "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"" + steamMain.Replace(@"\", @"\\") + "\"\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"" + steamMore.Replace(@"\", @"\\") + "\"\n\t}\n}\n");
+                                    string[,] manifests = { { steamMain, "431960", "Wallpaper Engine", "4" }, { steamMain, "228980", "Steamworks Common Redistributables", "4" }, { steamMore, "1145360", "Hades", "6" }, { steamMore, "999", "Half Installed", "1026" } };
+                                    for (int i = 0; i < manifests.GetLength(0); i++) File.WriteAllText(Path.Combine(manifests[i, 0], @"steamapps\appmanifest_" + manifests[i, 1] + ".acf"), "\"AppState\"\n{\n\t\"appid\"\t\t\"" + manifests[i, 1] + "\"\n\t\"name\"\t\t\"" + manifests[i, 2] + "\"\n\t\"StateFlags\"\t\t\"" + manifests[i, 3] + "\"\n}\n");
+                                    string steamList = string.Join(" | ", Hands.SteamApps(steamMain).ConvertAll(app => app.Name + " " + app.Id).ToArray());
+                                    if (steamList != "Wallpaper Engine steam://rungameid/431960 | Hades steam://rungameid/1145360" || Hands.SteamApps(Path.Combine(steamRoot, "missing")).Count != 0) throw new Exception("Steam's library read wrong: " + steamList);
+                                    System.Collections.Generic.List<InstalledApp> merged = Hands.WithSteam(new System.Collections.Generic.List<InstalledApp> { new InstalledApp("Hades", "steam://rungameid/1145360"), new InstalledApp("Notepad", @"C:\Windows\notepad.exe") }, Hands.SteamApps(steamMain));
+                                    if (merged.Count != 3) throw new Exception("A Steam game already in All apps was listed twice: " + merged.Count);
+                                    Hands.Catalog = delegate { return merged; };
+                                    Hands.Forget();
+                                    int ranBefore = ran.Count;
+                                    string wallpaper = Hands.Do("open_app", new ToolArguments { Name = "wallpaper engine" });
+                                    string hades = Hands.Do("open_app", new ToolArguments { Name = "Hades" });
+                                    string redist = Hands.Do("open_app", new ToolArguments { Name = "steamworks common redistributables" });
+                                    string steamRan = string.Join(" | ", ran.GetRange(ranBefore, ran.Count - ranBefore).ToArray());
+                                    ran.RemoveRange(ranBefore, ran.Count - ranBefore);
+                                    if (wallpaper != "Opened Wallpaper Engine." || hades != "Opened Hades." || !redist.StartsWith("No app called", StringComparison.Ordinal) || steamRan != "steam://rungameid/431960 | steam://rungameid/1145360" || Hands.Launch("steam://rungameid/431960").FileName != "steam://rungameid/431960") throw new Exception("Steam apps opened wrong: " + wallpaper + " / " + hades + " / " + redist + " / " + steamRan);
+                                    checks.Add("PASS Steam apps: games and apps in Steam's own library (every library folder, fully installed only, no redistributables) open through Steam even without a Start menu shortcut, and one already in All apps isn't listed twice");
+                                }
+                                finally
+                                {
+                                    Hands.Catalog = catalogBefore;
+                                    Hands.Forget();
+                                    try { Directory.Delete(steamRoot, true); } catch (IOException) { }
+                                }
                                 string[,] powerCases = { { "turn off my pc", "shut_down", "" }, { "Capri, can you shut down my computer please", "shut_down", "" }, { "turn my laptop off", "shut_down", "" }, { "restart my pc", "restart", "" }, { "put my computer to sleep", "sleep", "" }, { "lock my pc", "lock", "" }, { "sign me out", "sign_out", "" }, { "shut down my pc in 30 minutes", "shut_down", "30" }, { "turn off the computer in an hour", "shut_down", "60" }, { "cancel the shutdown", "cancel", "" } };
                                 for (int i = 0; i < powerCases.GetLength(0); i++)
                                     if (!Hands.Heard(powerCases[i, 0], out shortTool, out shortArgs) || shortTool != "power" || shortArgs.Action != powerCases[i, 1] || (shortArgs.Minutes ?? "") != powerCases[i, 2]) throw new Exception("Power was heard wrong: " + powerCases[i, 0] + " -> " + shortTool + " " + shortArgs.Action + " " + shortArgs.Minutes);
@@ -8021,9 +8160,10 @@ namespace CapriDesktop
                                     {
                                         lookups.Add(address);
                                         if (address.IndexOf("nothing", StringComparison.Ordinal) >= 0) return "<html></html>";
-                                        if (address.IndexOf("%2Fplaylist", StringComparison.Ordinal) >= 0) return "<a href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DWWQRwui0ExPn\">";
+                                        if (address.IndexOf("%2Fplaylist", StringComparison.Ordinal) >= 0) return "<a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DWWQRwui0ExPn\">lofi beats | Spotify Playlist</a>";
                                         if (address.IndexOf("&sp=", StringComparison.Ordinal) >= 0) return "{\"watchEndpoint\":{\"videoId\":\"qboQlr7lAAk\",\"playlistId\":\"RDCLAK5uy_kb7EBi6y3GrtJri4_ZH56Ms786DFEimbM\"}}";
-                                        return address.IndexOf("duckduckgo", StringComparison.Ordinal) >= 0 ? "<a href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0VjIjW4GlUZAMYd2vXMi3b\">" : "{\"videoRenderer\":{\"videoId\":\"4NRXx6U8ABQ\"}}";
+                                        return address.IndexOf("duckduckgo", StringComparison.Ordinal) >= 0 ? "<a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0VjIjW4GlUZAMYd2vXMi3b\">Blinding Lights - song and lyrics by The Weeknd | Spotify</a>"
+                                            + "<a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0VjIjW4GlUZAMYd2vXMi3b\">Désenchantée - song and lyrics by Mylène Farmer | Spotify</a>" : "{\"videoRenderer\":{\"videoId\":\"4NRXx6U8ABQ\"}}";
                                     };
                                     Hands.Windows = delegate
                                     {
@@ -8196,6 +8336,18 @@ namespace CapriDesktop
                                         || Hands.PlayScore("Pause Blinding Lights", "Blinding Lights") != 0 || Hands.PlayScore("Mettre en pause D\u00e9senchant\u00e9e", "D\u00e9senchant\u00e9e") != 0
                                         || Hands.PlayScore("Lire", "D\u00e9senchant\u00e9e") != 0 || Hands.PlayScore("Lire un autre titre", "D\u00e9senchant\u00e9e") != 0) throw new Exception("English and French play buttons matched wrong.");
                                     checks.Add("PASS Play and Lire labels match songs and liked songs with accents, rank exact names first, and reject pause and unrelated buttons");
+                                    string lookupPage = "<div class=\"result\"><h2 class=\"result__title\"><a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DX0XUfTFmNBRM&amp;rut=1\">Punjabi Tragedy Songs | Spotify Playlist</a></h2>"
+                                        + "<a class=\"result__url\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DX0XUfTFmNBRM\">open.spotify.com/playlist/37i9dQZF1DX0XUfTFmNBRM</a></div>"
+                                        + "<div class=\"result\"><h2 class=\"result__title\"><a rel=\"nofollow\" class=\"result__a\" href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Falbum%2F5Z9iiGl2FcIfa3BMiv6OIw&amp;rut=2\"><b>DiRT</b> <b>4</b> (Original <b>Soundtrack</b>) - Album by Various Artists | Spotify</a></h2></div>"
+                                        + "<div class=\"result\"><h2 class=\"result__title\"><a rel=\"nofollow\" class=\"result__a\" href=\"https://open.spotify.com/track/7ouMYWpwJ422jRcDASZB7P\">Don&#x27;t Stop Me Now - Remastered 2011 - song and lyrics by Queen | Spotify</a></h2></div>"
+                                        + "<p><a href=\"https://open.spotify.com/artist/0OdUWJ0sBjDrqHygGUXeCF\">Band of Horses | Spotify</a></p>";
+                                    if (Hands.SpotifyLink(lookupPage, "playlist", "Dirt 4 soundtrack") != null || Hands.SpotifyLink(lookupPage, "album", "Dirt 4 soundtrack") != "5Z9iiGl2FcIfa3BMiv6OIw"
+                                        || Hands.SpotifyLink(lookupPage, "album", "Dirt 4 game soundtrack") != "5Z9iiGl2FcIfa3BMiv6OIw" || Hands.SpotifyLink(lookupPage, "album", "Dirt 5") != null
+                                        || Hands.SpotifyLink(lookupPage, "song", "Don't Stop Me Now by Queen") != "7ouMYWpwJ422jRcDASZB7P" || Hands.SpotifyLink(lookupPage, "song", "Starjunk 95") != null
+                                        || Hands.SpotifyLink("Please complete the following challenge to confirm this search was made by a human.", "song", "Blinding Lights") != null || Hands.SpotifyLink(lookupPage, "album", "") != null
+                                        || Hands.SpotifyLink(lookupPage, "artist", "Band of Horses") != "0OdUWJ0sBjDrqHygGUXeCF" || Hands.SpotifyLink(lookupPage, "playlist", "open spotify") != null)
+                                        throw new Exception("A Spotify lookup kept a result that wasn't what they asked for, or missed one that was.");
+                                    checks.Add("PASS Spotify lookups: a web result only counts when its title has the words they asked for, so a popular playlist the lookup lists for an unknown name never plays; a missing match, or a blocked lookup, opens a Spotify search instead");
                                     Hands.Catalog = fakeCatalog;
                                     Hands.Forget();
                                     Func<string, string> musicFetch = Hands.Fetch;
@@ -9691,6 +9843,14 @@ namespace CapriDesktop
                             catch (VoiceException unreadable) { if (unreadable.Message != Voice.Unreadable) throw new Exception("An unreadable ElevenLabs reply showed: " + unreadable.Message); }
                             if (Brain.LogPath == null || !File.ReadAllText(Brain.LogPath).Contains("Unreadable AgentMade reply: <html>Access denied</html>")) throw new Exception("An unreadable ElevenLabs reply was not logged for Copy error details.");
                             checks.Add("PASS an unreadable ElevenLabs reply says to send Copy error details, and its first 200 characters go in the error log");
+                            string elevenLine = Array.FindLast(File.ReadAllLines(Brain.LogPath), line => line.Contains("/v1/text-to-speech/abc | - | HTTP "));
+                            if (elevenLine == null || !elevenLine.EndsWith("/v1/text-to-speech/abc | - | HTTP 401 {\"detail\":{\"status\":\"invalid_api_key\",\"message\":\"Invalid API key\"}}", StringComparison.Ordinal) || elevenLine.Contains("sk_test_capri_1234")) throw new Exception("ElevenLabs' own error wasn't kept for Copy error details: " + elevenLine);
+                            checks.Add("PASS an ElevenLabs error keeps its HTTP status and ElevenLabs' own answer (never the key) in the error log, so Copy error details shows what really failed");
+                            try { throw new InvalidOperationException("test crash"); }
+                            catch (InvalidOperationException thrown) { Brain.Crashed(new TargetInvocationException(thrown)); }
+                            string crashLine = Array.FindLast(File.ReadAllLines(Brain.LogPath), line => line.Contains(" | crash | "));
+                            if (crashLine == null || !crashLine.Contains(" | crash | - | InvalidOperationException: test crash | at ") || crashLine.Length > 300) throw new Exception("A crash wasn't kept in errors.txt: " + crashLine);
+                            checks.Add("PASS crashes: an error that closes her goes in errors.txt with what it was and where, so Copy error details carries it");
                             voices = new VoiceListing();
                             voices.Voices.AddRange(page.Voices);
                             voices.Models.AddRange(listed);
@@ -11020,13 +11180,69 @@ namespace CapriDesktop
                             foreach (short[] piece in earLine) ears.Feed(piece);
                             if (!earsShut || utterance != null || transcribing) throw new Exception("Muting did not discard the partial utterance.");
                             ToggleMic();
-                            for (int i = 0; i < 150; i++) ears.Feed(talk);
+                            for (int i = 0; i < 150; i++) ears.Feed(i % 2 == 0 ? talk : soft);
                             if (!noiseHold || utterance != null || transcribing) throw new Exception("The 15-second cap sent continuous noise to her ears.");
-                            for (int i = 0; i < 300; i++) ears.Feed(talk);
+                            for (int i = 0; i < 300; i++) ears.Feed(i % 2 == 0 ? soft : talk);
                             for (int i = 0; i < 8; i++) ears.Feed(hush);
                             if (!noiseHold || transcribing) throw new Exception("Continuous noise rearmed without a full pause.");
                             ears.Feed(hush);
                             if (noiseHold) throw new Exception("A pause did not rearm the local mic.");
+                            ears.Feed(talk);
+                            ears.Feed(soft);
+                            if (utterance == null) throw new Exception("After a pause, a voice didn't start a line.");
+                            for (int i = 0; i < 9; i++) ears.Feed(hush);
+                            if (utterance != null || transcribing) throw new Exception("A blip too short for a word went to her ears.");
+                            Random hiss = new Random(7);
+                            short[] murmur = new short[Ears.Chunk];
+                            short[] mumble = new short[Ears.Chunk];
+                            short[] mutter = new short[Ears.Chunk];
+                            short[] fan = new short[Ears.Chunk];
+                            short[] over = new short[Ears.Chunk];
+                            for (int i = 0; i < murmur.Length; i++)
+                            {
+                                murmur[i] = (short)hiss.Next(-57, 58);
+                                mumble[i] = (short)(murmur[i] + Math.Sin(i * 0.3) * 640);
+                                mutter[i] = (short)(murmur[i] + Math.Sin(i * 0.3) * 460);
+                                fan[i] = (short)hiss.Next(-4500, 4501);
+                                over[i] = (short)(fan[i] + Math.Sin(i * 0.3) * 6000);
+                            }
+                            for (int i = 0; i < 20; i++) ears.Feed(murmur);
+                            if (utterance != null) throw new Exception("A quiet room started a line.");
+                            for (int i = 0; i < 3; i++) { ears.Feed(mumble); ears.Feed(mutter); }
+                            short[][] quietLine;
+                            double quietWake;
+                            lock (waking) { quietLine = utterance == null ? null : utterance.ToArray(); quietWake = RoomWake(); }
+                            if (quietLine == null || Speaker.Loudness(mumble, 0, mumble.Length) >= WakeLevel || !Speech(quietLine, quietWake) || Speech(quietLine)) throw new Exception("A quiet mic in a quiet room didn't start a line she'd hear.");
+                            short[][] loudLine = { talk, soft, talk, soft, hush };
+                            double heardAt = clock.Elapsed.TotalSeconds;
+                            bool quietFirst;
+                            bool loudThen;
+                            bool quietSoon;
+                            bool quietLater;
+                            bool quietAgain;
+                            lock (waking) { lineAt = -100; quietFirst = LineCounts(quietLine, quietWake, heardAt); quietAgain = LineCounts(quietLine, quietWake, heardAt + 5); loudThen = LineCounts(loudLine, quietWake, heardAt + 10); quietSoon = LineCounts(quietLine, quietWake, heardAt + 40); quietLater = LineCounts(quietLine, quietWake, heardAt + 71); lineAt = -100; }
+                            if (!quietFirst || !quietAgain || !loudThen || quietSoon || !quietLater) throw new Exception("A quiet line was handled wrong around a normal one: " + quietFirst + " " + quietAgain + " " + loudThen + " " + quietSoon + " " + quietLater);
+                            ToggleMic();
+                            ToggleMic();
+                            double[] rooms = { 0.0001, 0.004, 0.01, 0.03 };
+                            double[] wakes = { 0.006, 0.012, 0.02, 0.048 };
+                            for (int i = 0; i < rooms.Length; i++)
+                            {
+                                double wakeFor;
+                                lock (waking) { room = rooms[i]; wakeFor = RoomWake(); }
+                                if (Math.Abs(wakeFor - wakes[i]) > 1e-9) throw new Exception("A room at " + rooms[i] + " woke her at " + wakeFor + ", not " + wakes[i] + ".");
+                            }
+                            lock (waking) room = -1;
+                            for (int i = 0; i < 25; i++) ears.Feed(fan);
+                            if (noiseHold || utterance != null || transcribing) throw new Exception("A loud steady fan was still a line after 2.5 seconds.");
+                            for (int i = 0; i < 50; i++) ears.Feed(fan);
+                            if (utterance != null) throw new Exception("A fan she'd learned started a line.");
+                            ears.Feed(over);
+                            ears.Feed(over);
+                            if (utterance == null) throw new Exception("A voice over a learned fan didn't start a line.");
+                            ToggleMic();
+                            ToggleMic();
+                            checks.Add("PASS mic level: free voice chat wakes for voice-band sound 3 times the room's level, never under -44 dB and never stricter than the old fixed -34 dB unless the room is within 4 dB of it, so a -40 dB voice in a quiet room starts a line; within a minute of a line, one under -34 dB and over 10 dB quieter than it is background; a loud steady fan is learned as the room within 2.5 seconds and a voice over it still starts one; blips too short for a word are dropped quietly");
                             int oldTicket = chatTicket;
                             int oldRequest = asking;
                             StopChat();
@@ -11048,7 +11264,7 @@ namespace CapriDesktop
                             if (transcribing || reply != "Typed before transcription started.") throw new Exception("Queued audio took the identity of a newer typed turn.");
                             CheckEars(clock.Elapsed.TotalSeconds);
                             if (earsShut) throw new Exception("The mic did not reopen after a stale transcript finished.");
-                            checks.Add("PASS local capture: real voiced duration, steady-noise rejection, a bounded utterance with a pause before retry, immediate thinking and mute gates, typed replies without paid speech, and stale session results ignored");
+                            checks.Add("PASS local capture: real voiced duration, steady-noise rejection, a bounded utterance that learns the steady sound as the room, immediate thinking and mute gates, typed replies without paid speech, and stale session results ignored");
                             Hearing.Run = delegate(short[] samples) { return samples.Length == talk.Length && samples[1] == talk[1] ? " Merci Capri,  \u00e7a va ? " : "wrong samples"; };
                             if (Hearing.Text(talk) != "Merci Capri, \u00e7a va ?") throw new Exception("Offline hearing was not given the mic's raw samples, or dropped French words.");
                             Hearing.Run = delegate(short[] samples) { throw new IOException("Test ears failure."); };

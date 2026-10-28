@@ -1496,6 +1496,15 @@ namespace CapriDesktop
             return null;
         }
 
+        // A crash closes her without a word, so errors.txt keeps what it was for the copied details.
+        internal static void Crashed(object thrown)
+        {
+            Exception error = thrown as Exception;
+            if (error == null) { Log("crash", -1, "" + thrown); return; }
+            Exception root = error.GetBaseException();
+            Log("crash", -1, root.GetType().Name + ": " + root.Message + " | " + Regex.Replace(root.StackTrace ?? error.StackTrace ?? "", @"\s+", " ").Trim());
+        }
+
         internal static void Log(string url, long took, string what)
         {
             string path = LogPath;

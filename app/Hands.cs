@@ -853,7 +853,67 @@ namespace CapriDesktop
             reader.Start();
             if (!reader.Join(10000)) throw new TimeoutException("The app list took too long.");
             if (failed != null) throw failed;
+            return WithSteam(apps, SteamApps(SteamFolder()));
+        }
+
+        // Steam games and apps show in All apps only when Steam made a Start menu shortcut, so her list adds the rest from Steam's own library.
+        internal static List<InstalledApp> WithSteam(List<InstalledApp> apps, List<InstalledApp> steam)
+        {
+            foreach (InstalledApp game in steam)
+                if (AppName(game).Length > 0 && !apps.Exists(app => AppName(app) == AppName(game))) apps.Add(game);
             return apps;
+        }
+
+        // Every library folder's fully installed games and apps, skipping Steam's own redistributables. They open through steam://rungameid.
+        internal static List<InstalledApp> SteamApps(string steam)
+        {
+            List<InstalledApp> apps = new List<InstalledApp>();
+            if (string.IsNullOrEmpty(steam)) return apps;
+            try
+            {
+                List<string> libraries = new List<string> { steam };
+                string folders = Path.Combine(steam, @"steamapps\libraryfolders.vdf");
+                if (File.Exists(folders))
+                    foreach (Match library in Regex.Matches(File.ReadAllText(folders), @"""path""\s+""([^""]+)"""))
+                        libraries.Add(library.Groups[1].Value.Replace(@"\\", @"\"));
+                HashSet<string> seen = new HashSet<string>();
+                foreach (string library in libraries)
+                {
+                    string folder = Path.Combine(library, "steamapps");
+                    if (!Directory.Exists(folder)) continue;
+                    foreach (string manifest in Directory.GetFiles(folder, "appmanifest_*.acf"))
+                    {
+                        string text;
+                        try { text = File.ReadAllText(manifest); }
+                        catch (IOException) { continue; }
+                        catch (UnauthorizedAccessException) { continue; }
+                        Match id = Regex.Match(text, @"""appid""\s+""(\d+)""");
+                        Match name = Regex.Match(text, @"""name""\s+""([^""]+)""");
+                        Match state = Regex.Match(text, @"""StateFlags""\s+""(\d+)""");
+                        long flags;
+                        if (!id.Success || !name.Success || !seen.Add(id.Groups[1].Value)) continue;
+                        if (state.Success && long.TryParse(state.Groups[1].Value, out flags) && (flags & 4) == 0) continue;
+                        if (Regex.IsMatch(name.Groups[1].Value, @"^(Steamworks Common Redistributables|Steam Linux Runtime\b.*|Proton\b.*)$", RegexOptions.IgnoreCase)) continue;
+                        apps.Add(new InstalledApp(name.Groups[1].Value, "steam://rungameid/" + id.Groups[1].Value));
+                    }
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return apps;
+        }
+
+        private static string SteamFolder()
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam"))
+                {
+                    string path = key == null ? null : key.GetValue("SteamPath") as string;
+                    return string.IsNullOrEmpty(path) ? null : path.Replace('/', '\\');
+                }
+            }
+            catch (Exception) { return null; }
         }
 
         private static object Call(object target, string method, params object[] args) { return target.GetType().InvokeMember(method, BindingFlags.InvokeMethod, null, target, args); }
@@ -1207,7 +1267,7 @@ namespace CapriDesktop
             if (app != "youtube" && Match(Apps(), "spotify").Count > 0)
             {
                 if (liked) named = "their Liked Songs";
-                string spotted = liked ? null : known ?? Find(Fetch("https://html.duckduckgo.com/html/?q=" + Uri.EscapeDataString("site:open.spotify.com/" + (kind == "song" ? "track" : kind) + " " + song)), @"open\.spotify\.com(?:/|%2F)" + (kind == "song" ? "track" : kind) + @"(?:/|%2F)([A-Za-z0-9]{22})");
+                string spotted = liked ? null : known ?? SpotifyLink(Fetch("https://html.duckduckgo.com/html/?q=" + Uri.EscapeDataString("site:open.spotify.com/" + (kind == "song" ? "track" : kind) + " " + song)), kind, song);
                 if (kind == "song" && spotted != null)
                 {
                     string before = NowPlaying();
@@ -1259,6 +1319,26 @@ namespace CapriDesktop
             }
             return false;
 #endif
+        }
+
+        // A site: lookup that matches nothing still lists popular pages from the site, so only a result whose title has
+        // the words they asked for counts (one may be missing from three or more). Otherwise she searches Spotify instead.
+        internal static string SpotifyLink(string page, string kind, string wanted)
+        {
+            string path = kind == "song" ? "track" : kind;
+            string[] want = Words(wanted);
+            if (want.Length == 0 || want[0].Length == 0) return null;
+            foreach (Match link in Regex.Matches(page ?? "", @"<a\b([^>]*)>(.*?)</a>", RegexOptions.Singleline | RegexOptions.IgnoreCase))
+            {
+                Match id = Regex.Match(link.Groups[1].Value, @"open\.spotify\.com(?:/|%2F)" + path + @"(?:/|%2F)([A-Za-z0-9]{22})");
+                if (!id.Success) continue;
+                // A link that only shows its address (open.spotify.com/playlist/...) says nothing about what's there.
+                string[] title = Plain(Regex.Replace(WebUtility.HtmlDecode(Regex.Replace(link.Groups[2].Value, "<[^>]+>", "")), @"\S*(spotify\.com|https?://|www\.)\S*", " ", RegexOptions.IgnoreCase)).Split(' ');
+                int missing = 0;
+                foreach (string word in want) if (Array.IndexOf(title, word) < 0) missing++;
+                if (missing == 0 || (missing == 1 && want.Length >= 3)) return id.Groups[1].Value;
+            }
+            return null;
         }
 
         internal static int PlayScore(string label, string name)

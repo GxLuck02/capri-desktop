@@ -182,6 +182,9 @@ namespace CapriDesktop
                 string detail;
                 using (response)
                 using (StreamReader reader = new StreamReader(response.GetResponseStream())) detail = reader.ReadToEnd();
+                // They only see her short line, so errors.txt keeps ElevenLabs' own answer for Copy error details.
+                string said = Regex.Replace(detail ?? "", @"\s+", " ").Trim();
+                Brain.Log(request.RequestUri.GetLeftPart(UriPartial.Path), -1, "HTTP " + status + " " + (said.Length > 200 ? said.Substring(0, 200) : said));
                 throw new VoiceException(Explain(status, detail), status);
             }
             catch (IOException) { throw new VoiceException("Can't reach ElevenLabs. Check your internet."); }
