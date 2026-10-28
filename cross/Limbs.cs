@@ -224,13 +224,11 @@ namespace CapriDesktop
             }
             string status = Music.Run("dbus-send", new[] { "--session", "--print-reply", "--dest=org.mpris.MediaPlayer2.spotify", "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties.Get", "string:org.mpris.MediaPlayer2.Player", "string:PlaybackStatus" });
             if (status == null || !status.Contains("\"Playing\"")) return "";
-            string data = Music.Run("dbus-send", new[] { "--session", "--print-reply", "--dest=org.mpris.MediaPlayer2.spotify", "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties.Get", "string:org.mpris.MediaPlayer2.Player", "string:Metadata" });
-            if (data == null) return "";
-            Match artist = Regex.Match(data, "\"xesam:artist\"\\s*variant\\s*array \\[\\s*string \"([^\"]*)\"");
-            Match title = Regex.Match(data, "\"xesam:title\"\\s*variant\\s*string \"([^\"]*)\"");
-            if (!title.Success) return "";
-            return (artist.Success ? artist.Groups[1].Value + " - " : "") + title.Groups[1].Value;
+            return Music.Song(Music.Run("dbus-send", new[] { "--session", "--print-reply", "--dest=org.mpris.MediaPlayer2.spotify", "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties.Get", "string:org.mpris.MediaPlayer2.Player", "string:Metadata" }));
         }
+
+        // Cyberpunk 2077 running: the Mac game, or the Windows one under Proton or Wine on Linux.
+        internal static bool CyberpunkRunning() { return Music.Run("pgrep", new[] { "-i", "-f", "[/\\\\]cyberpunk ?2077(\\.exe)?( |$)" }) != null; }
 
         // How long since they last touched the mouse or keyboard: macOS's HID idle time, GNOME's idle monitor (X11 and Wayland),
         // or xprintidle on other X11 desktops. XWayland can't see Wayland input, so xprintidle isn't asked there. -1 when unknown.

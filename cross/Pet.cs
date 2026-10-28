@@ -264,6 +264,13 @@ namespace CapriDesktop
         private double popOut = -1;
         private int popAsked;
         private bool popChecking;
+        // Cyberpunk 2077 starting, or a Night City song coming on, is home for her, like on Windows: she cheers once, then waits
+        // two hours before cheering for the same again. Check in on me off stops it.
+        internal const double HomeGap = 7200;
+        internal static readonly string[] HomeGameLines = { "Night City?! You're taking me home, choom.", "Ooh, Cyberpunk. Go wreck some corpos for me.", "[SIGNAL CORRUPTED] ...wait. I know that skyline." };
+        internal static readonly string[] HomeSongLines = { "Wait, that's Night City. Turn it up.", "Ooh, my soundtrack. Preem taste.", "Now that's music. You're learning." };
+        private bool homeBusy, homeGame, homeSong;
+        private double homeAt = -HomeGap, gameCheered = -HomeGap, songCheered = -HomeGap;
         // Tells the tray menu whether to offer Hide her or Show her, since a pop-in or Talk to her brings her out too.
         internal Action AwayChanged;
         private readonly DispatcherTimer frames = new DispatcherTimer();
@@ -535,6 +542,7 @@ namespace CapriDesktop
                 CheckWander(now);
                 CheckMusic(now);
                 if (Program.Smoke == null) CheckPopIn(now);
+                if (Program.Smoke == null) CheckHome(now);
             }
             Advance(now);
             Talk.Update(now);
@@ -1690,14 +1698,64 @@ namespace CapriDesktop
                 PixelRect area = screen.WorkingArea;
                 Move(new PixelPoint(area.X + random.Next(Math.Max(1, area.Width - Px(body.Size))), area.Y));
                 Arrive();
-                int ticket = ++asking;
-                Talk.Answer(PopHeard, line);
-                TypeAlong(line, ticket);
+                Blurt(PopHeard, line);
                 popAsked = asking;
                 popOut = hidden ? Now + 6 : -1;
             };
             if (hidden) arrive();
             else GlitchOut(arrive);
+        }
+
+        // A line she says by herself, typed out like her replies.
+        private void Blurt(string heard, string line)
+        {
+            int ticket = ++asking;
+            Talk.Answer(heard, line);
+            TypeAlong(line, ticket);
+        }
+
+        // Free for a line of her own: Check in on me on, showing, and not busy with them.
+        private bool Free { get { return !Saved.NoCheckIns && !away && CanPop; } }
+
+        private void CheckHome(double now)
+        {
+            if (Saved.NoCheckIns || homeBusy || now - homeAt < 15) return;
+            homeBusy = true;
+            homeAt = now;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                bool game = false, song = false;
+                try
+                {
+                    game = Limbs.CyberpunkRunning();
+                    foreach (string playing in Music.Songs()) if (Hands.NightCity(playing)) song = true;
+                }
+                catch (Exception) { }
+                Dispatcher.UIThread.Post(delegate
+                {
+                    homeBusy = false;
+                    string line = Cheer(game, song, Now, Free);
+                    if (line != null) Blurt(Array.IndexOf(HomeGameLines, line) >= 0 ? "(Cyberpunk 2077)" : "(Night City song)", line);
+                });
+            });
+        }
+
+        // Her cheer when the game starts or a Night City song comes on and she's free, or null. One she misses while busy waits for the next time.
+        internal string Cheer(bool game, bool song, double now, bool free)
+        {
+            bool started = game && !homeGame, cameOn = song && !homeSong;
+            homeGame = game;
+            homeSong = song;
+            if (!free) return null;
+            if (started && now - gameCheered >= HomeGap) { gameCheered = now; return HomeGameLines[random.Next(HomeGameLines.Length)]; }
+            if (cameOn && now - songCheered >= HomeGap) { songCheered = now; return HomeSongLines[random.Next(HomeSongLines.Length)]; }
+            return null;
+        }
+
+        internal void ForgetCheers()
+        {
+            homeGame = homeSong = false;
+            gameCheered = songCheered = -HomeGap;
         }
 
         internal double PopOut { get { return popOut; } }

@@ -1440,6 +1440,14 @@ namespace CapriDesktop
 
         internal static string Pick() { return Ost[Roll(Ost.Length)]; }
 
+        // A Night City song in a player's or tab's title, for her cheer. "Cyberpunk 2077 review - YouTube" isn't a song: the game's
+        // own name only counts next to a word for music.
+        private static readonly Regex NightCityMusic = new Regex(@"rezodrone|rosa walton|hallie coggins|adamczyk|przyby[lł]owicz|i really want to stay at your house|chippin.? in|never fade away|resist and disorder|the rebel path|this fffire|podsiad[lł]o|^\W*samurai\s*[-–—]", RegexOptions.IgnoreCase);
+        private static readonly Regex NightCityName = new Regex(@"cyberpunk|edgerunners|night city", RegexOptions.IgnoreCase);
+        private static readonly Regex MusicWord = new Regex(@"\b(ost|soundtrack|score|music|songs?|radio|playlist|mix|theme|lyrics|album)\b", RegexOptions.IgnoreCase);
+
+        internal static bool NightCity(string title) { return !string.IsNullOrEmpty(title) && (NightCityMusic.IsMatch(title) || (NightCityName.IsMatch(title) && MusicWord.IsMatch(title))); }
+
         private static readonly Regex Moon = new Regex(@"\bwish\s+(?:we|i|you\s+and\s+i|me\s+and\s+you)\s+could\s+(?:go|fly|get|run\s+away)\s+to\s+the\s+moon\b", RegexOptions.IgnoreCase);
         internal const string MoonSong = "I Really Want to Stay at Your House";
 

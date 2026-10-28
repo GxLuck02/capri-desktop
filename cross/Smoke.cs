@@ -187,6 +187,16 @@ namespace CapriDesktop
                 pet.SetPopPace(1);
                 if (!checkInsNew || !popsOften || popSoonest < 180 || popLatest > 480 || !popsRarely || !checkInsOff || !pet.CheckIns || pet.PopsPicked != "Sometimes") throw new Exception("Check in on me settings went wrong: new " + checkInsNew + ", often " + popsOften + " " + popSoonest.ToString("0") + "-" + popLatest.ToString("0") + " s, rarely " + popsRarely + ", off " + checkInsOff);
                 checks.Add("PASS Check in on me settings: on by default at Pop-ins Sometimes, Often waits 3 to 8 minutes and Rarely 20 to 40, and turning it off sticks");
+                string homeFirst = pet.Cheer(true, false, 100, true), homeStill = pet.Cheer(true, false, 115, true);
+                pet.Cheer(false, false, 130, true);
+                string homeSoon = pet.Cheer(true, false, 145, true), homeBusy = pet.Cheer(true, true, 160, false);
+                pet.Cheer(true, false, 175, true);
+                string homeSong = pet.Cheer(true, true, 190, true);
+                pet.Cheer(false, false, 200, true);
+                string homeLater = pet.Cheer(true, false, 200 + Pet.HomeGap, true);
+                pet.ForgetCheers();
+                if (Array.IndexOf(Pet.HomeGameLines, homeFirst) < 0 || homeStill != null || homeSoon != null || homeBusy != null || Array.IndexOf(Pet.HomeSongLines, homeSong) < 0 || Array.IndexOf(Pet.HomeGameLines, homeLater) < 0) throw new Exception("Her Night City cheers came at the wrong times: " + homeFirst + " | " + homeStill + " | " + homeSoon + " | " + homeBusy + " | " + homeSong + " | " + homeLater);
+                checks.Add("PASS Night City cheer: she cheers once when Cyberpunk 2077 starts or a Night City song comes on, not while she's busy, and not again for two hours");
                 Func<string, string[], string> runWas = Music.Run;
                 List<string> ran = new List<string>();
                 string status = "Playing";
@@ -214,6 +224,28 @@ namespace CapriDesktop
                 }
                 finally { Music.Run = runWas; }
                 checks.Add("PASS music: Linux reads music players over D-Bus (not browsers), Mac asks Spotify and Music only when they're already running");
+                List<string> songsAsked = new List<string>();
+                try
+                {
+                    Music.Run = delegate(string file, string[] args)
+                    {
+                        string line = file + " " + string.Join(" ", args);
+                        songsAsked.Add(line);
+                        if (line.Contains("ListNames")) return "method return\n   array [\n      string \"org.freedesktop.DBus\"\n      string \"org.mpris.MediaPlayer2.chromium.instance4021\"\n      string \"org.mpris.MediaPlayer2.spotify\"\n   ]\n";
+                        if (line.Contains("PlaybackStatus")) return "method return\n   variant       string \"" + (line.Contains("chromium") ? "Playing" : "Paused") + "\"\n";
+                        if (line.Contains("Metadata")) return "method return\n   variant       array [\n         dict entry(\n            string \"xesam:artist\"\n            variant                array [\n                  string \"CD PROJEKT RED\"\n               ]\n         )\n         dict entry(\n            string \"xesam:title\"\n            variant                string \"SAMURAI - Never Fade Away (Official Audio)\"\n         )\n      ]\n";
+                        if (file == "pgrep") return line.Contains("cyberpunk") || line.EndsWith(" Music", StringComparison.Ordinal) ? "777\n" : null;
+                        if (file == "osascript") return line.Contains("\"Music\"") ? "Rosa Walton - I Really Want to Stay at Your House\n" : "";
+                        return null;
+                    };
+                    List<string> linuxSongs = Music.LinuxSongs();
+                    List<string> macSongs = Music.MacSongs();
+                    bool cyberpunk = Limbs.CyberpunkRunning();
+                    string asked = string.Join(" / ", songsAsked);
+                    if (linuxSongs.Count != 1 || linuxSongs[0] != "CD PROJEKT RED - SAMURAI - Never Fade Away (Official Audio)" || !Hands.NightCity(linuxSongs[0]) || macSongs.Count != 1 || !Hands.NightCity(macSongs[0]) || !cyberpunk || asked.Contains("tell application \"Spotify\"") || asked.Contains("spotify /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:Metadata")) throw new Exception("Night City songs or the game were read wrong: " + string.Join(" | ", linuxSongs) + " / " + string.Join(" | ", macSongs) + " / " + asked);
+                }
+                finally { Music.Run = runWas; }
+                checks.Add("PASS Night City songs: Linux reads every playing player's title, browser tabs too, Mac asks Spotify and Music only when they're open, and a running Cyberpunk 2077 is found");
                 Action<string, string[]> launchWas = Limbs.Launch;
                 int patienceWas = Limbs.Patience;
                 int settleWas = Limbs.Settle;
