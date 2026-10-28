@@ -285,6 +285,10 @@ namespace CapriDesktop
                 if (!ipcNames.Contains(Path.Combine(ipcFolder, "discord-ipc-3")) || !discordOff || !discordOn || Array.IndexOf(new[] { "Hanging out", "Chatting", "Dancing to music", "Taking a break" }, pet.Doing) < 0)
                     throw new Exception("Her Discord status went wrong: " + string.Join(", ", ipcNames) + " / off " + discordOff + " / on " + discordOn + " / " + pet.Doing);
                 checks.Add("PASS Discord status: Settings > Show on Discord turns it off and on, she says what she's doing in plain words, and she finds Discord's socket in its temp folder");
+                string details = pet.ErrorDetails();
+                if (!details.StartsWith("Capri v", StringComparison.Ordinal) || details.IndexOf(" | brain: ", StringComparison.Ordinal) < 0 || details.IndexOf(" | voice: ", StringComparison.Ordinal) < 0)
+                    throw new Exception("Her error details were wrong: " + details);
+                checks.Add("PASS Help > Copy error details: her version, the system, her brain and voice, then her error log");
                 pet.AskNickname();
                 bool askedName = pet.Talk.Typing && pet.Talk.Reply != null && pet.Talk.Reply.StartsWith("What should I call you?", StringComparison.Ordinal);
                 pet.Talk.Submit("  Lachy!!  ");

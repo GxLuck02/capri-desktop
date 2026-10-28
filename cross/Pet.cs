@@ -135,6 +135,7 @@ namespace CapriDesktop
         internal const string PullChoice = "Download " + Starter + ", her brain (a few GB)";
         internal const string NoOllama = "Ollama isn't running. Install it from ollama.com and open it.";
         internal const string DiscordPage = "https://discord.gg/F4fDHfGtFk";
+        internal const string HelpPage = "https://lachydotmcg.github.io/capri-desktop/help/";
         internal static readonly double[] Sizes = { 140, 170, 240, 320, 440, 560 };
         private static readonly string[] SizeNames = { "Tiny", "Small", "Medium", "Large", "Huge", "Giant" };
         internal readonly Brain Brain = new Brain();
@@ -472,6 +473,28 @@ namespace CapriDesktop
                 if (clip == dance || clip == perchDance) return "Dancing to music";
                 return "Hanging out";
             }
+        }
+
+        // Her version, the system, her brain and voice, then the last 25 lines of errors.txt, for pasting in the Discord.
+        // The system line carries the distro, and on Linux whether it's Wayland or X11 and which desktop.
+        internal string ErrorDetails()
+        {
+            string system = System.Runtime.InteropServices.RuntimeInformation.OSDescription + " " + System.Runtime.InteropServices.RuntimeInformation.OSArchitecture;
+            if (OperatingSystem.IsLinux()) system += " " + (Environment.GetEnvironmentVariable("XDG_SESSION_TYPE") ?? "?") + " " + (Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP") ?? "?");
+            string head = "Capri v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3) + " | " + system + " | brain: " + (Brain.Model != null ? "Ollama " + Brain.Model : "none") + " | voice: " + (voice.Key != null ? "ElevenLabs" : "none");
+            string[] lines = new string[0];
+            try { if (Brain.LogPath != null && File.Exists(Brain.LogPath)) lines = File.ReadAllLines(Brain.LogPath); } catch (IOException) { }
+            int from = Math.Max(0, lines.Length - 25);
+            return head + Environment.NewLine + (lines.Length == 0 ? "No errors logged." : string.Join(Environment.NewLine, lines, from, lines.Length - from));
+        }
+
+        internal void CopyErrors()
+        {
+            Avalonia.Input.Platform.IClipboard board = Clipboard;
+            if (board == null) return;
+            try { board.SetTextAsync(ErrorDetails()); }
+            catch (Exception) { return; }
+            Talk.Answer("(error details)", "Copied my error log. Paste it in the Discord so they can fix me, choom.");
         }
 
         internal void SetDiscord(bool on)
@@ -965,6 +988,13 @@ namespace CapriDesktop
             }
             MenuItem discord = new MenuItem { Header = "Join the Discord" };
             discord.Click += delegate { Browse(DiscordPage); };
+            MenuItem help = new MenuItem { Header = "Help" };
+            MenuItem helpPage = new MenuItem { Header = "Help page" };
+            helpPage.Click += delegate { Browse(HelpPage); };
+            MenuItem copyErrors = new MenuItem { Header = "Copy error details" };
+            copyErrors.Click += delegate { CopyErrors(); };
+            help.Items.Add(helpPage);
+            help.Items.Add(copyErrors);
             MenuItem quit = new MenuItem { Header = "Quit Capri" };
             quit.Click += delegate { Quit(); };
             menu.Items.Add(talk);
@@ -973,6 +1003,7 @@ namespace CapriDesktop
             menu.Items.Add(sizes);
             menu.Items.Add(brainMenu);
             menu.Items.Add(settings);
+            menu.Items.Add(help);
             menu.Items.Add(discord);
             menu.Items.Add(new Separator());
             menu.Items.Add(quit);

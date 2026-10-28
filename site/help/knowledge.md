@@ -1082,13 +1082,13 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Wander, dance to music, petting, sizes
 - Opening apps and websites, playing songs on Spotify, skipping tracks, what's playing, volume
 - "Playing Capri" on your Discord profile, with Show on Discord in Settings
+- Right-click her > Help > Copy error details, with your system, desktop and her brain at the top
 
 ### Not yet
 - No Mainframe. Everything is in her right-click menu.
 - No voice chat: "Voice chat isn't on Mac and Linux yet. Type to me for now, choom."
 - No built-in brain or NVIDIA key. Ollama only.
 - No keyboard shortcuts, closing or switching windows, screen watching or mouse and keyboard jobs.
-- No Copy error details.
 - No automatic updates.
 - No transcripts or memories.md yet. She remembers the recent chat and her notes.
 
@@ -1099,6 +1099,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it."
 - Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Show on Discord, Open her notes (me.md), Edit her personality (personality.md), Reset her personality to default
+- Help: Help page, Copy error details
 - Join the Discord
 - Quit Capri
 
