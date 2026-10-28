@@ -131,12 +131,12 @@ namespace CapriDesktop
             text = text ?? "";
             if (Indic(text))
             {
-                // Whole letters with their marks, measured.
+                // Whole letters with their marks, measured, and only where a line may break between letters.
+                bool[] breaks = Letters(text);
                 int fits = 0;
-                int[] starts = StringInfo.ParseCombiningCharacters(text);
-                for (int k = 1; k <= starts.Length; k++)
+                for (int end = 1; end <= text.Length; end++)
                 {
-                    int end = k < starts.Length ? starts[k] : text.Length;
+                    if (end < text.Length && !breaks[end]) continue;
                     if (Cells(text.Substring(0, end)) > columns) break;
                     fits = end;
                 }
@@ -162,20 +162,27 @@ namespace CapriDesktop
         }
 
         // Thai, Lao and Khmer write no spaces between words, and Mac and Linux have no word breaker she can call, so their
-        // lines break between letters. A Thai line never breaks before a vowel or tone mark, or a vowel that follows its
-        // letter, and never after a vowel written before its letter; Lao and Khmer keep each letter with its marks. Windows
-        // breaks between words.
+        // lines break between letters. A Thai or Lao line never breaks before a vowel or tone mark, or a vowel that follows
+        // its letter, and never after a vowel written before its letter. Every script keeps each letter with its marks, and
+        // with the next letter after a sign that joins them (a virama, or Khmer's coeng). Windows breaks between words.
         internal static bool[] Letters(string word)
         {
             bool[] breaks = new bool[word.Length];
             if (!Thai(word))
             {
-                foreach (int start in StringInfo.ParseCombiningCharacters(word)) if (start > 0 && word[start - 1] != '្') breaks[start] = true;
+                foreach (int start in StringInfo.ParseCombiningCharacters(word))
+                    if (start > 0 && !Joins(word[start - 1]) && (word[start - 1] < 0x0EC0 || word[start - 1] > 0x0EC4) && "ະາຳໆຯ".IndexOf(word[start]) < 0) breaks[start] = true;
                 return breaks;
             }
             for (int i = 1; i < word.Length; i++)
                 breaks[i] = Cells(word[i]) > 0 && "ฯะาำๅๆ".IndexOf(word[i]) < 0 && (word[i - 1] < 0x0E40 || word[i - 1] > 0x0E44);
             return breaks;
+        }
+
+        // Signs that join the next letter to the one before: the Indian scripts' viramas and Khmer's coeng.
+        private static bool Joins(char c)
+        {
+            return c == '्' || c == '্' || c == '੍' || c == '્' || c == '୍' || c == '்' || c == '్' || c == '್' || c == '്' || c == '្';
         }
 
         // The longest start of a word with Thai, Lao or Khmer in it that ends where a line may break and fits in that many columns.

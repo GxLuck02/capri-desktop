@@ -11876,6 +11876,18 @@ namespace CapriDesktop
                             }
                             if (unspacedBreaks < 4 || brokenLetter.Length > 0 || !Look.Unspaced(laoReply) || !Look.Unspaced(khmerReply) || Look.Unspaced("hey choom"))
                                 throw new Exception("Lao and Khmer lines broke in the wrong places: " + unspacedBreaks + " breaks / " + brokenLetter);
+                            // Without ICU a Lao line breaks between letters, but never after a vowel written before its letter or before
+                            // one that follows it, and a shortened line never ends on a virama or a Khmer coeng.
+                            bool[] laoLetters = Look.Letters("ມື້ນີ້ເຈົ້າເຮັດຫຍັງຢູ່");
+                            string joinedCut = "";
+                            for (int n = 1; n <= 12; n++)
+                                foreach (string joined in new[] { "ថ្ងៃនេះ", "क्षमा करो" })
+                                {
+                                    string start = Look.Cut(joined, n);
+                                    if (start.EndsWith("្") || start.EndsWith("्")) joinedCut += start + " (" + n + ") ";
+                                }
+                            if (!laoLetters[3] || !laoLetters[6] || laoLetters[7] || laoLetters[10] || !laoLetters[11] || laoLetters[12] || joinedCut.Length > 0)
+                                throw new Exception("A Lao vowel or a joined letter came apart: " + laoLetters[7] + " " + laoLetters[10] + " " + laoLetters[12] + " / " + joinedCut);
                             using (SpeechBox tamilBox = new SpeechBox())
                             {
                                 tamilBox.State = TalkState.Online;

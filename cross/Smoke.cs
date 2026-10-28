@@ -731,7 +731,17 @@ namespace CapriDesktop
                 if (!thaiFits || string.Join("", thaiLines).Replace(" ", "") != thaiText.Replace(" ", "") || Look.Cells("วันนี้อากาศดีมาก") != 12 || !Look.Thai("hey วันนี้") || Look.Thai("hey choom")
                     || thaiLetters[1] || thaiLetters[2] || !thaiLetters[3] || !thaiLetters[4] || thaiLetters[5])
                     throw new Exception("Thai wrapped wrong: " + string.Join(" | ", thaiLines));
-                checks.Add("PASS bubble lines: Chinese, Japanese and Korean take two columns and wrap without spaces, never starting a line with closing punctuation, a long link breaks across lines without losing letters, Arabic, Urdu, Persian and Hebrew lines read right to left, and Thai breaks between letters, never before a vowel or tone mark");
+                bool[] laoLetters = Look.Letters("ມື້ນີ້ເຈົ້າເຮັດຫຍັງຢູ່");
+                string joinedCut = "";
+                for (int n = 1; n <= 12; n++)
+                    foreach (string joined in new[] { "ថ្ងៃនេះ", "क्षमा करो" })
+                    {
+                        string start = Look.Cut(joined, n);
+                        if (start.EndsWith("្") || start.EndsWith("्")) joinedCut += start + " (" + n + ") ";
+                    }
+                if (!laoLetters[3] || !laoLetters[6] || laoLetters[7] || laoLetters[10] || !laoLetters[11] || laoLetters[12] || joinedCut.Length > 0)
+                    throw new Exception("A Lao vowel or a joined letter came apart: " + laoLetters[7] + " " + laoLetters[10] + " " + laoLetters[12] + " / " + joinedCut);
+                checks.Add("PASS bubble lines: Chinese, Japanese and Korean take two columns and wrap without spaces, never starting a line with closing punctuation, a long link breaks across lines without losing letters, Arabic, Urdu, Persian and Hebrew lines read right to left, Thai and Lao break between letters, never before a vowel or tone mark or after a vowel written first, and a virama or Khmer coeng keeps its letters together");
                 pet.Talk.Dismiss();
                 PixelRect area = Work();
                 shelfAsked = new PixelRect(area.X + area.Width / 2 - Px(350), area.Y + area.Height / 2 - Px(140), Px(700), Px(360));
