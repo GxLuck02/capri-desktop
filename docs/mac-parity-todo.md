@@ -1,0 +1,60 @@
+# Capri Mac — reproduire la version Windows
+
+Dernière session : 2026-10-29. Repo : fork https://github.com/GxLuck02/capri-desktop
+(remote `upstream` = lachydotmcg/capri-desktop). Mac M2.
+
+## Décisions déjà prises
+- On avance étape par étape, but = parité avec la version Windows (`app/`).
+- Le Mainframe Mac se construit section par section, une section par étape.
+- Clés API dans le Trousseau macOS (Security.framework en P/Invoke, pas la commande `security`).
+  Linux garde le fichier `chmod 600`.
+- Tests : suivre le système existant `--smoke` (`cross/Smoke.cs`).
+- Process : spec → plan → code → test sur le M2, puis étape suivante.
+
+## À faire avant de coder
+- [ ] Installer le SDK .NET 10 : `brew install --cask dotnet-sdk`
+- [ ] Vérifier que le projet compile : `dotnet build cross/Capri.Cross.csproj -c Release`
+- [ ] (Optionnel) Ollama : `brew install ollama && ollama pull gemma4:e4b`
+
+## Feuille de route
+- [ ] **Étape 1 — Mainframe + section BRAIN + Trousseau** ← EN COURS
+- [ ] Étape 2 — « Set up her brain » sur Mac (llama.cpp Metal + modèle auto, Ollama en option)
+- [ ] Étape 3 — Section VOICE : OFF / FREE VOICE (Kokoro) / ELEVENLABS
+- [ ] Étape 4 — Chat vocal : micro, Test, raccourcis
+- [ ] Étape 5 — Section CAPRI + page Settings (langue, surnom, personnalité, raccourcis, démarrage, Discord, Check in)
+- [ ] Étape 6 — Voir l'écran
+- [ ] Étape 7 — Jobs avec son curseur + Blackwall (le plus risqué)
+- [ ] Étape 8 — Deux cerveaux : local privé + cloud (nouveauté, pas sur Windows). Piste retenue :
+  règles fixes par tâche (tout ce qui contient une capture d'écran reste local, le texte peut aller au cloud).
+
+## Étape 1 — où on en est
+Brainstorming : partie 1/3 **validée** (2026-10-29, révisée : palier NORMAL = modèles Ollama locaux,
+comme le palier 0 de Windows). Parties 2/3 et 3/3 validées, spec écrite.
+
+Ajout validé à la partie 1/3 : NORMAL = liste des modèles Ollama installés + Refresh (réutilise
+`RefreshBrains`/`PickBrain` de `cross/Pet.cs`), note « ollama pull gemma4:e2b » si Ollama absent.
+Modèle local recommandé sur M2 8 Go : Gemma 4 E2B (voit l'écran). Qwen3 4B possible mais aveugle.
+
+Partie 1/3 (composants) proposée :
+1. `cross/Keys.cs` (nouveau) : `Keys.Save/Read/Forget`, Trousseau sur Mac, fichier 600 sur Linux,
+   migration de l'ancien fichier `voice-key` en clair vers le Trousseau.
+2. `cross/Mainframe.cs` (nouveau) : fenêtre Avalonia au look Windows (fond `Look.Panel`, titre
+   MAINFRAME mono, bordures rouges), section BRAIN seule : paliers NORMAL / HIGHER / MAX,
+   cerveau actif, champ clé + Connect + Free key, menu modèles + Refresh.
+3. `cross/Pet.cs` (modifié) : porter `ChooseTier`, `ConnectText`, `ForgetText`, `ListCloud`
+   depuis `app/Capri.cs` (~l.3690-3830). `Brain.Remote` existe déjà dans `app/Brain.cs` (partagé).
+   `Settings` (cross.json) gagne `Tier`, `NvidiaModel`, `PaidModel` — jamais les clés.
+4. Menu clic droit : ajouter « Capri Mainframe » ; sous-menu Brain affiche aussi les modèles cloud.
+
+Prochaines actions :
+- [x] Valider (ou ajuster) la partie 1/3
+- [x] Partie 2/3 : comportement (connexion d'une clé, changement de palier, erreurs)
+- [x] Partie 3/3 : tests (`--smoke`)
+- [x] Écrire la spec : `docs/superpowers/specs/2026-10-29-mac-mainframe-brain-design.md` (branche `mac-step1-mainframe`) — **en attente de relecture par l'utilisateur**
+- [ ] Plan d'implémentation (writing-plans) puis implémentation
+
+## Repères dans le code Windows
+- Mainframe Windows : `app/Mainframe.cs` (section BRAIN ~l.194-225)
+- Paliers / clés : `app/Capri.cs` ~l.3690-3830
+- Fournisseurs cloud : `app/Brain.cs` (`Cloud`, `CloudModels`, `DefaultCloudModel`, `Remote`)
+- Page clé NVIDIA gratuite : https://build.nvidia.com/settings/api-keys
