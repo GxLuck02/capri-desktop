@@ -128,7 +128,11 @@ namespace CapriDesktop
         private static readonly int[] Recalls = { 8, 16, 32 };
         private static readonly string[] SoundNames = { "Off", "Quiet", "Normal", "Loud" };
         private static readonly int[] SoundLevels = { 0, 30, 60, 100 };
-        internal const string Offline = "My brain's offline. Install Ollama from ollama.com, then run: ollama pull gemma4:e4b";
+        internal const string Offline = "My brain's offline. Install Ollama from ollama.com and open it, then right-click me > Brain > Download " + Starter + ".";
+        // The brain she downloads for herself through Ollama when it has none yet, so no terminal is needed.
+        internal const string Starter = "gemma4:e4b";
+        internal const string PullChoice = "Download " + Starter + ", her brain (a few GB)";
+        internal const string NoOllama = "Ollama isn't running. Install it from ollama.com and open it.";
         internal const string DiscordPage = "https://discord.gg/F4fDHfGtFk";
         internal static readonly double[] Sizes = { 140, 170, 240, 320, 440, 560 };
         private static readonly string[] SizeNames = { "Tiny", "Small", "Medium", "Large", "Huge", "Giant" };
@@ -201,6 +205,9 @@ namespace CapriDesktop
         private const string KeyHeard = "(voice key)";
         private const string NameHeard = "(nickname)";
         private const string PersonalityHeard = "(personality)";
+        private const string BrainHeard = "(brain download)";
+        private bool pulling;
+        private volatile int pulled = -1;
         private bool dancing;
         private Action outro;
         private double outroAt;
@@ -1065,9 +1072,16 @@ namespace CapriDesktop
         internal void ShowBrains(string[] found)
         {
             brainMenu.Items.Clear();
-            if (found == null || found.Length == 0)
+            if (found == null)
             {
-                brainMenu.Items.Add(new MenuItem { Header = "No models yet. Install Ollama, then pull one.", IsEnabled = false });
+                brainMenu.Items.Add(new MenuItem { Header = NoOllama, IsEnabled = false });
+                return;
+            }
+            if (found.Length == 0)
+            {
+                MenuItem fetch = new MenuItem { Header = pulling ? "Downloading " + Starter + (pulled >= 0 ? ": " + pulled + "%" : "...") : PullChoice, IsEnabled = !pulling };
+                fetch.Click += delegate { PullBrain(); };
+                brainMenu.Items.Add(fetch);
                 return;
             }
             foreach (string name in found)
@@ -1080,6 +1094,37 @@ namespace CapriDesktop
         }
 
         internal int BrainChoices { get { return brainMenu.Items.Count; } }
+
+        internal string FirstBrainChoice { get { MenuItem first = brainMenu.Items.Count > 0 ? brainMenu.Items[0] as MenuItem : null; return first == null ? null : first.Header as string; } }
+
+        // Ollama has no models yet: she pulls her own brain, shows how far it's got on the Brain menu, then picks it and says so.
+        internal void PullBrain()
+        {
+            if (pulling) return;
+            pulling = true;
+            pulled = -1;
+            Talk.Answer(BrainHeard, "Downloading my brain, " + Starter + ". It's a few GB, so give me a while. Right-click me > Brain shows how far it's got.");
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string problem = null;
+                try { Brain.Pull(Starter, delegate(string status, long done, long total) { pulled = (int)(done * 100 / Math.Max(1, total)); }, delegate { return false; }); }
+                catch (Exception error)
+                {
+                    System.Net.WebException web = error as System.Net.WebException;
+                    problem = web != null && web.Response == null ? NoOllama : Brain.Plain(error.Message) ?? "Couldn't download my brain: " + Voice.Short(error.Message);
+                }
+                Dispatcher.UIThread.Post(delegate
+                {
+                    pulling = false;
+                    pulled = -1;
+                    if (problem != null) { Talk.Answer(BrainHeard, problem); return; }
+                    Brain.Model = Starter;
+                    Saved.Model = Starter;
+                    Save();
+                    Talk.Answer(BrainHeard, "My brain's in. Talk to me, choom.");
+                });
+            });
+        }
 
         internal void PickBrain(string model)
         {

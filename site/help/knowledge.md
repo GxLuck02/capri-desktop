@@ -165,7 +165,8 @@ The Mac preview uses Ollama for her brain. See "Ollama" in section 9.
 1. Download Capri-linux-x64.tar.gz.
 2. Unpack it.
 3. Run Capri/Capri.
-4. Install Ollama from https://ollama.com, then run: ollama pull gemma4:e4b
+4. Install Ollama from https://ollama.com and open it.
+5. Right-click her > Brain > Download gemma4:e4b, her brain (a few GB). Or run: ollama pull gemma4:e4b
 
 ### X11 or Wayland?
 - X11: she sits on your windows.
@@ -178,7 +179,7 @@ They tile new windows, so Capri gets squeezed into a tile.
 3. The rule syntax changes between Hyprland versions, so check the Window Rules page of the Hyprland wiki for yours. On Sway it's a for_window rule with floating enable and sticky enable.
 
 ### Her brain on Linux
-The Linux preview uses Ollama. If you installed Ollama but she says her brain is offline or disconnected, you haven't pulled a model yet. Run: ollama pull gemma4:e4b, then right-click her > Brain and pick it.
+The Linux preview uses Ollama. If you installed Ollama but she says her brain is offline or disconnected, you haven't downloaded a model yet. Right-click her > Brain > Download gemma4:e4b. She says "Downloading my brain..." and the Brain menu shows how far it's got; when it's in she says "My brain's in. Talk to me, choom." Or run: ollama pull gemma4:e4b, then right-click her > Brain and pick it.
 
 ---
 
@@ -1095,7 +1096,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Sit here
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance
 - Size: Tiny, Small, Medium, Large, Huge, Giant
-- Brain: your Ollama models. "No models yet. Install Ollama, then pull one."
+- Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it."
 - Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Open her notes (me.md), Edit her personality (personality.md), Reset her personality to default
 - Join the Discord
 - Quit Capri
@@ -1118,8 +1119,8 @@ The first time she controls Spotify or Music, macOS asks "Capri wants to control
 ### Music on Linux
 She controls music players that support MPRIS, like Spotify, Rhythmbox or Elisa. Browser tabs don't count.
 
-### "My brain's offline. Install Ollama from ollama.com, then run: ollama pull gemma4:e4b"
-Install Ollama, run that line in a terminal, then pick the model in right-click her > Brain.
+### "My brain's offline. Install Ollama from ollama.com and open it, then right-click me > Brain > Download gemma4:e4b."
+Install Ollama and open it, then right-click her > Brain > Download gemma4:e4b. Older versions said to run ollama pull gemma4:e4b in a terminal, which still works; then pick the model in right-click her > Brain.
 
 ### A button or menu from this help is missing on my Mac or Linux
 The preview doesn't have everything Windows has yet (see "Not yet" above). A missing Mainframe, voice chat or job feature on Mac or Linux usually means the preview doesn't have it, not that your install is broken. Check your version too.
@@ -1181,7 +1182,7 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 - Mac won't run it at all on macOS 12, 13 or 14: Capri needs macOS 15 or newer.
 - "Where's the Mainframe?": Mac and Linux don't have one yet. Right-click her.
 - An error inside the Ollama app itself (for example one that mentions ChatGPT): that comes from Ollama, not Capri. Capri only needs Ollama running with a model pulled. Check the model answers in Ollama first.
-- Linux says her brain is offline or disconnected: installing Ollama isn't enough, the model has to be downloaded too. Run ollama pull gemma4:e4b, check it answers in Ollama itself (ollama run gemma4:e4b), then right-click her > Brain and pick it.
+- Linux says her brain is offline or disconnected: installing Ollama isn't enough, the model has to be downloaded too. Right-click her > Brain > Download gemma4:e4b (or run ollama pull gemma4:e4b), check it answers in Ollama itself (ollama run gemma4:e4b), then right-click her > Brain and pick it.
 - Linux blank replies while Ollama itself answers: that's a separate problem we haven't solved yet. Try another model in right-click her > Brain, update Ollama, and tell us in the Discord with your distro and Ollama version.
 - Wayland: she can only sit on the bottom of the screen. That's a Wayland limit.
 
