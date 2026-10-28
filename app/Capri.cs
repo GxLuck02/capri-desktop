@@ -11700,7 +11700,18 @@ namespace CapriDesktop
                             Hands.Manners("Spotify'ı aç lütfen", out turkishPolite);
                             Hands.Manners("افتح سبوتيفاي", out arabicAsked);
                             string minFadlak = Hands.Manners("من فضلك", out arabicKept);
-                            bool anyLanguage = germanAsked && !germanKept && bitte == "öffne Spotify please" && !germanPolite && !japanesePolite && !hindiPolite && !turkishPolite && arabicAsked && minFadlak == "افتح سبوتيفاي please" && !arabicKept;
+                            bool spellings = true;
+                            foreach (string spelled in new[] { "abre Spotify porfavor", "apri Spotify perfavore", "открой Spotify плз", "ouvre Spotify sil te plait" })
+                            {
+                                bool spelledAsked;
+                                Hands.Manners(spelled, out spelledAsked);
+                                if (spelledAsked) spellings = false;
+                            }
+                            bool spelledFirst, spelledKept;
+                            Hands.Manners("abre Spotify", out spelledFirst);
+                            string porfavor = Hands.Manners("porfavor", out spelledKept);
+                            bool anyLanguage = germanAsked && !germanKept && bitte == "öffne Spotify please" && !germanPolite && !japanesePolite && !hindiPolite && !turkishPolite && arabicAsked && minFadlak == "افتح سبوتيفاي please" && !arabicKept
+                                && spellings && spelledFirst && !spelledKept && porfavor == "abre Spotify please";
                             Hear("open spotify");
                             bool askedInChat = reply == Hands.SayPlease;
                             CloseTalk();
