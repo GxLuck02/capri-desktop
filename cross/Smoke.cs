@@ -45,6 +45,7 @@ namespace CapriDesktop
         private bool blinked;
         private bool slept;
         private double noticedBefore = -1;
+        private bool poppedAgain;
         private Func<byte[]> peekWas;
         private readonly List<string> glanceAsks = new List<string>();
         private const string GlanceSaid = "SAW: a racing game, a red car in first place. SAY: First place? Don't choke now.";
@@ -943,9 +944,20 @@ namespace CapriDesktop
             }
             if (step == 23)
             {
-                if (pet.IsVisible) return false;
-                checks.Add("PASS pop-ins: with Check in on me on she glitches in to say hi even when hidden, then hides again");
-                pet.ComeBack();
+                if (!poppedAgain)
+                {
+                    if (pet.IsVisible) return false;
+                    checks.Add("PASS pop-ins: with Check in on me on she glitches in to say hi even when hidden, then hides again");
+                    pet.PopIn();
+                    pet.Talk.Dismiss();
+                    poppedAgain = true;
+                    return false;
+                }
+                if (pet.Arriving || pet.Falling || pet.Seat == null) return false;
+                pet.Tap();
+                pet.CheckPopIn(pet.PopOut + 0.1);
+                if (pet.Away || pet.Leaving || pet.PopOut >= 0) throw new Exception("A quick click didn't keep her out after she popped in from hiding: away " + pet.Away + " | out " + pet.PopOut);
+                checks.Add("PASS a quick click while she's popped in from hiding keeps her out");
                 return true;
             }
             if (step == 24)

@@ -270,7 +270,7 @@ namespace CapriDesktop
         private MenuItem checkInsItem;
         private double nextPopIn = -1;
         private double popOut = -1;
-        private int popAsked;
+        private int popAsked, popClicks, popPets;
         private bool popChecking;
         // Cyberpunk 2077 starting, or a Night City song coming on, is home for her, like on Windows: she cheers once, then waits
         // two hours before cheering for the same again. Check in on me off stops it.
@@ -1129,6 +1129,13 @@ namespace CapriDesktop
             Play(seat != null ? perchGlitch : glitch);
         }
 
+        // A quick click, pressed and let go, for the smoke test.
+        internal void Tap()
+        {
+            clicks++;
+            React();
+        }
+
         internal void NoVoice()
         {
             Talk.Answer("(voice)", "Voice chat isn't on Mac and Linux yet. Type to me for now, choom.");
@@ -1958,8 +1965,9 @@ namespace CapriDesktop
 
         internal void CheckPopIn(double now)
         {
-            // Touching her, typing to her, opening her menu or asking her something while she's out from hiding keeps her out.
-            if (popOut >= 0 && (asking != popAsked || dragging || pressed || Talk.Typing || (ContextMenu != null && ContextMenu.IsOpen))) popOut = -1;
+            // Touching her, typing to her, opening her menu or asking her something while she's out from hiding keeps her out. Clicks
+            // and pats are counted, since a quick click is over before this looks.
+            if (popOut >= 0 && (asking != popAsked || clicks != popClicks || petTicket != popPets || dragging || pressed || Talk.Typing || (ContextMenu != null && ContextMenu.IsOpen))) popOut = -1;
             if (popOut >= 0 && now >= popOut && Talk.Quiet) { popOut = -1; HideAway(); }
             if (Saved.NoCheckIns || shushed) { nextPopIn = -1; return; }
             if (nextPopIn < 0) nextPopIn = now + PopGap();
@@ -2001,6 +2009,8 @@ namespace CapriDesktop
                 Arrive();
                 Blurt(PopHeard, line);
                 popAsked = asking;
+                popClicks = clicks;
+                popPets = petTicket;
                 popOut = hidden ? Now + 6 : -1;
             };
             if (hidden) arrive();
