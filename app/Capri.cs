@@ -10674,9 +10674,10 @@ namespace CapriDesktop
                             if (!mainframeShown) mainframe.Hide();
                             if (!balloonOpened) throw new Exception("Clicking the download popup didn't open Capri Mainframe.");
                             checks.Add("PASS voice installs: her free voice and ears get one dotted bar under VOICE that pushes the rest down without overlaps and closes when done, and the download popup opens Capri Mainframe");
-                            int mainTall = mainframe.ClientSize.Height;
+                            int mainTall = mainframe.ClientSize.Height, mainWide = mainframe.ClientSize.Width;
                             mainframe.ShowSettings(true);
-                            if (!mainframe.SettingsShown || mainframe.ClientSize.Height >= mainTall || mainframe.SettingsStatus != "English | 100% | 60% | Off | 2 min | dance | intro | Short | Short | Normal") throw new Exception("The settings page did not open right: " + mainframe.SettingsStatus);
+                            // Settings opens a second column beside the first. With four voice sliders and her perch row it can be taller than the main page too.
+                            if (!mainframe.SettingsShown || mainframe.ClientSize.Width <= mainWide || mainframe.SettingsStatus != "English | 100% | 60% | Off | 2 min | dance | intro | Short | Short | Normal") throw new Exception("The settings page did not open right: " + mainframe.SettingsStatus);
                             snap("mainframe-settings.png");
                             string pageTabs = mainframe.TabWalk();
                             if (pageTabs != null) throw new Exception("Settings page keyboard: " + pageTabs);
