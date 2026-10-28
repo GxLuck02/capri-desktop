@@ -11932,7 +11932,7 @@ namespace CapriDesktop
                                 }
                             }
                             bool[] mingalaba = Look.Letters("မင်္ဂလာပါ");
-                            if (burmeseOver.Length > 0 || burmeseBroken.Length > 0 || burmeseBreaks < 2 || burmeseInk < 40 || !mingalaba[5] || !mingalaba[7] || !Look.Burmese("hey " + burmeseReply) || Look.Burmese("hey choom") || !Look.Unspaced(burmeseReply))
+                            if (burmeseOver.Length > 0 || burmeseBroken.Length > 0 || burmeseBreaks < 2 || burmeseInk < 40 || !mingalaba[5] || mingalaba[6] || !mingalaba[7] || mingalaba[8] || !Look.Burmese("hey " + burmeseReply) || Look.Burmese("hey choom") || !Look.Unspaced(burmeseReply))
                                 throw new Exception("Burmese didn't fit her bubble: " + burmeseOver + " / " + burmeseBroken + " / " + burmeseBreaks + " breaks, " + burmeseInk + " lit");
                             using (SpeechBox burmeseBox = new SpeechBox())
                             {

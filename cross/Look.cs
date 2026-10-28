@@ -168,14 +168,15 @@ namespace CapriDesktop
         // their lines break between letters. A Thai or Lao line never breaks before a vowel or tone mark, or a vowel that
         // follows its letter, and never after a vowel written before its letter. Every script keeps each letter with its marks,
         // and with the next letter after a sign that joins them (a virama, or Khmer's coeng), and a Burmese line never breaks
-        // before a letter that ends the syllable before it. Windows breaks between words.
+        // before ါ, ာ or း (.NET counts them as letters of their own) or a letter that ends the syllable before it. Windows
+        // breaks between words.
         internal static bool[] Letters(string word)
         {
             bool[] breaks = new bool[word.Length];
             if (!Thai(word))
             {
                 foreach (int start in StringInfo.ParseCombiningCharacters(word))
-                    if (start > 0 && !Joins(word[start - 1]) && !Ends(word, start) && (word[start - 1] < 0x0EC0 || word[start - 1] > 0x0EC4) && "ະາຳໆຯ".IndexOf(word[start]) < 0) breaks[start] = true;
+                    if (start > 0 && !Joins(word[start - 1]) && !Ends(word, start) && (word[start - 1] < 0x0EC0 || word[start - 1] > 0x0EC4) && "ະາຳໆຯါား".IndexOf(word[start]) < 0) breaks[start] = true;
                 return breaks;
             }
             for (int i = 1; i < word.Length; i++)
