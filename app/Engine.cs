@@ -134,7 +134,8 @@ namespace CapriDesktop
         private readonly string root;
         private readonly object gate = new object();
         private Process server;
-        private IntPtr job;
+        private static IntPtr job;
+        private static readonly object jobs = new object();
         private int port;
         private bool serverEyes;
         private bool serverCpu;
@@ -296,7 +297,7 @@ namespace CapriDesktop
 
         internal static Func<ProcessStartInfo, Process> Spawn = Process.Start;
 
-        private static int ExitCode(Process process)
+        internal static int ExitCode(Process process)
         {
             try { return process.ExitCode; }
             catch (InvalidOperationException) { return -1; }
@@ -368,7 +369,7 @@ namespace CapriDesktop
             }
         }
 
-        private static int FreePort()
+        internal static int FreePort()
         {
             TcpListener probe = new TcpListener(IPAddress.Loopback, 0);
             probe.Start();
@@ -411,18 +412,21 @@ namespace CapriDesktop
         [DllImport("kernel32.dll")] private static extern bool SetInformationJobObject(IntPtr job, int kind, ref ExtendedLimits limits, int size);
         [DllImport("kernel32.dll")] private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
 
-        private void Bind(Process child)
+        internal static void Bind(Process child)
         {
             try
             {
-                if (job == IntPtr.Zero)
+                lock (jobs)
                 {
-                    IntPtr created = CreateJobObject(IntPtr.Zero, null);
-                    ExtendedLimits limits = new ExtendedLimits();
-                    limits.Basic.Flags = 0x2000;
-                    if (created != IntPtr.Zero && SetInformationJobObject(created, 9, ref limits, Marshal.SizeOf(typeof(ExtendedLimits)))) job = created;
+                    if (job == IntPtr.Zero)
+                    {
+                        IntPtr created = CreateJobObject(IntPtr.Zero, null);
+                        ExtendedLimits limits = new ExtendedLimits();
+                        limits.Basic.Flags = 0x2000;
+                        if (created != IntPtr.Zero && SetInformationJobObject(created, 9, ref limits, Marshal.SizeOf(typeof(ExtendedLimits)))) job = created;
+                    }
+                    if (job != IntPtr.Zero) AssignProcessToJobObject(job, child.Handle);
                 }
-                if (job != IntPtr.Zero) AssignProcessToJobObject(job, child.Handle);
             }
             catch (InvalidOperationException) { }
             catch (System.ComponentModel.Win32Exception) { }

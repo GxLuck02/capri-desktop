@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 #if !CROSS
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Media;
+using System.Reflection;
+using System.Threading;
 #endif
 using System.Net;
 using System.Runtime.InteropServices;
@@ -736,6 +739,335 @@ namespace CapriDesktop
 
         [StructLayout(LayoutKind.Sequential)]
         private struct Generated { internal IntPtr Samples; internal int Count, Rate; }
+    }
+
+    // Her opt-in HD voice: Qwen3-TTS 1.7B on the graphics card, served by its own llama-server so her brain keeps its engine.
+    internal sealed class QwenVoice : IDisposable
+    {
+        internal const string Style = "HD";
+        internal const string Build = "b11781";
+        internal static string EngineUrl = "https://github.com/ggml-org/llama.cpp/releases/download/" + Build + "/llama-" + Build + "-bin-win-vulkan-x64.zip";
+        internal static string EngineSha = "543198c366542b9259ac0bf1dfdc9bcd45843059b144f3771773d5f2f1d5cbf5";
+        internal static long EngineSize = 36803725;
+        private const string Weights = "https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/ca27d74bc954b73dadab5b71ca265d87fc861a7c/";
+        internal const string ModelFile = "Qwen3-TTS-12Hz-1.7B-Base-Q4_K_M.gguf";
+        internal static string ModelUrl = Weights + ModelFile;
+        internal static string ModelSha = "8d18c94acb2addd042f97da63c98be144eafa76d0d9495177eab65130cf85129";
+        internal static long ModelSize = 1035965280;
+        internal const string CodecFile = "mmproj-Qwen3-TTS-12Hz-1.7B-Base-Q8_0.gguf";
+        internal static string CodecUrl = Weights + CodecFile;
+        internal static string CodecSha = "6fd65188839bcd6ecc91b277ad471e22a0edfada4699a0fe82f1165c18cfcce2";
+        internal static long CodecSize = 446422912;
+        internal const long CardNeeded = 6L << 30;
+        internal const long RoomNeeded = 5L << 29;
+        internal const int PieceLength = 300;
+        private static readonly string[] Tongues = { "zh", "en", "de", "it", "pt", "es", "ja", "ko", "fr", "ru" };
+        internal static Func<ProcessStartInfo, Process> Spawn = Process.Start;
+        private readonly string folder;
+        private readonly string engine;
+        private readonly object gate = new object();
+        private readonly object waking = new object();
+        private Process server;
+        private int port;
+        private bool awake;
+        private byte[] clip;
+        internal volatile bool Cancel;
+
+        internal QwenVoice(string data)
+        {
+            string root = Path.Combine(data, "voice");
+            folder = Path.Combine(root, "qwen3-tts-1.7b");
+            engine = Path.Combine(root, "engine-" + Build);
+        }
+
+        internal static long PackSize { get { return EngineSize + CodecSize + ModelSize; } }
+
+        internal string Folder { get { return folder; } }
+
+        private string Server { get { return Path.Combine(engine, "llama-server.exe"); } }
+
+        internal bool Installed { get { return File.Exists(Server) && File.Exists(Path.Combine(folder, ModelFile)) && File.Exists(Path.Combine(folder, CodecFile)); } }
+
+        internal bool Awake { get { lock (gate) return awake && (server == null || !server.HasExited); } }
+
+        internal void Install(Action<string, long, long> progress)
+        {
+            if (IntPtr.Size != 8) throw new IOException("Her HD voice needs 64-bit Windows.");
+            Directory.CreateDirectory(folder);
+            string model = Path.Combine(folder, ModelFile), codec = Path.Combine(folder, CodecFile);
+            long needed = (File.Exists(Server) ? 0 : EngineSize * 4) + (File.Exists(codec) ? 0 : CodecSize) + (File.Exists(model) ? 0 : ModelSize) + (64L << 20);
+            string drive = Path.GetPathRoot(folder);
+            if (new DriveInfo(drive).AvailableFreeSpace < needed) throw new IOException("Her HD voice needs " + Engine.Amount(needed) + " free on " + drive.TrimEnd('\\') + ".");
+            Func<bool> stopped = delegate { return Cancel; };
+            if (!File.Exists(Server))
+            {
+                string zip = engine + ".zip";
+                Engine.Fetch(EngineUrl, zip, EngineSize, EngineSha, "her HD voice", Along(progress, 0), stopped);
+                progress("Unpacking her HD voice", EngineSize, PackSize);
+                string staging = engine + ".new";
+                if (Directory.Exists(staging)) Directory.Delete(staging, true);
+                ZipFile.ExtractToDirectory(zip, staging);
+                if (!File.Exists(Path.Combine(staging, "llama-server.exe"))) throw new IOException("The HD voice download is missing llama-server.exe.");
+                lock (gate)
+                {
+                    Close();
+                    if (Directory.Exists(engine)) Directory.Delete(engine, true);
+                    Directory.Move(staging, engine);
+                }
+                File.Delete(zip);
+            }
+            if (!File.Exists(codec)) Engine.Fetch(CodecUrl, codec, CodecSize, CodecSha, "her HD voice", Along(progress, EngineSize), stopped);
+            if (!File.Exists(model)) Engine.Fetch(ModelUrl, model, ModelSize, ModelSha, "her HD voice", Along(progress, EngineSize + CodecSize), stopped);
+        }
+
+        private static Action<string, long, long> Along(Action<string, long, long> progress, long before)
+        {
+            return delegate(string text, long done, long total) { progress(text, before + done, PackSize); };
+        }
+
+        internal ProcessStartInfo StartInfo(int number)
+        {
+            int threads = Engine.Threads(Environment.ProcessorCount);
+            ProcessStartInfo info = new ProcessStartInfo(Server, "-m \"" + Path.Combine(folder, ModelFile) + "\" --mmproj \"" + Path.Combine(folder, CodecFile) + "\" --host 127.0.0.1 --port " + number + " -c 2048 -np 1 --no-webui --log-disable -t " + threads + " -tb " + threads);
+            info.UseShellExecute = false;
+            info.CreateNoWindow = true;
+            info.WorkingDirectory = engine;
+            return info;
+        }
+
+        internal void Warm()
+        {
+            lock (waking)
+            {
+                Process running;
+                int number;
+                lock (gate)
+                {
+                    if (awake && (server == null || !server.HasExited)) return;
+                    Close();
+                    if (IntPtr.Size != 8) throw new VoiceException("Her HD voice needs 64-bit Windows.");
+                    if (!Installed) throw new VoiceException("Get her HD voice in Capri Mainframe first.");
+                    number = port = Engine.FreePort();
+                    try { running = server = Spawn(StartInfo(number)); }
+                    catch (System.ComponentModel.Win32Exception error) { throw new VoiceException(Voice.Short("Her HD voice wouldn't start: " + error.Message)); }
+                    Engine.Lower(running);
+                    Engine.Bind(running);
+                }
+                Stopwatch waited = Stopwatch.StartNew();
+                while (waited.Elapsed.TotalSeconds < 120)
+                {
+                    // Stop() while she's waking hands back a disposed process, so a stop is a quiet cancel rather than a crash.
+                    lock (gate)
+                    {
+                        if (server != running) throw new OperationCanceledException();
+                        if (running.HasExited)
+                        {
+                            Brain.Log("HD voice", waited.ElapsedMilliseconds, "llama-server stopped while loading with exit code 0x" + ((uint)Engine.ExitCode(running)).ToString("X8"));
+                            Close();
+                            throw new VoiceException("Her HD voice crashed loading. Close games, then try again.");
+                        }
+                    }
+                    bool up = false;
+                    try
+                    {
+                        HttpWebRequest request = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + number + "/health");
+                        request.Proxy = null;
+                        request.Timeout = 2000;
+                        using (HttpWebResponse response = (HttpWebResponse)request.GetResponse()) up = response.StatusCode == HttpStatusCode.OK;
+                    }
+                    catch (WebException) { }
+                    if (up)
+                    {
+                        // One short line before she counts as awake, so the graphics card's first-run setup isn't on her first reply.
+                        try { Say(number, "Hey, I'm awake."); }
+                        catch (VoiceException)
+                        {
+                            lock (gate) if (server != running) throw new OperationCanceledException();
+                            throw;
+                        }
+                        lock (gate)
+                        {
+                            if (server != running) throw new OperationCanceledException();
+                            awake = true;
+                        }
+                        return;
+                    }
+                    Thread.Sleep(300);
+                }
+                Stop();
+                throw new VoiceException("Her HD voice loaded too slowly.");
+            }
+        }
+
+        internal byte[] Speak(string text)
+        {
+            int number;
+            lock (gate)
+            {
+                if (!awake || (server != null && server.HasExited)) throw new VoiceException("Her HD voice is still waking up.");
+                number = port;
+            }
+            return Say(number, text);
+        }
+
+        private byte[] Say(int number, string text)
+        {
+            string code = Brain.LanguageCode(Brain.Language);
+            string rest = ",\"lang\":\"" + (Array.IndexOf(Tongues, code) >= 0 ? code : "en") + "\",\"seed\":7,\"response_format\":\"pcm\",\"speaker_ref_b64\":\"" + Convert.ToBase64String(Clip()) + "\"}";
+            List<short> said = new List<short>();
+            int hertz = 24000;
+            foreach (string piece in Pieces(Voice.Sayable(text))) said.AddRange(Ask(number, "{\"input\":" + Voice.Quote(piece) + rest, out hertz));
+            byte[] wav = Voice.Wave(said.ToArray(), hertz);
+            if (Voice.Seconds(wav) < 0.2) throw new VoiceException("Her HD voice made no sound.");
+            return wav;
+        }
+
+        // Each /tts call stops at 512 frames (about 41 s), so long replies go a few sentences at a time.
+        internal static List<string> Pieces(string text)
+        {
+            List<string> pieces = new List<string>();
+            string piece = "";
+            foreach (string sentence in Regex.Split(text.Trim(), @"(?<=[.!?…])\s+|\s*\n\s*"))
+            {
+                if (sentence.Length == 0) continue;
+                if (piece.Length > 0 && piece.Length + 1 + sentence.Length > PieceLength) { pieces.Add(piece); piece = ""; }
+                piece = piece.Length == 0 ? sentence : piece + " " + sentence;
+            }
+            if (piece.Length > 0) pieces.Add(piece);
+            return pieces;
+        }
+
+        private static short[] Ask(int number, string json, out int hertz)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(json);
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + number + "/tts");
+            request.Method = "POST";
+            request.Proxy = null;
+            request.ContentType = "application/json";
+            request.ContentLength = payload.Length;
+            request.Timeout = 60000;
+            request.ReadWriteTimeout = 60000;
+            try
+            {
+                using (Stream upload = request.GetRequestStream()) upload.Write(payload, 0, payload.Length);
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (Stream stream = response.GetResponseStream())
+                using (MemoryStream copy = new MemoryStream())
+                {
+                    stream.CopyTo(copy);
+                    return Decode(copy.ToArray(), response.ContentType, out hertz);
+                }
+            }
+            catch (WebException error)
+            {
+                HttpWebResponse response = error.Response as HttpWebResponse;
+                if (response == null) throw new VoiceException("Her HD voice stopped answering.");
+                string detail;
+                using (response)
+                using (StreamReader reader = new StreamReader(response.GetResponseStream())) detail = reader.ReadToEnd();
+                throw new VoiceException(Voice.Short("Her HD voice glitched: HTTP " + (int)response.StatusCode + " " + Regex.Replace(detail ?? "", @"\s+", " ").Trim()));
+            }
+            catch (IOException) { throw new VoiceException("Her HD voice stopped answering."); }
+        }
+
+        internal Func<string, byte[]> Or(Func<string, byte[]> fallback, Action<string> trouble)
+        {
+            return delegate(string words)
+            {
+                Stopwatch took = Stopwatch.StartNew();
+                try
+                {
+                    byte[] wav = Speak(words);
+                    if (took.Elapsed.TotalSeconds > Math.Max(6, Voice.Seconds(wav) * 1.2)) trouble("Her HD voice is running slowly right now, so she's using her free voice for a bit.");
+                    return wav;
+                }
+                catch (VoiceException error)
+                {
+                    trouble(Voice.Short(error.Message) + " She's using her free voice for a bit.");
+                    if (fallback == null) throw;
+                    return fallback(words);
+                }
+            };
+        }
+
+        private static short[] Decode(byte[] pcm, string type, out int hertz)
+        {
+            Match rate = Regex.Match(type ?? "", @"rate=(\d+)");
+            hertz = rate.Success ? int.Parse(rate.Groups[1].Value) : 24000;
+            short[] samples = new short[pcm.Length / 4];
+            for (int i = 0; i < samples.Length; i++) samples[i] = (short)Math.Max(-32767, Math.Min(32767, Math.Round(BitConverter.ToSingle(pcm, i * 4) * 32767)));
+            return samples;
+        }
+
+        // reference.wav in her HD voice folder replaces the clip she's built with, so a new reference can be tried without a rebuild.
+        private byte[] Clip()
+        {
+            string own = Path.Combine(folder, "reference.wav");
+            if (File.Exists(own)) return File.ReadAllBytes(own);
+            lock (gate)
+            {
+                if (clip != null) return clip;
+                using (Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream("Capri.Voice.reference.wav"))
+                {
+                    if (source == null) throw new VoiceException("Her HD voice is missing her reference clip.");
+                    using (MemoryStream copy = new MemoryStream())
+                    {
+                        source.CopyTo(copy);
+                        clip = copy.ToArray();
+                    }
+                }
+                return clip;
+            }
+        }
+
+        // Free graphics memory on NVIDIA cards, from nvidia-smi; -1 where that can't be read.
+        internal static long FreeRoom()
+        {
+            string smi = Path.Combine(Environment.SystemDirectory, "nvidia-smi.exe");
+            if (!File.Exists(smi)) return -1;
+            try
+            {
+                ProcessStartInfo start = new ProcessStartInfo(smi, "--query-gpu=memory.total,memory.used --format=csv,noheader,nounits") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
+                using (Process query = Process.Start(start))
+                {
+                    string output = query.StandardOutput.ReadToEnd();
+                    if (!query.WaitForExit(5000)) return -1;
+                    long best = -1;
+                    foreach (string line in output.Split('\n'))
+                    {
+                        string[] parts = line.Split(',');
+                        long total, used;
+                        if (parts.Length == 2 && long.TryParse(parts[0].Trim(), out total) && long.TryParse(parts[1].Trim(), out used)) best = Math.Max(best, (total - used) << 20);
+                    }
+                    return best;
+                }
+            }
+            catch (System.ComponentModel.Win32Exception) { return -1; }
+            catch (InvalidOperationException) { return -1; }
+        }
+
+        internal void Attach(int number)
+        {
+            lock (gate)
+            {
+                Close();
+                port = number;
+                awake = true;
+            }
+        }
+
+        internal void Stop() { lock (gate) Close(); }
+
+        private void Close()
+        {
+            awake = false;
+            if (server == null) return;
+            try { if (!server.HasExited) { server.Kill(); server.WaitForExit(3000); } } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
+            server.Dispose();
+            server = null;
+        }
+
+        public void Dispose() { Stop(); }
     }
 #endif
 }

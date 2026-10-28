@@ -184,6 +184,7 @@ namespace CapriDesktop
         [DataMember] public bool StartupSet;
         [DataMember] public bool QuickHands;
         [DataMember] public bool Bypass;
+        [DataMember] public bool HdVoice;
 
         [OnDeserializing]
         private void Defaults(StreamingContext context)
@@ -703,10 +704,14 @@ namespace CapriDesktop
         private volatile bool voiceBroke;
         private readonly Voice voice = new Voice();
         private readonly LocalVoice kokoro;
+        private readonly QwenVoice qwen;
         private readonly LocalEars parakeet;
         private readonly Presence presence;
-        private bool settingUpEars;
-        private long voiceGot, voiceTotal, earsGot, earsTotal;
+        private bool settingUpEars, settingUpHd, wakingHd, hdTest;
+        private long voiceGot, voiceTotal, earsGot, earsTotal, hdGot, hdTotal, graphics = -1;
+        private double hdRest = -1, hdUsed = -1, hdChecked = -1;
+        private bool? hdFitsTest;
+        private const double HdRest = 600;
         private bool balloonMainframe;
         private bool? ownEarsTest;
         private readonly System.Collections.Generic.List<bool> cursorSwaps = new System.Collections.Generic.List<bool>();
@@ -845,6 +850,7 @@ namespace CapriDesktop
             Brain.MakePersonality();
             engine = new Engine(data);
             kokoro = new LocalVoice(data);
+            qwen = new QwenVoice(data);
             parakeet = new LocalEars(data);
             presence = new Presence(Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
             preferences = smoke ? new Preferences() : LoadPreferences();
@@ -991,6 +997,7 @@ namespace CapriDesktop
                 if (!testing) CheckPopIn(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckNudge(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) presence.Show(preferences.NoDiscord ? null : Doing);
+                if (!testing) CheckHd(clock.Elapsed.TotalSeconds);
                 StayOnTop();
                 CheckSeat(clock.Elapsed.TotalSeconds);
                 CheckChat(clock.Elapsed.TotalSeconds);
@@ -2823,6 +2830,7 @@ namespace CapriDesktop
             if (preferences.Silent) return;
             preferences.Silent = true;
             voice.Stop();
+            qwen.Stop();
             if (chatting && !local) StopChat();
             SavePreferences();
             mainframe.Sync();
@@ -4068,20 +4076,142 @@ namespace CapriDesktop
             SetUpFreeVoice(true);
         }
 
-        // One row under VOICE, with the brain setup's dotted bar, for whichever of her free voice and ears is downloading.
+        // One row under VOICE, with the brain setup's dotted bar, for whichever of her free voice, ears and HD voice is downloading.
         private void ShowInstall()
         {
-            bool voicing = SettingUpVoice, hearing = settingUpEars;
-            if (!voicing && !hearing) { mainframe.HideInstall(); return; }
-            long done = (voicing ? voiceGot : 0) + (hearing ? earsGot : 0);
-            long total = (voicing ? (voiceTotal > 0 ? voiceTotal : LocalVoice.PackSize) : 0) + (hearing ? (earsTotal > 0 ? earsTotal : parakeet.Size) : 0);
-            mainframe.ShowInstall(voicing && hearing ? "Installing the speech model + ears" : voicing ? "Installing the local speech model" : "Installing her ears", done, total);
+            bool voicing = SettingUpVoice, hearing = settingUpEars, hd = settingUpHd;
+            if (!voicing && !hearing && !hd) { mainframe.HideInstall(); return; }
+            long done = (voicing ? voiceGot : 0) + (hearing ? earsGot : 0) + (hd ? hdGot : 0);
+            long total = (voicing ? (voiceTotal > 0 ? voiceTotal : LocalVoice.PackSize) : 0) + (hearing ? (earsTotal > 0 ? earsTotal : parakeet.Size) : 0) + (hd ? (hdTotal > 0 ? hdTotal : QwenVoice.PackSize) : 0);
+            string what = voicing && hearing ? "Installing the speech model + ears" : voicing ? "Installing the local speech model" : hearing ? "Installing her ears" : "Installing her HD voice";
+            mainframe.ShowInstall(hd && (voicing || hearing) ? what + " + HD voice" : what, done, total);
         }
 
         internal void CancelFreeVoice() { kokoro.Cancel = true; }
 
+        private bool HdFits
+        {
+            get
+            {
+                if (hdFitsTest.HasValue) return hdFitsTest.Value;
+                if (graphics < 0) graphics = Machine.Read().Vram;
+                return graphics >= QwenVoice.CardNeeded;
+            }
+        }
+
+        // HD is opt-in: one download, then it wakes on the graphics card when she talks and hands back to her free voice while games run.
+        private void ChooseHd()
+        {
+            if (!HdFits) { mainframe.VoiceNote("Her HD voice needs a graphics card with 6 GB or more.", true); return; }
+            preferences.HdVoice = true;
+            hdRest = -1;
+            SavePreferences();
+            ShowVoice();
+            if (testing) return;
+            if (!qwen.Installed) { SetUpHd(); return; }
+            hdTest = voice.Key == null;
+            WakeHd();
+        }
+
+        private void SetUpHd()
+        {
+            if (settingUpHd) return;
+            settingUpHd = true;
+            qwen.Cancel = false;
+            hdGot = hdTotal = 0;
+            ShowInstall();
+            mainframe.VoiceNote("Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop.", false);
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string problem = null;
+                bool cancelled = false;
+                Action<string, long, long> progress = delegate(string text, long done, long total)
+                {
+                    Post(delegate { if (total > 0) { hdGot = done; hdTotal = total; } ShowInstall(); });
+                };
+                try { qwen.Install(progress); }
+                catch (OperationCanceledException) { cancelled = true; }
+                catch (Exception error) { problem = Voice.Short(error.Message); }
+                if (problem != null) Brain.Log("HD voice setup", -1, problem);
+                Post(delegate
+                {
+                    settingUpHd = false;
+                    ShowInstall();
+                    ShowVoice();
+                    if (cancelled) return;
+                    if (problem != null) { mainframe.VoiceNote(problem, true); return; }
+                    if (!preferences.HdVoice) return;
+                    hdTest = voice.Key == null;
+                    WakeHd();
+                });
+            });
+        }
+
+        private void WakeHd()
+        {
+            if (wakingHd || testing) return;
+            wakingHd = true;
+            hdUsed = clock.Elapsed.TotalSeconds;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string problem = null;
+                bool stopped = false;
+                long room = qwen.Awake ? -1 : QwenVoice.FreeRoom();
+                if (room >= 0 && room < QwenVoice.RoomNeeded) problem = "Her HD voice needs about " + Engine.Amount(QwenVoice.RoomNeeded) + " of free graphics memory, so she's on her free voice. Close games or pick a smaller brain.";
+                else
+                {
+                    try { qwen.Warm(); }
+                    catch (OperationCanceledException) { stopped = true; }
+                    catch (Exception error) { problem = Voice.Short(error.Message); }
+                }
+                Post(delegate
+                {
+                    wakingHd = false;
+                    bool test = hdTest;
+                    hdTest = false;
+                    if (stopped) return;
+                    if (!preferences.HdVoice) { qwen.Stop(); return; }
+                    if (problem != null) { HdTrouble(problem); return; }
+                    if (test) TestVoice();
+                });
+            });
+        }
+
+        private Func<string, byte[]> Hd(Func<string, byte[]> fallback)
+        {
+            if (!preferences.HdVoice || preferences.Silent || !qwen.Installed || clock.Elapsed.TotalSeconds < hdRest) return fallback;
+            if (Native.Gaming()) { qwen.Stop(); return fallback; }
+            hdUsed = clock.Elapsed.TotalSeconds;
+            if (!qwen.Awake) { WakeHd(); return fallback; }
+            return qwen.Or(fallback, delegate(string problem) { Post(delegate { HdTrouble(problem); }); });
+        }
+
+        private void HdTrouble(string problem)
+        {
+            if (!testing) Brain.Log("HD voice", -1, problem);
+            qwen.Stop();
+            hdRest = clock.Elapsed.TotalSeconds + HdRest;
+            mainframe.VoiceNote(problem, true);
+        }
+
+        // Her HD voice gives the graphics card back while a game runs and after 10 quiet minutes.
+        private void CheckHd(double now)
+        {
+            if (now - hdChecked < 3) return;
+            hdChecked = now;
+            if (wakingHd || !qwen.Awake) return;
+            if (!preferences.HdVoice || preferences.Silent || now - hdUsed > HdRest || Native.Gaming()) qwen.Stop();
+        }
+
         internal void ChooseVoiceStyle(string name)
         {
+            if (name == QwenVoice.Style) { ChooseHd(); return; }
+            if (preferences.HdVoice || settingUpHd)
+            {
+                preferences.HdVoice = false;
+                qwen.Cancel = true;
+                qwen.Stop();
+            }
             kokoro.Style = LocalVoice.Find(name);
             preferences.VoiceStyle = kokoro.Style == LocalVoice.Styles[0] ? null : kokoro.Style.Name;
             SavePreferences();
@@ -4128,11 +4258,12 @@ namespace CapriDesktop
         {
             bool ready = kokoro.Installed;
             mainframe.ShowVoice(voice.Key == null ? null : Voice.Tail(voice.Key), voice.VoiceId, voice.Model, voices);
-            mainframe.ShowFree(ready, kokoro.Style.Name, SettingUpVoice);
+            bool hd = preferences.HdVoice;
+            mainframe.ShowFree(ready, hd ? QwenVoice.Style : kokoro.Style.Name, SettingUpVoice, HdFits);
             if (!note) return;
             string name = "custom voice";
             if (voices != null) foreach (VoiceEntry entry in voices.Voices) if (entry.Id == voice.VoiceId && entry.Name != null) name = entry.Name;
-            mainframe.VoiceNote(voice.Key == null ? (ready ? "Free voice, runs on your PC." : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
+            mainframe.VoiceNote(voice.Key == null ? (hd && settingUpHd ? "Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop." : hd && qwen.Installed ? "HD voice on your graphics card. Games get her free voice." : ready ? "Free voice, runs on your PC." : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
         }
 
         private float TalkScale()
@@ -5007,6 +5138,7 @@ namespace CapriDesktop
             bool quiet = local;
             Cloud remote = brain.Remote;
             if (!testing && (voice.Key == null || quiet || voiceBroke) && kokoro.Installed && !preferences.Quiet && !preferences.Silent) ThreadPool.QueueUserWorkItem(delegate { try { kokoro.Warm(); } catch (Exception) { } });
+            if (!testing && preferences.HdVoice && (voice.Key == null || quiet || voiceBroke || preferences.Quiet) && !preferences.Silent && qwen.Installed && !qwen.Awake && clock.Elapsed.TotalSeconds >= hdRest && !Native.Gaming()) WakeHd();
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string said;
@@ -5058,7 +5190,7 @@ namespace CapriDesktop
             if (ticket != asking || IsDisposed) return;
             voice.Stop();
             voiceUntil = 0;
-            Func<string, byte[]> free = preferences.Quiet && !FreeChatOn ? null : FreeSpeak ?? (!testing && kokoro.Installed ? new Func<string, byte[]>(kokoro.Speak) : null);
+            Func<string, byte[]> free = preferences.Quiet && !FreeChatOn ? null : FreeSpeak ?? (testing ? null : Hd(kokoro.Installed ? new Func<string, byte[]>(kokoro.Speak) : null));
             Func<string, byte[]> speak = preferences.Quiet || local || quiet || voiceBroke ? null : Speak;
             if (speak == null && !local && !quiet && !voiceBroke && !testing && voice.Ready && !preferences.Quiet) speak = voice.Speak;
             if (speak == null && (voice.Key == null || local || quiet || voiceBroke || preferences.Quiet)) speak = free;
@@ -5470,6 +5602,8 @@ namespace CapriDesktop
             voice.Stop();
             engine.Cancel = true;
             kokoro.Cancel = true;
+            qwen.Cancel = true;
+            qwen.Stop();
             engine.Stop();
             presence.Dispose();
             mainframe.Quitting = true;
@@ -10144,6 +10278,163 @@ namespace CapriDesktop
                             if (!fetchedVoice.Installed || File.Exists(packFolder + ".zip") || Directory.Exists(packFolder + ".new") || !packSteps.Contains("Checking her free voice") || !packSteps.Contains("Unpacking her free voice")) throw new Exception("Voice pack did not install: " + string.Join(", ", packSteps.ToArray()));
                             Directory.Delete(packRoot, true);
                             checks.Add("PASS free voice: Free voice row and Get free voice button without a key, four styles with fallback, pack download + checksum + unpack from a fake server");
+                            if (new Preferences().HdVoice) throw new Exception("Her HD voice is on by default.");
+                            hdFitsTest = false;
+                            ShowVoice();
+                            if (mainframe.HdChoice != "HD · needs a 6 GB graphics card (off)") throw new Exception("A small graphics card was offered her HD voice: " + mainframe.HdChoice);
+                            ChooseVoiceStyle(QwenVoice.Style);
+                            if (preferences.HdVoice || mainframe.FreeStatus != "Free voice: Her own | " + freeSetupText) throw new Exception("Her HD voice turned on without a big enough graphics card: " + mainframe.FreeStatus);
+                            hdFitsTest = true;
+                            ShowVoice();
+                            if (mainframe.HdChoice != "HD · graphics card, " + Engine.Amount(QwenVoice.PackSize)) throw new Exception("Her HD voice wasn't offered on a big graphics card: " + mainframe.HdChoice);
+                            ChooseVoiceStyle(QwenVoice.Style);
+                            if (!preferences.HdVoice || mainframe.FreeStatus != "Free voice: HD | " + freeSetupText || !mainframe.HdChoice.EndsWith("(picked)", StringComparison.Ordinal)) throw new Exception("Picking her HD voice didn't stick: " + mainframe.FreeStatus + " / " + mainframe.HdChoice);
+                            if (mainframe.Overlap() != null) throw new Exception("The free voice row overlaps with HD picked: " + mainframe.Overlap());
+                            Func<string, byte[]> hdFallback = delegate(string words) { return null; };
+                            if (Hd(hdFallback) != hdFallback) throw new Exception("Her HD voice spoke before it was installed.");
+                            ChooseVoiceStyle("Sly");
+                            if (preferences.HdVoice || kokoro.Style.Speaker != 6 || mainframe.FreeStatus != "Free voice: Sly | " + freeSetupText) throw new Exception("Picking a free voice didn't turn HD off: " + mainframe.FreeStatus);
+                            ChooseVoiceStyle(LocalVoice.Styles[0].Name);
+                            hdFitsTest = null;
+                            checks.Add("PASS HD voice: off by default, offered under the free voice only with a 6 GB graphics card, picking it sticks, and picking another free voice turns it off");
+                            Func<byte[], string> hash = delegate(byte[] bytes) { using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant(); };
+                            byte[] hdZip;
+                            using (MemoryStream zipped = new MemoryStream())
+                            {
+                                using (System.IO.Compression.ZipArchive archive = new System.IO.Compression.ZipArchive(zipped, System.IO.Compression.ZipArchiveMode.Create, true))
+                                using (Stream entry = archive.CreateEntry("llama-server.exe").Open()) entry.WriteByte(1);
+                                hdZip = zipped.ToArray();
+                            }
+                            byte[] hdCodec = { 2, 2 }, hdModel = { 3, 3, 3 };
+                            float[] hdWave = new float[9600];
+                            for (int i = 0; i < hdWave.Length; i++) hdWave[i] = (float)(0.5 * Math.Sin(i * 0.07));
+                            byte[] hdPcm = new byte[hdWave.Length * 4];
+                            Buffer.BlockCopy(hdWave, 0, hdPcm, 0, hdPcm.Length);
+                            System.Collections.Generic.List<string> hdAsked = new System.Collections.Generic.List<string>();
+                            System.Net.Sockets.TcpListener hdServer = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+                            hdServer.Start();
+                            ThreadPool.QueueUserWorkItem(delegate
+                            {
+                                try
+                                {
+                                    while (true)
+                                        using (System.Net.Sockets.TcpClient client = hdServer.AcceptTcpClient())
+                                        using (System.Net.Sockets.NetworkStream stream = client.GetStream())
+                                        {
+                                            MemoryStream got = new MemoryStream();
+                                            byte[] buffer = new byte[65536];
+                                            string request = "";
+                                            while (true)
+                                            {
+                                                int read = stream.Read(buffer, 0, buffer.Length);
+                                                if (read <= 0) break;
+                                                got.Write(buffer, 0, read);
+                                                request = System.Text.Encoding.UTF8.GetString(got.ToArray());
+                                                int end = request.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                                                if (end < 0) continue;
+                                                System.Text.RegularExpressions.Match length = System.Text.RegularExpressions.Regex.Match(request, @"Content-Length:\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                                if (got.Length >= end + 4 + (length.Success ? int.Parse(length.Groups[1].Value) : 0)) break;
+                                            }
+                                            lock (hdAsked) hdAsked.Add(request);
+                                            string[] words = request.Split(' ');
+                                            string path = words.Length > 1 ? words[1] : "";
+                                            bool hdSpeech = path.EndsWith("/tts", StringComparison.Ordinal);
+                                            byte[] answer = hdSpeech ? hdPcm : path.EndsWith(".zip", StringComparison.Ordinal) ? hdZip : path.EndsWith("codec.gguf", StringComparison.Ordinal) ? hdCodec : hdModel;
+                                            byte[] head = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: " + (hdSpeech ? "audio/pcm;rate=24000;encoding=float;bits=32" : "application/octet-stream") + "\r\nContent-Length: " + answer.Length + "\r\nConnection: close\r\n\r\n");
+                                            stream.Write(head, 0, head.Length);
+                                            stream.Write(answer, 0, answer.Length);
+                                        }
+                                }
+                                catch (Exception) { }
+                            });
+                            int hdPort = ((IPEndPoint)hdServer.LocalEndpoint).Port;
+                            string hdRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "hd-test");
+                            QwenVoice hdVoice = new QwenVoice(hdRoot);
+                            string[] hdKept = { QwenVoice.EngineUrl, QwenVoice.EngineSha, QwenVoice.CodecUrl, QwenVoice.CodecSha, QwenVoice.ModelUrl, QwenVoice.ModelSha };
+                            long[] hdSizes = { QwenVoice.EngineSize, QwenVoice.CodecSize, QwenVoice.ModelSize };
+                            System.Collections.Generic.List<string> hdSteps = new System.Collections.Generic.List<string>();
+                            long hdTotalSeen = 0;
+                            try
+                            {
+                                QwenVoice.EngineUrl = "http://127.0.0.1:" + hdPort + "/engine.zip";
+                                QwenVoice.EngineSha = hash(hdZip);
+                                QwenVoice.EngineSize = hdZip.Length;
+                                QwenVoice.CodecUrl = "http://127.0.0.1:" + hdPort + "/codec.gguf";
+                                QwenVoice.CodecSha = hash(hdCodec);
+                                QwenVoice.CodecSize = hdCodec.Length;
+                                QwenVoice.ModelUrl = "http://127.0.0.1:" + hdPort + "/model.gguf";
+                                QwenVoice.ModelSha = hash(hdModel);
+                                QwenVoice.ModelSize = hdModel.Length;
+                                if (hdVoice.Installed) throw new Exception("An empty folder counted as her HD voice.");
+                                hdVoice.Install(delegate(string text, long done, long total) { hdSteps.Add(text); hdTotalSeen = total; });
+                                if (!hdVoice.Installed || hdTotalSeen != QwenVoice.PackSize || !hdSteps.Contains("Checking her HD voice") || !hdSteps.Contains("Unpacking her HD voice") || Directory.Exists(Path.Combine(Path.Combine(hdRoot, "voice"), "engine-" + QwenVoice.Build + ".new")) || File.Exists(Path.Combine(Path.Combine(hdRoot, "voice"), "engine-" + QwenVoice.Build + ".zip"))) throw new Exception("Her HD voice pack did not install: " + string.Join(", ", hdSteps.ToArray()));
+                            }
+                            finally
+                            {
+                                QwenVoice.EngineUrl = hdKept[0];
+                                QwenVoice.EngineSha = hdKept[1];
+                                QwenVoice.CodecUrl = hdKept[2];
+                                QwenVoice.CodecSha = hdKept[3];
+                                QwenVoice.ModelUrl = hdKept[4];
+                                QwenVoice.ModelSha = hdKept[5];
+                                QwenVoice.EngineSize = hdSizes[0];
+                                QwenVoice.CodecSize = hdSizes[1];
+                                QwenVoice.ModelSize = hdSizes[2];
+                            }
+                            if (!QwenVoice.ModelUrl.StartsWith("https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/", StringComparison.Ordinal) || QwenVoice.ModelSha.Length != 64 || QwenVoice.CodecSha.Length != 64 || !QwenVoice.EngineUrl.EndsWith("/llama-" + QwenVoice.Build + "-bin-win-vulkan-x64.zip", StringComparison.Ordinal)) throw new Exception("Her HD voice points at the wrong download.");
+                            checks.Add("PASS HD voice pack: llama.cpp " + QwenVoice.Build + " engine, codec and Qwen3-TTS model download with their checksums and unpack from a fake server");
+                            string hdTrouble = null;
+                            byte[] hdTone = Voice.Wave(new short[12000], 24000);
+                            Action<string> hdNoted = delegate(string problem) { hdTrouble = problem; };
+                            try { hdVoice.Speak("Hi."); throw new Exception("A sleeping HD voice spoke."); }
+                            catch (VoiceException) { }
+                            hdVoice.Attach(hdPort);
+                            byte[] hdSaid = hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom, this is my HD voice.");
+                            int hdRate;
+                            short[] hdSamples = Voice.Samples(hdSaid, out hdRate);
+                            string hdBody;
+                            lock (hdAsked) hdBody = hdAsked[hdAsked.Count - 1];
+                            if (hdTrouble != null || hdRate != 24000 || hdSamples.Length != hdWave.Length || Math.Abs(hdSamples[100] - (int)Math.Round(hdWave[100] * 32767)) > 1) throw new Exception("Her HD voice didn't turn the server's float audio into her WAV: " + hdTrouble + " / " + hdRate + " Hz / " + hdSamples.Length);
+                            if (hdBody.IndexOf("POST /tts ", StringComparison.Ordinal) != 0 || hdBody.IndexOf("\"input\":\"Hey chewm, this is my HD voice.\"", StringComparison.Ordinal) < 0 || hdBody.IndexOf("\"response_format\":\"pcm\"", StringComparison.Ordinal) < 0 || hdBody.IndexOf("\"speaker_ref_b64\":\"UklGR", StringComparison.Ordinal) < 0) throw new Exception("Her HD voice sent the wrong request: " + (hdBody.Length > 300 ? hdBody.Substring(0, 300) : hdBody));
+                            string hdSentence = "This sentence is here so her voice has to say a long reply in more than one piece today.";
+                            string hdLong = string.Join(" ", new string[] { hdSentence, hdSentence, hdSentence, hdSentence, hdSentence, hdSentence });
+                            System.Collections.Generic.List<string> hdPieces = QwenVoice.Pieces(hdLong);
+                            int hdCalls;
+                            lock (hdAsked) hdCalls = hdAsked.Count;
+                            short[] hdLongSamples = Voice.Samples(hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)(hdLong), out hdRate);
+                            lock (hdAsked) hdCalls = hdAsked.Count - hdCalls;
+                            if (hdPieces.Count != 2 || hdPieces[0].Length > QwenVoice.PieceLength || string.Join(" ", hdPieces.ToArray()) != hdLong || hdCalls != 2 || hdTrouble != null || hdLongSamples.Length != 2 * hdWave.Length) throw new Exception("Her HD voice didn't say a long reply a few sentences at a time: " + hdPieces.Count + " pieces / " + hdCalls + " calls / " + hdLongSamples.Length + " samples / " + hdTrouble);
+                            hdServer.Stop();
+                            byte[] hdBackup = hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Still there?");
+                            if (hdBackup != hdTone || hdTrouble == null) throw new Exception("A dead HD voice didn't hand the line to her free voice: " + hdTrouble);
+                            hdVoice.Stop();
+                            if (hdVoice.Awake) throw new Exception("Her HD voice stayed awake after Stop.");
+                            Func<ProcessStartInfo, Process> hdSpawnWas = QwenVoice.Spawn;
+                            string hdCrash = null, hdStopped = null;
+                            try
+                            {
+                                QwenVoice.Spawn = delegate(ProcessStartInfo info) { return Process.Start(new ProcessStartInfo("cmd.exe", "/c exit 3") { UseShellExecute = false, CreateNoWindow = true }); };
+                                try { hdVoice.Warm(); }
+                                catch (VoiceException error) { hdCrash = error.Message; }
+                                QwenVoice.Spawn = delegate(ProcessStartInfo info)
+                                {
+                                    ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(700); hdVoice.Stop(); });
+                                    return Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "PING.EXE"), "-n 30 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true });
+                                };
+                                try { hdVoice.Warm(); hdStopped = "woke"; }
+                                catch (OperationCanceledException) { hdStopped = "quiet"; }
+                                catch (VoiceException error) { hdStopped = error.Message; }
+                            }
+                            finally
+                            {
+                                QwenVoice.Spawn = hdSpawnWas;
+                                hdVoice.Stop();
+                            }
+                            string[] hdCrashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => line.Contains(" | HD voice | ") && line.EndsWith(" | llama-server stopped while loading with exit code 0x00000003", StringComparison.Ordinal));
+                            if (hdCrash != "Her HD voice crashed loading. Close games, then try again." || hdCrashLines.Length != 1 || hdStopped != "quiet" || hdVoice.Awake) throw new Exception("Her HD voice didn't handle a crash or a stop while waking: " + hdCrash + " / " + hdCrashLines.Length + " log lines / " + hdStopped);
+                            Directory.Delete(hdRoot, true);
+                            checks.Add("PASS HD voice speech: a fake /tts server's float PCM becomes a 24 kHz WAV, the request carries her reference clip and respelled words, a long reply goes a few sentences per call so none hits the 41 s cap, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
+                            checks.Add("LIMIT HD voice synthesis not run in the smoke test; it needs the 1.5 GB pack and a graphics card");
                             string earsRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "ears-test");
                             if (Directory.Exists(earsRoot)) Directory.Delete(earsRoot, true);
                             string earsSource = Path.Combine(earsRoot, "source");
@@ -11780,11 +12071,20 @@ namespace CapriDesktop
         [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr dc, IntPtr value);
         [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr value);
         [DllImport("user32.dll", SetLastError = true)] private static extern bool UpdateLayeredWindow(IntPtr window, IntPtr screen, ref Point destination, ref Size size, IntPtr source, ref Point origin, int colorKey, ref Blend blend, int flags);
+        [DllImport("shell32.dll")] private static extern int SHQueryUserNotificationState(out int state);
 
         internal static long IdleMilliseconds()
         {
             InputInfo info = new InputInfo { Size = Marshal.SizeOf(typeof(InputInfo)) };
             return GetLastInputInfo(ref info) ? unchecked((uint)Environment.TickCount - info.Time) : 0;
+        }
+
+        // Windows' own full-screen check: busy (2) is a full-screen app or presentation, 3 is a Direct3D game in exclusive full screen.
+        internal static bool Gaming()
+        {
+            int state;
+            try { return SHQueryUserNotificationState(out state) == 0 && (state == 2 || state == 3); }
+            catch (EntryPointNotFoundException) { return false; }
         }
 
         internal static void DrawLayered(IntPtr window, Bitmap bitmap, System.Drawing.Point location)

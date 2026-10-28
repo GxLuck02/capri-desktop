@@ -976,7 +976,7 @@ namespace CapriDesktop
             speechModels.Invalidate();
         }
 
-        internal void ShowFree(bool ready, string chosen, bool busy)
+        internal void ShowFree(bool ready, string chosen, bool busy, bool hdFits)
         {
             freeReady = ready;
             freeVoices.Text = "Free voice: " + chosen;
@@ -989,11 +989,28 @@ namespace CapriDesktop
                 string name = style.Name;
                 freeMenu.Items.Add(Choice(name, name == chosen, delegate { capri.ChooseVoiceStyle(name); }));
             }
+            freeMenu.Items.Add(new ToolStripSeparator());
+            ToolStripMenuItem hd = Choice(hdFits ? "HD · graphics card, " + Engine.Amount(QwenVoice.PackSize) : "HD · needs a 6 GB graphics card", chosen == QwenVoice.Style, delegate { capri.ChooseVoiceStyle(QwenVoice.Style); });
+            hd.Enabled = hdFits;
+            freeMenu.Items.Add(hd);
             freeVoices.Invalidate();
             freeSetup.Invalidate();
         }
 
         internal string FreeStatus { get { return (freeVoices.Visible ? freeVoices.Text : "-") + " | " + (freeSetup.Visible ? freeSetup.Text : "-"); } }
+
+        internal string HdChoice
+        {
+            get
+            {
+                foreach (ToolStripItem item in freeMenu.Items)
+                {
+                    ToolStripMenuItem choice = item as ToolStripMenuItem;
+                    if (choice != null && choice.Text.StartsWith(QwenVoice.Style + " ", StringComparison.Ordinal)) return choice.Text + (choice.Enabled ? "" : " (off)") + (choice.Checked ? " (picked)" : "");
+                }
+                return "-";
+            }
+        }
 
         internal void ShowShortcut(bool talk, bool mute)
         {
