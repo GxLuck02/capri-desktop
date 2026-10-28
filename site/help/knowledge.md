@@ -345,6 +345,7 @@ WATCH
 - Keep her caught up (beside Watch my screen): on by default. Glances she keeps quiet about still go in her memory, so she knows what you've been up to. Turn it off to keep only the glances she comments on. It uses a little more of your API (section 16).
 
 BRAIN
+- Stay on my model (right of the BRAIN heading, off by default): when an NVIDIA model gets stuck, she says what went wrong instead of switching to another model.
 - Replies: Short, Medium or Long.
 - Memory: Short, Medium or Long (how much of the chat she keeps in mind).
 - Bubble: Quick, Normal or Long (how long her replies stay up). It was under VOICE before 0.7.5.
@@ -468,7 +469,7 @@ If Ollama is running but has no models, the setup step reads "Download <name> (<
 She uses nvidia/nemotron-3.5-super-vl-120b-a12b first. It can see your screen. Since 0.7.0 she no longer uses z-ai/glm-5.3-flash. Other NVIDIA models she can use: nvidia/nemotron-3.5-bolt-e4b, openai/gpt-oss-20b and meta/llama-3.2-11b-vision-instruct.
 
 ### Why did she switch NVIDIA models by herself?
-If a model doesn't answer in time or NVIDIA's servers fail, she tries the next one so you still get a reply. She says "<old> wasn't answering, so she switched to <new>." This switch is only for that moment. Your saved pick stays the same. If it keeps happening, pick a faster model like nvidia/nemotron-3.5-bolt-e4b in the Model menu. It can't see your screen.
+If a model doesn't answer in time or NVIDIA's servers fail, she tries the next one so you still get a reply. She says "<old> wasn't answering, so she switched to <new>." This switch is only for that moment. Your saved pick stays the same, and she keeps your chat going on the new model. If it keeps happening, pick a faster model like nvidia/nemotron-3.5-bolt-e4b in the Model menu. It can't see your screen. To never switch, turn on Stay on my model in Capri Mainframe > Settings, next to the BRAIN heading: then she tells you the model is stuck and stays on it.
 
 ### OpenAI, Claude or DeepSeek keys
 Paste the key in the same box under BRAIN and press Connect. She can tell which company it's for:

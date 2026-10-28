@@ -89,6 +89,7 @@ namespace CapriDesktop
         private int heldMods;
         private readonly Toggle watch;
         private readonly Toggle caughtUp;
+        private readonly Toggle stayOnModel;
         private readonly Toggle remembering;
         private readonly Label voiceHead;
         private readonly Rung[] voiceRungs = new Rung[3];
@@ -443,6 +444,8 @@ namespace CapriDesktop
             gap.Changed += delegate { if (syncing) return; gapName.Text = GapNames[gap.Value]; capri.SetGlanceGap(Gaps[gap.Value]); };
             gapName = Caption("2 min", 292 + c, 223, Font, Look.Ink);
             Caption("BRAIN >", 28 + c, 266, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
+            stayOnModel = Check("Stay on my model", 186 + c, 264, 170, delegate { if (!syncing) capri.ToggleStayOnModel(); });
+            stayOnModel.AccessibleName = "Stay on my model. When an NVIDIA model gets stuck she says so instead of switching to another one";
             Caption("Replies", 28 + c, 295, Font, Look.Dim);
             replies = PageSlider(Lengths, 288, "Reply length", c);
             repliesName = Caption("Short", 292 + c, 295, Font, Look.Ink);
@@ -857,6 +860,7 @@ namespace CapriDesktop
             bypass.Checked = capri.Bypassing;
             watch.Checked = capri.Watching;
             caughtUp.Checked = capri.CaughtUp;
+            stayOnModel.Checked = capri.StayOnModel;
             remembering.Checked = capri.Remembers;
             VoiceTier();
             int chosen = Array.IndexOf(Gaps, capri.GlanceGap);
@@ -947,6 +951,10 @@ namespace CapriDesktop
         internal bool CaughtUpShown { get { return caughtUp.Checked; } }
 
         internal void FlipCaughtUp() { caughtUp.Checked = !caughtUp.Checked; }
+
+        internal bool StayShown { get { return stayOnModel.Checked; } }
+
+        internal void FlipStay() { stayOnModel.Checked = !stayOnModel.Checked; }
 
         internal bool RemembersShown { get { return remembering.Checked; } }
 

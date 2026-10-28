@@ -153,6 +153,8 @@ namespace CapriDesktop
         [DataMember] public int GlanceGap;
         // Keep her caught up is on by default: what she saw costs a few words per chat, next to the screenshot each glance already sends.
         [DataMember] public bool CaughtUp = true;
+        // Stay on my model: a stuck NVIDIA model says what went wrong instead of handing the message to another model (Zak's ask).
+        [DataMember] public bool StayOnModel;
         [DataMember] public bool Quiet;
         [DataMember] public bool Silent;
         [DataMember] public bool Wander;
@@ -3271,6 +3273,15 @@ namespace CapriDesktop
             mainframe.Sync();
         }
 
+        internal bool StayOnModel { get { return preferences.StayOnModel; } }
+
+        internal void ToggleStayOnModel()
+        {
+            preferences.StayOnModel = !preferences.StayOnModel;
+            SavePreferences();
+            mainframe.Sync();
+        }
+
         private string Unseeing()
         {
             Cloud remote = brain.Remote;
@@ -4097,7 +4108,8 @@ namespace CapriDesktop
             ++asking;
             CloseTalk();
             brain.Model = name;
-            brain.Forget();
+            // A stand-in for a stuck model carries on the same chat.
+            if (keep) brain.Forget();
             Cloud remote = brain.Remote;
             if (remote != null) remote.Model = name;
             if (!keep) return;
@@ -5773,7 +5785,7 @@ namespace CapriDesktop
                 {
                     if (!IsDisposed) BeginInvoke((Action)delegate
                     {
-                        if (stuck && ticket == asking && switches < 2 && SwitchModel(remote)) { Hear(text, shown, prompt, switches + 1); return; }
+                        if (stuck && ticket == asking && Hops(remote, switches)) { Hear(text, shown, prompt, switches + 1); return; }
                         if (problem != null && ticket == asking) mainframe.ShowProblem(Brain.Brief(problem) ?? (problem.Length > 60 ? problem.Substring(0, 57) + "..." : problem));
                         Answer(ticket, said, state, quiet);
                         if (said == Brain.Offline) FindBrain();
@@ -5782,6 +5794,9 @@ namespace CapriDesktop
                 catch (InvalidOperationException) { }
             });
         }
+
+        // A stuck NVIDIA model hands the message to the next one, twice at most, unless Stay on my model is on.
+        private bool Hops(Cloud remote, int switches) { return switches < 2 && !preferences.StayOnModel && SwitchModel(remote); }
 
         private bool SwitchModel(Cloud remote)
         {
@@ -14487,6 +14502,24 @@ namespace CapriDesktop
                             if (Brain.Next("nvidia/nemotron-3.5-super-vl-120b-a12b", new System.Collections.Generic.List<string> { "nvidia/nemotron-3.5-super-vl-120b-a12b", "openai/gpt-oss-20b", "moonshotai/kimi-k2.6" }, new System.Collections.Generic.HashSet<string>()) != "openai/gpt-oss-20b" || !Brain.Stalled(new BrainException(Brain.Gone)) || !Brain.Stalled(new BrainException(Brain.Down)) || Brain.Stalled(new BrainException("Key rejected. Press Forget, then paste it again."))) throw new Exception("NVIDIA fallbacks were picked wrong.");
                             checks.Add("PASS stuck NVIDIA model: a timeout, a rate limit, a gone model or a server failure switches to the next working NVIDIA model and asks again, at most twice per message");
                             if (talkState != TalkState.Dormant || reply != "NVIDIA didn't answer in time. Try again or pick another model under BRAIN in Capri Mainframe." || errorVoice != 0) throw new Exception("A cloud timeout did not reach the bubble without voice.");
+                            // Stay on my model: on, a stuck model keeps its error and she stays; off, a stand-in carries on the same chat.
+                            string[] stalledBefore = new string[stalled.Count];
+                            stalled.CopyTo(stalledBefore);
+                            stalled.Clear();
+                            brain.Remember("which model are you on?", "Bolt, for now.");
+                            int chatBeforeHop = brain.History.Count;
+                            string boltWas = brain.Model;
+                            mainframe.FlipStay();
+                            bool stayedPut = preferences.StayOnModel && mainframe.StayShown && LoadPreferences().StayOnModel && !Hops(brain.Remote, 0) && brain.Model == boltWas && stalled.Count == 0;
+                            mainframe.FlipStay();
+                            bool hoppedOn = !preferences.StayOnModel && !mainframe.StayShown && !LoadPreferences().StayOnModel && Hops(brain.Remote, 0) && brain.Model != boltWas && brain.History.Count == chatBeforeHop && chatBeforeHop >= 2;
+                            string hoppedTo = brain.Model;
+                            ChooseModel(boltWas, false);
+                            stalled.Clear();
+                            foreach (string stalledModel in stalledBefore) stalled.Add(stalledModel);
+                            Preferences stayOld = (Preferences)new DataContractJsonSerializer(typeof(Preferences)).ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Size\":240}")));
+                            if (!stayedPut || !hoppedOn || brain.Model != boltWas || stayOld.StayOnModel || new Preferences().StayOnModel) throw new Exception("Stay on my model went wrong: stayed " + stayedPut + ", hopped " + hoppedOn + " to " + hoppedTo + ", chat " + chatBeforeHop + " then " + brain.History.Count);
+                            checks.Add("PASS Stay on my model: off by default; on (under BRAIN in Settings), a stuck NVIDIA model keeps its error and she stays on it; off, the stand-in model carries on the same chat instead of wiping it");
                             Think = delegate { throw new WebException("cancelled", WebExceptionStatus.RequestCanceled); };
                             Hear("still there");
                         }
