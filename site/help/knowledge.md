@@ -975,7 +975,10 @@ The update worked. Open Capri from the Start menu.
 Wait a few seconds, then press Restart to update again.
 
 ### Mac and Linux
-No automatic updates yet. Download the new file from the website and replace the old one.
+No automatic updates yet, but she tells you when a new version is out: "Capri X is out. Right-click me > Get Capri X."
+1. Right-click her > Get Capri X. Its download page opens. (The item only shows when there's a new version.)
+2. Download Capri-mac-apple-silicon.zip, Capri-mac-intel.zip or Capri-linux-x64.tar.gz.
+3. Quit Capri and put the new one where the old one was. Her settings, notes, chat and keys stay, because they're kept outside the app.
 
 ### Where can I see what changed?
 - The changelog on the website's main page
@@ -1089,7 +1092,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - No voice chat: "Voice chat isn't on Mac and Linux yet. Type to me for now, choom."
 - No built-in brain. Use Ollama or an API key.
 - No keyboard shortcuts, closing or switching windows, screen watching or mouse and keyboard jobs.
-- No automatic updates.
+- No automatic updates. She says when a new version is out, and right-click her > Get Capri X opens its download page.
 - No transcripts or memories.md yet. She remembers the recent chat and her notes.
 
 ### Right-click menu
@@ -1101,6 +1104,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Settings: What should she call you?, Language, Reply length, Chat memory, Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Show on Discord, Open her notes (me.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
+- Get Capri X, only when a new version is out
 - Quit Capri
 
 Tray or menu bar icon: Talk to her, Hide her / Show her, Bring her back, Quit Capri.

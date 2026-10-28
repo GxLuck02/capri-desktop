@@ -294,6 +294,30 @@ namespace CapriDesktop
                 if (freeKey != Pet.FreeKeySteps || !keyAsked || notKey != Pet.NotAKey || !keyHidden) throw new Exception("The key choices didn't say where to paste, ask in a hidden box or explain a bad key: " + freeKey + " | " + keyAsked + " | " + notKey + " | " + keyHidden);
                 if (cloudMenu != "NVIDIA key ending 1234 (off) | *meta/llama-3.3-70b-instruct | qwen/qwen3-235b-a22b | - | Forget the key and use Ollama" || !cloudPicked || !cloudGone || !cloudDetails) throw new Exception("The cloud key's Brain menu went wrong: " + cloudMenu + " | " + cloudPicked + " | " + cloudGone + " | " + cloudDetails);
                 checks.Add("PASS cloud brain: Brain offers a free NVIDIA key or any API key in a hidden box, explains one that isn't a key, lists a key's models to pick from, and Forget goes back to Ollama");
+                // Updates: a newer finished release puts Get Capri X in her menu and she mentions it once; older releases, drafts and odd tags don't.
+                pet.Saved.UpdateSeen = null;
+                pet.ShowUpdate("{\"tag_name\":\"v99.1.0\",\"draft\":false,\"prerelease\":false,\"html_url\":\"https://github.com/lachydotmcg/capri-desktop/releases/tag/v99.1.0\",\"assets\":[{\"name\":\"Capri-linux-x64.tar.gz\"}]}");
+                string updateChoice = pet.UpdateChoice;
+                string updateNews = pet.UpdateNews;
+                string updatePage = pet.UpdatePage;
+                pet.UpdateNews = null;
+                pet.ShowUpdate("{\"tag_name\":\"v99.1.0\",\"draft\":false,\"prerelease\":false}");
+                string updateAgain = pet.UpdateNews;
+                string updateKept = pet.UpdateChoice;
+                pet.ShowUpdate("{\"tag_name\":\"v99.2.0\",\"draft\":true}");
+                string draftChoice = pet.UpdateChoice;
+                pet.ShowUpdate("{\"tag_name\":\"v99.3.0\",\"html_url\":\"https://example.com/capri\"}");
+                string oddPage = pet.UpdatePage;
+                pet.ShowUpdate("{\"tag_name\":\"v0.0.1\"}");
+                string olderChoice = pet.UpdateChoice;
+                pet.ShowUpdate("not json");
+                bool oddTags = Pet.Newer("nightly", new Version(0, 7, 5)) == null && Pet.Newer("v0.7.5", new Version(0, 7, 5)) == null && Pet.Newer("0.7.10", new Version(0, 7, 9)) == "0.7.10" && Pet.Newer("v1.0", new Version(0, 7, 5)) == "1.0.0" && Pet.Newer("v0.7.6-beta", new Version(0, 7, 5)) == null;
+                pet.UpdateNews = null;
+                pet.Saved.UpdateSeen = null;
+                pet.Save();
+                if (updateChoice != "Get Capri 99.1.0" || updateNews != "Capri 99.1.0 is out. Right-click me > Get Capri 99.1.0." || updatePage != "https://github.com/lachydotmcg/capri-desktop/releases/tag/v99.1.0") throw new Exception("A newer release wasn't offered: " + updateChoice + " | " + updateNews + " | " + updatePage);
+                if (updateAgain != null || updateKept != "Get Capri 99.1.0" || draftChoice != null || oddPage != "https://github.com/lachydotmcg/capri-desktop/releases/latest" || olderChoice != null || pet.UpdateChoice != null || !oddTags) throw new Exception("The update notice went wrong: " + updateAgain + " | " + updateKept + " | " + draftChoice + " | " + oddPage + " | " + olderChoice + " | " + pet.UpdateChoice + " | " + oddTags);
+                checks.Add("PASS updates: a newer GitHub release puts Get Capri X in her right-click menu and she says so once; older releases, drafts, odd tags and other sites don't");
                 // Her Discord status: the switch, plain states, and Discord's socket found by name in its temp folder.
                 string ipcFolder = Path.Combine(folder, "ipc");
                 Directory.CreateDirectory(ipcFolder);

@@ -37,6 +37,17 @@ namespace CapriDesktop
         [DataMember] internal int Typing;
         [DataMember] internal bool NoDiscord;
         [DataMember] internal string CloudModel;
+        [DataMember] internal string UpdateSeen;
+    }
+
+    // The bits of GitHub's latest release she reads to tell them about an update.
+    [DataContract]
+    internal sealed class Release
+    {
+        [DataMember(Name = "tag_name")] internal string Tag;
+        [DataMember(Name = "html_url")] internal string Page;
+        [DataMember(Name = "draft")] internal bool Draft;
+        [DataMember(Name = "prerelease")] internal bool Prerelease;
     }
 
     internal sealed class Clip
@@ -141,6 +152,9 @@ namespace CapriDesktop
         internal const string FreeKeySteps = "Make a key on NVIDIA's page and copy it. Then right-click me > Brain > " + KeyChoice + " and paste it.";
         internal const string DiscordPage = "https://discord.gg/F4fDHfGtFk";
         internal const string HelpPage = "https://lachydotmcg.github.io/capri-desktop/help/";
+        // Mac and Linux don't update themselves yet, so she checks GitHub's latest release now and then and offers its page.
+        private const string LatestRelease = "https://api.github.com/repos/lachydotmcg/capri-desktop/releases/latest";
+        private const string ReleasesPage = "https://github.com/lachydotmcg/capri-desktop/releases/latest";
         internal static readonly double[] Sizes = { 140, 170, 240, 320, 440, 560 };
         private static readonly string[] SizeNames = { "Tiny", "Small", "Medium", "Large", "Huge", "Giant" };
         internal readonly Brain Brain = new Brain();
@@ -221,6 +235,12 @@ namespace CapriDesktop
         private readonly Presence presence;
         private MenuItem discordItem;
         private double nextStatus;
+        private MenuItem updateItem;
+        private string updatePage;
+        private double nextUpdate = 60;
+        private bool updateChecking;
+        // What she says about a new version once she's free.
+        internal string UpdateNews;
         private bool pulling;
         private volatile int pulled = -1;
         private bool dancing;
@@ -458,6 +478,8 @@ namespace CapriDesktop
         {
             double now = Now;
             if (presence != null && now >= nextStatus) { nextStatus = now + 1; presence.Show(Saved.NoDiscord ? null : Doing); }
+            if (Program.Smoke == null && now >= nextUpdate) { nextUpdate = now + 6 * 3600; CheckUpdate(); }
+            if (UpdateNews != null && !away && !dragging && Talk.Quiet) { Talk.Answer("(update)", UpdateNews); UpdateNews = null; }
             if (outro != null && now >= outroAt) { Action next = outro; outro = null; next(); }
             if (away && !IsVisible) { if (smoke != null) smoke.Tick(now); return; }
             if (!dragging)
@@ -505,6 +527,68 @@ namespace CapriDesktop
             int from = Math.Max(0, lines.Length - 25);
             return head + Environment.NewLine + (lines.Length == 0 ? "No errors logged." : string.Join(Environment.NewLine, lines, from, lines.Length - from));
         }
+
+        private void CheckUpdate()
+        {
+            if (updateChecking) return;
+            updateChecking = true;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string latest = null;
+                try
+                {
+                    using (System.Net.Http.HttpClient client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(15) })
+                    {
+                        client.DefaultRequestHeaders.UserAgent.ParseAdd("Capri-Desktop");
+                        client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+                        latest = client.GetStringAsync(LatestRelease).GetAwaiter().GetResult();
+                    }
+                }
+                catch (Exception) { }
+                Dispatcher.UIThread.Post(delegate { updateChecking = false; if (latest != null) ShowUpdate(latest); });
+            });
+        }
+
+        // A newer finished release puts "Get Capri X" in her menu, and she mentions it once per version.
+        internal void ShowUpdate(string latest)
+        {
+            Release found = null;
+            try { using (MemoryStream body = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(latest ?? ""))) found = (Release)new DataContractJsonSerializer(typeof(Release)).ReadObject(body); }
+            catch (Exception) { }
+            string version = found == null || found.Draft || found.Prerelease ? null : Newer(found.Tag, System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
+            if (ContextMenu == null) return;
+            if (version == null) { if (updateItem != null) ContextMenu.Items.Remove(updateItem); return; }
+            updatePage = found.Page != null && found.Page.StartsWith("https://github.com/lachydotmcg/capri-desktop/releases/", StringComparison.Ordinal) ? found.Page : ReleasesPage;
+            if (updateItem == null)
+            {
+                updateItem = new MenuItem();
+                updateItem.Click += delegate { Browse(updatePage); };
+            }
+            updateItem.Header = "Get Capri " + version;
+            if (!ContextMenu.Items.Contains(updateItem))
+            {
+                int at = ContextMenu.Items.Count;
+                for (int i = ContextMenu.Items.Count - 1; i >= 0; i--) if (ContextMenu.Items[i] is Separator) { at = i; break; }
+                ContextMenu.Items.Insert(at, updateItem);
+            }
+            if (Saved.UpdateSeen == version) return;
+            Saved.UpdateSeen = version;
+            Save();
+            UpdateNews = "Capri " + version + " is out. Right-click me > Get Capri " + version + ".";
+        }
+
+        // The release's version when it's newer than hers, like "0.7.6". Null for older, odd or missing tags.
+        internal static string Newer(string tag, Version mine)
+        {
+            Version found;
+            if (tag == null || !System.Text.RegularExpressions.Regex.IsMatch(tag, @"^[vV]?\d+\.\d+(\.\d+)?$") || !Version.TryParse(tag.TrimStart('v', 'V'), out found)) return null;
+            found = new Version(found.Major, found.Minor, Math.Max(0, found.Build));
+            return found > new Version(mine.Major, mine.Minor, Math.Max(0, mine.Build)) ? found.ToString(3) : null;
+        }
+
+        internal string UpdateChoice { get { return updateItem != null && ContextMenu != null && ContextMenu.Items.Contains(updateItem) ? updateItem.Header as string : null; } }
+
+        internal string UpdatePage { get { return updatePage; } }
 
         internal void CopyErrors()
         {
