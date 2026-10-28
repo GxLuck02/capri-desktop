@@ -52,6 +52,7 @@ namespace CapriDesktop
         [DataMember] internal int? Pace;
         [DataMember] internal int Robot;
         [DataMember] internal int Glitch;
+        [DataMember] internal bool NoIntro;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -219,6 +220,7 @@ namespace CapriDesktop
         private readonly List<MenuItem> soundPicks = new List<MenuItem>();
         private MenuItem danceItem;
         private MenuItem musicItem;
+        private MenuItem introItem;
         private MenuItem brainMenu;
         internal Func<bool> MusicPlaying = Music.Playing;
         private bool musicOn;
@@ -567,9 +569,26 @@ namespace CapriDesktop
             Screen saved = Saved.Placed ? Screens.ScreenFromPoint(new PixelPoint(Saved.X + Px(body.Size / 2), Saved.Y + Px(body.Size / 2))) : null;
             Screen screen = saved ?? Screens.Primary ?? (Screens.All.Count > 0 ? Screens.All[0] : null);
             if (screen == null) return;
+            if (Saved.NoIntro && saved != null)
+            {
+                Move(new PixelPoint(Saved.X, Saved.Y));
+                Reappear();
+                return;
+            }
             PixelRect area = screen.WorkingArea;
             Move(new PixelPoint(area.X + (area.Width - Px(body.Size)) / 2, area.Y + (area.Height - Px(body.Size)) / 2));
             Arrive();
+        }
+
+        // With Glitch in at startup off she starts back where she sat, like on Windows, with no glitch or sound. If what she
+        // sat on has gone, she drops onto what's under her.
+        internal void Reappear()
+        {
+            seat = null;
+            Ledge under = Perches.Below(Ledges(), Hip, Px(body.Size / 2), Px(8), 0, Headroom, ScreenAt);
+            if (under != null) Land(under);
+            if (seat != null) Play(perch);
+            else Fall();
         }
 
         internal void Bring()
@@ -1242,6 +1261,9 @@ namespace CapriDesktop
                 sleeps.Items.Add(pick);
             }
             move.Items.Add(sleeps);
+            introItem = new MenuItem { Header = "Glitch in at startup", ToggleType = MenuItemToggleType.CheckBox };
+            introItem.Click += delegate { SetIntro(Saved.NoIntro); };
+            move.Items.Add(introItem);
             brainMenu = new MenuItem { Header = "Brain" };
             brainMenu.Items.Add(new MenuItem { Header = "Looking for models...", IsEnabled = false });
             MenuItem settings = new MenuItem { Header = "Settings" };
@@ -1438,6 +1460,7 @@ namespace CapriDesktop
             for (int i = 0; i < wanderPicks.Count; i++) wanderPicks[i].IsChecked = i == Saved.Wander;
             danceItem.IsChecked = dancing;
             musicItem.IsChecked = !Saved.NoDance;
+            introItem.IsChecked = !Saved.NoIntro;
             string language = Brain.Language ?? "English";
             foreach (MenuItem pick in languagePicks) pick.IsChecked = (string)pick.Tag == language;
             for (int i = 0; i < replyPicks.Count; i++) replyPicks[i].IsChecked = i == Brain.Wordiness;
@@ -1698,6 +1721,15 @@ namespace CapriDesktop
         internal void SetDanceToMusic(bool on)
         {
             Saved.NoDance = !on;
+            Save();
+            Sync();
+        }
+
+        internal bool IntroShown { get { return introItem.IsChecked; } }
+
+        internal void SetIntro(bool on)
+        {
+            Saved.NoIntro = !on;
             Save();
             Sync();
         }

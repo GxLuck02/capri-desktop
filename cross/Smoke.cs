@@ -268,6 +268,15 @@ namespace CapriDesktop
                 bool macRight = macLogin.Contains("\t\t<string>/usr/bin/open</string>\n\t\t<string>-g</string>\n\t\t<string>-b</string>\n\t\t<string>" + Limbs.MacBundle + "</string>\n") && !macLogin.Contains("/Applications/") && macLogin.Contains("<key>RunAtLoad</key>") && macLogin.Contains("<string>Interactive</string>") && bareLogin.Contains("\t\t<string>/Users/me/capri/Capri</string>\n");
                 if (!loginNew || !loginOn || !loginKept || !loginOff || !linuxLogin.Contains("\nExec=\"/home/me/My Apps/Capri\"\n") || !macRight) throw new Exception("Start at login went wrong: new " + loginNew + ", on " + loginOn + ", kept " + loginKept + ", off " + loginOff + ", mac " + macRight + " | " + loginText);
                 checks.Add("PASS start at login: off until ticked, then an autostart entry on Linux that starts this copy, or a LaunchAgent on Mac that opens her app by its id wherever it's kept; left alone when unchanged, gone again when unticked");
+                bool introNew = pet.IntroShown && !pet.Saved.NoIntro;
+                pet.SetIntro(false);
+                PixelPoint introHip = pet.Hip;
+                int introArrivals = pet.Arrivals;
+                pet.Reappear();
+                bool introOff = pet.Saved.NoIntro && !pet.IntroShown && pet.Arrivals == introArrivals && !pet.Falling && Sitting() && pet.Hip == introHip;
+                pet.SetIntro(true);
+                if (!introNew || !introOff || pet.Saved.NoIntro || !pet.IntroShown) throw new Exception("Glitch in at startup went wrong: new " + introNew + ", off " + introOff + " (" + introHip + " to " + pet.Hip + ")");
+                checks.Add("PASS glitch in at startup: ticked by default; unticked, she starts back on the spot she sat on, with no glitch or sound, like Windows");
                 string homeFirst = pet.Cheer(true, false, 100, true), homeStill = pet.Cheer(true, false, 115, true);
                 pet.Cheer(false, false, 130, true);
                 string homeSoon = pet.Cheer(true, false, 145, true), homeBusy = pet.Cheer(true, true, 160, false);
