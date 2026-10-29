@@ -17,7 +17,7 @@ Dernière session : 2026-10-29. Repo : fork https://github.com/GxLuck02/capri-de
 - [ ] (Optionnel) Ollama : `brew install ollama && ollama pull gemma4:e4b`
 
 ## Feuille de route
-- [ ] **Étape 1 — Mainframe + section BRAIN + Trousseau** ← EN COURS
+- [ ] **Étape 1 — Mainframe + section BRAIN + Trousseau** ← code fini, reste le test manuel
 - [ ] Étape 2 — « Set up her brain » sur Mac (llama.cpp Metal + modèle auto, Ollama en option)
 - [ ] Étape 3 — Section VOICE : OFF / FREE VOICE (Kokoro) / ELEVENLABS
 - [ ] Étape 4 — Chat vocal : micro, Test, raccourcis
@@ -51,7 +51,18 @@ Prochaines actions :
 - [x] Partie 2/3 : comportement (connexion d'une clé, changement de palier, erreurs)
 - [x] Partie 3/3 : tests (`--smoke`)
 - [x] Écrire la spec : `docs/superpowers/specs/2026-10-29-mac-mainframe-brain-design.md` (branche `mac-step1-mainframe`) — **en attente de relecture par l'utilisateur**
-- [ ] Plan d'implémentation (writing-plans) puis implémentation
+- [x] Plan : `docs/superpowers/plans/2026-10-29-mac-mainframe-brain.md`
+- [x] Implémentation (branche `mac-step1-mainframe`) : Keys/Trousseau, 3 paliers, fenêtre Mainframe.
+  Smoke complet vert sur le M2 (2026-10-29), relecture finale faite et 2 bugs importants corrigés.
+- [ ] **Test manuel sur le M2** (tâche 4 du plan) : Ollama + gemma4:e2b, vraie clé NVIDIA, clé ElevenLabs,
+  vérifier les entrées `capri` dans Trousseaux d'accès.
+- [ ] Ensuite : merger la branche, puis Étape 2.
+
+Remarques mineures laissées de côté (relecture finale) : appel réseau ListCloud à chaque clic droit en palier
+cloud ; champ clé vidé après une erreur ; pas de note si la clé a disparu du Trousseau ; `CloseTalk` absent.
+
+Note tests : les smoke tests ouvrent de vraies fenêtres ; Claude ne peut pas les lancer lui-même (permission
+refusée) → l'utilisateur les lance avec `! cross/bin/Release/net10.0/Capri --smoke /tmp/capri-smoke`.
 
 ## Repères dans le code Windows
 - Mainframe Windows : `app/Mainframe.cs` (section BRAIN ~l.194-225)
