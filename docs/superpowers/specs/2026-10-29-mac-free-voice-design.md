@@ -106,7 +106,8 @@ Faux serveur de téléchargement de l'étape 2 (`ServeHub`) ; faux pack zip et f
 (créée avec `/usr/bin/tar -cjf`) ; synthèse remplacée par `FreeSpeak` (renvoie un court WAV).
 
 1. Installation : fichiers Mac requis présents, `.dll` absents, `lib/` contient les deux dylibs.
-2. Sécurité : zip avec `../evil`, tar.bz2 avec un fichier en trop ou un lien symbolique, mauvais
+2. Sécurité : zip avec `../evil`, tar.bz2 avec `../evil` ou un lien symbolique (un fichier en trop
+   est normal : la vraie archive contient `libsherpa-onnx-cxx-api.dylib`), mauvais
    SHA-256 → refusés, rien hors du dossier, pas d'installation partielle.
 3. Cancel puis reprise du pack.
 4. Mainframe : section VOICE, trois choix, `TiersFit`, capture `mainframe-voice.png`.
