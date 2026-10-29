@@ -20,7 +20,12 @@ Dernière session : 2026-10-29. Repo : fork https://github.com/GxLuck02/capri-de
 - [x] Étape 1 — Mainframe + section BRAIN + Trousseau (fait le 2026-10-29)
 - [x] Étape 2 — « Set up her brain » sur Mac (llama.cpp Metal + modèle auto, Ollama en option) (fait le 2026-10-29)
 - [x] Étape 3 — Section VOICE : OFF / FREE VOICE (Kokoro) / ELEVENLABS (fait le 2026-10-29)
-- [ ] **Étape 4 — Chat vocal : micro, Test, raccourcis** ← PROCHAINE
+- [ ] **Étape 3b — Voix « Original » (clonage local)** ← DEMAIN EN PREMIER : d'abord un essai de ZipVoice
+  (sherpa-onnx, déjà prévu dans `LocalVoice` via la struct `Zipvoice`) avec les 3 salutations
+  `assets/voice/hello-*.wav` (~6,6 s) comme référence. Faire écouter à l'utilisateur avant tout code.
+  Vérifier taille et licence du modèle ; licence Capri = PolyForm Noncommercial (usage perso OK).
+  Si validé : 5e style de voix gratuite « Original ».
+- [ ] Étape 4 — Chat vocal : micro, Test, raccourcis
 - [ ] Étape 5 — Section CAPRI + page Settings (langue, surnom, personnalité, raccourcis, démarrage, Discord, Check in)
 - [ ] Étape 6 — Voir l'écran
 - [ ] Étape 7 — Jobs avec son curseur + Blackwall (le plus risqué)
@@ -94,5 +99,8 @@ affiche « needs Apple silicon » sur Linux/Mac Intel.
 - Sur le M2 8 Go, utiliser `gemma4:e2b-it-qat` (4,3 Go). Le `gemma4:e2b` par défaut d'Ollama fait 7,5 Go : trop gros.
 - Données Capri sur Mac : `~/Library/Application Support/Capri/` (pas ~/.config).
 - Clic droit sur Capri = deux doigts sur le trackpad.
+- App installée : `sh cross/mac/build-app.sh` → `~/Applications/Capri.app` (à refaire après chaque étape).
+  Ollama arrêté (`brew services stop ollama`) : Capri utilise son cerveau intégré ; clé NVIDIA aussi enregistrée.
+- Personnalité : `~/Library/Application Support/Capri/personality.md` (Settings > Edit her personality).
 - Smoke : fermer les fenêtres au centre de l'écran (ex. Moniteur d'activité), sinon le test « sitting »
   échoue (« She didn't land on the test shelf's top edge »).
