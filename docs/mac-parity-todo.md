@@ -17,8 +17,8 @@ Dernière session : 2026-10-29. Repo : fork https://github.com/GxLuck02/capri-de
 - [ ] (Optionnel) Ollama : `brew install ollama && ollama pull gemma4:e4b`
 
 ## Feuille de route
-- [ ] **Étape 1 — Mainframe + section BRAIN + Trousseau** ← code fini, reste le test manuel
-- [ ] Étape 2 — « Set up her brain » sur Mac (llama.cpp Metal + modèle auto, Ollama en option)
+- [x] Étape 1 — Mainframe + section BRAIN + Trousseau (fait le 2026-10-29)
+- [ ] **Étape 2 — « Set up her brain » sur Mac (llama.cpp Metal + modèle auto, Ollama en option)** ← PROCHAINE
 - [ ] Étape 3 — Section VOICE : OFF / FREE VOICE (Kokoro) / ELEVENLABS
 - [ ] Étape 4 — Chat vocal : micro, Test, raccourcis
 - [ ] Étape 5 — Section CAPRI + page Settings (langue, surnom, personnalité, raccourcis, démarrage, Discord, Check in)
@@ -54,9 +54,9 @@ Prochaines actions :
 - [x] Plan : `docs/superpowers/plans/2026-10-29-mac-mainframe-brain.md`
 - [x] Implémentation (branche `mac-step1-mainframe`) : Keys/Trousseau, 3 paliers, fenêtre Mainframe.
   Smoke complet vert sur le M2 (2026-10-29), relecture finale faite et 2 bugs importants corrigés.
-- [ ] **Test manuel sur le M2** (tâche 4 du plan) : Ollama + gemma4:e2b, vraie clé NVIDIA, clé ElevenLabs,
-  vérifier les entrées `capri` dans Trousseaux d'accès.
-- [ ] Ensuite : merger la branche, puis Étape 2.
+- [x] Test manuel sur le M2 : NORMAL (Ollama gemma4:e2b-it-qat), HIGHER (vraie clé NVIDIA), relance, Trousseau,
+  Forget — tout OK. ElevenLabs non testé (payant, l'utilisateur veut rester gratuit au maximum).
+- [x] Branche fusionnée dans main.
 
 Remarques mineures laissées de côté (relecture finale) : appel réseau ListCloud à chaque clic droit en palier
 cloud ; champ clé vidé après une erreur ; pas de note si la clé a disparu du Trousseau ; `CloseTalk` absent.
@@ -69,3 +69,9 @@ refusée) → l'utilisateur les lance avec `! cross/bin/Release/net10.0/Capri --
 - Paliers / clés : `app/Capri.cs` ~l.3690-3830
 - Fournisseurs cloud : `app/Brain.cs` (`Cloud`, `CloudModels`, `DefaultCloudModel`, `Remote`)
 - Page clé NVIDIA gratuite : https://build.nvidia.com/settings/api-keys
+
+## Notes pour la suite
+- L'utilisateur veut rester **gratuit au maximum** : privilégier local (Ollama / llama.cpp, Kokoro) et NVIDIA gratuit.
+- Sur le M2 8 Go, utiliser `gemma4:e2b-it-qat` (4,3 Go). Le `gemma4:e2b` par défaut d'Ollama fait 7,5 Go : trop gros.
+- Données Capri sur Mac : `~/Library/Application Support/Capri/` (pas ~/.config).
+- Clic droit sur Capri = deux doigts sur le trackpad.
