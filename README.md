@@ -246,6 +246,8 @@ Who she is and how she talks lives in `personality.md`, a plain text file you ca
 Capri is free. To support the people who make her, tip them on Ko-fi:
 
 - [Lachy](https://ko-fi.com/lachysdev), developer
+- [lance and xoru](https://ko-fi.com/xorulance), project manager and head tester, who share one tip jar
+- [Guh](https://ko-fi.com/guh703214)
 - [her artist](#), animator and artist
 - [BaldDcMod](https://ko-fi.com/balddcmod), Discord moderator
 
