@@ -3033,6 +3033,8 @@ namespace CapriDesktop
         internal const string FishFree = "s2.1-pro-free";
         // Her own voice on Fish Audio (Lachy, 29 Oct: "everybody could just use this voice for fish"), used when the voice box is blank.
         internal const string FishCapri = "20a4d45fd7864a2fb5387b7b2d94ab83";
+        // What the Voice box shows for it.
+        internal const string FishCapriName = "Capri Default";
         internal const string OpenAiCloud = "https://api.openai.com/v1";
         internal const string Theirs = "Your voice server";
         // How long a server has to start answering a line, in milliseconds, before her free voice says it.
@@ -3051,8 +3053,8 @@ namespace CapriDesktop
         // Ready-made choices for its panel. Picking one fills in its API, address, model and voice; the last keeps what's typed.
         internal static readonly Service[] Services =
         {
-            new Service("Fish Audio · cloud", Fish, FishCloud, FishFree, FishCapri, "Voice ID or fish.audio link", "Paste your Fish Audio key",
-                "Fish Audio's voices. Paste a key from fish.audio. She starts in her own Capri voice; paste a voice's link or ID from its library for another. " + FishFree + " is its free tier."),
+            new Service("Fish Audio · cloud", Fish, FishCloud, FishFree, FishCapriName, "Voice ID or fish.audio link", "Paste your Fish Audio key",
+                "Fish Audio's voices. Paste a key from fish.audio. Capri Default is her own voice; paste a voice's link or ID from its library for another. " + FishFree + " is its free tier."),
             new Service("Voice model file · on your PC", Files, "", "", "", "Number or clip, optional", "Optional",
                 "A Piper, Kokoro, Kitten or Pocket TTS model for sherpa-onnx, run with no server. Browse to its .tar.bz2 or .onnx. Pocket TTS copies a voice clip, or her HD voice if blank."),
             new Service("Fish Speech · on your PC", Fish, "http://127.0.0.1:8080", "", "", "Reference ID, optional", "Optional",
@@ -3310,7 +3312,8 @@ namespace CapriDesktop
         {
             string voice = (typed ?? "").Trim();
             Match link = Regex.Match(voice, @"fish\.audio/\S*?([0-9a-f]{32})", RegexOptions.IgnoreCase);
-            return link.Success ? link.Groups[1].Value.ToLowerInvariant() : voice;
+            if (link.Success) return link.Groups[1].Value.ToLowerInvariant();
+            return string.Equals(voice, FishCapriName, StringComparison.OrdinalIgnoreCase) ? FishCapri : voice;
         }
 
         private static string Slow(string name) { return name + " took over " + (Patience / 1000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " s to answer."; }
