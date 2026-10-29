@@ -31,7 +31,6 @@ Capri is free. To support the people who make her, tip them on Ko-fi. The links 
 - Lachy, developer: https://ko-fi.com/lachysdev
 - lance and xoru, project manager and head tester, who share one tip jar: https://ko-fi.com/xorulance
 - Guh: https://ko-fi.com/guh703214
-- her artist, animator and artist: #
 - BaldDcMod, Discord moderator: https://ko-fi.com/balddcmod
 
 ### Do I need anything else installed?

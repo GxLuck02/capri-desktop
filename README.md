@@ -32,7 +32,7 @@
 </table>
 
 <p align="center">
-  <sub>Her window perch and music perch are by artist and animator <a href="#"><b>her artist</b></a>:</sub>
+  <sub>Her window perch and music perch are by artist and animator an artist who prefers to stay private:</sub>
 </p>
 
 <table align="center">
@@ -248,7 +248,6 @@ Capri is free. To support the people who make her, tip them on Ko-fi:
 - [Lachy](https://ko-fi.com/lachysdev), developer
 - [lance and xoru](https://ko-fi.com/xorulance), project manager and head tester, who share one tip jar
 - [Guh](https://ko-fi.com/guh703214)
-- [her artist](#), animator and artist
 - [BaldDcMod](https://ko-fi.com/balddcmod), Discord moderator
 
 ## Contributing
@@ -257,8 +256,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build her, test her and send a
 
 ## Licence
 
-Free for anything non-commercial: use her, share her, change her. No selling her or putting her in paid products. Credit us when you use her: [her artist](#) for her art and animations, and Capri, with a link to this page, for her code and anything else. Full terms in [LICENSE.md](LICENSE.md) (PolyForm Noncommercial 1.0.0). The credits are its Required Notices, so anyone who passes on any part of her has to pass them on too.
+Free for anything non-commercial: use her, share her, change her. No selling her or putting her in paid products. Credit us when you use her: her artist for her art and animations, and Capri, with a link to this page, for her code and anything else. Full terms in [LICENSE.md](LICENSE.md) (PolyForm Noncommercial 1.0.0). The credits are its Required Notices, so anyone who passes on any part of her has to pass them on too.
 
 Have fun and more updates to come!
 
-<sub>Window perch and music perch animations: [her artist](#). Setup guide based on Dancer's guide in the Discord. Font: Share Tech Mono (OFL). Free voice: Kokoro-82M (Apache-2.0). Her own ears: [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) for English and [v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for 25 European languages ([CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)), int8 exports by sherpa-onnx. Both run with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0). HD voice: [Qwen3-TTS 1.7B](https://github.com/QwenLM/Qwen3-TTS) (Apache-2.0), run with [qwentts.cpp](https://github.com/ServeurpersoCom/qwentts.cpp) (MIT).</sub>
+<sub>Window perch and music perch animations: an artist who prefers to stay private. Setup guide based on Dancer's guide in the Discord. Font: Share Tech Mono (OFL). Free voice: Kokoro-82M (Apache-2.0). Her own ears: [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) for English and [v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for 25 European languages ([CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)), int8 exports by sherpa-onnx. Both run with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0). HD voice: [Qwen3-TTS 1.7B](https://github.com/QwenLM/Qwen3-TTS) (Apache-2.0), run with [qwentts.cpp](https://github.com/ServeurpersoCom/qwentts.cpp) (MIT).</sub>
