@@ -184,6 +184,7 @@ namespace CapriDesktop
         private readonly Label bubbleName;
         private readonly Toggle intro;
         private readonly Toggle typing;
+        private readonly Toggle hdGames;
         private readonly Label sleepName;
         private readonly Label soundsName;
         private readonly Slider wander;
@@ -415,6 +416,10 @@ namespace CapriDesktop
             typing = Check("Typing sound", 28, 458, 328, delegate { if (!syncing) capri.ToggleTyping(); });
             typing.Hint = "When she types";
             typing.HintFont = Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point);
+            // Shares Typing sound's row, and only while her HD voice is on (Lachy, 29 Oct). Off out of the box.
+            hdGames = Check("Free voice in games", 186, 458, 170, delegate { if (!syncing) capri.ToggleHdGameRest(); });
+            hdGames.AccessibleName = "Free voice in games: while a game or video is full screen, her free voice talks instead of her HD voice, so the game gets the graphics card";
+            hdGames.Visible = false;
             Caption("MOVES >", 28, 494, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
             Caption("Wander", 28, 523, Font, Look.Dim);
             wander = PageSlider(WanderNames, 516, "How much she wanders");
@@ -562,6 +567,21 @@ namespace CapriDesktop
         internal string SizeStatus { get { return sizeName.Text; } }
 
         internal bool TypingShown { get { return typing.Checked; } }
+
+        internal string HdGamesStatus { get { return hdGames.Visible ? (hdGames.Checked ? "on" : "off") : "-"; } }
+
+        // Free voice in games shows beside Typing sound only while her HD voice is on; without it, Typing sound has the row.
+        private void ShowHdGames()
+        {
+            bool was = syncing, hd = capri.HdVoiceOn;
+            syncing = true;
+            hdGames.Visible = hd;
+            hdGames.Checked = capri.HdGameRest;
+            typing.Width = Scaled(hd ? 150 : 328);
+            typing.Hint = hd ? null : "When she types";
+            typing.Invalidate();
+            syncing = was;
+        }
 
         internal string HabitsStatus { get { return startup.Checked ? "startup" : "-"; } }
 
@@ -904,6 +924,7 @@ namespace CapriDesktop
             bubbleName.Text = BubbleNames[bubble.Value];
             intro.Checked = capri.Intro;
             typing.Checked = capri.TypingSound;
+            ShowHdGames();
             replies.Value = capri.Wordiness;
             repliesName.Text = Lengths[replies.Value];
             recall.Value = Math.Max(0, Array.IndexOf(Recalls, capri.Recall));
@@ -1307,6 +1328,7 @@ namespace CapriDesktop
         internal void ShowFree(bool ready, string chosen, bool busy, bool hdFits, bool yours, bool kept, string served = null)
         {
             bool hd = chosen == QwenVoice.Style;
+            ShowHdGames();
             freeReady = ready;
             yoursShown = hd && yours;
             freeVoices.Text = "Free voice: " + (yoursShown ? "Your voice" : served ?? chosen);
