@@ -1294,7 +1294,7 @@ namespace CapriDesktop
             string[] questions = { "Open spotify? Say yes and I will.", "Turn the volume up? Say yes and I will.", "Take a screenshot? Say yes and I will.", "Switch to discord? Say yes and I will.", "Lock your PC? Say yes and I will." };
             string[] ran = { "run exec:spotify", "key AF", "instead screenshot", "steer switch_to discord", "power lock" };
             List<string> gates = new List<string>();
-            string declined, dropped, mixedAsk, mixedRan, mouseFree, lockdownNote, trustedPrompt, openPrompt;
+            string declined, dropped, mixedAsk, mixedRan, mouseFree, lockdownNote, trustedPrompt, openPrompt, textChat;
             try
             {
                 Hands.Run = delegate(string id) { did.Add("run " + id); };
@@ -1333,6 +1333,15 @@ namespace CapriDesktop
                 List<string> results = new List<string> { pet.Brain.Act("open_app", calls[0]), pet.Brain.Act("media", calls[1]), pet.Brain.Act("power", calls[4]) };
                 mixedAsk = Security.Reply(results);
                 mixedRan = Hands.Resume("yeah") + " [" + string.Join(",", did) + "]";
+                // Text chat: her question goes out word for word with no second brain call, and their next message's yes does it.
+                Security.Pick(Security.Trusted);
+                Security.Set(Security.Media, false);
+                did.Clear();
+                Brain talker = new Brain();
+                talker.Model = "smoke-test-model";
+                talker.Act = pet.Brain.Act;
+                string talkAsked = talker.Ask("turn the volume up"), talkEarly = string.Join(",", did);
+                textChat = talkAsked + " / " + talkEarly + " / " + talker.Ask("yes") + " [" + string.Join(",", did) + "]";
                 // Mac and Linux don't have her mouse and keyboard jobs yet, so even Lockdown never holds one, what's playing never
                 // asks, and her prompt names only the toggles this computer has.
                 Security.Pick(Security.Lockdown);
@@ -1360,10 +1369,11 @@ namespace CapriDesktop
             if (gates.Count > 0) throw new Exception("A Security toggle didn't ask first or run on a yes: " + string.Join(" // ", gates));
             if (declined != Security.Left + " []" || dropped != "null / nothing held []") throw new Exception("A no or a new message after her Security question went wrong: " + declined + " / " + dropped);
             if (mixedAsk != "Opened Spotify. Turn the volume up and lock your PC? Say yes and I will." || mixedRan.IndexOf("key AF", StringComparison.Ordinal) < 0 || mixedRan.IndexOf("power lock", StringComparison.Ordinal) < 0) throw new Exception("Two held calls weren't one question and one yes: " + mixedAsk + " / " + mixedRan);
+            if (!textChat.StartsWith("Turn the volume up? Say yes and I will. /  / Turned the volume up.", StringComparison.Ordinal) || textChat.IndexOf("key AF", StringComparison.Ordinal) < 0) throw new Exception("Text chat didn't ask first or run on a yes: " + textChat);
             if (mouseFree != "free / False / free" || lockdownNote.IndexOf("switch to or close apps and tabs or shut down, restart, sleep, lock or sign out of their PC. Still call the tool as soon as they ask", StringComparison.Ordinal) < 0 || lockdownNote.IndexOf("mouse and keyboard", StringComparison.Ordinal) >= 0
                 || trustedPrompt.IndexOf("SECURITY", StringComparison.Ordinal) >= 0 || openPrompt.IndexOf("Call the tool.\nThey've set her SECURITY settings to ask first before you open apps, games or sites. Still call the tool as soon as they ask", StringComparison.Ordinal) < 0)
                 throw new Exception("Security asked about something Mac and Linux don't have, or her prompt didn't follow it: " + mouseFree + " / " + lockdownNote);
-            checks.Add("PASS Security gates: with each of the five toggles off she holds the call and asks (\"Open spotify? Say yes and I will.\", \"Lock your PC? Say yes and I will.\"), nothing runs until a yes, a yes runs it once through her own hands, a no leaves it alone and a new message drops it; two held calls are one question and one yes; mouse and keyboard jobs, which Mac and Linux don't have yet, never ask; and her brain is told to still call a tool that's off and let her ask");
+            checks.Add("PASS Security gates: with each of the five toggles off she holds the call and asks (\"Open spotify? Say yes and I will.\", \"Lock your PC? Say yes and I will.\"), nothing runs until a yes, a yes runs it once through her own hands, a no leaves it alone and a new message drops it; two held calls are one question and one yes; in text chat her question goes out word for word and the next message's yes does it; mouse and keyboard jobs, which Mac and Linux don't have yet, never ask; and her brain is told to still call a tool that's off and let her ask");
         }
 
         private string FakeVoice()

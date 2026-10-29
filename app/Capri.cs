@@ -2604,7 +2604,7 @@ namespace CapriDesktop
             string[] ranWanted = { "run spotify-id", "key AF", "chord ", "steer switch_to Discord", "power lock", "job message Sam hi on Discord" };
             ToolArguments[] calls = { new ToolArguments { Name = "spotify" }, new ToolArguments { Action = "volume_up" }, new ToolArguments { Name = "screenshot" }, new ToolArguments { Name = "discord", Action = "switch_to" }, new ToolArguments { Action = "lock" }, new ToolArguments { Task = "message Sam hi on Discord" } };
             System.Collections.Generic.List<string> gates = new System.Collections.Generic.List<string>(), voiceTold = new System.Collections.Generic.List<string>();
-            string declined, dropped, mixedAsk, mixedRan, voiceHeld, voiceRan, quickKey, cursorKey, noBrain, lockdownFree;
+            string declined, dropped, mixedAsk, mixedRan, voiceHeld, voiceRan, quickKey, cursorKey, noBrain, lockdownFree, textChat;
             try
             {
                 Hands.Run = delegate(string id) { lock (did) did.Add("run " + id); };
@@ -2655,6 +2655,15 @@ namespace CapriDesktop
                 Security.Set(Security.Media, false);
                 did.Clear();
                 noBrain = Security.Said(DoTool("media", calls[1])) + " -> " + Security.Resume("ok", DoTool) + " [" + string.Join(",", did.ToArray()) + "]";
+                // Text chat: her question goes out word for word with no second brain call, and their next message's yes does it.
+                Security.Pick(Security.Trusted);
+                Security.Set(Security.Media, false);
+                did.Clear();
+                Brain talker = new Brain();
+                talker.Model = "smoke-test-model";
+                talker.Act = delegate(string talkTool, ToolArguments talkArgs) { return DoTool(talkTool, talkArgs); };
+                string talkAsked = talker.Ask("turn the volume up"), talkEarly = string.Join(",", did.ToArray());
+                textChat = talkAsked + " / " + talkEarly + " / " + talker.Ask("yes") + " [" + string.Join(",", did.ToArray()) + "]";
                 // Use your mouse and keyboard for jobs off keeps her quick tools quick, so a YouTube search doesn't take the mouse.
                 brain.Model = "smoke-test-model";
                 preferences.QuickHands = false;
@@ -2694,10 +2703,11 @@ namespace CapriDesktop
             if (mixedAsk != "Opened Spotify. Turn the volume up and lock your PC? Say yes and I will." || mixedRan.IndexOf("key AF", StringComparison.Ordinal) < 0 || mixedRan.IndexOf("power lock", StringComparison.Ordinal) < 0) throw new Exception("Two held calls weren't one question and one yes: " + mixedAsk + " / " + mixedRan);
             if (lockdownFree != "free | -1-1-1-1-1") throw new Exception("Lockdown asked about something that never asks: " + lockdownFree);
             if (!noBrain.StartsWith("Turn the volume up? Say yes and I will. -> Turned the volume up", StringComparison.Ordinal) || noBrain.IndexOf("key AF", StringComparison.Ordinal) < 0) throw new Exception("Asking first before she has a brain went wrong: " + noBrain);
+            if (!textChat.StartsWith("Turn the volume up? Say yes and I will. /  / Turned the volume up.", StringComparison.Ordinal) || textChat.IndexOf("key AF", StringComparison.Ordinal) < 0) throw new Exception("Text chat didn't ask first or run on a yes: " + textChat);
             if (cursorKey == "null" || quickKey != "null") throw new Exception("Use your mouse and keyboard for jobs off still put a quick tool on the mouse: " + cursorKey + " / " + quickKey);
             if (!voiceHeld.StartsWith(Security.Hold + "\"Use your mouse and keyboard to message Sam hi on Discord? Say yes and I will.\"", StringComparison.Ordinal) || !voiceHeld.EndsWith("[]", StringComparison.Ordinal) || !voiceRan.StartsWith("True / Capri's hands did what they just said yes to (use_computer): Did it.", StringComparison.Ordinal) || voiceRan.IndexOf("job message Sam hi on Discord", StringComparison.Ordinal) < 0)
                 throw new Exception("Voice chat didn't ask first or run on a spoken yes: " + voiceHeld + " / " + voiceRan);
-            checks.Add("PASS SECURITY gates on her tools: with each of the first six toggles off she holds the call and asks (\"Open spotify? Say yes and I will.\", \"Lock your PC?\", \"Use your mouse and keyboard to message Sam hi on Discord?\"), nothing runs until a yes, a yes runs it once, a no leaves it alone and a new message drops it; two held calls are one question and one yes; looking, notes, her nap, moves, animations, what's playing and cancelling a shutdown never ask; it works before she has a brain and in voice chat; and with Use your mouse and keyboard off her quick tools stay off the mouse");
+            checks.Add("PASS SECURITY gates on her tools: with each of the first six toggles off she holds the call and asks (\"Open spotify? Say yes and I will.\", \"Lock your PC?\", \"Use your mouse and keyboard to message Sam hi on Discord?\"), nothing runs until a yes, a yes runs it once, a no leaves it alone and a new message drops it; two held calls are one question and one yes; looking, notes, her nap, moves, animations, what's playing and cancelling a shutdown never ask; it works in text chat (her question word for word, with no second brain call), before she has a brain and in voice chat; and with Use your mouse and keyboard off her quick tools stay off the mouse");
 
             // Her prompts follow the toggles, so she calls the tool and lets Capri ask instead of asking or saying it's done.
             string trustedNote = Security.Note, trustedAsk = Computer.AskLine(), trustedPrompt = Computer.Allowing(Computer.Prompt), trustedHands = Hands.Prompt;
