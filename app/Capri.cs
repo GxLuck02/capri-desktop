@@ -5688,6 +5688,7 @@ namespace CapriDesktop
             Point feet = Feet();
             Rectangle area = Screen.FromPoint(feet).WorkingArea;
             int top = Math.Min(feet.Y + (int)(2 * s), area.Bottom - TalkPill.Measure(s).Height - 2);
+            pill.Motion = preferences.Motion;
             pill.Place(new Point(feet.X - (int)(4 * s), top), s);
         }
 
@@ -15587,6 +15588,10 @@ namespace CapriDesktop
                             pillUntil = clock.Elapsed.TotalSeconds + 30;
                             UpdatePill(clock.Elapsed.TotalSeconds);
                             if (!pill.Visible || pill.Top < Bottom - 60 || Math.Abs(pill.Left + pill.Width / 2 - (Left + Width / 2)) > Width / 2) throw new Exception("Talk pill is not under her.");
+                            string pillLook = TalkPill.Check();
+                            if (pillLook != null) throw new Exception(pillLook);
+                            if (!pill.GlitchesIn()) throw new Exception("The pill didn't glitch in when it showed, or a redraw while it was up glitched it again.");
+                            checks.Add("PASS hover pill: black cut-corner plates with a pink-to-cyan neon edge, TYPE and TALK, a segmented mic level and a red MUTED, crisp at 100%, 150% and 200% with the same size and hit areas, and a glitch only when it shows");
                             pill.Press(1);
                             if (!typer.Visible || typer.Bottom > Top + PaddingSize) throw new Exception("Pencil did not open the typing box above her.");
                             typer.Send("hi");

@@ -212,14 +212,16 @@ Only one Capri runs at a time. Opening her again while she's running brings her 
 ## 6. Talking to her
 
 ### How do I type to her?
-1. Move your mouse over her. A small pill with two buttons shows under her.
-2. Press the pencil.
+1. Move your mouse over her. A small pill with two buttons shows under her: TYPE with the pencil and TALK with the wave.
+2. Press the pencil (TYPE).
 3. Type (up to 240 letters) and press Enter.
 
 Esc or clicking away closes the box. Your message shows as "> you:" and her reply as "CAPRI:".
 
 ### The wave button
-The wave starts voice chat. With FREE VOICE picked (or no ElevenLabs key) it's free voice chat: you talk, she answers out loud. See section 12.
+The wave (TALK) starts voice chat. With FREE VOICE picked (or no ElevenLabs key) it's free voice chat: you talk, she answers out loud. See section 12.
+
+Since 0.7.6 the pill looks like the rest of her: a black plate with cut corners and a pink-to-cyan neon edge that glitches in when it shows. During voice chat (Windows) a mic button sits on its right, the wave's bars light up with your mic level, and TALK turns into a red MUTED, with the mic button edged in red, while your mic is muted. It's the same size, in the same place, on Windows, Mac and Linux.
 
 ### How long do her bubbles stay up?
 It depends on how long the reply is (4 seconds plus a bit per letter, up to 14 seconds). Mainframe > Settings > BRAIN > Bubble changes it: Quick, Normal or Long. On Mac and Linux it's right-click her > Settings > Bubble.
@@ -723,7 +725,7 @@ If you run out of ElevenLabs credits during voice chat, she switches to FREE VOI
 
 ### Muting your mic
 - Ctrl + Alt + N while voice chat is on, or
-- The mic button by her during voice chat.
+- The mic button by her during voice chat (on the right of the pill under her). While you're muted, the pill says MUTED in red.
 
 Since 0.7.1, muting pauses ElevenLabs voice chat once she stops talking: "Mic muted. Voice chat is paused until you unmute." She stops listening, won't ask if you're there, and uses no credits while muted. Unmute ("Mic on. Talk and she'll pick up.") and just talk. In 0.7.0 she kept asking if you were there while muted; update to fix it.
 
