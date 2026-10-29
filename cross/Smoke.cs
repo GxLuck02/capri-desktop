@@ -511,6 +511,7 @@ namespace CapriDesktop
                     Hands.Forget();
                 }
                 checks.Add("PASS hands: she opens apps (.app folders, .desktop files) and sites, skips and plays Spotify tracks, reads what's playing, turns or sets the volume and reads the mute state on Mac and Linux, closes, minimizes and switches to apps (System Events on Mac, wmctrl on Linux, which says when it's missing), and shuts down, restarts, sleeps, locks and signs out, with cancel stopping a wait; a screenshot, the task manager and show desktop use their own tools, and key-press shortcuts say they're Windows-only");
+                SecurityChecks();
                 pet.ShowBrains(new[] { "gemma4:e4b", "qwen3:8b" });
                 int brains = pet.BrainChoices;
                 pet.Brain.Remember("what's up?", "Not much, choom.");
@@ -1228,6 +1229,141 @@ namespace CapriDesktop
                 return false;
             }
             return false;
+        }
+
+        // Security on Mac and Linux, like Windows' SECURITY window: each preset ticks its toggles, a flip makes it Custom and is
+        // saved, settings from before it get Trusted, and a toggle that's off holds her tool call so she asks first and does it
+        // on their yes. Mac and Linux have the first five toggles; her mouse and keyboard jobs and "Hey Capri" are Windows-only.
+        private void SecurityChecks()
+        {
+            Func<string> bits = delegate { StringBuilder all = new StringBuilder(); for (int i = 0; i < Security.Count; i++) all.Append(Security.On(i) ? '1' : '0'); return all.ToString(); };
+            Func<int, int, string> menu = delegate(int preset, int mask)
+            {
+                List<string> want = new List<string> { "Security: " + Security.Presets[preset] };
+                for (int i = 0; i <= Security.Custom; i++) want.Add((i == preset ? "*" : "") + Security.Presets[i] + (i == Security.Custom ? " (off)" : ""));
+                want.Add("-");
+                for (int i = 0; i <= Security.Power; i++) want.Add(((mask & (1 << i)) != 0 ? "*" : "") + Security.Names[i] + " (" + Security.Lines[i] + ")");
+                return string.Join(" | ", want);
+            };
+            string[] presetBits = { "00000000000", "11100000000", "11111110000", "11111111111" };
+            List<string> wrong = new List<string>();
+            string first = pet.SecurityShown;
+            bool startedTrusted = Security.Preset == Security.Trusted && first == menu(Security.Trusted, 0x7F);
+            for (int preset = Security.Lockdown; preset <= Security.Blackwall; preset++)
+            {
+                pet.ClickSecurity(preset, -1);
+                string shown = pet.SecurityShown;
+                if (bits() != presetBits[preset] || Security.Preset != preset || pet.Saved.Permissions != presetBits[preset].Substring(0, 10) || shown != menu(preset, Security.MaskOf(preset)))
+                    wrong.Add(Security.Presets[preset] + " " + bits() + " saved " + pet.Saved.Permissions + " shows " + shown);
+            }
+            pet.ClickSecurity(Security.Trusted, -1);
+            pet.ClickSecurity(-1, Security.Open);
+            string customShown = pet.SecurityShown;
+            bool custom = Security.Preset == Security.Custom && pet.Saved.Permissions == "0111111000" && customShown == menu(Security.Custom, 0x7E);
+            // The smoke test never writes cross.json, so this is what Save would write.
+            MemoryStream savedJson = new MemoryStream();
+            new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(Settings)).WriteObject(savedJson, pet.Saved);
+            bool written = Encoding.UTF8.GetString(savedJson.ToArray()).Contains("\"Permissions\":\"0111111000\"");
+            Security.Load(pet.Saved.Permissions);
+            bool reloaded = Security.Preset == Security.Custom && !Security.On(Security.Open) && Security.On(Security.Media);
+            pet.ClickSecurity(-1, Security.Open);
+            bool back = Security.Preset == Security.Trusted && pet.Saved.Permissions == "1111111000" && pet.SecurityShown == menu(Security.Trusted, 0x7F);
+            bool windowsOnly = customShown.IndexOf("mouse and keyboard", StringComparison.Ordinal) < 0 && customShown.IndexOf("Hey Capri", StringComparison.Ordinal) < 0 && customShown.IndexOf("passwords", StringComparison.Ordinal) < 0 && customShown.IndexOf("Pay, buy", StringComparison.Ordinal) < 0;
+            bool lines = Security.PresetLine(Security.Trusted) == "She does what you ask without asking first." && Security.PresetLine(Security.Blackwall) == "Everything is on: she never asks before doing what you ask." && Security.PresetLine(Security.Guarded) == "She opens apps and sites, plays music and presses shortcuts, and asks first for the rest.";
+            Settings older = (Settings)new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(Settings)).ReadObject(new MemoryStream(Encoding.UTF8.GetBytes("{\"Model\":\"qwen3:8b\",\"Watch\":true}")));
+            Security.Load(older.Permissions);
+            bool olderTrusted = older.Permissions == null && Security.Preset == Security.Trusted;
+            Security.Load("not toggles");
+            bool unreadable = Security.Preset == Security.Trusted;
+            Security.Load(pet.Saved.Permissions);
+            if (wrong.Count > 0 || !startedTrusted || !custom || !written || !reloaded || !back || !windowsOnly || !lines || !olderTrusted || !unreadable)
+                throw new Exception("Security's menu went wrong: " + string.Join(" / ", wrong) + " / first " + first + " / custom " + customShown + " / " + written + " " + reloaded + " " + back + " " + windowsOnly + " " + lines + " " + olderTrusted + " " + unreadable);
+            checks.Add("PASS Security menu: Settings > Security starts on Trusted; Lockdown, Guarded, Trusted and Blackwall tick the toggles under them (the five Mac and Linux have, each with its plain line), a toggle click makes it Custom and is saved for next time, ticking it again is Trusted, and settings from before it, or unreadable ones, get Trusted");
+
+            // A toggle that's off holds the call and she asks first; a yes runs it once, a no leaves it and anything else drops it.
+            List<string> did = new List<string>();
+            Action<string> runWas = Hands.Run;
+            Action<byte> pressWas = Hands.Press;
+            Func<List<InstalledApp>> catalogWas = Hands.Catalog;
+            Func<List<OpenWindow>> windowsWas = Hands.Windows;
+            Func<OpenWindow, string, bool> steerWas = Hands.Steer;
+            Func<string, int, bool> powerWas = Hands.Power;
+            Func<string, string> insteadWas = Hands.Instead;
+            string[] tools = { "open_app", "media", "shortcut", "app_window", "power" };
+            ToolArguments[] calls = { new ToolArguments { Name = "spotify" }, new ToolArguments { Action = "volume_up" }, new ToolArguments { Name = "screenshot" }, new ToolArguments { Name = "discord", Action = "switch_to" }, new ToolArguments { Action = "lock" } };
+            string[] questions = { "Open spotify? Say yes and I will.", "Turn the volume up? Say yes and I will.", "Take a screenshot? Say yes and I will.", "Switch to discord? Say yes and I will.", "Lock your PC? Say yes and I will." };
+            string[] ran = { "run exec:spotify", "key AF", "instead screenshot", "steer switch_to discord", "power lock" };
+            List<string> gates = new List<string>();
+            string declined, dropped, mixedAsk, mixedRan, mouseFree, lockdownNote, trustedPrompt, openPrompt;
+            try
+            {
+                Hands.Run = delegate(string id) { did.Add("run " + id); };
+                Hands.Press = delegate(byte key) { did.Add("key " + key.ToString("X2")); };
+                Hands.Catalog = delegate { return new List<InstalledApp> { new InstalledApp("Spotify", "exec:spotify") }; };
+                Hands.Forget();
+                OpenWindow discord = new OpenWindow(new IntPtr(9), "#general | Discord", "discord");
+                Hands.Windows = delegate { return new List<OpenWindow> { discord }; };
+                Hands.Steer = delegate(OpenWindow window, string action) { did.Add("steer " + action + " " + window.Program); return true; };
+                Hands.Power = delegate(string action, int seconds) { did.Add("power " + action); return true; };
+                Hands.Instead = delegate(string name) { did.Add("instead " + name); return "Opened the screenshot picker."; };
+                for (int i = 0; i <= Security.Power; i++)
+                {
+                    Security.Pick(Security.Trusted);
+                    Security.Set(i, false);
+                    did.Clear();
+                    string held = pet.Brain.Act(tools[i], calls[i]);
+                    string early = string.Join(",", did), question = Security.Question;
+                    string yes = Hands.Resume("yes");
+                    string after = string.Join(",", did);
+                    if (!Security.IsHold(held) || early.Length > 0 || question != questions[i] || yes == null || Security.IsHold(yes) || after.IndexOf(ran[i], StringComparison.Ordinal) < 0 || Security.Holding != null)
+                        gates.Add(Security.Names[i] + ": " + held + " / ran early " + early + " / asked " + question + " / yes " + yes + " / ran " + after);
+                }
+                Security.Pick(Security.Trusted);
+                Security.Set(Security.Open, false);
+                did.Clear();
+                pet.Brain.Act("open_app", calls[0]);
+                declined = Hands.Resume("nah") + " [" + string.Join(",", did) + "]";
+                pet.Brain.Act("open_app", calls[0]);
+                dropped = (Hands.Resume("what's the weather like?") ?? "null") + " / " + (Security.Holding ?? "nothing held") + " [" + string.Join(",", did) + "]";
+                // Two held and one that ran: what ran, then one question for both, and one yes runs both.
+                Security.Pick(Security.Trusted);
+                Security.Set(Security.Media, false);
+                Security.Set(Security.Power, false);
+                did.Clear();
+                List<string> results = new List<string> { pet.Brain.Act("open_app", calls[0]), pet.Brain.Act("media", calls[1]), pet.Brain.Act("power", calls[4]) };
+                mixedAsk = Security.Reply(results);
+                mixedRan = Hands.Resume("yeah") + " [" + string.Join(",", did) + "]";
+                // Mac and Linux don't have her mouse and keyboard jobs yet, so even Lockdown never holds one, what's playing never
+                // asks, and her prompt names only the toggles this computer has.
+                Security.Pick(Security.Lockdown);
+                ToolArguments job = new ToolArguments { Task = "message Sam hi on Discord" };
+                mouseFree = (Security.Gate("use_computer", job) ?? "free") + " / " + Security.Asks("use_computer", job) + " / " + (Security.Gate("media", new ToolArguments { Action = "now_playing" }) ?? "free");
+                lockdownNote = Security.Note;
+                Security.Pick(Security.Trusted);
+                trustedPrompt = Hands.Prompt;
+                Security.Set(Security.Open, false);
+                openPrompt = Hands.Prompt;
+            }
+            finally
+            {
+                Hands.Run = runWas;
+                Hands.Press = pressWas;
+                Hands.Catalog = catalogWas;
+                Hands.Forget();
+                Hands.Windows = windowsWas;
+                Hands.Steer = steerWas;
+                Hands.Power = powerWas;
+                Hands.Instead = insteadWas;
+                Security.Drop();
+                Security.Pick(Security.Trusted);
+            }
+            if (gates.Count > 0) throw new Exception("A Security toggle didn't ask first or run on a yes: " + string.Join(" // ", gates));
+            if (declined != Security.Left + " []" || dropped != "null / nothing held []") throw new Exception("A no or a new message after her Security question went wrong: " + declined + " / " + dropped);
+            if (mixedAsk != "Opened Spotify. Turn the volume up and lock your PC? Say yes and I will." || mixedRan.IndexOf("key AF", StringComparison.Ordinal) < 0 || mixedRan.IndexOf("power lock", StringComparison.Ordinal) < 0) throw new Exception("Two held calls weren't one question and one yes: " + mixedAsk + " / " + mixedRan);
+            if (mouseFree != "free / False / free" || lockdownNote.IndexOf("switch to or close apps and tabs or shut down, restart, sleep, lock or sign out of their PC. Still call the tool as soon as they ask", StringComparison.Ordinal) < 0 || lockdownNote.IndexOf("mouse and keyboard", StringComparison.Ordinal) >= 0
+                || trustedPrompt.IndexOf("SECURITY", StringComparison.Ordinal) >= 0 || openPrompt.IndexOf("Call the tool.\nThey've set her SECURITY settings to ask first before you open apps, games or sites. Still call the tool as soon as they ask", StringComparison.Ordinal) < 0)
+                throw new Exception("Security asked about something Mac and Linux don't have, or her prompt didn't follow it: " + mouseFree + " / " + lockdownNote);
+            checks.Add("PASS Security gates: with each of the five toggles off she holds the call and asks (\"Open spotify? Say yes and I will.\", \"Lock your PC? Say yes and I will.\"), nothing runs until a yes, a yes runs it once through her own hands, a no leaves it alone and a new message drops it; two held calls are one question and one yes; mouse and keyboard jobs, which Mac and Linux don't have yet, never ask; and her brain is told to still call a tool that's off and let her ask");
         }
 
         private string FakeVoice()

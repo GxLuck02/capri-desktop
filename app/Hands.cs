@@ -161,8 +161,14 @@ namespace CapriDesktop
 
         internal static string PresetName { get { return Presets[Preset]; } }
 
-        // What the preset does, in a line. Without a wake word, Blackwall's line doesn't promise one.
-        internal static string PresetLine(int preset) { return preset == Blackwall && !Has(Wake) ? "Everything is on: she never asks before doing what you ask." : Told[Math.Max(0, Math.Min(Custom, preset))]; }
+        // What the preset does, in a line. Without her jobs (Mac and Linux so far) Trusted never asks either, and without a
+        // wake word Blackwall's line doesn't promise one.
+        internal static string PresetLine(int preset)
+        {
+            if (preset == Trusted && !Has(Mouse)) return "She does what you ask without asking first.";
+            if (preset == Blackwall && !Has(Wake)) return "Everything is on: she never asks before doing what you ask.";
+            return Told[Math.Max(0, Math.Min(Custom, preset))];
+        }
 
         internal static string Short { get { int preset = Preset; return preset == Blackwall && !Has(Wake) ? "She never asks first." : Shorts[preset]; } }
 
