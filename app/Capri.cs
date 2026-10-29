@@ -16226,7 +16226,7 @@ namespace CapriDesktop
                                 mainframe.ShowSettings(vsPagedWas);
                                 mainframe.Sync();
                             }
-                            string vsPanelUsual = "Fish Audio · cloud | " + VoiceServer.FishCloud + " | " + VoiceServer.FishFree + " | " + VoiceServer.FishCapriName + " | Paste your Fish Audio key | - | ";
+                            string vsPanelUsual = "Fish Audio · cloud | " + VoiceServer.FishCloud + " | " + VoiceServer.FishFree + " |  | Paste your Fish Audio key | - | ";
                             string vsCloudOnly = "CLOUD VOICE > | Fish Audio · cloud, OpenAI · cloud";
                             if (vsMenu.IndexOf(VoiceServer.Menu, StringComparison.Ordinal) >= 0 || !vsMenu.StartsWith("Her own (picked), Bright, Sly, Sharp, -, HD ", StringComparison.Ordinal) || vsOpened != vsPanelUsual
                                 || vsCloudFields != "no address | Model | Voice | Key | -" || vsCloudChoices != vsCloudOnly || vsCustomChoices != "CUSTOM LOCAL > | Voice model file · on your PC, Fish Speech · on your PC, Kokoro · on your PC, Any OpenAI-style server"
