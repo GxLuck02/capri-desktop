@@ -620,7 +620,7 @@ namespace CapriDesktop
             if (screen == null || quitting) return;
             Halt();
             SetAway(false);
-            if (!IsVisible) Show();
+            if (!IsVisible) { Show(); Look.OnTopAgain(this); }
             walking = false;
             seat = null;
             falling = false;
@@ -656,7 +656,7 @@ namespace CapriDesktop
             if (!away || quitting) return;
             Halt();
             SetAway(false);
-            if (!IsVisible) Show();
+            if (!IsVisible) { Show(); Look.OnTopAgain(this); }
             walking = false;
             seat = null;
             falling = false;
@@ -2300,13 +2300,24 @@ namespace CapriDesktop
             if (quitting) return;
             bool hidden = away;
             string line = PopLines[random.Next(PopLines.Length)];
+            // With Stay put, or on a Sit here spot, she says hi from where she is.
+            if (!hidden && (Saved.Wander <= 0 || (seat != null && seat.Free)))
+            {
+                Blurt(PopHeard, line);
+                popAsked = asking;
+                popClicks = clicks;
+                popPets = petTicket;
+                popOut = -1;
+                Raise(Now + 6);
+                return;
+            }
             Action arrive = delegate
             {
                 Screen screen = ScreenHere();
                 if (screen == null || quitting) return;
                 // Only coming out of hiding restarts her wait to ask for attention: a pop-in nobody touched isn't them noticing her.
                 if (away) SetAway(false);
-                if (!IsVisible) Show();
+                if (!IsVisible) { Show(); Look.OnTopAgain(this); }
                 walking = false;
                 seat = null;
                 falling = false;
@@ -2464,7 +2475,7 @@ namespace CapriDesktop
             PixelPoint hip = Hip;
             PixelRect area = mouse == null ? Area : WorkAt(mouse.Value);
             int wide = Px(body.Size);
-            if (mouse == null || (area.Contains(hip) && Math.Abs(hip.X - mouse.Value.X) <= Math.Max(Px(300), wide * 2))) { Plead(now, line); return; }
+            if (mouse == null || Saved.Wander <= 0 || (seat != null && seat.Free) || (area.Contains(hip) && Math.Abs(hip.X - mouse.Value.X) <= Math.Max(Px(300), wide * 2))) { Plead(now, line); return; }
             int x = mouse.Value.X - area.X < area.Width / 2 ? mouse.Value.X + wide / 2 : mouse.Value.X - wide - wide / 2;
             x = Math.Max(area.X, Math.Min(area.Right - wide, x));
             // Her wait to be noticed starts once she's there and has asked: a glitch-out cut short, by her window closing say, never asked.

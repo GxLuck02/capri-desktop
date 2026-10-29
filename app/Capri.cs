@@ -2021,9 +2021,19 @@ namespace CapriDesktop
         private void PopIn(double now)
         {
             bool wasHidden = hidden;
+            string line = PopLines[random.Next(PopLines.Length)];
+            // With Wander off, or on a spot they picked (Sit here, Hang here, riding the cursor), she says hi from where she is.
+            if (!wasHidden && (!preferences.Wander || riding || hanging || (seat != null && seat.Free)))
+            {
+                if (IsHandleCreated) Native.SetWindowPos(Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+                Say(line);
+                popOut = preferences.OnTop ? -1 : clock.Elapsed.TotalSeconds + 6;
+                popClicks = clicks;
+                popHide = false;
+                return;
+            }
             Rectangle area = Screen.FromPoint(Cursor.Position).WorkingArea;
             Point spot = new Point(area.Left + (int)(random.NextDouble() * Math.Max(1, area.Width - Width)), area.Bottom - Height - 12);
-            string line = PopLines[random.Next(PopLines.Length)];
             Action arrive = delegate
             {
                 StopRide();
@@ -2129,7 +2139,8 @@ namespace CapriDesktop
                 }
                 Say(line);
             };
-            if (area.Contains(hip) && Math.Abs(hip.X - cursor.X) <= Math.Max(300, Width * 2)) { ask(); return; }
+            // With Wander off, or on a Sit here spot, she asks from where she is.
+            if (!preferences.Wander || (seat != null && seat.Free) || (area.Contains(hip) && Math.Abs(hip.X - cursor.X) <= Math.Max(300, Width * 2))) { ask(); return; }
             int x = cursor.X - area.Left < area.Width / 2 ? cursor.X + Width / 2 : cursor.X - Width - Width / 2;
             Point spot = new Point(Math.Max(area.Left, Math.Min(area.Right - Width, x)), area.Bottom - Height - 12);
             GlitchOut(delegate
@@ -8044,11 +8055,22 @@ namespace CapriDesktop
                             CheckPopIn(popOut + 0.1, 0);
                             bool poppedBack = hidden && popOut < 0;
                             ShowHidden(false);
+                            bool wanderWas = preferences.Wander;
+                            preferences.Wander = true;
                             PopIn(clock.Elapsed.TotalSeconds);
                             bool stayedOut = !hidden && !popHide && speech != null;
                             speech = null;
                             CheckPopIn(clock.Elapsed.TotalSeconds + 7, 0);
                             bool keptOut = !hidden;
+                            // With Wander off she says hi from where she is: no glitch and no new spot.
+                            preferences.Wander = false;
+                            popOut = -1;
+                            Point stillAt = Location, stillAnchor = anchor;
+                            PopIn(clock.Elapsed.TotalSeconds);
+                            bool stayedPut = !hidden && !popHide && speech != null && Array.IndexOf(PopLines, speech) >= 0 && Location == stillAt && anchor == stillAnchor && outro == null;
+                            speech = null;
+                            popOut = -1;
+                            preferences.Wander = wanderWas;
                             if (preferences.CheckIns != popsWere) ToggleCheckIns();
                             seat = popSeat;
                             anchor = popFrom;
@@ -8056,8 +8078,8 @@ namespace CapriDesktop
                             falling = false;
                             Play(seat != null ? perch : idle);
                             if (hiddenWas) ShowHidden(true);
-                            if (!poppedUp || !poppedBack || !stayedOut || !keptOut || preferences.CheckIns != popsWere) throw new Exception("Her pop-ins went wrong: up " + poppedUp + ", back " + poppedBack + ", stayed " + stayedOut + ", kept " + keptOut);
-                            checks.Add("PASS pop-ins: with the setting on she pops up on top of your app even when hidden, says hi and hides again, and when she's already out she stays out");
+                            if (!poppedUp || !poppedBack || !stayedOut || !keptOut || !stayedPut || preferences.CheckIns != popsWere) throw new Exception("Her pop-ins went wrong: up " + poppedUp + ", back " + poppedBack + ", stayed " + stayedOut + ", kept " + keptOut + ", put " + stayedPut);
+                            checks.Add("PASS pop-ins: with the setting on she pops up on top of your app even when hidden, says hi and hides again, and when she's already out she stays out; with Wander off she says hi from where she is");
                             bool nudgesWere = preferences.CheckIns;
                             Point nudgeFrom = anchor;
                             Ledge nudgeSeat = seat;
