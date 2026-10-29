@@ -493,6 +493,8 @@ If Ollama is running but has no models, the setup step reads "Download <name> (<
 
 She uses nvidia/nemotron-3.5-super-vl-120b-a12b first. It can see your screen. Since 0.7.0 she no longer uses z-ai/glm-5.3-flash. Other NVIDIA models she can use: nvidia/nemotron-3.5-bolt-e4b, openai/gpt-oss-20b and meta/llama-3.2-11b-vision-instruct.
 
+From 0.7.6 the Model menu marks two NVIDIA models "· recommended" and lists them at the top: nvidia/nemotron-3.5-super-vl-120b-a12b (Nemotron Super, her first pick, sees your screen) and nvidia/nemotron-3-nano-omni-30b-a3b-reasoning (Nemotron's reasoning model, which thinks before it answers). The Mac and Linux Brain menu marks them the same way.
+
 ### Why did she switch NVIDIA models by herself?
 If a model doesn't answer in time or NVIDIA's servers fail, she tries the next one so you still get a reply. She says "<old> wasn't answering, so she switched to <new>." This switch is only for that moment. Your saved pick stays the same, and she keeps your chat going on the new model. If it keeps happening, pick a faster model like nvidia/nemotron-3.5-bolt-e4b in the Model menu. It can't see your screen. To never switch, turn on Stay on my model in Capri Mainframe > Settings, next to the BRAIN heading: then she tells you the model is stuck and stays on it.
 
@@ -1158,18 +1160,18 @@ Tray or menu bar icon: Talk to her, Quiet, Hide her / Show her, Bring her back, 
 - "ElevenLabs rejected the key. Settings > Voice > New key."
 - Remove key ending XXXX removes it.
 
-### Check my screen on Mac and Linux
-Ask "check my screen", "what's on my screen?" or "can you see this?". She takes a screenshot and her brain looks at it.
+### Check my screen on Mac and Linux (0.7.6 and newer)
+0.7.4 and older can't see the screen on Mac and Linux. Update to 0.7.6. Ask "check my screen", "what's on my screen?" or "can you see this?". She takes a screenshot and her brain looks at it.
 - Her brain has to see pictures: a free NVIDIA key (nvidia/nemotron-3.5-super-vl-120b-a12b), a Claude or OpenAI key, or an Ollama model that can see pictures. DeepSeek can't.
 - Mac: the first time, macOS asks to let Capri record the screen. If she only describes your wallpaper, allow Capri under System Settings > Privacy & Security > Screen Recording, then reopen her.
 - Linux: she uses your desktop's screenshot tool: spectacle (KDE), gnome-screenshot (GNOME), grim (Sway, Hyprland and other wlroots desktops), or ImageMagick, scrot or maim on X11. If none is installed she says so; install one and ask again. GNOME on Wayland may refuse apps' screenshots.
 
-### A free NVIDIA key on Mac and Linux
-No Ollama needed, and nothing to download.
+### A free NVIDIA key on Mac and Linux (0.7.6 and newer)
+No Ollama needed, and nothing to download. 0.7.4 and older only think with Ollama on Mac and Linux; update to 0.7.6 for an API key.
 1. Right-click her > Brain > Get a free NVIDIA key. NVIDIA's key page opens.
 2. Make a key there (see "The free NVIDIA key" above) and copy it.
 3. Right-click her > Brain > Use an API key..., paste the key in her box and press Enter. It stays on this computer. (Her box closes if you click away, so copy the key first.)
-4. She says "Key saved. I'm thinking with X now. Change it under Brain in my right-click menu." Pick another model under Brain. Forget the key and use Ollama goes back to Ollama.
+4. She says "Key saved. I'm thinking with X now. Change it under Brain in my right-click menu." Pick another model under Brain; Nemotron Super and Nemotron's reasoning model are marked recommended at the top. Forget the key and use Ollama goes back to Ollama.
 
 If an NVIDIA model gets stuck, she switches to another one and answers. She goes back to your pick the next time she starts. To keep her on your model, tick Brain > Stay on my model; she then says what went wrong instead.
 
