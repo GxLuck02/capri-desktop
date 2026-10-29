@@ -1175,7 +1175,10 @@ namespace CapriDesktop
             }
             string written;
             ToolArguments writtenArgs;
-            if (calls.Count == 0 && Hands.Typed(raw, out written, out writtenArgs, true)) calls.Add(new KeyValuePair<string, ToolArguments>(written, writtenArgs));
+            // A list of calls written out as text runs every one of them.
+            List<KeyValuePair<string, ToolArguments>> several = calls.Count == 0 ? Hands.Written(raw) : null;
+            if (several != null && several.Count > 1) calls.AddRange(several);
+            else if (calls.Count == 0 && Hands.Typed(raw, out written, out writtenArgs, true)) calls.Add(new KeyValuePair<string, ToolArguments>(written, writtenArgs));
             if (calls.Exists(call => !Hands.Valid(call.Key, call.Value))) { calls.Clear(); throw new BrainException("Couldn't read that tool call. Try again."); }
             return raw;
         }
@@ -1246,7 +1249,7 @@ namespace CapriDesktop
             Check(ticket);
             Cloud remote = Remote;
             string listed = tools ? openAiTools ?? Hands.Tools : null;
-            if (remote != null && remote.Claude) return AskClaude(remote, messages, tools, calls, parts, ticket, claudeTools);
+            if (remote != null && remote.Claude) return AskClaude(remote, messages, tools, calls, parts, ticket, claudeTools, routing);
             if (remote != null)
             {
                 bool openAi = remote.Kind == "openai";
@@ -1264,7 +1267,8 @@ namespace CapriDesktop
                 };
                 string address = Address(remote.Kind, "/chat/completions");
                 Action<HttpWebRequest> sign = delegate(HttpWebRequest request) { Sign(request, remote.Key, false); };
-                try { return Read(Send<CompletionReply>(address, body, CloudWait, listed, sign, parts, ticket), calls); }
+                CompletionReply reply;
+                try { reply = Send<CompletionReply>(address, body, CloudWait, listed, sign, parts, ticket); }
                 catch (BrainException error)
                 {
                     // A model that turns down its reasoning_effort, like gpt-6-luna with tools, gets the value its error names, once, and keeps it.
@@ -1273,8 +1277,18 @@ namespace CapriDesktop
                     lock (efforts) efforts[remote.Model] = taken;
                     Log(address, -1, remote.Model + " takes reasoning_effort " + (taken.Length == 0 ? "left out" : taken) + ", asking again");
                     body.Effort = taken.Length == 0 ? null : taken;
-                    return Read(Send<CompletionReply>(address, body, CloudWait, listed, sign, parts, ticket), calls);
+                    reply = Send<CompletionReply>(address, body, CloudWait, listed, sign, parts, ticket);
                 }
+                CompletionMessage cut = reply != null && reply.Choices != null && reply.Choices.Length > 0 && reply.Choices[0] != null ? reply.Choices[0].Message : null;
+                if (routing && Stopped(reply) && cut != null && Unfinished(cut.Content, cut.Calls != null, cut.Thinking ?? cut.Reasoning))
+                    reply = Longer(reply, body.Limit ?? body.Tokens ?? 2000, Stopped, Whole, delegate(int room)
+                    {
+                        if (body.Limit != null) body.Limit = room;
+                        else body.Tokens = room;
+                        return Send<CompletionReply>(address, body, Math.Max(CloudWait, room * 50), listed, sign, parts, ticket);
+                    });
+                if (routing && Stopped(reply)) return CutShort(Said(reply), Whole(reply), calls);
+                return Read(reply, calls);
             }
             Engine local = Local;
             if (local != null)
@@ -1322,14 +1336,16 @@ namespace CapriDesktop
                 if (chat.Error != null) throw new BrainException(chat.Error);
                 if (chat.Message != null && chat.Message.Calls == null && Garbled(chat.Message.Content)) throw new BrainException(Gibberish, true);
             }
-            if (routing && chat.Stopped == "length" && thinker != thinking && limit < LongAsk && chat.Message != null && CutCalls(chat.Message.Content, chat.Message.Calls != null))
-            {
-                asking.Options.Limit = LongAsk;
-                chat = Send<ChatReply>(Ollama + "/api/chat", asking, 180000, listed, null, null, ticket);
-                if (chat.Error != null) throw new BrainException(chat.Error);
-            }
-            if (routing && chat.Stopped == "length") throw new BrainException("Couldn't finish that request. Try again.");
+            if (routing && chat.Stopped == "length" && chat.Message != null && Unfinished(chat.Message.Content, chat.Message.Calls != null, chat.Message.Thinking))
+                chat = Longer(chat, asking.Options.Limit, reply => reply.Stopped == "length", Whole, delegate(int room)
+                {
+                    asking.Options.Limit = room;
+                    ChatReply again = Send<ChatReply>(Ollama + "/api/chat", asking, Math.Max(180000, room * 150), listed, null, null, ticket);
+                    if (again.Error != null) throw new BrainException(again.Error);
+                    return again;
+                });
             if (chat.Message == null) return null;
+            if (routing && chat.Stopped == "length") return CutShort(chat.Message.Content, Whole(chat), calls);
             if (chat.Message.Calls != null) foreach (ToolCall call in chat.Message.Calls) if (call != null && call.Function != null) calls.Add(new KeyValuePair<string, ToolArguments>(call.Function.Name, call.Function.Arguments));
             return chat.Message.Content;
         }
@@ -1371,21 +1387,99 @@ namespace CapriDesktop
                 choice = reply.Choices != null && reply.Choices.Length > 0 ? reply.Choices[0] : null;
             }
             CompletionMessage cut = choice != null ? choice.Message : null;
-            if (routing && choice != null && choice.Stopped == "length" && thinker != thinking && limit < LongAsk && cut != null && CutCalls(cut.Content, cut.Calls != null))
-            {
-                asking.Limit = LongAsk;
-                reply = Send<CompletionReply>(address + "/v1/chat/completions", asking, 180000, listed, null, parts, ticket);
-                choice = reply.Choices != null && reply.Choices.Length > 0 ? reply.Choices[0] : null;
-            }
-            if (routing && choice != null && choice.Stopped == "length") throw new BrainException("Couldn't finish that request. Try again.");
+            if (routing && Stopped(reply) && cut != null && Unfinished(cut.Content, cut.Calls != null, cut.Thinking ?? cut.Reasoning))
+                reply = Longer(reply, asking.Limit, Stopped, Whole, delegate(int room)
+                {
+                    asking.Limit = room;
+                    return Send<CompletionReply>(address + "/v1/chat/completions", asking, Math.Max(180000, room * 150), listed, null, parts, ticket);
+                });
+            if (routing && Stopped(reply)) return CutShort(Said(reply), Whole(reply), calls);
             return Read(reply, calls);
         }
 
-        // Routing's short reply fits four or five tool calls. A longer list, like six apps at once, is cut off partway through
-        // its calls, so it's asked again with room for all of them, as much as cloud brains get. A cut-off ramble isn't.
+        // Routing's short reply fits four or five tool calls. A longer list, like a dozen apps at once, runs out of room partway
+        // through its calls, so it's asked again with double the room each time, until a reply ends by itself or a try brings no
+        // more whole calls. Then every whole call from the longest try runs, with no ceiling on how many. A cut-off ramble isn't
+        // asked again.
         private const int LongAsk = 2000;
 
-        private static bool CutCalls(string content, bool called) { return called || Regex.IsMatch(content ?? "", @"\{|<tool_call>|<\|tool"); }
+        // A reply that ran out of room partway through its calls, or before it finished thinking.
+        private static bool Unfinished(string content, bool called, string thinking)
+        {
+            return called || Regex.IsMatch(content ?? "", @"\{|<tool_call>|<\|tool") || (Clean(content).Length == 0 && (!string.IsNullOrWhiteSpace(thinking) || (content ?? "").IndexOf("<think>", StringComparison.OrdinalIgnoreCase) >= 0));
+        }
+
+        private static T Longer<T>(T reply, int was, Func<T, bool> cut, Func<T, List<KeyValuePair<string, ToolArguments>>> whole, Func<int, T> ask) where T : class
+        {
+            T longest = reply;
+            int most = whole(reply).Count;
+            for (long room = Math.Max(LongAsk, 2L * was); room <= int.MaxValue; room *= 2)
+            {
+                T again;
+                try { again = ask((int)room); }
+                // A brain that turns down the bigger room, or takes too long with it, keeps the calls it already wrote.
+                catch (BrainException) { if (most == 0) throw; break; }
+                catch (WebException error) { if (most == 0 || error.Status != WebExceptionStatus.Timeout) throw; break; }
+                if (!cut(again)) return again;
+                List<KeyValuePair<string, ToolArguments>> found = whole(again);
+                if (found.Count <= most) break;
+                longest = again;
+                most = found.Count;
+            }
+            return longest;
+        }
+
+        // A reply that still ran out of room: its whole calls run. With none, it's what it said so far, and her chat answers.
+        private static string CutShort(string content, List<KeyValuePair<string, ToolArguments>> whole, List<KeyValuePair<string, ToolArguments>> calls)
+        {
+            if (whole.Count == 0) return content ?? "";
+            calls.AddRange(whole);
+            return "";
+        }
+
+        private static bool Stopped(CompletionReply reply) { return reply != null && reply.Choices != null && reply.Choices.Length > 0 && reply.Choices[0] != null && reply.Choices[0].Stopped == "length"; }
+
+        private static string Said(CompletionReply reply) { return reply != null && reply.Choices != null && reply.Choices.Length > 0 && reply.Choices[0] != null && reply.Choices[0].Message != null ? reply.Choices[0].Message.Content : null; }
+
+        // The calls in a reply that came back whole. One cut off at the end, or one that doesn't make sense, is left out.
+        private static List<KeyValuePair<string, ToolArguments>> Whole(ChatReply chat)
+        {
+            List<KeyValuePair<string, ToolArguments>> found = new List<KeyValuePair<string, ToolArguments>>();
+            if (chat == null || chat.Message == null) return found;
+            if (chat.Message.Calls != null)
+                foreach (ToolCall call in chat.Message.Calls)
+                    if (call != null && call.Function != null && Hands.Valid(call.Function.Name, call.Function.Arguments)) found.Add(new KeyValuePair<string, ToolArguments>(call.Function.Name, call.Function.Arguments));
+            return found.Count > 0 ? found : Hands.Written(chat.Message.Content);
+        }
+
+        private static List<KeyValuePair<string, ToolArguments>> Whole(CompletionReply reply)
+        {
+            List<KeyValuePair<string, ToolArguments>> found = new List<KeyValuePair<string, ToolArguments>>();
+            CompletionMessage message = reply != null && reply.Choices != null && reply.Choices.Length > 0 && reply.Choices[0] != null ? reply.Choices[0].Message : null;
+            if (message == null) return found;
+            if (message.Calls != null)
+                foreach (CompletionCall call in message.Calls)
+                {
+                    if (call == null || call.Function == null) continue;
+                    ToolArguments args = Hands.Read(call.Function.Arguments);
+                    if (Hands.Valid(call.Function.Name, args)) found.Add(new KeyValuePair<string, ToolArguments>(call.Function.Name, args));
+                }
+            return found.Count > 0 ? found : Hands.Written(message.Content);
+        }
+
+        private static List<KeyValuePair<string, ToolArguments>> Whole(ClaudeReply reply)
+        {
+            List<KeyValuePair<string, ToolArguments>> found = new List<KeyValuePair<string, ToolArguments>>();
+            if (reply == null || reply.Content == null) return found;
+            for (int i = 0; i < reply.Content.Length; i++)
+            {
+                ClaudeBlock block = reply.Content[i];
+                // The block Claude was writing when it ran out of room can be missing the end of its input.
+                if (block == null || block.Type != "tool_use" || (i == reply.Content.Length - 1 && reply.StopReason == "max_tokens")) continue;
+                if (Hands.Valid(block.Name, block.Input)) found.Add(new KeyValuePair<string, ToolArguments>(block.Name, block.Input));
+            }
+            return found;
+        }
 
         private static string Read(CompletionReply reply, List<KeyValuePair<string, ToolArguments>> calls)
         {
@@ -1404,7 +1498,7 @@ namespace CapriDesktop
             return Visible(message.Content);
         }
 
-        private string AskClaude(Cloud remote, List<ChatMessage> messages, bool tools, List<KeyValuePair<string, ToolArguments>> calls, string parts = null, int ticket = -1, string claudeTools = null)
+        private string AskClaude(Cloud remote, List<ChatMessage> messages, bool tools, List<KeyValuePair<string, ToolArguments>> calls, string parts = null, int ticket = -1, string claudeTools = null, bool routing = false)
         {
             string model = remote.Model;
             bool fallback = Regex.IsMatch(model, @"^claude-(opus-5|sonnet-5-5|fable-5-1)");
@@ -1416,12 +1510,22 @@ namespace CapriDesktop
                 Output = Regex.IsMatch(model, @"^claude-((opus|sonnet|haiku|fable|mythos)-5|opus-4-[5-8]|sonnet-4-6)") ? new ClaudeOutput() : null,
                 Fallbacks = fallback ? "default" : null
             };
-            ClaudeReply reply = Send<ClaudeReply>(Anthropic + "/v1/messages", body, CloudWait, tools ? claudeTools ?? Hands.ClaudeTools : null, delegate(HttpWebRequest request)
+            Action<HttpWebRequest> sign = delegate(HttpWebRequest request)
             {
                 Sign(request, remote.Key, true);
                 if (fallback) request.Headers["anthropic-beta"] = "server-side-fallback-2026-07-01";
-            }, parts, ticket);
+            };
+            string listed = tools ? claudeTools ?? Hands.ClaudeTools : null;
+            ClaudeReply reply = Send<ClaudeReply>(Anthropic + "/v1/messages", body, CloudWait, listed, sign, parts, ticket);
+            Func<ClaudeReply, bool> cut = delegate(ClaudeReply said) { return said.StopReason == "max_tokens"; };
+            if (routing && cut(reply) && reply.Content != null && Array.Exists(reply.Content, block => block != null && block.Type == "tool_use"))
+                reply = Longer(reply, body.Limit, cut, Whole, delegate(int room)
+                {
+                    body.Limit = room;
+                    return Send<ClaudeReply>(Anthropic + "/v1/messages", body, Math.Max(CloudWait, room * 50), listed, sign, parts, ticket);
+                });
             if (reply.StopReason == "refusal") return Declined;
+            if (routing && cut(reply)) return CutShort(Spoken(reply, new List<KeyValuePair<string, ToolArguments>>()), Whole(reply), calls);
             return Spoken(reply, calls);
         }
 

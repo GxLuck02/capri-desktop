@@ -1002,6 +1002,57 @@ namespace CapriDesktop
             return true;
         }
 
+        private const string ToolNames = "open_app|open_website|media|look_at_screen|play_music|app_window|use_computer|shortcut|remember|power|nap";
+        private static readonly Regex NamedBefore = new Regex(@"(?<![\p{L}\p{N}_])(" + ToolNames + @")\s*\z");
+        private static readonly Regex NamedInside = new Regex(@"""name""\s*:\s*""(" + ToolNames + @")""");
+        private static readonly Regex GivenInside = new Regex(@"""(?:arguments|parameters)""\s*:\s*\{");
+
+        // Every whole call written out as text, in order: open_app{"name":"Discord"}, Gemma's call:open_app{name:<|"|>Discord<|"|>}
+        // or {"name":"open_app","arguments":{"name":"Discord"}} in <tool_call> tags. One cut off partway through, where her brain ran
+        // out of room, is left out, and so is one that doesn't make sense.
+        internal static List<KeyValuePair<string, ToolArguments>> Written(string reply)
+        {
+            List<KeyValuePair<string, ToolArguments>> found = new List<KeyValuePair<string, ToolArguments>>();
+            string text = Regex.Replace(Brain.Visible(reply), @"<\|""\|>|<escape>", "\"");
+            for (int at = 0; at < text.Length; )
+            {
+                int open = text.IndexOf('{', at);
+                int close = open < 0 ? -1 : Closing(text, open);
+                if (close < 0) break;
+                string body = text.Substring(open, close - open + 1);
+                Match named = NamedBefore.Match(text.Substring(at, open - at));
+                string tool = null;
+                ToolArguments args = null;
+                if (named.Success) { tool = named.Groups[1].Value; args = Read(body); }
+                else
+                {
+                    Match inside = NamedInside.Match(body), given = GivenInside.Match(body);
+                    int start = given.Success ? given.Index + given.Length - 1 : -1;
+                    int end = start < 0 ? -1 : Closing(body, start);
+                    if (inside.Success && end > 0) { tool = inside.Groups[1].Value; args = Read(body.Substring(start, end - start + 1)); }
+                }
+                if (tool != null && Valid(tool, args)) found.Add(new KeyValuePair<string, ToolArguments>(tool, args));
+                at = close + 1;
+            }
+            return found;
+        }
+
+        // Where the brace at open closes, skipping braces in quotes, or -1 when it never does.
+        private static int Closing(string text, int open)
+        {
+            int depth = 0;
+            bool quoted = false;
+            for (int i = open; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (quoted) { if (c == '\\') i++; else if (c == '"') quoted = false; }
+                else if (c == '"') quoted = true;
+                else if (c == '{') depth++;
+                else if (c == '}' && --depth == 0) return i;
+            }
+            return -1;
+        }
+
         internal static ToolArguments Read(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return null;
