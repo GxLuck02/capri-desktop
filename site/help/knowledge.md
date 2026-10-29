@@ -353,6 +353,7 @@ VOICE ("Every voice, ElevenLabs too" on the right of the heading)
 Pitch, Speed, Robot and Glitch change every voice she has: her free voice styles, HD, ElevenLabs and ElevenLabs voice chat. See "Pitch, speed, robot and glitch" under Her voice.
 
 MOVES
+- Mini player: on by default, on the right of the MOVES heading. While music plays, a small player shows what's playing, and she perches on it. See "Her mini player" in section 14.
 - Wander: Off, Rarely, Sometimes, Often or Restless.
 - Sleep: Never, 1 min, 2 min (default), 5 min, 10 min or 30 min.
 - Pop-ins: how often Check in on me brings her over to say hi. Rarely (every 20 to 40 minutes), Sometimes (every 8 to 20, default) or Often (every 3 to 8).
@@ -866,6 +867,20 @@ She dances when music plays: Spotify, Media Player, Apple Music, iTunes, Amazon 
 
 Turn it off: right-click her > Move > Dance to music, or Mainframe > Settings > Dance to music.
 
+### Her mini player
+While a song or video plays, a small black player with her pink and cyan neon shows in the bottom-left corner of your main screen. With Wander on, she hops onto its top edge as it comes up and sits there like it's a window, bobbing to the music. With Wander off she stays where you put her, and you can drag her onto it.
+- It shows what Windows' volume flyout shows: the song and the artist, from Spotify, YouTube in a browser, Media Player and other players. The time played and the song's length show on the right when the app gives them.
+- Previous, play/pause and next go to the app that's playing. Click or drag along the seek bar to skip through the song, if the app allows it.
+- The heart is only there for Spotify. It likes the song in Spotify, or takes the like back, and it's filled when the song is already in your Liked Songs. She presses Spotify's own heart, or its Like key (Alt + Shift + B) with Spotify in front for a moment.
+- The menu button, or right-click the player: Open Spotify (or whichever app is playing), Hide for now, and Turn off mini player.
+- The X puts it away until nothing has played for 10 seconds, so it's back for your next song.
+- Drag it by its body to move it. It keeps that spot, and carries her along if she's sitting on it.
+- It stays up for a minute after you pause. It hides during full-screen games and videos, and while she's hidden.
+- It follows Always on top: on, it stays over your windows, just under her. Off, it sits among them.
+- Her own screenshots during a job look straight through it.
+
+Turn it off: Mainframe > Settings > Mini player, or the player's menu > Turn off mini player. It's Windows only for now.
+
 ### Sleep
 If you don't touch the mouse or keyboard for a while, she falls asleep. Move the mouse to wake her. Mainframe > Settings > Sleep sets the time, or Never. On Mac and Linux it's right-click her > Move > Fall asleep after.
 
@@ -1176,6 +1191,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - No built-in brain. Use Ollama or an API key.
 - No keyboard shortcuts or mouse and keyboard jobs.
 - No automatic updates. She says when a new version is out, and right-click her > Get Capri X opens its download page.
+- No mini player.
 
 ### Right-click menu
 - Talk to her
@@ -1405,6 +1421,10 @@ If she closes twice in a row while she's starting (a crash, but also Task Manage
 - She's hidden behind a game: switch the game to borderless or windowed. Check Always on top is on (Mainframe > Settings > CAPRI).
 - She doesn't dance: Dance to music must be on, and the app must show up as music in Windows.
 - She dances but her head isn't on the beat yet: give it a few seconds. Quiet songs, talking and very slow songs are harder for her to follow.
+- The mini player doesn't show: Settings > Mini player must be on, and the song has to show in Windows' volume flyout with its name. If you pressed its X, it's back once nothing has played for 10 seconds. It hides during full-screen games and videos.
+- She doesn't sit on the mini player: she only hops on as it comes up with Wander on, and not while she's talking, sleeping or busy. Drag her onto it any time.
+- The mini player has no heart: the heart is only there for Spotify.
+- The heart didn't like the song: Spotify must be open in a window, not only in the tray, and its Like key must still be Alt + Shift + B.
 - She's asleep: move the mouse. If you put her to sleep (Go to sleep, or "go to sleep"), click her or say "wake up" instead. Change how soon she dozes off in Settings > Sleep.
 - She's on the wrong monitor: right-click her > Move > Bring to this screen, or tell her "come here".
 
@@ -1449,4 +1469,5 @@ Things in this file the team should confirm before the support chat relies on th
 14. <unused49> replies: the CPU retry in newer builds wasn't confirmed on the reporting user's PC.
 15. Free voice chat with a real mic on a fresh PC.
 16. Your own voice models under CUSTOM LOCAL and CLOUD VOICE (0.7.6): their servers were only tested against stand-ins. Fish Audio's cloud wasn't tried here with a real key, though a play-tester said it works great (29 Oct 2026), and a real Fish Speech, Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI or vLLM-Omni Qwen3-TTS server hasn't been run with it. The start commands come from their projects' pages and weren't run here. Voice model files were run with real Piper, Kokoro and Pocket TTS models.
+17. The mini player's heart hasn't been pressed on a real Spotify. Spotify's heart button names ("Add to Liked Songs" and the rest) and its Alt + Shift + B Like key come from Spotify's pages. The player's other buttons and what it shows were tested against a stand-in player in Windows' media session, not Spotify or YouTube themselves.
 

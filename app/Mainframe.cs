@@ -198,6 +198,7 @@ namespace CapriDesktop
         private readonly Toggle intro;
         private readonly Toggle typing;
         private readonly Toggle hdGames;
+        private readonly Toggle miniPlayer;
         private readonly Label sleepName;
         private readonly Label soundsName;
         private readonly Slider wander;
@@ -447,11 +448,16 @@ namespace CapriDesktop
             typing = Check("Typing sound", 28, 458, 328, delegate { if (!syncing) capri.ToggleTyping(); });
             typing.Hint = "When she types";
             typing.HintFont = Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point);
+            typing.AccessibleName = "Typing sound. A soft typing sound while her text replies type out";
             // Shares Typing sound's row, and only while her HD voice is on (Lachy, 29 Oct). Off out of the box.
             hdGames = Check("Free voice in games", 186, 458, 170, delegate { if (!syncing) capri.ToggleHdGameRest(); });
             hdGames.AccessibleName = "Free voice in games: while a game or video is full screen, her free voice talks instead of her HD voice, so the game gets the graphics card";
             hdGames.Visible = false;
             Caption("MOVES >", 28, 494, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
+            // Her mini player shows what's playing while music plays, with her perched on it. It sits in MOVES' heading row,
+            // like Stay on my model beside BRAIN, since Free voice in games takes the rest of Typing sound's row while HD is on.
+            miniPlayer = Check("Mini player", 186, 492, 170, delegate { if (!syncing) capri.TogglePlayer(); });
+            miniPlayer.AccessibleName = "Mini player. It shows what's playing while music plays, and she sits on it";
             Caption("Wander", 28, 523, Font, Look.Dim);
             wander = PageSlider(WanderNames, 516, "How much she wanders");
             wanderName = Caption("Off", 292, 523, Font, Look.Ink);
@@ -613,6 +619,10 @@ namespace CapriDesktop
             typing.Invalidate();
             syncing = was;
         }
+
+        internal bool PlayerShown { get { return miniPlayer.Checked; } }
+
+        internal void FlipPlayer() { miniPlayer.Checked = !miniPlayer.Checked; }
 
         internal string HabitsStatus { get { return startup.Checked ? "startup" : "-"; } }
 
@@ -956,6 +966,7 @@ namespace CapriDesktop
             intro.Checked = capri.Intro;
             typing.Checked = capri.TypingSound;
             ShowHdGames();
+            miniPlayer.Checked = capri.PlayerOn;
             replies.Value = capri.Wordiness;
             repliesName.Text = Lengths[replies.Value];
             recall.Value = Math.Max(0, Array.IndexOf(Recalls, capri.Recall));
