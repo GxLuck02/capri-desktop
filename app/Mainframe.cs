@@ -100,9 +100,12 @@ namespace CapriDesktop
         private bool off;
         private bool eleven;
         private bool wantEleven;
+        // Fish Audio or OpenAI, picked under CLOUD VOICE before it's set up: the row and its menu stay up until another row is picked.
+        private string wantCloud;
         private const string Eleven = Companion.ElevenLabs;
-        private static readonly string[] Clouds = { Eleven, "Fish Audio", "OpenAI" };
-        private string cloudName = Eleven;
+        // Fish Audio comes first: its free tier needs no credits.
+        private static readonly string[] Clouds = { "Fish Audio", Eleven, "OpenAI" };
+        private string cloudName = Clouds[0];
         private readonly Key cloudPick;
         private readonly ContextMenuStrip cloudMenu;
         private readonly Key cloudVoice;
@@ -316,7 +319,7 @@ namespace CapriDesktop
                 string each = name;
                 cloudMenu.Items.Add(Choice(each, false, delegate { PickCloud(each); }));
             }
-            cloudPick = Lower(Make(Eleven, 28, KeyAt, 100, 28, delegate { cloudMenu.Show(cloudPick, new Point(0, cloudPick.Height)); }));
+            cloudPick = Lower(Make(Clouds[0], 28, KeyAt, 100, 28, delegate { cloudMenu.Show(cloudPick, new Point(0, cloudPick.Height)); }));
             cloudPick.Chevron = true;
             cloudPick.AccessibleName = "Cloud voice service";
             keyEntry = Lower(Input(136, KeyAt, 136));
@@ -1265,8 +1268,9 @@ namespace CapriDesktop
             bool served = !off && !eleven && capri.ServerPicked, inCloud = served && capri.ServerInCloud;
             if (eleven) cloudName = Eleven;
             else if (inCloud) cloudName = capri.ServerCloudName;
+            else if (wantCloud != null) cloudName = wantCloud;
             else cloudName = capri.CloudChoice;
-            voiceRow = off ? 0 : eleven || inCloud ? 3 : served ? 2 : 1;
+            voiceRow = off ? 0 : eleven || inCloud || wantCloud != null ? 3 : served ? 2 : 1;
             for (int i = 0; i < voiceRungs.Length; i++) voiceRungs[i].Checked = i == voiceRow;
             bool cloud = voiceRow == 3, elevenLabs = cloud && cloudName == Eleven;
             cloudPick.Visible = cloud;
@@ -1293,7 +1297,7 @@ namespace CapriDesktop
         private void PickRow(int row)
         {
             if (row == 0) PickSilent();
-            else if (row == 1) { wantEleven = false; capri.UsePrebuilt(); }
+            else if (row == 1) { wantEleven = false; wantCloud = null; capri.UsePrebuilt(); }
             else if (row == 2) PickModel(false, null);
             else PickCloud(cloudName);
         }
@@ -1306,22 +1310,25 @@ namespace CapriDesktop
             else PickModel(true, CloudApi(name));
         }
 
-        // One they set up before comes back at once. Otherwise the voice model panel opens with this row's choices.
+        // One they set up before comes back at once. Otherwise the voice model panel opens with this row's choices, and a cloud
+        // service stays picked under CLOUD VOICE, so its menu can still switch to ElevenLabs if they close the panel.
         private void PickModel(bool cloud, string api)
         {
             if (capri.HasServer(cloud, api))
             {
                 wantEleven = false;
+                wantCloud = null;
                 capri.UseSavedServer(cloud);
             }
             else
             {
+                wantCloud = cloud ? cloudName : null;
                 OpenServer(cloud, api);
                 VoiceTier();
             }
         }
 
-        private static string CloudApi(string name) { return name == Clouds[1] ? VoiceServer.Fish : name == Clouds[2] ? VoiceServer.OpenAi : null; }
+        private static string CloudApi(string name) { return name == Clouds[0] ? VoiceServer.Fish : name == Clouds[2] ? VoiceServer.OpenAi : null; }
 
         // ElevenLabs' setup guide, or the voice model panel, whose note says where Fish Audio's and OpenAI's keys come from.
         private void CloudGuide()
@@ -1354,12 +1361,14 @@ namespace CapriDesktop
         internal void PickVoice(bool paid)
         {
             wantEleven = paid;
+            wantCloud = null;
             capri.ChooseVoiceTier(paid);
             if (paid && !keySaved) keyEntry.Box.Focus();
         }
 
         internal void PickSilent()
         {
+            wantCloud = null;
             capri.Silence();
         }
 
@@ -1507,6 +1516,16 @@ namespace CapriDesktop
         internal string ServerChoices { get { return sheet.Choices; } }
 
         internal string CloudPicked { get { return cloudName; } }
+
+        internal string CloudMenu
+        {
+            get
+            {
+                List<string> names = new List<string>();
+                foreach (ToolStripItem item in cloudMenu.Items) names.Add(item.Text);
+                return string.Join(", ", names);
+            }
+        }
 
         internal string CloudShown { get { return (cloudPick.Visible ? cloudPick.Text : "-") + " | " + (cloudVoice.Visible ? cloudVoice.Text : "-") + " | " + (customVoice.Visible ? customVoice.Text : "-"); } }
 
@@ -2339,6 +2358,7 @@ namespace CapriDesktop
             private void Use()
             {
                 owner.wantEleven = false;
+                owner.wantCloud = null;
                 owner.capri.UseVoiceServer(url.Box.Text, model.Box.Text, speaker.Box.Text, key.Box.Text, picked.Api);
                 Close();
             }

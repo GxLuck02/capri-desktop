@@ -4661,14 +4661,16 @@ namespace CapriDesktop
         internal const string ElevenLabs = "ElevenLabs";
 
         // The service CLOUD VOICE's menu shows while another row is in use: the one used there last. Before they've used one in
-        // this version, ElevenLabs if its key is saved, or else the Fish Audio or OpenAI voice they set up.
+        // this version, ElevenLabs if its key is saved, the Fish Audio or OpenAI voice they set up, or else Fish Audio, whose
+        // free tier needs no credits.
         internal string CloudChoice
         {
             get
             {
                 if (preferences.CloudVoice != null) return preferences.CloudVoice;
+                if (voice.Key != null) return ElevenLabs;
                 string api, url, model, speaker, tail;
-                return voice.Key == null && SavedServer(true, out api, out url, out model, out speaker, out tail) ? VoiceServer.CloudName(api) : ElevenLabs;
+                return VoiceServer.CloudName(SavedServer(true, out api, out url, out model, out speaker, out tail) ? api : VoiceServer.Fish);
             }
         }
 
@@ -13671,6 +13673,7 @@ namespace CapriDesktop
                             Func<bool> vsTalking = delegate { return reply == TestLine && voiceUntil > 0; };
                             string vsMenu, vsOpened, vsKokoro, vsTyped, vsTested, vsUsedNote, vsUsedMenu, vsSliders, vsPage, vsFellNote, vsFellState, vsOnceNote, vsKept, vsForgot, vsSly, vsTestBody, vsUseBody;
                             string vsCloudChoices, vsCloudSwitch, vsCustomChoices, vsCustomRows, vsCloudRows, vsCloudKept, vsAsideTail = null, vsAsideUrl = null, vsBackRows, vsCloudLast, vsCloudFirst, vsCloudKeyed;
+                            string vsCloudPending, vsCloudFresh;
                             bool vsHasBoth, vsSwapped, vsSwappedBack, vsRowBack;
                             string vsHostBody, vsFishNote, vsFileShown, vsFileTaken, vsFishList, vsListBody, vsFishPicked, vsCloned, vsClonedBody, vsFileClip, vsHostTest = null;
                             bool vsTestSpoke, vsTestUnsaved, vsUseSpoke, vsFellSpoke, vsOnceSpoke, vsSealed, vsRound, vsOldRound, vsSlyOff, vsHdOff, vsHostDropped;
@@ -13698,10 +13701,12 @@ namespace CapriDesktop
                                         vsBoth.Save(Path.Combine(output, "mainframe-voice-prebuilt-menu.png"), ImageFormat.Png);
                                     }
                                 }
-                                // Fish Audio under CLOUD VOICE, with nothing set up in the cloud yet, opens the panel with only the cloud's choices.
+                                // Fish Audio under CLOUD VOICE, with nothing set up in the cloud yet, opens the panel with only the cloud's choices,
+                                // and the row stays picked with its menu up, which lists Fish Audio first.
                                 mainframe.PickCloudVoice("Fish Audio");
                                 vsOpened = mainframe.ServerShown;
                                 vsCloudChoices = mainframe.ServerChoices;
+                                vsCloudPending = mainframe.VoiceTierStatus + " / " + mainframe.CloudShown + " / " + mainframe.CloudMenu;
                                 Form vsFresh = mainframe.ServerPanel;
                                 using (Bitmap vsPicture = new Bitmap(vsFresh.Width, vsFresh.Height))
                                 {
@@ -13899,7 +13904,7 @@ namespace CapriDesktop
                                     && Voice.Unprotect(preferences.AsideKey) == "fish-aside-4321" && preferences.AsideSpeaker == "0123456789abcdef0123456789abcdef";
                                 ShowVoice();
                                 // CLOUD VOICE's menu keeps the service used there last while another row is in use. Before one's been used,
-                                // a Fish Audio or OpenAI voice they set up shows when there's no ElevenLabs key.
+                                // a Fish Audio or OpenAI voice they set up shows when there's no ElevenLabs key, and with neither, Fish Audio.
                                 string vsElevenKeyWas = voice.Key;
                                 preferences.CloudVoice = "OpenAI";
                                 ShowVoice();
@@ -13907,6 +13912,10 @@ namespace CapriDesktop
                                 preferences.CloudVoice = null;
                                 voice.Key = null;
                                 vsCloudFirst = CloudChoice;
+                                string vsAsideWas = preferences.AsideUrl;
+                                preferences.AsideUrl = null;
+                                vsCloudFresh = CloudChoice;
+                                preferences.AsideUrl = vsAsideWas;
                                 voice.Key = "eleven-test-key";
                                 vsCloudKeyed = CloudChoice;
                                 voice.Key = vsElevenKeyWas;
@@ -13971,9 +13980,10 @@ namespace CapriDesktop
                             if (!vsHasBoth || vsAsideUrl != VoiceServer.FishCloud || vsAsideTail != "4321" || !vsSwapped || !vsSwappedBack
                                 || vsCloudRows != "CLOUD VOICE | Fish Audio | - | fold 36 / Fish Audio | Voice, key and model... | -" || vsFishNote != "Fish Audio at api.fish.audio." + (kokoro.Installed ? " Her free voice fills in if it's down." : "")
                                 || vsCloudKept != "Fish Audio · cloud | " + VoiceServer.FishCloud + " | " + VoiceServer.FishFree + " | 0123456789abcdef0123456789abcdef | Key saved, ends 4321 | Forget |  / " + vsCloudOnly
-                                || !vsRowBack || vsBackRows != "CUSTOM LOCAL | - | voice model | fold 36" || vsCloudLast != "OpenAI" || vsCloudFirst != "Fish Audio" || vsCloudKeyed != ElevenLabs)
+                                || !vsRowBack || vsBackRows != "CUSTOM LOCAL | - | voice model | fold 36" || vsCloudLast != "OpenAI" || vsCloudFirst != "Fish Audio" || vsCloudKeyed != ElevenLabs
+                                || vsCloudFresh != "Fish Audio" || vsCloudPending != "CLOUD VOICE | Fish Audio | - | fold 36 / Fish Audio | Set up Fish Audio... | - / Fish Audio, ElevenLabs, OpenAI")
                                 throw new Exception("CUSTOM LOCAL and CLOUD VOICE didn't each keep their own: " + vsHasBoth + " / " + vsAsideUrl + " / " + vsAsideTail + " / swapped " + vsSwapped + ", back " + vsSwappedBack + " / " + vsCloudRows + " / " + vsFishNote + " / " + vsCloudKept + " / row back " + vsRowBack + " / " + vsBackRows
-                                    + " / cloud menu " + vsCloudLast + ", " + vsCloudFirst + ", " + vsCloudKeyed);
+                                    + " / cloud menu " + vsCloudLast + ", " + vsCloudFirst + ", " + vsCloudKeyed + ", fresh " + vsCloudFresh + " / " + vsCloudPending);
                             // A server that isn't running.
                             vsServer.Stop();
                             byte[] vsGone = vsOff(vsVoice.Or(vsFree, vsNoted), "Hello?");
@@ -13983,7 +13993,7 @@ namespace CapriDesktop
                             catch (VoiceException vsError) { vsAlone = vsError.Message; }
                             if (vsGone != vsStandIn || vsGoneNote != "Can't reach your voice server at " + vsWhere + ". Is it running?" + VoiceServer.Filling || vsAlone != "Can't reach your voice server at " + vsWhere + ". Is it running?" || vsNotes.Count != 5)
                                 throw new Exception("A voice server that isn't running didn't say so: " + vsGoneNote + " / " + vsAlone + " / " + vsNotes.Count + " notes");
-                            checks.Add("PASS voice models: Fish Audio or OpenAI under CLOUD VOICE opens a panel with only those two, starting on Fish Audio's cloud with its free tier's model, and CUSTOM LOCAL's Set up opens one with only a voice model file, Fish Speech on your PC, Kokoro or any OpenAI-style server, which her own voices' menu no longer lists; each row keeps its own setup and key (one waits aside while the other is in use, and its panel shows only its own key), and picking the row brings it back and says her check line through it; CLOUD VOICE's menu keeps the service used there last; a voice model file (Piper, Kokoro or Kitten for sherpa-onnx, told apart by its files) asks for its folder, language and speaker with Browse in place of a key, and a .tar.bz2 or .zip of one is unpacked into her models folder (one with no model is refused in plain words); Test speaks through it before anything's saved and Use this server keeps it, the key sealed like her other keys (a blank box keeps it for that server only, Forget drops it); she POSTs only the words to /v1/audio/speech with a Bearer key when there is one, and to Fish Audio's /v1/tts with the voice's ID from its fish.audio link and its model in a header; a picked Fish Audio shows by name; a 16-bit 22 kHz WAV, a float WAV streamed in chunks" + (vsMp3 != null ? " and an MP3" : "") + " become her 24 kHz voice; her pitch moves it and its own robot and glitch (saved apart, shown as · server) change it; a 404, a 500, a refused key, no answer within its 20 s (0.8 s here) or no server at all hand the line to her free voice and say why once; picking one of her own styles or HD turns it off and keeps it saved");
+                            checks.Add("PASS voice models: Fish Audio or OpenAI under CLOUD VOICE opens a panel with only those two, starting on Fish Audio's cloud with its free tier's model, and CUSTOM LOCAL's Set up opens one with only a voice model file, Fish Speech on your PC, Kokoro or any OpenAI-style server, which her own voices' menu no longer lists; each row keeps its own setup and key (one waits aside while the other is in use, and its panel shows only its own key), and picking the row brings it back and says her check line through it; CLOUD VOICE's menu lists Fish Audio first and starts on it when there's no ElevenLabs key, stays up with Set up Fish Audio... while nothing's set up, and keeps the service used there last; a voice model file (Piper, Kokoro or Kitten for sherpa-onnx, told apart by its files) asks for its folder, language and speaker with Browse in place of a key, and a .tar.bz2 or .zip of one is unpacked into her models folder (one with no model is refused in plain words); Test speaks through it before anything's saved and Use this server keeps it, the key sealed like her other keys (a blank box keeps it for that server only, Forget drops it); she POSTs only the words to /v1/audio/speech with a Bearer key when there is one, and to Fish Audio's /v1/tts with the voice's ID from its fish.audio link and its model in a header; a picked Fish Audio shows by name; a 16-bit 22 kHz WAV, a float WAV streamed in chunks" + (vsMp3 != null ? " and an MP3" : "") + " become her 24 kHz voice; her pitch moves it and its own robot and glitch (saved apart, shown as · server) change it; a 404, a 500, a refused key, no answer within its 20 s (0.8 s here) or no server at all hand the line to her free voice and say why once; picking one of her own styles or HD turns it off and keeps it saved");
                             string earsRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "ears-test");
                             if (Directory.Exists(earsRoot)) Directory.Delete(earsRoot, true);
                             string earsSource = Path.Combine(earsRoot, "source");
