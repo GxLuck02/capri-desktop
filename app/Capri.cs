@@ -511,6 +511,9 @@ namespace CapriDesktop
     internal sealed class Clip
     {
         internal readonly Bitmap Strip;
+        // her artist's facing-left frames, for the clips that have them (her perches): her red arm and leg swap sides, so a
+        // mirror of Strip isn't her. They're stored mirrored back onto Strip's cells and drawn mirrored like the rest.
+        internal readonly Bitmap Flipped;
         internal readonly int Count;
         internal readonly double Fps;
         internal readonly float Height;
@@ -526,11 +529,13 @@ namespace CapriDesktop
             ShiftY = shiftY;
             Strip = Companion.LoadArt("Capri.Sprite." + name + ".png");
             if (Strip == null) throw new FileNotFoundException("Capri's " + name + " animation is missing. Rebuild with assets/sprites.");
+            Flipped = Companion.LoadArt("Capri.Sprite." + name + "_flipped.png");
         }
 
         internal Clip(Clip art)
         {
             Strip = art.Strip;
+            Flipped = art.Flipped;
             Count = art.Count;
             Fps = art.Fps;
             Height = art.Height;
@@ -558,7 +563,8 @@ namespace CapriDesktop
         private readonly Clip sleep = new Clip("sleep", 16, 6, 1.11f);
         private readonly Clip wake = new Clip("wake", 13, 15, 1.11f);
         // her artist's perch: 60 frames at 30 fps. Its cells are cut to her outline, so they sit 26 px left of her
-        // square's middle and start 36 px down it, in 384 px art, which leaves room for her longer dangling legs.
+        // square's middle and start 36 px down it, in 384 px art, which leaves room for her longer dangling legs. Facing left,
+        // every perch clip shows her artist's flipped set (the _flipped strips) on the same cells.
         private const float PerchShiftX = -26f / 384, PerchShiftY = 36f / 384;
         private readonly Clip perch = new Clip("perch", 60, 30, 1, PerchShiftX, PerchShiftY);
         private readonly Clip perchBlink = new Clip("perch_blink", 4, 30, 1, PerchShiftX, PerchShiftY);
@@ -5958,9 +5964,12 @@ namespace CapriDesktop
             if (clip == perch && blinkWith != null && following >= PerchBlinkFrom && following < PerchBlinkFrom + blinkWith.Count) { after = blinkWith; following -= PerchBlinkFrom; }
             int width = shown.Strip.Width / shown.Count;
             if (inBetween == null) inBetween = new Bitmap(width, shown.Strip.Height, PixelFormat.Format32bppPArgb);
-            Mix(shown.Strip, cell, after.Strip, following, perchMix, inBetween);
+            Mix(Art(shown), cell, Art(after), following, perchMix, inBetween);
             return inBetween;
         }
+
+        // The strip she's drawn from: facing left, a clip's flipped art when it has some.
+        private Bitmap Art(Clip shown) { return facingLeft && shown.Flipped != null ? shown.Flipped : shown.Strip; }
 
         // Cell a of one strip mixed with weight 256ths of cell b of another, into a spare cell. Her strips are premultiplied,
         // so a straight mix of each channel fades her edges right too.
@@ -6056,7 +6065,7 @@ namespace CapriDesktop
             graphics.TranslateTransform(Width / 2f, Height / 2f + breathe);
             graphics.RotateTransform(tilt + (float)leanAngle);
             if (facingLeft) graphics.ScaleTransform(-1, 1);
-            Bitmap strip = tween ?? shown.Strip;
+            Bitmap strip = tween ?? Art(shown);
             int width = shown.Strip.Width / shown.Count;
             if (tween != null) cell = 0;
             float tall = preferences.Size * shown.Height;
@@ -6289,7 +6298,11 @@ namespace CapriDesktop
                 box.Dispose();
                 typer.Dispose();
                 mainframe.Dispose();
-                foreach (Clip owned in new[] { idle, blink, blinkGlitch, grin, glitch, dangle, sleep, wake, perch, perchBlink, perchBlinkGlitch, perchGlitch, mouth }) owned.Strip.Dispose();
+                foreach (Clip owned in new[] { idle, blink, blinkGlitch, grin, glitch, dangle, sleep, wake, perch, perchBlink, perchBlinkGlitch, perchGlitch, mouth })
+                {
+                    owned.Strip.Dispose();
+                    if (owned.Flipped != null) owned.Flipped.Dispose();
+                }
                 if (frame != null) frame.Dispose();
                 if (inBetween != null) inBetween.Dispose();
             }
@@ -8242,6 +8255,49 @@ namespace CapriDesktop
                                 sheet.Save(Path.Combine(output, "clips.png"), ImageFormat.Png);
                             }
                             checks.Add("PASS all 12 clips draw: idle, blinks, grin, glitch, drag, sleep, wake and perch, plus the talking mouth");
+                            // Facing left, her perches show her artist's flipped frames: the outline of the old mirrored perch, with her
+                            // red arm and leg on the other side. The old look is the normal cell drawn as a tween, the same way.
+                            foreach (Clip seated in new[] { perch, perchBlink, perchBlinkGlitch, perchGlitch, perchDance, perchArrive, perchLeave })
+                                if (seated.Flipped == null || seated.Flipped.Size != seated.Strip.Size) throw new Exception("A perch clip has no flipped art the size of its own.");
+                            bool facedWas = facingLeft, motionWas = preferences.Motion;
+                            int outline = 0, sameOutline = 0, recoloured = 0;
+                            try
+                            {
+                                preferences.Motion = false;
+                                facingLeft = true;
+                                int perchWide = perch.Strip.Width / perch.Count, perchHigh = perch.Strip.Height;
+                                int[] normalCell = new int[perchWide * perchHigh];
+                                Pixels(perch.Strip, new Rectangle(20 * perchWide, 0, perchWide, perchHigh), normalCell, false);
+                                using (Bitmap normal = new Bitmap(perchWide, perchHigh, PixelFormat.Format32bppPArgb))
+                                using (Bitmap right = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb))
+                                using (Bitmap left = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb))
+                                {
+                                    Pixels(normal, new Rectangle(0, 0, perchWide, perchHigh), normalCell, true);
+                                    using (Graphics graphics = Graphics.FromImage(right)) Draw(graphics, perch, 20, -1, normal);
+                                    using (Graphics graphics = Graphics.FromImage(left)) Draw(graphics, perch, 20);
+                                    int[] mirrored = new int[Width * Height], drawn = new int[Width * Height];
+                                    Pixels(right, new Rectangle(0, 0, Width, Height), mirrored, false);
+                                    Pixels(left, new Rectangle(0, 0, Width, Height), drawn, false);
+                                    for (int i = 0; i < drawn.Length; i++)
+                                    {
+                                        int mirrorAlpha = (mirrored[i] >> 24) & 255, leftAlpha = (drawn[i] >> 24) & 255;
+                                        if (mirrorAlpha < 128 && leftAlpha < 128) continue;
+                                        outline++;
+                                        if (Math.Abs(mirrorAlpha - leftAlpha) < 64) sameOutline++;
+                                        int shift = 0;
+                                        for (int channel = 0; channel < 24; channel += 8) shift += Math.Abs(((mirrored[i] >> channel) & 255) - ((drawn[i] >> channel) & 255));
+                                        if (mirrorAlpha >= 128 && leftAlpha >= 128 && shift > 120) recoloured++;
+                                    }
+                                    using (Bitmap pair = new Bitmap(Width * 2, Height, PixelFormat.Format32bppArgb))
+                                    {
+                                        using (Graphics graphics = Graphics.FromImage(pair)) { graphics.DrawImage(right, 0, 0); graphics.DrawImage(left, Width, 0); }
+                                        pair.Save(Path.Combine(output, "perch-left.png"), ImageFormat.Png);
+                                    }
+                                }
+                            }
+                            finally { facingLeft = facedWas; preferences.Motion = motionWas; }
+                            if (sameOutline < outline * 98 / 100 || recoloured < outline * 3 / 100) throw new Exception("Facing left, her perch wasn't her artist's flipped frame: " + sameOutline + " of " + outline + " outline pixels match the mirror, " + recoloured + " recoloured.");
+                            checks.Add("PASS perch facing left: all 7 perch clips have her artist's flipped art the size of their own, drawn in the mirrored outline (" + sameOutline * 100 / outline + "% matching) with her arm and leg swapped (" + recoloured * 100 / outline + "% recoloured)");
                             using (Font display = Look.Mono(14, FontStyle.Bold))
                             using (Font slanted = Look.Mono(9f, FontStyle.Italic, GraphicsUnit.Point))
                                 if (display.Name != "Share Tech Mono" || slanted.Name != "Share Tech Mono") throw new Exception("Embedded font did not load: " + display.Name);
