@@ -20,7 +20,7 @@ namespace CapriDesktop
 {
     internal static class Program
     {
-        // Set when she closed while starting last time, so this start moved settings.json aside.
+        // Set when she closed while starting twice in a row, so this start moved settings.json aside and kept her keys.
         internal static bool StartedFresh;
         internal const string StartMarker = "starting.on";
         private static string lastCrash;
@@ -72,8 +72,9 @@ namespace CapriDesktop
             }
         }
 
-        // A start that never settled means she crashed while starting. Then settings.json moves aside, the same fix as
-        // deleting it, and she starts fresh. True when that happened.
+        // A start that never settled means she closed while starting: a crash, but also Task Manager, an antivirus, a stuck
+        // shutdown or the power going off in her first 15 s. Two of those in a row move settings.json aside, the same fix as
+        // deleting it, and she starts fresh with her keys kept (JustAxolotl lost theirs to one). True when that happened.
         internal static bool Starting(string data)
         {
             string marker = Path.Combine(data, StartMarker);
@@ -82,19 +83,54 @@ namespace CapriDesktop
             try
             {
                 Directory.CreateDirectory(data);
-                if (File.Exists(marker) && File.Exists(settings))
+                // The marker's second line counts the unfinished starts before the one that wrote it. One from before 0.7.6 has none.
+                int unfinished = 0;
+                if (File.Exists(marker))
+                {
+                    string[] lines = File.ReadAllLines(marker);
+                    int earlier;
+                    unfinished = 1 + (lines.Length > 1 && int.TryParse(lines[1], out earlier) && earlier > 0 ? earlier : 0);
+                }
+                if (unfinished >= 2 && File.Exists(settings))
                 {
                     string kept = Path.Combine(data, "settings.crashed.json");
                     if (File.Exists(kept)) File.Delete(kept);
                     File.Move(settings, kept);
+                    KeepKeys(kept, settings);
                     fresh = true;
-                    Brain.Log("startup", -1, "Capri closed while starting last time, so she started with fresh settings. The old ones are in settings.crashed.json.");
+                    unfinished = 0;
+                    Brain.Log("startup", -1, "Capri closed while starting twice in a row, so she started with fresh settings and kept your keys. The old ones are in settings.crashed.json.");
                 }
-                File.WriteAllText(marker, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                else if (unfinished == 1) Brain.Log("startup", -1, "Capri closed while starting last time. If it happens again, she starts with fresh settings and keeps your keys.");
+                File.WriteAllText(marker, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + Environment.NewLine + unfinished);
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
             return fresh;
+        }
+
+        // A fresh start keeps what can't crash her: her brain and voice keys with what each one is for (model, voice, agent,
+        // server), and her own keys to talk, mute, type, hide and go quiet. The rest starts like a new install. Settings that
+        // can't be read keep nothing.
+        private static void KeepKeys(string crashed, string settings)
+        {
+            Preferences old;
+            try { using (FileStream stream = File.OpenRead(crashed)) old = (Preferences)new DataContractJsonSerializer(typeof(Preferences)).ReadObject(stream); }
+            catch (Exception) { return; }
+            Preferences fresh = new Preferences { Language = Brain.SystemLanguage(System.Globalization.CultureInfo.CurrentUICulture) };
+            fresh.VoiceKey = old.VoiceKey; fresh.VoiceId = old.VoiceId; fresh.VoiceModel = old.VoiceModel;
+            fresh.AgentId = old.AgentId; fresh.AgentVersion = old.AgentVersion; fresh.AgentPolyglot = old.AgentPolyglot; fresh.AgentPersonality = old.AgentPersonality;
+            fresh.TextKey = old.TextKey; fresh.TextModel = old.TextModel;
+            fresh.NvidiaKey = old.NvidiaKey; fresh.NvidiaModel = old.NvidiaModel;
+            fresh.PaidKey = old.PaidKey; fresh.PaidModel = old.PaidModel;
+            fresh.ServerUrl = old.ServerUrl; fresh.ServerApi = old.ServerApi; fresh.ServerModel = old.ServerModel; fresh.ServerSpeaker = old.ServerSpeaker; fresh.ServerKey = old.ServerKey;
+            fresh.AsideUrl = old.AsideUrl; fresh.AsideApi = old.AsideApi; fresh.AsideModel = old.AsideModel; fresh.AsideSpeaker = old.AsideSpeaker; fresh.AsideKey = old.AsideKey;
+            fresh.CloudVoice = old.CloudVoice;
+            fresh.TalkMods = old.TalkMods; fresh.TalkVk = old.TalkVk; fresh.MuteMods = old.MuteMods; fresh.MuteVk = old.MuteVk;
+            fresh.TypeMods = old.TypeMods; fresh.TypeVk = old.TypeVk; fresh.HideMods = old.HideMods; fresh.HideVk = old.HideVk;
+            fresh.QuietMods = old.QuietMods; fresh.QuietVk = old.QuietVk;
+            try { using (FileStream stream = File.Create(settings)) new DataContractJsonSerializer(typeof(Preferences)).WriteObject(stream, fresh); }
+            catch (Exception) { try { File.Delete(settings); } catch (Exception) { } }
         }
 
         // A crash goes in errors.txt: what it was and where in her code, so Copy error details shows it.
@@ -575,8 +611,9 @@ namespace CapriDesktop
         // every perch clip shows her artist's flipped set (the _flipped strips) on the same cells.
         private const float PerchShiftX = -26f / 384, PerchShiftY = 36f / 384;
         private readonly Clip perch = new Clip("perch", 60, 30, 1, PerchShiftX, PerchShiftY);
-        private readonly Clip perchBlink = new Clip("perch_blink", 4, 30, 1, PerchShiftX, PerchShiftY);
-        private readonly Clip perchBlinkGlitch = new Clip("perch_blink_glitch", 4, 30, 1, PerchShiftX, PerchShiftY);
+        // her artist's own blink, frames 29 to 36 of the blink set, and the same with a glitch around her eye.
+        private readonly Clip perchBlink = new Clip("perch_blink", 8, 30, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchBlinkGlitch = new Clip("perch_blink_glitch", 8, 30, 1, PerchShiftX, PerchShiftY);
         private readonly Clip perchGlitch = new Clip("perch_glitch", 10, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip mouth = new Clip("mouth", 5, 12, 1.11f);
         private readonly Clip walk = new Clip("walk", 12, 12, 1.11f);
@@ -919,7 +956,8 @@ namespace CapriDesktop
         // mouse and keyboard until a click, a drag, talking to her or "wake up". Quiet the same way as her quiet key.
         private bool napAsked, napping;
         private const int BlinkFrom = 9;
-        private const int PerchBlinkFrom = 34;
+        // Her perch blinks where her artist drew it: loop frames 29 to 36 (index 28 on).
+        private const int PerchBlinkFrom = 28;
         // Her perch fps choices. The art is 30 fps: slower holds each frame longer, faster mixes in-betweens of neighbouring frames.
         internal static readonly int[] PerchRates = { 10, 15, 20, 30, 40, 50, 60 };
         internal bool TestFailed;
@@ -1201,7 +1239,7 @@ namespace CapriDesktop
                 balloonPage = null;
                 balloonUpdate = false;
                 balloonMainframe = true;
-                tray.ShowBalloonTip(12000, "Capri started fresh", "She closed while starting last time, so her settings were reset, keys too. The old ones are in settings.crashed.json.", ToolTipIcon.Warning);
+                tray.ShowBalloonTip(12000, "Capri started fresh", "She closed while starting twice in a row, so her settings were reset. Your keys stayed. The old settings are in settings.crashed.json.", ToolTipIcon.Warning);
             }
         }
 
@@ -2552,11 +2590,12 @@ namespace CapriDesktop
 
         internal string Language { get { return Brain.Language ?? "English"; } }
 
+        // A picked English is saved as English, so she listens in English. Never picked, it stays empty (agir's Japanese PC).
         internal void SetLanguage(string language)
         {
             string code = Brain.LanguageCode(language);
             Brain.Language = code == "en" ? null : language;
-            preferences.Language = code == "en" ? null : language;
+            preferences.Language = code == "en" ? "English" : language;
             brain.Forget();
             SavePreferences();
             PointEars();
@@ -4347,11 +4386,15 @@ namespace CapriDesktop
             });
         }
 
+        // The language she listens for: the one picked in Settings, English included. Left on English without ever being
+        // picked, she listens for Windows' language, for people who never changed her from English but speak their own.
+        internal static string Listening(string picked, string windows) { return LocalEars.Spoken(Brain.LanguageCode(picked), picked == null ? windows : null); }
+
         // Parakeet hears English and 24 other European languages; the rest keep Windows speech, which knows them.
         private void PointEars()
         {
             string was = parakeet.Model;
-            parakeet.Language = LocalEars.Spoken(Brain.LanguageCode(preferences.Language), System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
+            parakeet.Language = Listening(preferences.Language, System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
             if (parakeet.Model == was || !chatting || !local) return;
             Dictation closing = dictation;
             dictation = null;
@@ -5193,6 +5236,7 @@ namespace CapriDesktop
             Dictation opened;
             try { opened = Dictation.Make(); }
             catch (Exception error) { HearLater("Windows speech recognition isn't on this PC: " + Voice.Short(error.Message)); return; }
+            opened.Language = preferences.Language;
             dictation = opened;
             opened.Heard = delegate(string text) { OnUi(delegate { if (dictation == opened) HeardDictation(text); }); };
             opened.Lost = delegate(string problem) { OnUi(delegate { if (dictation == opened) DictationLost(problem); }); };
@@ -7407,13 +7451,14 @@ namespace CapriDesktop
                                     int oldCell = Advance(fpsNow), oldMix = perchMix;
                                     if (fastCell != 33 || fastMix != 128 || oldCell != 30 || oldMix != 0) framesWrong = "her perch advanced to " + fastCell + " + " + fastMix + " at 60 fps and " + oldCell + " + " + oldMix + " at 30";
                                     if (framesWrong != null) throw new Exception("Perch frames went wrong: " + framesWrong);
-                                    // Halfway from loop frame 33 to the blink: every channel of every pixel is the rounded average of the two.
+                                    // Halfway from loop frame 27 to the blink: every channel of every pixel is the rounded average of the two.
                                     int cellWide = perch.Strip.Width / perch.Count, cellHigh = perch.Strip.Height;
                                     int[] loopPixels = new int[cellWide * cellHigh], blinkPixels = new int[loopPixels.Length], mixPixels = new int[loopPixels.Length];
-                                    Pixels(perch.Strip, new Rectangle(33 * cellWide, 0, cellWide, cellHigh), loopPixels, false);
+                                    if (PerchBlinkFrom != 28 || perchBlink.Count != 8 || perchBlinkGlitch.Count != 8 || perchBlink.Strip.Width / perchBlink.Count != cellWide || perchBlink.Strip.Height != cellHigh) throw new Exception("Her perch blink isn't her artist's frames 29 to 36: " + PerchBlinkFrom + " / " + perchBlink.Count + " cells of " + perchBlink.Strip.Width / perchBlink.Count);
+                                    Pixels(perch.Strip, new Rectangle(27 * cellWide, 0, cellWide, cellHigh), loopPixels, false);
                                     Pixels(perchBlink.Strip, new Rectangle(0, 0, cellWide, cellHigh), blinkPixels, false);
                                     perchMix = 128;
-                                    Pixels(Tween(perch, 33, 34), new Rectangle(0, 0, cellWide, cellHigh), mixPixels, false);
+                                    Pixels(Tween(perch, 27, 28), new Rectangle(0, 0, cellWide, cellHigh), mixPixels, false);
                                     int mixMisses = 0, blinkChanged = 0;
                                     for (int i = 0; i < mixPixels.Length; i++)
                                     {
@@ -8366,29 +8411,45 @@ namespace CapriDesktop
                                 if (Directory.Exists(startCheck)) Directory.Delete(startCheck, true);
                                 Directory.CreateDirectory(startCheck);
                                 Brain.LogPath = Path.Combine(startCheck, "errors.txt");
-                                File.WriteAllText(Path.Combine(startCheck, "settings.json"), "{\"Size\":300}");
+                                string startSettings = Path.Combine(startCheck, "settings.json"), startMark = Path.Combine(startCheck, Program.StartMarker);
+                                File.WriteAllText(startSettings, "{\"Size\":300,\"Watch\":true,\"NvidiaKey\":\"kept-nvidia\",\"PaidKey\":\"kept-paid\",\"VoiceKey\":\"kept-voice-key\",\"VoiceId\":\"kept-voice\",\"ServerUrl\":\"https://api.fish.audio\",\"ServerKey\":\"kept-server\",\"TalkMods\":2,\"TalkVk\":75}");
                                 bool firstStart = Program.Starting(startCheck);
-                                bool marked = File.Exists(Path.Combine(startCheck, Program.StartMarker)) && File.Exists(Path.Combine(startCheck, "settings.json"));
+                                bool marked = File.Exists(startMark) && File.Exists(startSettings);
+                                // One start that never settled only warns: Task Manager or a stuck shutdown can do that once.
+                                bool onceClosed = Program.Starting(startCheck);
+                                bool keptOnce = File.ReadAllText(startSettings).Contains("300") && !File.Exists(Path.Combine(startCheck, "settings.crashed.json"));
                                 bool crashedStart = Program.Starting(startCheck);
-                                bool movedAside = !File.Exists(Path.Combine(startCheck, "settings.json")) && File.ReadAllText(Path.Combine(startCheck, "settings.crashed.json")).Contains("300");
-                                File.Delete(Path.Combine(startCheck, Program.StartMarker));
-                                File.WriteAllText(Path.Combine(startCheck, "settings.json"), "{\"Size\":300}");
-                                bool cleanStart = !Program.Starting(startCheck) && File.Exists(Path.Combine(startCheck, "settings.json"));
+                                Preferences afterReset;
+                                using (FileStream stream = File.OpenRead(startSettings)) afterReset = (Preferences)new DataContractJsonSerializer(typeof(Preferences)).ReadObject(stream);
+                                bool movedAside = File.ReadAllText(Path.Combine(startCheck, "settings.crashed.json")).Contains("300") && afterReset.Size == 240 && !afterReset.Watch
+                                    && afterReset.NvidiaKey == "kept-nvidia" && afterReset.PaidKey == "kept-paid" && afterReset.VoiceKey == "kept-voice-key" && afterReset.VoiceId == "kept-voice"
+                                    && afterReset.ServerUrl == "https://api.fish.audio" && afterReset.ServerKey == "kept-server" && afterReset.TalkMods == 2 && afterReset.TalkVk == 75 && afterReset.MuteVk == 0x4E
+                                    && File.ReadAllLines(startMark)[1] == "0";
+                                File.Delete(startMark);
+                                File.WriteAllText(startSettings, "{\"Size\":300}");
+                                bool cleanStart = !Program.Starting(startCheck) && File.ReadAllText(startSettings).Contains("300");
+                                // A marker from before 0.7.6 holds only the time: one unfinished start, so it warns.
+                                File.WriteAllText(startMark, "2026-10-28 10:00:00");
+                                bool oldMarker = !Program.Starting(startCheck) && File.ReadAllText(startSettings).Contains("300") && File.ReadAllLines(startMark)[1] == "1";
+                                // Settings that can't be read keep nothing, so she starts like a new install.
+                                File.WriteAllText(startSettings, "{not json");
+                                bool brokenFresh = Program.Starting(startCheck) && !File.Exists(startSettings) && File.ReadAllText(Path.Combine(startCheck, "settings.crashed.json")) == "{not json";
                                 try { throw new InvalidOperationException("Test crash " + Guid.NewGuid().ToString("N")); }
                                 catch (InvalidOperationException crash) { Program.Crashed(new System.Reflection.TargetInvocationException(crash)); Program.Crashed(crash); }
                                 string[] logged = File.ReadAllLines(Brain.LogPath);
                                 int crashLines = 0;
                                 foreach (string line in logged) if (line.Contains(" | crash | ")) crashLines++;
                                 bool crashLogged = Array.Exists(logged, delegate(string line) { return line.Contains(" | crash | - | InvalidOperationException: Test crash"); }) && Array.Exists(logged, delegate(string line) { return line.Contains(" | crash | - | at CapriDesktop."); }) && crashLines >= 2 && crashLines <= 5;
-                                bool restartLogged = Array.Exists(logged, delegate(string line) { return line.Contains("started with fresh settings"); });
-                                if (firstStart || !marked || !crashedStart || !movedAside || !cleanStart || !crashLogged || !restartLogged) throw new Exception("Crash recovery: first " + firstStart + ", marked " + marked + ", crashed start " + crashedStart + ", moved aside " + movedAside + ", clean start " + cleanStart + ", crash logged " + crashLogged + " (" + crashLines + " lines), restart logged " + restartLogged);
+                                bool restartLogged = Array.Exists(logged, delegate(string line) { return line.Contains("started with fresh settings and kept your keys"); })
+                                    && Array.Exists(logged, delegate(string line) { return line.Contains("If it happens again, she starts with fresh settings"); });
+                                if (firstStart || !marked || onceClosed || !keptOnce || !crashedStart || !movedAside || !cleanStart || !oldMarker || !brokenFresh || !crashLogged || !restartLogged) throw new Exception("Crash recovery: first " + firstStart + ", marked " + marked + ", once closed " + onceClosed + ", kept once " + keptOnce + ", crashed start " + crashedStart + ", moved aside with keys " + movedAside + ", clean start " + cleanStart + ", old marker " + oldMarker + ", broken settings " + brokenFresh + ", crash logged " + crashLogged + " (" + crashLines + " lines), restart logged " + restartLogged);
                             }
                             finally
                             {
                                 Brain.LogPath = logWas;
                                 try { Directory.Delete(startCheck, true); } catch (IOException) { }
                             }
-                            checks.Add("PASS crash recovery: a crash goes in errors.txt with where in her code it happened (once, not every tick), and if she closed while starting, the next start moves settings.json aside to settings.crashed.json, says so and starts fresh, while a clean start keeps it");
+                            checks.Add("PASS crash recovery: a crash goes in errors.txt with where in her code it happened (once, not every tick); one start that never settled (or a marker from before 0.7.6) only warns, and two in a row move settings.json aside to settings.crashed.json, say so and start fresh with her brain and voice keys, what they're for and her hotkeys kept; settings that can't be read keep nothing, and a clean start keeps them all");
                             {
                                 // A pretend Discord on its own pipe: she says hello with the app's id, shows what she's doing with her
                                 // picture and buttons, and hangs up when Show on Discord goes off.
@@ -12151,8 +12212,17 @@ namespace CapriDesktop
                             SetWordiness(0);
                             SetRecall(8);
                             SetLanguage("English");
-                            if (preferences.Wander || preferences.Language != null || Brain.Language != null || Brain.Character != Brain.Persona || Brain.Clean(new string('a', 300)).Length > 230 || Brain.Window != 4096) throw new Exception("Settings did not go back to their defaults.");
-                            if (parakeet.Language != LocalEars.Spoken("en", System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName)) throw new Exception("Going back to English did not point her ears back: " + parakeet.Language);
+                            if (preferences.Wander || preferences.Language != "English" || Brain.Language != null || Brain.Character != Brain.Persona || Brain.Clean(new string('a', 300)).Length > 230 || Brain.Window != 4096) throw new Exception("Settings did not go back to their defaults.");
+                            if (parakeet.Language != "en") throw new Exception("Picking English did not point her ears at English: " + parakeet.Language);
+                            // agir: a picked English listens in English on a Japanese PC; one never picked listens for Windows' language.
+                            string[] dictationTags = { "ja-JP", "en-US", "en-GB", "en-AU", "zh-CN", "zh-TW", "nb-NO", "fil-PH" };
+                            string listenProblem = null;
+                            if (Listening("English", "ja") != "en" || Listening(null, "ja") != "ja" || Listening("Spanish", "ja") != "es" || Listening(null, "en") != "en" || Listening("Japanese", "en") != "ja") listenProblem = "listening " + Listening("English", "ja") + " / " + Listening(null, "ja");
+                            else if (WindowsDictation.Tag("English", dictationTags, "AU") != "en-AU" || WindowsDictation.Tag("English", dictationTags, "JP") != "en-US" || WindowsDictation.Tag("Japanese", dictationTags, "AU") != "ja-JP"
+                                || WindowsDictation.Tag("Traditional Chinese", dictationTags, "US") != "zh-TW" || WindowsDictation.Tag("Simplified Chinese", dictationTags, "TW") != "zh-CN" || WindowsDictation.Tag("Norwegian", dictationTags, "NO") != "nb-NO"
+                                || WindowsDictation.Tag("Filipino", dictationTags, "PH") != "fil-PH" || WindowsDictation.Tag("French", dictationTags, "FR") != null || WindowsDictation.Tag(null, dictationTags, "AU") != null) listenProblem = "dictation " + WindowsDictation.Tag("English", dictationTags, "JP");
+                            if (listenProblem != null) throw new Exception("Her listening language went wrong: " + listenProblem);
+                            checks.Add("PASS listening language: English picked in Settings is saved as English and she listens in English even when Windows speaks another language, English never picked listens for Windows' language as before, and Windows dictation opens in the picked language for their region (en-AU before en-US, Chinese by its script, Norwegian as nb), or in Windows' own when it doesn't have it");
                             mainframe.ShowSettings(false);
                             if (mainframe.SettingsShown || mainframe.ClientSize.Height != mainTall) throw new Exception("Closing settings did not bring the main page back.");
                             string mainTabs = mainframe.TabWalk();
@@ -14667,6 +14737,7 @@ namespace CapriDesktop
                             StartLocal();
                             CheckEars(clock.Elapsed.TotalSeconds);
                             if (!chatting || !local || earsReady || !earsShut || !lateStart.Started || reply != "One sec, opening my ears.") throw new Exception("Opening Windows speech looked ready to listen: " + reply);
+                            if (lateStart.Language != preferences.Language || lateStart.Language != "English") throw new Exception("Windows speech didn't open in her picked language: " + lateStart.Language);
                             replyDone = clock.Elapsed.TotalSeconds - 120;
                             UpdateTalk(clock.Elapsed.TotalSeconds);
                             if (box.Leaving >= 0) throw new Exception("The opening-ears message faded before Windows speech started.");
