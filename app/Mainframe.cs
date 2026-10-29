@@ -197,6 +197,7 @@ namespace CapriDesktop
         private readonly Label bubbleName;
         private readonly Toggle intro;
         private readonly Toggle typing;
+        private readonly Toggle miniPlayer;
         private readonly Label sleepName;
         private readonly Label soundsName;
         private readonly Slider wander;
@@ -442,9 +443,11 @@ namespace CapriDesktop
             sounds = PageSlider(SoundNames, 422, "Sound effects volume");
             soundsName = Caption("60%", 292, 429, Font, Look.Ink);
             sounds.Changed += delegate { if (syncing) return; soundsName.Text = SoundNames[sounds.Value]; capri.SetSoundLevel(sounds.Value * 10); };
-            typing = Check("Typing sound", 28, 458, 328, delegate { if (!syncing) capri.ToggleTyping(); });
-            typing.Hint = "When she types";
-            typing.HintFont = Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point);
+            typing = Check("Typing sound", 28, 458, 150, delegate { if (!syncing) capri.ToggleTyping(); });
+            typing.AccessibleName = "Typing sound. A soft typing sound while her text replies type out";
+            // Her mini player shows what's playing while music plays, with her perched on it.
+            miniPlayer = Check("Mini player", 186, 458, 170, delegate { if (!syncing) capri.TogglePlayer(); });
+            miniPlayer.AccessibleName = "Mini player. It shows what's playing while music plays, and she sits on it";
             Caption("MOVES >", 28, 494, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
             Caption("Wander", 28, 523, Font, Look.Dim);
             wander = PageSlider(WanderNames, 516, "How much she wanders");
@@ -592,6 +595,10 @@ namespace CapriDesktop
         internal string SizeStatus { get { return sizeName.Text; } }
 
         internal bool TypingShown { get { return typing.Checked; } }
+
+        internal bool PlayerShown { get { return miniPlayer.Checked; } }
+
+        internal void FlipPlayer() { miniPlayer.Checked = !miniPlayer.Checked; }
 
         internal string HabitsStatus { get { return startup.Checked ? "startup" : "-"; } }
 
@@ -934,6 +941,7 @@ namespace CapriDesktop
             bubbleName.Text = BubbleNames[bubble.Value];
             intro.Checked = capri.Intro;
             typing.Checked = capri.TypingSound;
+            miniPlayer.Checked = capri.PlayerOn;
             replies.Value = capri.Wordiness;
             repliesName.Text = Lengths[replies.Value];
             recall.Value = Math.Max(0, Array.IndexOf(Recalls, capri.Recall));
@@ -2651,8 +2659,6 @@ namespace CapriDesktop
         private sealed class Toggle : CheckBox
         {
             private bool hot;
-            internal string Hint;
-            internal Font HintFont;
 
             internal Toggle()
             {
@@ -2679,9 +2685,6 @@ namespace CapriDesktop
                 int left = (int)(box.Right + 9 * s);
                 TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
                 TextRenderer.DrawText(graphics, Text, Font, new Rectangle(left, 0, Width - left, Height), Look.Ink, flags);
-                if (Hint == null) return;
-                int after = left + TextRenderer.MeasureText(graphics, Text, Font, Size.Empty, flags).Width + (int)(14 * s);
-                TextRenderer.DrawText(graphics, Hint, HintFont ?? Font, new Rectangle(after, 0, Math.Max(0, Width - after), Height), Look.Dim, flags);
             }
         }
     }
