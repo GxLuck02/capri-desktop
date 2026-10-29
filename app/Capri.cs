@@ -4928,6 +4928,33 @@ namespace CapriDesktop
             herPointer.Begin(Computer.HerAt);
             PassThrough();
             UpdateTalk(clock.Elapsed.TotalSeconds);
+            SayJobStart(running);
+        }
+
+        // She says her job's first line out loud too (Lachy, 29 Oct: "she doesnt verbally say 'on it, esc stops me'"), in the voice
+        // she's using, the way Answer picks it. It plays beside the job and leaves the reply the job ends with alone. Quiet,
+        // Silent, voice chat (which speaks for itself) and a line she's still saying keep it to her bubble.
+        private void SayJobStart(Job running)
+        {
+            if (testing || chatting || preferences.Quiet || preferences.Silent || voiceUntil > clock.Elapsed.TotalSeconds) return;
+            Func<string, byte[]> own = FreeSpeak ?? (!kokoro.Installed ? null : new Func<string, byte[]>(kokoro.Speak));
+            Func<string, byte[]> free = preferences.ServerVoice ? Served(own) : FreeSpeak ?? Hd(own);
+            Func<string, byte[]> speak = local || voiceBroke ? null : Speak;
+            if (speak == null && !local && !voiceBroke && voice.Ready) speak = voice.Speak;
+            if (speak == null && (voice.Key == null || local || voiceBroke)) speak = free;
+            if (speak == null) return;
+            string words = Voice.Spoken("On it. Escape stops me.");
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string problem;
+                byte[] wav = Voiced(speak, free, words, out problem);
+                Post(delegate
+                {
+                    if (wav == null || job != running || IsDisposed || chatting || voiceUntil > clock.Elapsed.TotalSeconds) return;
+                    voiceUntil = clock.Elapsed.TotalSeconds + Voice.Seconds(wav) + 0.6;
+                    voice.Play(wav);
+                });
+            });
         }
 
         // Asking them something counts as an end too, so her pointer is put away while they answer.
