@@ -1631,10 +1631,13 @@ namespace CapriDesktop
         private const string Inside = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01";
         private const string Encoder = "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx", Decoder = "decoder-epoch-12-avg-2-chunk-16-left-64.onnx", Joiner = "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx";
         internal static readonly string[] Needed = { Encoder, Decoder, Joiner, "tokens.txt" };
-        // HEY CAPRI in the model's BPE pieces, from its own bpe.model. The boost and threshold were tuned on her free voices.
+        // HEY CAPRI in the model's BPE pieces, from its own bpe.model. The boost and threshold were tuned on 918 clips of her
+        // four free voices and Windows' two, clean, under noise and from across the room: about 97% of clean and quiet
+        // "Hey Capri"s and 72% under noise fired, and none of 594 other lines or 10 minutes of talk did. A boost of 3 fired
+        // on "a caprese salad".
         internal static string[] Phrases = { "▁HE Y ▁CA P RI" };
-        internal static float Boost = 1.5f;
-        internal static float Threshold = 0.25f;
+        internal static float Boost = 2f;
+        internal static float Threshold = 0.1f;
         private readonly string root;
         private readonly string engine;
         private readonly object gate = new object();
@@ -1709,11 +1712,18 @@ namespace CapriDesktop
             lock (gate) { Open(); Fresh(); }
             if (mic.Listening) return;
             mic.Chosen = chosen;
+            lastChunk = Environment.TickCount;
             mic.Start();
         }
 
-        // Loads the spotter and a live stream without the mic, so the next Listen opens at once.
+        // Loads the spotter and a live stream without the mic, so the next Listen opens at once. Seconds, the first time.
         internal void Warm() { lock (gate) { Open(); if (stream == IntPtr.Zero) Fresh(); } }
+
+        internal bool Warmed { get { return spotter != IntPtr.Zero; } }
+
+        // The mic is open but nothing has come from it for 5 s: unplugged, or lost when the PC slept.
+        internal bool Stalled { get { return mic.Listening && Environment.TickCount - lastChunk > 5000; } }
+        private volatile int lastChunk;
 
         // Hands the live stream a chunk as if the mic had heard it.
         internal void Feed(short[] chunk) { Hear(chunk); }
@@ -1733,18 +1743,54 @@ namespace CapriDesktop
 
         private void Hear(short[] chunk)
         {
-            bool fired;
+            lastChunk = Environment.TickCount;
+            bool fired = false;
             lock (gate)
             {
                 if (spotter == IntPtr.Zero || stream == IntPtr.Zero) return;
                 if (held) { heldWas = true; return; }
                 // What she half-heard before she spoke is dropped, so the end of her line can't finish a keyword.
                 if (heldWas) { heldWas = false; Fresh(); }
-                fired = Decode(stream, Wave(chunk));
+                // A quiet room isn't decoded: only sound over three times the room's own hiss is, from half a second before
+                // it to two seconds after, so a quiet day costs almost nothing. The room's level sinks quickly, rises with the
+                // hiss over seconds, and only creeps up under talking, so a soft "Hey Capri" after loud talk still gets through.
+                // A muted or gated mic's dead silence says nothing about the room, so it's left out.
+                double level = Speaker.Loudness(chunk, 0, chunk.Length);
+                if (level < Hiss / 50) { }
+                else if (room < 0) room = level;
+                else if (level < room) room += (level - room) * 0.3;
+                else if (level < room * Louder) room += (level - room) * 0.01;
+                else room *= 1.002;
+                Chunks++;
+                if (level > Math.Max(room * Louder, Hiss))
+                {
+                    if (quietFor > After) foreach (short[] early in before) fired |= Decode(stream, Wave(early));
+                    before.Clear();
+                    quietFor = 0;
+                }
+                else if (++quietFor > After)
+                {
+                    before.Enqueue(chunk);
+                    if (before.Count > Before) before.Dequeue();
+                    return;
+                }
+                Decoded++;
+                fired |= Decode(stream, Wave(chunk));
             }
             Action heard = Heard;
             if (fired && heard != null) heard();
         }
+
+        // In 100 ms chunks: the room's level, how long it's been quiet, and the half second kept from before a sound.
+        private const int Before = 5, After = 20;
+        private const double Hiss = 0.0005;
+        internal static double Louder = 3;
+        // Chunks heard, and decoded past the quiet gate.
+        internal int Chunks, Decoded;
+        private double room = -1;
+        internal double Room { get { return room; } }
+        private int quietFor = After + 1;
+        private readonly Queue<short[]> before = new Queue<short[]>();
 
         // How many times "Hey Capri" is in a clip of 16 kHz speech, heard on a stream of its own. For her smoke test.
         internal int Spot(short[] clip)
@@ -1803,6 +1849,8 @@ namespace CapriDesktop
         private void Fresh()
         {
             heldWas = false;
+            before.Clear();
+            quietFor = After + 1;
             if (spotter == IntPtr.Zero) return;
             if (stream != IntPtr.Zero) SherpaOnnxDestroyOnlineStream(stream);
             stream = SherpaOnnxCreateKeywordStream(spotter);
