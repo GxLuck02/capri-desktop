@@ -1773,7 +1773,7 @@ namespace CapriDesktop
                 nudge = "";
                 Show("Thinking");
                 string fresh = Heard();
-                if (fresh != null) asides += "\nWhile you worked they also told you " + fresh + ": do that, then finish their job.";
+                if (fresh != null) asides += "\nWhile you worked they also said " + fresh + ": if that's something for you to do, do it, then finish their job.";
                 try { written = Think(Computer.Allowing(Computer.Prompt), Computer.Brief(Task, Steps, sight, notes, earlier) + asides + (lost > 0 ? "\nYour last reply had no tool call. Reply with only one tool call, or call done." : "") + nudged, calls); }
                 catch (System.Runtime.Serialization.SerializationException) { written = ""; calls.Clear(); }
                 Show(null);
@@ -1866,7 +1866,7 @@ namespace CapriDesktop
                 if (fresh != null)
                 {
                     string last = talk[talk.Count - 1];
-                    talk[talk.Count - 1] = last.Substring(0, last.Length - 2) + ",{\"type\":\"text\",\"text\":" + Voice.Quote("While you work, they just told you " + fresh + ". Do that now, then carry on with their job where you left off.") + "}]}";
+                    talk[talk.Count - 1] = last.Substring(0, last.Length - 2) + ",{\"type\":\"text\",\"text\":" + Voice.Quote("While you work, they just said " + fresh + ". If that's something for you to do, do it now, then carry on with their job where you left off. If not, just carry on.") + "}]}";
                 }
                 ClaudeReply reply;
                 try { reply = Drive(Computer.Allowing(Computer.Seeing), Computer.Toolset, Conversation()); }

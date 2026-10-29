@@ -754,6 +754,8 @@ namespace CapriDesktop
         // A Claude model that turned down the computer tools this session, so its jobs read buttons instead.
         private volatile string blindModel;
         private string working;
+        // Her own ears, opened for a job while voice chat was off, so they can just talk to her mid-job. They close with it.
+        private bool jobEars;
         private bool pendingClick;
         private Point pendingPoint;
         private long pendingTime;
@@ -4927,6 +4929,8 @@ namespace CapriDesktop
             if (SitOnPanel()) Computer.PlacePointer(PointerHome());
             herPointer.Begin(Computer.HerAt);
             PassThrough();
+            // With Hey Capri on, her own offline ears open for the job, so they can tell her more without saying it first (Lachy, 29 Oct).
+            if (!chatting && !testing && preferences.HeyCapri && FreeChatOn && OwnEars) { jobEars = true; StartLocal(); }
             UpdateTalk(clock.Elapsed.TotalSeconds);
             SayJobStart(running);
         }
@@ -4977,6 +4981,11 @@ namespace CapriDesktop
         private void JobOff(Job running, string outcome, string result)
         {
             working = null;
+            if (jobEars)
+            {
+                jobEars = false;
+                if (chatting && local) StopChat();
+            }
             pointing = false;
             herPointer.End();
             PassThrough();
@@ -7247,6 +7256,7 @@ namespace CapriDesktop
             Job running = job;
             if (running != null && working != null && !running.Asking && prompt == "> you: ")
             {
+                Brain.Transcribe(local ? "You (voice)" : "You", text);
                 running.Tell(text);
                 working = "Got it. Esc stops me.";
                 UpdateTalk(clock.Elapsed.TotalSeconds);
@@ -11763,7 +11773,7 @@ namespace CapriDesktop
                                     };
                                     string heardRun = driveHeard.Run();
                                     string heardLast = heardTurns.Count == 2 ? heardTurns[1] : "";
-                                    int heardAt = heardLast.IndexOf("they just told you \\\"open spotify and play some music\\\"", StringComparison.Ordinal);
+                                    int heardAt = heardLast.IndexOf("they just said \\\"open spotify and play some music\\\"", StringComparison.Ordinal);
                                     int resultAt = heardLast.IndexOf("\"tool_result\"", StringComparison.Ordinal);
                                     if (heardRun != "Installed it." || heardAt < 0 || resultAt < 0 || resultAt > heardAt || heardTurns[0].Contains("spotify"))
                                         throw new Exception("What they said mid-job didn't reach her next turn: " + heardRun + " / " + heardTurns.Count + " turns");
