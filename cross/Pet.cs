@@ -615,7 +615,7 @@ namespace CapriDesktop
             if (screen == null || quitting) return;
             Halt();
             SetAway(false);
-            if (!IsVisible) Show();
+            if (!IsVisible) { Show(); Look.OnTopAgain(this); }
             walking = false;
             seat = null;
             falling = false;
@@ -651,7 +651,7 @@ namespace CapriDesktop
             if (!away || quitting) return;
             Halt();
             SetAway(false);
-            if (!IsVisible) Show();
+            if (!IsVisible) { Show(); Look.OnTopAgain(this); }
             walking = false;
             seat = null;
             falling = false;
@@ -2250,7 +2250,7 @@ namespace CapriDesktop
                 if (screen == null || quitting) return;
                 // Only coming out of hiding restarts her wait to ask for attention: a pop-in nobody touched isn't them noticing her.
                 if (away) SetAway(false);
-                if (!IsVisible) Show();
+                if (!IsVisible) { Show(); Look.OnTopAgain(this); }
                 walking = false;
                 seat = null;
                 falling = false;
