@@ -70,6 +70,12 @@ refusée) → l'utilisateur les lance avec `! cross/bin/Release/net10.0/Capri --
 - Fournisseurs cloud : `app/Brain.cs` (`Cloud`, `CloudModels`, `DefaultCloudModel`, `Remote`)
 - Page clé NVIDIA gratuite : https://build.nvidia.com/settings/api-keys
 
+## Étape 2 — où on en est
+Design validé (3 parties), spec : `docs/superpowers/specs/2026-10-29-mac-builtin-brain-design.md`
+(branche `mac-step2-brain`) — en attente de relecture utilisateur, puis plan.
+Décisions : approche A (moteur llama.cpp b11669 officiel figé + SHA-256), gardien anti-orphelin, clé
+secrète via --api-key-file, Ollama prioritaire comme Windows.
+
 ## Notes pour la suite
 - L'utilisateur veut rester **gratuit au maximum** : privilégier local (Ollama / llama.cpp, Kokoro) et NVIDIA gratuit.
 - Sur le M2 8 Go, utiliser `gemma4:e2b-it-qat` (4,3 Go). Le `gemma4:e2b` par défaut d'Ollama fait 7,5 Go : trop gros.
