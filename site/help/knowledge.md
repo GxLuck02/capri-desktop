@@ -191,7 +191,7 @@ The Linux preview uses Ollama. If you installed Ollama but she says her brain is
 2. The Capri Mainframe opens by itself (only on the first run).
 3. Under BRAIN, press Set up her brain. She downloads a brain that fits your PC.
 4. She says hi when it's done.
-5. She talks out loud with her free voice. For her best voice, pick ELEVENLABS under VOICE and add a key (section 11).
+5. She talks out loud with her free voice. For another voice, click CLOUD VOICE under VOICE: Fish Audio has a free tier, and ElevenLabs uses your credits (section 11). Before 0.7.6 that row was ELEVENLABS.
 
 ### She says something when she starts
 Unless you've already said something, she greets you in her own recorded voice a couple of seconds after starting:
@@ -310,8 +310,8 @@ The main page has three sections: BRAIN, VOICE and CAPRI.
   - OFF: "Silent · text only", as above. Test under it says "Her voice is OFF. Pick another row under VOICE to hear her."
   - PREBUILT LOCAL: "Her voices · free". Her free voice and its styles, HD and Your voice (HD), in the "Free voice" menu. No key, no credits.
   - CUSTOM LOCAL: "Your own model". A voice model on your PC: a voice model file, Fish Speech, Kokoro or any OpenAI-style server. Its Set up button opens the voice model panel with only those choices. Once one is set up, clicking the row brings it straight back, and the "Voice model: <name>" button under it opens its panel again.
-  - CLOUD VOICE: "Needs a key". The menu under it picks ElevenLabs, Fish Audio or OpenAI. ElevenLabs keeps its key box, Voice ID and Model there, as above. Fish Audio and OpenAI open the voice model panel with only those two: "Set up Fish Audio..." at first, then "Voice, key and model..." once it's in use. Setup guide on this row opens ElevenLabs' voice steps, or the panel for Fish Audio and OpenAI.
-  - CUSTOM LOCAL and CLOUD VOICE each keep their own setup and key, so switching between them loses neither. CLOUD VOICE's menu keeps the service used there last, so clicking CLOUD VOICE again (even after a restart) brings back that one, not ElevenLabs.
+  - CLOUD VOICE: "Needs a key". The menu under it picks Fish Audio, ElevenLabs or OpenAI. Fish Audio comes first, since its free tier needs no credits: a new install starts on it, and anyone with an ElevenLabs key saved starts on ElevenLabs. Clicking CLOUD VOICE with nothing set up opens Fish Audio's panel, and the row stays picked with its menu, so ElevenLabs is one click away. ElevenLabs keeps its key box, Voice ID and Model there, as above. Fish Audio and OpenAI open the voice model panel with only those two: "Set up Fish Audio..." at first, then "Voice, key and model..." once it's in use. Setup guide on this row opens ElevenLabs' voice steps, or the panel for Fish Audio and OpenAI.
+  - CUSTOM LOCAL and CLOUD VOICE each keep their own setup and key, so switching between them loses neither. CLOUD VOICE's menu keeps the service used there last, so clicking CLOUD VOICE again (even after a restart) brings back that one.
 - Mic: "Mic: default" or "Mic: <name>". Click it to pick a mic. "Windows default" follows your Windows setting.
 - Test: she says a test line out loud.
 - "Ctrl + Alt + N mutes mic": click it to change the key (it opens Settings with Mute mic ready to change).
@@ -544,7 +544,7 @@ She has two voices. Pick one under VOICE in the Mainframe, or pick OFF (since 0.
 - FREE VOICE: "Free · runs on your PC". No key, no credits, works offline. Decent, but not as good as ElevenLabs.
 - ELEVENLABS: "Sounds amazing · paid". Her best voice, from your own ElevenLabs account. It uses your ElevenLabs credits. The Setup guide button opens the voice steps.
 
-From 0.7.6 the rows are OFF, PREBUILT LOCAL (her free voice, HD and Your voice), CUSTOM LOCAL (your own voice model on your PC) and CLOUD VOICE (ElevenLabs, Fish Audio or OpenAI). Where these steps say FREE VOICE, 0.7.6 says PREBUILT LOCAL; where they say ELEVENLABS, click CLOUD VOICE and pick ElevenLabs in its menu.
+From 0.7.6 the rows are OFF, PREBUILT LOCAL (her free voice, HD and Your voice), CUSTOM LOCAL (your own voice model on your PC) and CLOUD VOICE (Fish Audio, ElevenLabs or OpenAI). Where these steps say FREE VOICE, 0.7.6 says PREBUILT LOCAL; where they say ELEVENLABS, click CLOUD VOICE and pick ElevenLabs in its menu.
 
 ### Her free voice
 - The Windows installer installs it ("Installing the local speech model", about 316 MB).
@@ -593,10 +593,10 @@ Her other free voice styles (Her own, Bright, Sly and Sharp) are set voices and 
 Her voice can come from Fish Audio's cloud, OpenAI, a voice model file she runs herself, or any speech model you run behind a server. Windows only for now.
 1. Mainframe > VOICE:
    - On your PC (a voice model file, Fish Speech, Kokoro or any OpenAI-style server): press Set up on the CUSTOM LOCAL row.
-   - In the cloud (Fish Audio or OpenAI): click CLOUD VOICE, then pick Fish Audio or OpenAI in the menu under it.
+   - In the cloud (Fish Audio or OpenAI): click CLOUD VOICE. Fish Audio is first in the menu under it and its panel opens; pick OpenAI in that menu instead if you want it. The setup guide has Fish Audio's steps: https://lachydotmcg.github.io/capri-desktop/setup/#fish
    - The first 0.7.6 tester build had them all in one list instead: VOICE > FREE VOICE, open the "Free voice" menu and pick "Any voice model...".
 2. Under "Voice from", pick where her voice comes from. CUSTOM LOCAL's panel lists only the ones on your PC, and CLOUD VOICE's only Fish Audio and OpenAI. It fills in the address, model and voice:
-   - Fish Audio · cloud (https://fish.audio): make an API key on fish.audio and paste it under Key. Under Voice, paste a voice's link or ID from Fish Audio's voice library (a link like https://fish.audio/m/ followed by its ID works as it is), or press the arrow in the Voice box to pick one of your own Fish Audio voices. To make a new voice, press that arrow, pick New voice from a clip..., and choose 10 to 30 seconds of someone talking (with their OK): she sends it to Fish Audio as a private voice and puts its ID in the Voice box. Model s2.1-pro-free is Fish Audio's free developer tier; with credit on your account, type s2.1-pro, s2-pro or s1 instead.
+   - Fish Audio · cloud (https://fish.audio): sign up, open https://fish.audio/app/api-keys, press Create New Key, and paste the key under Key. Under Voice, paste a voice's link or ID from Fish Audio's voice library (a link like https://fish.audio/m/ followed by its ID works as it is), or press the arrow in the Voice box to pick one of your own Fish Audio voices. To make a new voice, press that arrow, pick New voice from a clip..., and choose 10 to 30 seconds of someone talking (with their OK): she sends it to Fish Audio as a private voice and puts its ID in the Voice box. For her own voice, pick her voice clip from the setup guide (capri-voice-sample.m4a). Model s2.1-pro-free is Fish Audio's free developer tier; with credit on your account, type s2.1-pro, s2-pro or s1 instead.
    - Voice model file · on your PC: a Piper, Kokoro, Kitten or Pocket TTS model made for sherpa-onnx (https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models), run by her free voice's engine with no server and nothing else to install. Piper voices come in 40+ languages, like vits-piper-en_US-amy-medium.tar.bz2 or vits-piper-fr_FR-siwis-medium.tar.bz2. Download one, press Browse and pick the .tar.bz2 (she unpacks it into her own folder), or the .onnx inside a folder you unpacked yourself. Language is for Kokoro models only, like es or fr-fr (en-us if blank). Speaker picks a voice in models with several, counting from 0; past the last one she uses the first. It needs her free voice installed.
    - Pocket TTS (sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2, 98 MB, English) copies a voice from a clip, on the CPU with no graphics card. Press the arrow in the Speaker or clip box and pick a WAV, MP3 or M4A of that voice (5 to 10 seconds of clear talking is enough; she uses the first 10), with that person's OK. Leave the box blank and she copies her HD voice's own clip, so she sounds close to her HD voice on any PC.
    - Fish Speech · on your PC (https://github.com/fishaudio/fish-speech): start its server with `python tools/api_server.py --listen 0.0.0.0:8080` plus its model paths. Address: http://127.0.0.1:8080. Voice: a reference ID you added to it (POST /v1/references/add), or blank.
@@ -649,7 +649,7 @@ Or clone her real voice (needs ElevenLabs Starter or above):
 If you'd rather keep Restrict key on, the key needs: Text to Speech and Models (Access), Voices and ElevenAgents (Read), and ElevenAgents (Write). Restrict key off is simpler and is what we recommend.
 
 ### Step 4: in the Mainframe
-1. Under VOICE, click ELEVENLABS (0.7.6: click CLOUD VOICE, with ElevenLabs picked in the menu under it). The key box opens: "Paste your ElevenLabs key, then press Connect."
+1. Under VOICE, click ELEVENLABS (0.7.6: click CLOUD VOICE, then pick ElevenLabs in the menu under it, and close Fish Audio's panel if it opens first). The key box opens: "Paste your ElevenLabs key, then press Connect."
 2. Paste the key and press Connect.
 3. Clear the Voice ID box, then paste your Voice ID. Or pick your voice from the list.
 4. Model menu > v4.
@@ -1397,5 +1397,5 @@ Things in this file the team should confirm before the support chat relies on th
 13. "Can't open your speakers." on 0.6.2: the default-output-and-restart fix didn't work for everyone, and the underlying Windows error wasn't shown then.
 14. <unused49> replies: the CPU retry in newer builds wasn't confirmed on the reporting user's PC.
 15. Free voice chat with a real mic on a fresh PC.
-16. Your own voice models under CUSTOM LOCAL and CLOUD VOICE (0.7.6): their servers were only tested against stand-ins. Fish Audio's cloud hasn't had a real key, and a real Fish Speech, Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI or vLLM-Omni Qwen3-TTS server hasn't been run with it. The start commands come from their projects' pages and weren't run here. Voice model files were run with real Piper, Kokoro and Pocket TTS models.
+16. Your own voice models under CUSTOM LOCAL and CLOUD VOICE (0.7.6): their servers were only tested against stand-ins. Fish Audio's cloud wasn't tried here with a real key, though a play-tester said it works great (29 Oct 2026), and a real Fish Speech, Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI or vLLM-Omni Qwen3-TTS server hasn't been run with it. The start commands come from their projects' pages and weren't run here. Voice model files were run with real Piper, Kokoro and Pocket TTS models.
 

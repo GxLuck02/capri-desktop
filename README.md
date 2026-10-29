@@ -45,7 +45,7 @@ Beware that Capri may try to take over your human CPU. We take no responsibility
 ## What she does
 
 - **Talks back.** Type to her and she answers in her own words.
-- **Talks out loud.** Add an ElevenLabs key and she speaks, or voice chat with her.
+- **Talks out loud.** In her own free voice, or through Fish Audio, ElevenLabs or a voice model of yours. Or voice chat with her.
 - **Does things for you.** Ask her to open apps, play music or close a tab.
 - **Watches you play.** Turn it on and she comments on your games.
 - **Sits on your stuff.** Drop her on a window, an icon or the bottom of your screen.
@@ -72,7 +72,7 @@ Beware that Capri may try to take over your human CPU. We take no responsibility
 
 1. Download **Capri-Setup.exe** and run it
 2. In the Capri Mainframe, press **Set up her brain**, or press **Free key** to use a free NVIDIA key
-3. Optional: paste an ElevenLabs key so she can talk. Make the key with **Restrict key** turned off
+3. Optional: another voice under **VOICE**, like Fish Audio's free tier under **CLOUD VOICE**
 
 Stuck? The [setup guide](https://lachydotmcg.github.io/capri-desktop/setup/) walks through it, or ask in the [Discord](https://discord.gg/F4fDHfGtFk).
 
@@ -116,7 +116,7 @@ Just ask her for things, like "open Spotify", "play Blinding Lights", "pause", "
 | Ctrl + Alt + C | get her off your cursor |
 | Right-click, Move | she hops between your open windows |
 | Watch my screen | in the Mainframe: she comments as you play |
-| PREBUILT LOCAL / CUSTOM LOCAL / CLOUD VOICE | in the Mainframe under VOICE: PREBUILT LOCAL is her own voice, free on your PC, and HD in its list is a better-sounding one for graphics cards with 6 GB or more; CUSTOM LOCAL runs a voice model you set up on your PC; CLOUD VOICE is ElevenLabs, Fish Audio or OpenAI with your own key |
+| PREBUILT LOCAL / CUSTOM LOCAL / CLOUD VOICE | in the Mainframe under VOICE: PREBUILT LOCAL is her own voice, free on your PC, and HD in its list is a better-sounding one for graphics cards with 6 GB or more; CUSTOM LOCAL runs a voice model you set up on your PC; CLOUD VOICE is Fish Audio (free tier), ElevenLabs or OpenAI with your own key |
 | Help | in the Mainframe: opens the help page |
 
 </details>

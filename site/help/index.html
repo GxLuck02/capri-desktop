@@ -76,7 +76,7 @@
           <li>She glitches in and drops onto a window or the taskbar</li>
           <li>The <b>Capri Mainframe</b> opens by itself</li>
           <li><b>NORMAL</b> → <b>Set up her brain</b>. Slow PC? <b>HIGHER</b> → <b>Free key</b></li>
-          <li>She talks with her free voice. Best voice: <b>CLOUD VOICE</b> → <b>ElevenLabs</b> under VOICE</li>
+          <li>She talks with her free voice. Another voice: <b>CLOUD VOICE</b> → <b>Fish Audio</b> under VOICE, free tier</li>
         </ol>
         <dl class="keys">
           <dt>Pencil</dt><dd>hover her, press it, type, Enter</dd>
@@ -111,8 +111,8 @@
           <dt>OFF</dt><dd>no voice: she types her replies (0.7.1)</dd>
           <dt>PREBUILT LOCAL</dt><dd>her own voices: free, runs on your PC, no credits</dd>
           <dt>CUSTOM LOCAL</dt><dd>a voice model you run on your PC: <b>Set up</b></dd>
-          <dt>CLOUD VOICE</dt><dd>ElevenLabs, Fish Audio or OpenAI, with your own key. ElevenLabs sounds amazing and uses your credits</dd>
-          <dt>Setup guide</dt><dd>on CLOUD VOICE: opens the voice steps</dd>
+          <dt>CLOUD VOICE</dt><dd>Fish Audio (free tier), ElevenLabs or OpenAI, with your own key. ElevenLabs uses your credits</dd>
+          <dt>Setup guide</dt><dd>on CLOUD VOICE: ElevenLabs' steps, or the panel for Fish Audio and OpenAI</dd>
           <dt>Free voice</dt><dd>on PREBUILT LOCAL: Her own, Bright, Sly, Sharp or HD. <b>Get free voice</b> if it's missing</dd>
           <dt>Key box</dt><dd>on ElevenLabs: paste the key → <b>Connect</b></dd>
           <dt>Voice ID</dt><dd>on ElevenLabs: paste it or pick from your voices</dd>
@@ -223,8 +223,8 @@
           <dt>PREBUILT LOCAL</dt><dd>her free voice. The installer adds it. Missing? <b>Get free voice</b> under VOICE. Windows 64-bit only</dd>
           <dt>Your voice</dt><dd>HD only, 6 GB graphics card: “Free voice” menu → <b>Your voice (HD) · pick a clip of you...</b>, then 5 to 30 s of you talking (WAV, MP3 or M4A). <b>Her voice</b> switches back. For ElevenLabs, clone yours there (Instant Voice Clone) and paste its Voice ID</dd>
           <dt>CUSTOM LOCAL</dt><dd>a <a href="https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models" target="_blank" rel="noopener noreferrer">Piper, Kokoro, Kitten or Pocket TTS model file</a> she runs herself, or any speech model you run yourself, like Fish Speech, <a href="https://github.com/remsky/Kokoro-FastAPI" target="_blank" rel="noopener noreferrer">Kokoro-FastAPI</a> or Qwen3-TTS: <b>Set up</b>, pick one under <b>Voice from</b>, add its file or address, <b>Test</b>, <b>Use this server</b></dd>
-          <dt>CLOUD VOICE</dt><dd>its menu picks <a href="https://fish.audio" target="_blank" rel="noopener noreferrer">Fish Audio</a> (free tier), OpenAI or ElevenLabs. Fish Audio or OpenAI: <b>Set up...</b> under it, add your key, <b>Test</b>, <b>Use this server</b>. They get only the words she says</dd>
-          <dt>ElevenLabs</dt><dd>her best voice, from your own account:</dd>
+          <dt>CLOUD VOICE</dt><dd>its menu picks <a href="https://fish.audio" target="_blank" rel="noopener noreferrer">Fish Audio</a> (free tier, <a href="../setup/#fish">steps</a>), ElevenLabs or OpenAI. Fish Audio or OpenAI: <b>Set up...</b>, paste your key, <b>Test</b>, <b>Use this server</b>. They get only the words she says</dd>
+          <dt>ElevenLabs</dt><dd>from your own account, using your credits:</dd>
         </dl>
         <ol class="moves">
           <li>Make a voice in <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer">ElevenLabs</a>: <b>Voice Design</b> with the <a href="../setup/#voice">setup guide's prompt</a>, or clone her (paid plan)</li>
@@ -411,7 +411,7 @@
           <dt>“ElevenLabs rejected the key”</dt><dd>That isn't the key. Keys start with <code>sk_</code>. Make a new one and paste it.</dd>
           <dt>“Key is missing permissions” or “Key can't do that”</dt><dd>Make a new key with <b>Restrict key</b> turned off. <b>Forget</b> the old one, paste the new one.</dd>
           <dt>“Voice not found”</dt><dd>Paste the Voice ID from My Voices, not the name. Library voices go in My Voices first.</dd>
-          <dt>“Out of ElevenLabs credits”</dt><dd>Credits refill each month. Pick <b>PREBUILT LOCAL</b> meanwhile. “10,000 / 10,000” means all used.</dd>
+          <dt>“Out of ElevenLabs credits”</dt><dd>Credits refill each month. Pick <b>PREBUILT LOCAL</b> or Fish Audio meanwhile. “10,000 / 10,000” means all used.</dd>
           <dt>“ElevenLabs has restricted your account”</dt><dd>Sign in at elevenlabs.io to see why. Pick <b>PREBUILT LOCAL</b> meanwhile.</dd>
           <dt>“Free tier usage disabled”</dt><dd>Turn off your VPN and try again.</dd>
           <dt>“ElevenLabs sent a reply Capri couldn't read.”</dt><dd>ElevenLabs may be blocked where you are, or by a VPN. Try without one, then send <a href="#get-help">Copy error details</a>.</dd>

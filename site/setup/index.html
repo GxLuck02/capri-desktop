@@ -60,10 +60,20 @@
       </section>
 
       <section id="voice" class="step">
-        <h2><span class="step-number">3</span>Her voice <small>free, or ElevenLabs</small></h2>
-        <p class="note">Skip this and she talks with her free voice, which the installer sets up. ElevenLabs is her best voice and uses your credits. Fish Audio, OpenAI or your own voice model: <a href="../help/#voice">Help → Her voice</a>.</p>
+        <h2><span class="step-number">3</span>Her voice <small>free, Fish Audio or ElevenLabs</small></h2>
+        <p class="note">Skip this and she talks with her free voice, which the installer sets up. Fish Audio has a free tier. ElevenLabs uses your credits. OpenAI or your own voice model: <a href="../help/#voice">Help → Her voice</a>.</p>
 
-        <h3>Account</h3>
+        <h3 id="fish">Fish Audio <small>free tier</small></h3>
+        <ol class="moves">
+          <li>Sign up at <a href="https://fish.audio" target="_blank" rel="noopener noreferrer">fish.audio</a></li>
+          <li><a href="https://fish.audio/app/api-keys" target="_blank" rel="noopener noreferrer">API Keys</a> → <b>Create New Key</b>, then copy it</li>
+          <li>Mainframe, under VOICE: <b>CLOUD VOICE</b> → <b>Fish Audio</b>. Its panel opens</li>
+          <li>Paste the key under <b>Key</b></li>
+          <li>Voice: paste a voice's link from fish.audio. Or the arrow → <b>New voice from a clip...</b> → <a href="../assets/capri-voice-sample.m4a" download="capri-voice-sample.m4a">her voice clip</a></li>
+          <li><b>Test</b>, then <b>Use this server</b></li>
+        </ol>
+
+        <h3>Or ElevenLabs <small>uses your credits</small></h3>
         <ol class="moves">
           <li>Sign up at <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer">elevenlabs.io</a></li>
         </ol>
@@ -107,7 +117,7 @@
 
         <h3>In the Mainframe</h3>
         <ol class="moves">
-          <li>Under VOICE, pick <b>CLOUD VOICE</b>, with <b>ElevenLabs</b> in the menu under it. Before 0.7.6: <b>ELEVENLABS</b></li>
+          <li>Under VOICE: <b>CLOUD VOICE</b>, then <b>ElevenLabs</b> in the menu under it. Close Fish Audio's panel if it opens. Before 0.7.6: <b>ELEVENLABS</b></li>
           <li>Paste the key → <b>Connect</b>
             <img class="fit" src="../assets/guide-mainframe-key.png" alt="The Mainframe VOICE section with CLOUD VOICE picked, ElevenLabs in its menu and the key box circled" width="366" height="170" loading="lazy">
           </li>
@@ -129,7 +139,7 @@
           <dt>Watch my screen</dt><dd>Mainframe → Settings: she comments as you play</dd>
           <dt>PREBUILT LOCAL</dt><dd>in the Mainframe: her free voice, runs on your PC, no credits</dd>
           <dt>CUSTOM LOCAL</dt><dd>in the Mainframe: a voice model you run on your PC</dd>
-          <dt>CLOUD VOICE</dt><dd>in the Mainframe: ElevenLabs, her best voice, uses your credits. Or Fish Audio or OpenAI</dd>
+          <dt>CLOUD VOICE</dt><dd>in the Mainframe: Fish Audio (free tier), ElevenLabs (uses your credits) or OpenAI</dd>
           <dt>OFF</dt><dd>in the Mainframe under VOICE: no voice, she types</dd>
           <dt>Wave</dt><dd>voice chat, free unless ElevenLabs is picked</dd>
           <dt>Mic button</dt><dd>mute your mic while chatting</dd>
