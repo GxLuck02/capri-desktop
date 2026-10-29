@@ -970,6 +970,7 @@ namespace CapriDesktop
             Brain.Wordiness = Math.Max(0, Math.Min(2, preferences.Wordiness));
             Brain.Recall = preferences.Recall == 16 || preferences.Recall == 32 ? preferences.Recall : 8;
             Brain.Keeping = preferences.Remembers;
+            Brain.Digging = !smoke;
             if (!smoke) Brain.Keeper = brain;
             if (!smoke) brain.Load(Path.Combine(data, "chat.json"));
             Voice.Loudness = Math.Max(0, Math.Min(150, preferences.Volume));
@@ -11735,7 +11736,7 @@ namespace CapriDesktop
                                     }
                                     finally { Brain.OpenAi = seenOpenAi; seenFake.Stop(); Brain.Unsee(); }
                                     checks.Add("PASS screen memory replies: a glance answers SAW and SAY, read with bold, lowercase, dashes or either order; SKIP stays silent and keeps what she saw; a blocked description stays out; her chat prompt lists what she saw, oldest first, for 3 hours and across a restart");
-                                    string transcriptsWas = Brain.TranscriptPath, memoriesWas = Brain.MemoriesPath, foldOpenAi = Brain.OpenAi;
+                                    string transcriptsWas = Brain.TranscriptPath, memoriesWas = Brain.MemoriesPath, foldOpenAi = Brain.OpenAi, notesWas = Brain.MemoryPath;
                                     string memoryRoot = Path.Combine(Path.GetDirectoryName(Brain.MemoryPath), "memory-test");
                                     if (Directory.Exists(memoryRoot)) Directory.Delete(memoryRoot, true);
                                     Brain.TranscriptPath = Path.Combine(memoryRoot, "transcripts");
@@ -11779,7 +11780,8 @@ namespace CapriDesktop
                                             "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"## Wednesday 28 October 2026\\n- They finally beat Malenia in Elden Ring after 40 tries, and I called them a legend.\\n* They finally beat Malenia in Elden Ring after 40 tries, and I called them a legend.\\n- They live at 42 Wallaby Way.\\n- Their phone number is 0412 345 678.\\n- Their school is called Hillcrest High.\\n- They don't keep addresses, but they mentioned 14 Carrington Street.\\n- They hang out at 7 Ocean Parade.\\nSome chatter that isn't a bullet.\"}}]}",
                                             "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"## Earlier\\n- They like games.\"}}]}",
                                             "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"## Earlier\\n## Thursday 29 October 2026\\n- They like games, apparently.\"}}]}",
-                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"You beat the Hornet fight, choom. I remember.\"}}]}"
+                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"You beat the Hornet fight, choom. I remember.\"}}]}",
+                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Hornet again? You beat her once already.\"}}]}"
                                         }, foldAsked, out foldFake);
                                         Brain folder = new Brain();
                                         folder.Remote = new Cloud("sk-proj-test", "gpt-5-mini");
@@ -11803,13 +11805,38 @@ namespace CapriDesktop
                                         if (newDayOnly != null || File.ReadAllText(Brain.MemoriesPath) != longMemory + "## Thursday 29 October 2026\n- They like games, apparently.\n" || File.ReadAllText(queueFile) != "") throw new Exception("A fold that sent back only the new day lost the older ones: " + newDayOnly + " / " + File.ReadAllText(Brain.MemoriesPath));
                                         File.WriteAllText(Path.Combine(Brain.TranscriptPath, "2026-10-20.md"), "# Capri and you, Tuesday 20 October 2026\n> Kept on this PC only, never uploaded.\n\n**21:04 You:** We beat the Hornet fight in Silksong!\n**21:05 Capri:** Took you long enough.\n**21:30 You:** going to bed\n");
                                         string recalled = Brain.Recalled("remember when we beat Hornet?");
-                                        if (recalled.IndexOf("- 2026-10-20 21:04 You: We beat the Hornet fight in Silksong!", StringComparison.Ordinal) < 0 || recalled.IndexOf("going to bed", StringComparison.Ordinal) >= 0 || Brain.Recalled("how's it going?") != "" || Brain.Recalled("remember when we did stuff?") != "" || Brain.Recalled("remember my address on Carrington Street?") != "") throw new Exception("Remember when didn't find the right lines, or found an address: " + recalled);
+                                        if (recalled.IndexOf("- 2026-10-20 21:04 You: We beat the Hornet fight in Silksong!\n- 2026-10-20 21:05 Capri: Took you long enough.", StringComparison.Ordinal) < 0 || recalled.IndexOf("going to bed", StringComparison.Ordinal) >= 0 || Brain.Recalled("how's it going?") != "" || Brain.Recalled("remember when we did stuff?") != "" || Brain.Recalled("remember my address on Carrington Street?") != "") throw new Exception("Remember when didn't find the right lines, or found an address: " + recalled);
+                                        // Unasked, she digs up a telling match with its reply, and adds nothing for small talk, a word they say all the time, what's already in her chat, an address or a note already in her prompt.
+                                        Brain.Digging = true;
+                                        string dug = Brain.Recalled("Hornet keeps wrecking me in Silksong");
+                                        string dugShown = Brain.Recalled("Hornet keeps wrecking me in Silksong", new[] { "We beat the Hornet fight in Silksong!" });
+                                        File.WriteAllText(Path.Combine(Brain.TranscriptPath, "2026-10-21.md"), "# Capri and you, Wednesday 21 October 2026\n\n**09:00 You:** gonna play some games\n**09:01 Capri:** Which games?\n**09:02 You:** games with friends\n**09:03 You:** board games tonight\n");
+                                        string dugCommon = Brain.Recalled("any good games coming out?");
+                                        string dugSmall = Brain.Recalled("how's it going?") + Brain.Recalled("what are you up to tonight?") + Brain.Recalled("Carrington Street was busy today");
+                                        string fillers = "";
+                                        for (int note = 1; note < 40; note++) fillers += "- Note number " + note + "\n";
+                                        Brain.MemoryPath = Path.Combine(memoryRoot, "me.md");
+                                        File.WriteAllText(Brain.MemoryPath, Brain.NotesHead + "- Their cat is called Biscuit\n" + fillers + "- Their dog is called Pickles\n");
+                                        string dugNote = Brain.Recalled("Biscuit knocked my drink over");
+                                        string dugNewest = Brain.Recalled("Pickles chewed my headphones");
+                                        Brain.MemoryPath = notesWas;
+                                        Brain.Digging = false;
+                                        string undug = Brain.Recalled("Hornet keeps wrecking me in Silksong");
+                                        Brain.Digging = true;
+                                        if (!dug.StartsWith("\n\n(From your own chat logs and notes on this PC, earlier moments", StringComparison.Ordinal) || !dug.EndsWith("\n- 2026-10-20 21:04 You: We beat the Hornet fight in Silksong!\n- 2026-10-20 21:05 Capri: Took you long enough.)", StringComparison.Ordinal) || dug.IndexOf("Malenia", StringComparison.Ordinal) >= 0
+                                            || dugShown != "" || dugCommon != "" || dugSmall != "" || dugNote.IndexOf("\n- From your notes: Their cat is called Biscuit)", StringComparison.Ordinal) < 0 || dugNewest != "" || undug != "")
+                                            throw new Exception("Digging through her chats unasked went wrong: " + dug + " / " + dugShown + " / " + dugCommon + " / " + dugSmall + " / " + dugNote + " / " + dugNewest + " / " + undug);
                                         Brain rememberer = new Brain();
                                         rememberer.Remote = new Cloud("sk-proj-test", "gpt-5-mini");
                                         rememberer.Model = "gpt-5-mini";
                                         string recallSaid = rememberer.Ask("remember when we beat Hornet?");
                                         lock (foldAsked) foldSent = foldAsked.Count == 4 ? foldAsked[3] : "";
                                         if (recallSaid != "You beat the Hornet fight, choom. I remember." || foldSent.IndexOf("We beat the Hornet fight in Silksong!", StringComparison.Ordinal) < 0) throw new Exception("Remember when didn't reach her chat: " + recallSaid + " / " + foldSent);
+                                        // Talking about Hornet again brings the old fight into her chat, but not the lines she can already see.
+                                        string dugSaid = rememberer.Ask("Hornet keeps wrecking me in Silksong");
+                                        lock (foldAsked) foldSent = foldAsked.Count == 5 ? foldAsked[4] : "";
+                                        if (dugSaid != "Hornet again? You beat her once already." || foldSent.IndexOf("(From your own chat logs and notes on this PC, earlier moments", StringComparison.Ordinal) < 0 || foldSent.IndexOf("We beat the Hornet fight in Silksong!", StringComparison.Ordinal) < 0
+                                            || foldSent.Split(new[] { "You beat the Hornet fight, choom. I remember." }, StringSplitOptions.None).Length != 2) throw new Exception("Digging didn't reach her chat, or brought back what she could already see: " + dugSaid + " / " + foldSent);
                                         File.Delete(Brain.MemoriesPath);
                                         OpenMemories();
                                         if (File.ReadAllText(Brain.MemoriesPath) != Brain.MemoriesHead || !Directory.Exists(Brain.TranscriptPath)) throw new Exception("Open her memories didn't make memories.md.");
@@ -11826,13 +11853,15 @@ namespace CapriDesktop
                                     {
                                         Brain.TranscriptPath = transcriptsWas;
                                         Brain.MemoriesPath = memoriesWas;
+                                        Brain.MemoryPath = notesWas;
                                         Brain.OpenAi = foldOpenAi;
                                         Brain.Keeping = true;
+                                        Brain.Digging = false;
                                         Brain.Unsee();
                                         if (foldFake != null) foldFake.Stop();
                                         if (Directory.Exists(memoryRoot)) Directory.Delete(memoryRoot, true);
                                     }
-                                    checks.Add("PASS longer memory: chat, her own lines, glances and jobs go in a daily transcript on this PC, folding runs on a new day or when the lines outgrow her chat, the picked brain folds them into memories.md without addresses, schools or numbers, a fold that loses most memories is refused, a day the brain leaves out is kept unless it went into Earlier, memories.md reaches her prompt only with Remember our chats on, remember when finds old transcript lines, and the switch saves");
+                                    checks.Add("PASS longer memory: chat, her own lines, glances and jobs go in a daily transcript on this PC, folding runs on a new day or when the lines outgrow her chat, the picked brain folds them into memories.md without addresses, schools or numbers, a fold that loses most memories is refused, a day the brain leaves out is kept unless it went into Earlier, memories.md reaches her prompt only with Remember our chats on, remember when finds old transcript lines with their replies, talking about something digs up a telling old line or an old note on its own while small talk, common words, lines she can already see and addresses add nothing, and the switch saves");
                                     string curses = "King of Curses with Malevolent Shrine on the hotbar, choom? Somebody's been watching too much anime.";
                                     string[] cursed = { curses };
                                     if (!Glances.Repeats("That King of Curses moveset again? Malevolent Shrine spam incoming.", cursed, "") || !Glances.Repeats("still running that king of curses build huh", cursed, "") || !Glances.Repeats(curses, cursed, "")) throw new Exception("A glance repeated a name it already brought up.");
