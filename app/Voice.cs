@@ -1176,6 +1176,8 @@ namespace CapriDesktop
             private readonly int hop;
             private readonly int tolerance;
             private readonly double[] window;
+            private readonly double[] near;
+            private readonly double[] span;
             private readonly List<short> held = new List<short>();
             private readonly List<double> sum = new List<double>();
             private readonly List<double> weight = new List<double>();
@@ -1190,6 +1192,8 @@ namespace CapriDesktop
                 frame = Math.Max(32, rate / 50) & ~1;
                 hop = frame / 2;
                 tolerance = Math.Max(1, rate / 200);
+                near = new double[(frame + 3) / 4];
+                span = new double[2 * tolerance + frame];
                 window = new double[frame];
                 for (int i = 0; i < frame; i++) window[i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / frame);
             }
@@ -1231,15 +1235,19 @@ namespace CapriDesktop
                 {
                     long natural = Math.Min(last, previous + hop);
                     double closest = double.MinValue;
+                    // The sound it compares, copied out once per window: the same numbers in the same order, so it lines up
+                    // exactly as before, a few times faster, which her voice layers' two copies need.
+                    for (int j = 0, k = 0; j < frame; j += 4, k++) near[k] = At(natural + j);
+                    for (int k = 0; k < span.Length; k++) span[k] = At(nominal - tolerance + k);
                     for (int shift = -tolerance; shift <= tolerance; shift++)
                     {
                         long candidate = nominal + shift;
                         if (candidate < 0 || candidate > last) continue;
                         double dot = 0, energy = 1;
-                        for (int j = 0; j < frame; j += 4)
+                        for (int j = 0, k = 0, from = shift + tolerance; j < frame; j += 4, k++)
                         {
-                            double ahead = At(candidate + j);
-                            dot += At(natural + j) * ahead;
+                            double ahead = span[from + j];
+                            dot += near[k] * ahead;
                             energy += ahead * ahead;
                         }
                         double score = dot / Math.Sqrt(energy);
