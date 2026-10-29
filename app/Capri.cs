@@ -591,6 +591,7 @@ namespace CapriDesktop
         private readonly NotifyIcon tray;
         private readonly ContextMenuStrip menu;
         private readonly ToolStripMenuItem visibilityItem;
+        private readonly ToolStripMenuItem sleepItem;
         private readonly ToolStripMenuItem wanderItem;
         private double nextWander = -1;
         private double nextPopIn = -1;
@@ -914,6 +915,9 @@ namespace CapriDesktop
         private bool quietKey;
         // Her quiet key's state: no glances, pop-ins, check-ins, cheers or jokes until it's pressed again. Starting her again ends it.
         private bool shushed;
+        // A nap they asked for: asked until she's said her line and is free to doze off, then napping, asleep through their
+        // mouse and keyboard until a click, a drag, talking to her or "wake up". Quiet the same way as her quiet key.
+        private bool napAsked, napping;
         private const int BlinkFrom = 9;
         private const int PerchBlinkFrom = 34;
         // Her perch fps choices. The art is 30 fps: slower holds each frame longer, faster mixes in-betweens of neighbouring frames.
@@ -1030,9 +1034,11 @@ namespace CapriDesktop
             moves.DropDownItems.Add(sitHereItem);
             hangHereItem = new ToolStripMenuItem("Hang here", null, delegate { if (hanging) LetGo(); else HangHere(); });
             moves.DropDownItems.Add(hangHereItem);
+            sleepItem = new ToolStripMenuItem("Go to sleep", null, delegate { Nap(!napAsked && clip != sleep); });
+            moves.DropDownItems.Add(sleepItem);
             moves.DropDownItems.Add(new ToolStripMenuItem("Bring to this screen", null, delegate { RestoreAtCursor(); }));
             menu.Items.Add(moves);
-            menu.Opening += delegate { sitHereItem.Text = seat != null && seat.Free ? "Stand up" : "Sit here"; hangHereItem.Text = hanging ? "Let go" : "Hang here"; };
+            menu.Opening += delegate { sitHereItem.Text = seat != null && seat.Free ? "Stand up" : "Sit here"; hangHereItem.Text = hanging ? "Let go" : "Hang here"; sleepItem.Text = napAsked || clip == sleep ? "Wake up" : "Go to sleep"; };
             clickDelay = new System.Windows.Forms.Timer();
             clickDelay.Interval = Math.Max(100, SystemInformation.DoubleClickTime);
             clickDelay.Tick += delegate { OnClickDelay(); };
@@ -1073,6 +1079,7 @@ namespace CapriDesktop
             Computer.Bypass = preferences.Bypass;
             Hands.Resume = ResumeJob;
             Hands.Rename = CallThem;
+            Hands.Nap = NapTool;
             Hands.Hush = Computer.Mask;
             Computer.Grab = HandsGrab;
             string textKey = Voice.Unprotect(preferences.TextKey);
@@ -1560,9 +1567,45 @@ namespace CapriDesktop
 
         private void CheckIdle(long quiet)
         {
-            if (clip == sleep) { if (quiet < 1000) Play(wake); return; }
+            // A click, a drag or talking to her took her out of the nap they asked for.
+            if (napping && clip != sleep) napping = false;
+            if (napAsked && clip == idle && !dragging && !pressed && !riding && !walking && !falling && !hanging && seat == null && !onPanel
+                && speech == null && talkState != TalkState.Thinking && talkState != TalkState.Talking && clock.Elapsed.TotalSeconds >= voiceUntil && !speaker.Busy)
+            {
+                napAsked = false;
+                napping = true;
+                StopChat();
+                Play(sleep);
+                frames.Start();
+                return;
+            }
+            if (clip == sleep) { if (quiet < 1000 && !napping) Play(wake); return; }
             if (SleepDue(quiet) && clip == idle && preferences.Motion && !riding && !dragging && !hidden && !chatting && speech == null && talkState == TalkState.Off && !typer.Visible) Play(sleep);
         }
+
+        // "Go to sleep" from her menu, her brain or plain words: she gets down from wherever she is, finishes what she's saying,
+        // then sleeps where she floats. Unlike the doze she falls into by herself, their mouse and keyboard don't wake her.
+        internal string Nap(bool sleeping)
+        {
+            if (!sleeping)
+            {
+                bool resting = napAsked || napping || clip == sleep;
+                napAsked = false;
+                napping = false;
+                if (clip == sleep) { Play(wake); frames.Start(); }
+                return resting ? "Woke up." : "Already awake.";
+            }
+            if (hidden) SetHidden(false);
+            if (riding) StopRide();
+            if (seat != null || hanging) StandUp();
+            EndWalk();
+            if (clip == dance || clip == perchDance) Play(idle);
+            napAsked = true;
+            return "Going to sleep. A click on me wakes me up.";
+        }
+
+        // Her nap tool, which her brain calls from its own thread.
+        private string NapTool(bool sleeping) { return InvokeRequired ? (string)Invoke(new Func<bool, string>(Nap), sleeping) : Nap(sleeping); }
 
         private static Size CanvasSize(int size) { return new Size(size + PaddingSize * 2, size + PaddingSize * 2); }
 
@@ -1967,7 +2010,7 @@ namespace CapriDesktop
         {
             if (popOut >= 0 && (clicks != popClicks || chatting || typer.Visible || talkState != TalkState.Off)) EndPopIn(false);
             if (popOut >= 0 && now >= popOut && speech == null) EndPopIn(true);
-            if (!preferences.CheckIns || shushed) { nextPopIn = -1; return; }
+            if (!preferences.CheckIns || Hushed) { nextPopIn = -1; return; }
             if (nextPopIn < 0) nextPopIn = now + PopGap();
             if (now < nextPopIn) return;
             nextPopIn = now + PopGap();
@@ -2023,6 +2066,9 @@ namespace CapriDesktop
 
         internal bool Shushed { get { return shushed; } }
 
+        // Her quiet key or a nap they asked for: no glances, pop-ins, check-ins, cheers or jokes.
+        private bool Hushed { get { return shushed || napAsked || napping; } }
+
         // Her quiet key, for when they focus or game: she stops what she's saying and talks only when they talk to her.
         // Watch my screen and Check in on me keep their settings and pick up again on the next press.
         internal void ToggleShush()
@@ -2059,7 +2105,7 @@ namespace CapriDesktop
                 }
                 return;
             }
-            if (!preferences.CheckIns || shushed || hidden || quiet > 30000 || now - noticed < nudgeGap || (lastGlance >= 0 && now - lastGlance < 300)) return;
+            if (!preferences.CheckIns || Hushed || hidden || quiet > 30000 || now - noticed < nudgeGap || (lastGlance >= 0 && now - lastGlance < 300)) return;
             if (quitting || riding || onPanel || falling || hanging || typer.Visible || speech != null || outro != null || popOut >= 0 || (clip != idle && clip != perch)) return;
             Nudge(now);
         }
@@ -2217,7 +2263,7 @@ namespace CapriDesktop
         private void CheckWander(double now, long quiet)
         {
             bool settled = talkState == TalkState.Off || (talkState == TalkState.Talking && replyDone >= 0 && now - replyDone > 8);
-            if (!preferences.Wander || hidden || dragging || pressed || riding || onPanel || falling || hanging || chatting || typer.Visible || menu.Visible || speech != null || !settled || quiet > 90000 || (seat != null && seat.Free) || outro != null || (clip != idle && clip != perch && clip != dance && clip != perchDance)) return;
+            if (!preferences.Wander || napAsked || napping || hidden || dragging || pressed || riding || onPanel || falling || hanging || chatting || typer.Visible || menu.Visible || speech != null || !settled || quiet > 90000 || (seat != null && seat.Free) || outro != null || (clip != idle && clip != perch && clip != dance && clip != perchDance)) return;
             double pace = WanderPaces[preferences.WanderPace];
             if (nextWander < 0) nextWander = now + (20 + random.NextDouble() * 40) * pace;
             if (now < nextWander) return;
@@ -2863,7 +2909,7 @@ namespace CapriDesktop
                 });
             }
             bool dancing = clip == dance || clip == perchDance;
-            bool free = musicOn && !preferences.NoDance && preferences.Motion && !hidden && !dragging && !pressed && !riding && !falling && !hanging && !walking && outro == null && speech == null && talkState == TalkState.Off && !chatting;
+            bool free = musicOn && !preferences.NoDance && preferences.Motion && !hidden && !dragging && !pressed && !riding && !falling && !hanging && !walking && outro == null && speech == null && talkState == TalkState.Off && !chatting && !napAsked && !napping;
             if (dancing && !free) { Play(seat != null || onPanel ? perch : idle); UpdateAnimation(); }
             else if (!dancing && free && (clip == idle || clip == perch)) { Play(seat != null || onPanel ? perchDance : dance); frames.Start(); }
             groove.Want(!testing && musicOn && !preferences.NoDance && preferences.Motion && !hidden);
@@ -2890,7 +2936,7 @@ namespace CapriDesktop
                 Post(delegate
                 {
                     homeBusy = false;
-                    bool free = preferences.CheckIns && !shushed && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null;
+                    bool free = preferences.CheckIns && !Hushed && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null;
                     string line = Cheer(game, song, clock.Elapsed.TotalSeconds, free);
                     if (line != null) Say(line);
                 });
@@ -2906,7 +2952,7 @@ namespace CapriDesktop
             double busy = lagTotal == 0 || total <= lagTotal ? 0 : 1 - (double)(idle - lagIdle) / (total - lagTotal);
             lagIdle = idle;
             lagTotal = total;
-            bool free = preferences.CheckIns && !shushed && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null && !Native.Gaming();
+            bool free = preferences.CheckIns && !Hushed && !hidden && !quitting && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && speech == null && talkState == TalkState.Off && !onPanel && outro == null && !Native.Gaming();
             string line = Lagging(busy, now, free);
             if (line != null) Say(line);
         }
@@ -3164,6 +3210,9 @@ namespace CapriDesktop
             if (hanging) { LetGo(); return; }
             EndWalk();
             clicks++;
+            napAsked = false;
+            // A click wakes her the gentle way, from a nap they asked for or her own doze.
+            if (clip == sleep) { napping = false; Play(wake); if (!hidden) frames.Start(); RenderFrame(); return; }
             Play(seat != null || onPanel ? perchGlitch : glitch);
             if (!hidden) frames.Start();
             RenderFrame();
@@ -3400,7 +3449,7 @@ namespace CapriDesktop
 
         private void CheckGlance(double now, long quiet)
         {
-            if (!preferences.Watch || glancing || shushed) return;
+            if (!preferences.Watch || glancing || Hushed) return;
             if (nextGlance < 0) nextGlance = now + Math.Min(20, GlanceGap);
             if (now < nextGlance || quiet > 600000 || brain.Model == null || hidden || MicOpen || dragging || typer.Visible || talkState != TalkState.Off) return;
             nextGlance = now + GlanceGap * (0.8 + random.NextDouble() * 0.4);
@@ -3448,7 +3497,7 @@ namespace CapriDesktop
             string unseen = Unseeing();
             if (unseen != null || problem != null) { lastPrint = null; mainframe.ShowProblem(unseen ?? problem); return; }
             if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
-            if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || shushed || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
+            if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || Hushed || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
             // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
             if (Glances.Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) { Glimpsed(saw); return; }
             glanced.Add(Tuple.Create(clock.Elapsed.TotalSeconds, said));
@@ -7655,6 +7704,48 @@ namespace CapriDesktop
                             if (clip != idle) throw new Exception("Boot glitch did not settle into idle.");
                             Play(idle);
                             checks.Add("PASS sleeps after two quiet minutes, boots awake and settles into idle");
+                            // A nap they ask for: she stops dancing, finishes her line, then sleeps through their mouse and keyboard until
+                            // her menu's Wake up, a click, "wake up" or talking to her. Her quiet-key checks rest meanwhile.
+                            Play(dance);
+                            string napLine = Hands.Do("nap", new ToolArguments { Action = "sleep" });
+                            bool napStopped = clip == idle && napAsked && Hushed;
+                            Say("Night night.");
+                            CheckIdle(0);
+                            bool napWaited = clip == idle;
+                            Say(null);
+                            CheckIdle(0);
+                            CheckIdle(0);
+                            CheckIdle(400);
+                            bool napHeld = clip == sleep && napping && !napAsked && Doing == "Asleep";
+                            sleepItem.PerformClick();
+                            bool menuWoke = clip == wake && !napping;
+                            clipStart -= 1;
+                            RenderFrame();
+                            sleepItem.PerformClick();
+                            CheckIdle(0);
+                            bool menuSlept = clip == sleep && napping;
+                            React();
+                            bool clickWoke = clip == wake && !napping && !Hushed;
+                            clipStart -= 1;
+                            RenderFrame();
+                            Hands.Do("nap", new ToolArguments { Action = "sleep" });
+                            CheckIdle(0);
+                            bool toldSlept = clip == sleep;
+                            string woke = Hands.Do("nap", new ToolArguments { Action = "wake" });
+                            bool toldWoke = toldSlept && clip == wake && woke == "Woke up.";
+                            clipStart -= 1;
+                            RenderFrame();
+                            string already = Hands.Do("nap", new ToolArguments { Action = "wake" });
+                            Hands.Do("nap", new ToolArguments { Action = "sleep" });
+                            CheckIdle(0);
+                            Say("Hm?");
+                            CheckIdle(0);
+                            bool talkWoke = clip == idle && !napping;
+                            Say(null);
+                            if (napLine != "Going to sleep. A click on me wakes me up." || !napStopped || !napWaited || !napHeld || !menuWoke || !menuSlept || !clickWoke || !toldWoke || already != "Already awake." || !talkWoke)
+                                throw new Exception("Her nap went wrong: " + napStopped + " " + napWaited + " " + napHeld + " " + menuWoke + " " + menuSlept + " " + clickWoke + " " + toldWoke + " " + already + " " + talkWoke);
+                            Play(idle);
+                            checks.Add("PASS nap on demand: \"go to sleep\" stops her dance and waits for her line, then she sleeps through mouse and keyboard use, Asleep on Discord with her pop-ins and glances resting, until her menu's Wake up, a click, \"wake up\" or talking to her");
                             if (MouthFor('a', 0) != 3 || MouthFor('O', 0) != 4 || MouthFor('i', 0) != 2 || MouthFor('m', 0) != 0 || MouthFor(' ', 0) != 0 || MouthFor('!', 0) != 0 || MouthFor('k', 1) != 1 || MouthFor('k', 2) != 2) throw new Exception("Mouth shapes picked the wrong letters.");
                             const string spoken = "Hey OK, bye!";
                             int mouthPixels = 0;
@@ -8878,6 +8969,14 @@ namespace CapriDesktop
                                 }
                                 finally { Hands.Power = powerWas; }
                                 checks.Add("PASS power: turn off, restart, sleep, lock and sign out their PC straight away without asking, timed shutdowns, \"wait no\" right after cancels, and chat about shutting down doesn't");
+                                // Her own nap: "go to sleep" or "take a nap" said to her, and "wake up", never their PC's sleep.
+                                string[,] napCases = { { "go to sleep", "sleep" }, { "Capri, take a nap", "sleep" }, { "go to bed capri", "sleep" }, { "please go back to sleep", "sleep" }, { "nap time", "sleep" }, { "go to sleep, Capri!", "sleep" }, { "wake up", "wake" }, { "wakey wakey", "wake" } };
+                                for (int i = 0; i < napCases.GetLength(0); i++)
+                                    if (!Hands.Heard(napCases[i, 0], out shortTool, out shortArgs) || shortTool != "nap" || shortArgs.Action != napCases[i, 1]) throw new Exception("A nap was heard wrong: " + napCases[i, 0] + " -> " + shortTool + " " + shortArgs.Action);
+                                foreach (string chat in new[] { "i should go to sleep", "i'm going to sleep", "how do you sleep", "did you sleep well", "put my computer to sleep" })
+                                    if (Hands.Heard(chat, out shortTool, out shortArgs) && shortTool == "nap") throw new Exception("Chat was taken as a nap: " + chat);
+                                if (!Hands.Valid("nap", new ToolArguments { Action = "sleep" }) || !Hands.Valid("nap", new ToolArguments { Action = "wake" }) || Hands.Valid("nap", new ToolArguments { Action = "dance" })) throw new Exception("Her nap's arguments were checked wrong.");
+                                checks.Add("PASS nap words: \"go to sleep\", \"take a nap\", \"go to bed\" and \"wake up\" said to her are her own nap without a brain, and talk about their own sleep or the PC's isn't");
                                 Func<Sight> oldLook = Computer.Look;
                                 Func<string, ToolArguments, Sight, string> oldAct = Computer.Act;
                                 Func<IntPtr> oldFront = Computer.Front;
@@ -14951,7 +15050,7 @@ namespace CapriDesktop
                             if (heard != "hi" || reply != "Loud and clear, choom." || (talkState != TalkState.Talking && talkState != TalkState.Online) || !speaker.Busy) throw new Exception("Voice chat did not hear and answer: " + heard + " / " + reply + " / " + talkState + " / " + log);
                             Play(idle);
                             if (MouthCell(clock.Elapsed.TotalSeconds, idle) < 0) throw new Exception("Her mouth did not follow the agent's audio.");
-                            string[] wanted = { "http POST /v1/convai/agents/create sk_test_capri_1234 {\"name\":\"Capri\"", "\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45}", "http PATCH /v1/convai/agents/agent_old sk_test_capri_1234 {\"conversation_config\":{\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45},\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "\"tool_ids\":[\"tool_kept\",\"tool_1\",\"tool_2\",\"tool_3\",\"tool_4\",\"tool_5\",\"tool_6\",\"tool_7\",\"tool_8\",\"tool_9\"]", "\"tool_ids\":[\"tool_kept\",\"tool_10\",\"tool_11\",\"tool_12\",\"tool_13\",\"tool_14\",\"tool_15\",\"tool_16\",\"tool_17\",\"tool_18\"]}}}}", "\"name\":\"play_music\"", "\"name\":\"app_window\"", "\"name\":\"look_at_screen\"", "http GET /v1/convai/tools sk_test_capri_1234", "http POST /v1/convai/tools sk_test_capri_1234 {\"tool_config\":{\"type\":\"client\",\"name\":\"open_website\"", "\"name\":\"media\",\"description\":\"Control the music", "\"expects_response\":true,\"response_timeout_secs\":20}}", "You have tools for their PC", "tool {\"type\":\"client_tool_result\",\"tool_call_id\":\"call_1\",\"result\":\"Opened Spotify.\",\"is_error\":false}", "ran SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", "Never check in", "beg them to talk or say they left you hanging", "\"prompt\":{\"prompt\":\"You are Capri", "\"llm\":\"gemini-2.5-flash\"", "\"tts\":{\"voice_id\":\"abc\"}", "\"overrides\":{\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":true}},\"tts\":{\"voice_id\":true}}}", "http GET /v1/convai/conversation/get-signed-url?agent_id=agent_old sk_test_capri_1234", "init {\"type\":\"conversation_initiation_client_data\",\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "pong {\"type\":\"pong\",\"event_id\":7}", "chunk silent | chunk loud | chunk loud" };
+                            string[] wanted = { "http POST /v1/convai/agents/create sk_test_capri_1234 {\"name\":\"Capri\"", "\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45}", "http PATCH /v1/convai/agents/agent_old sk_test_capri_1234 {\"conversation_config\":{\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45},\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "\"tool_ids\":[\"tool_kept\",\"tool_1\",\"tool_2\",\"tool_3\",\"tool_4\",\"tool_5\",\"tool_6\",\"tool_7\",\"tool_8\",\"tool_9\",\"tool_10\"]", "\"tool_ids\":[\"tool_kept\",\"tool_11\",\"tool_12\",\"tool_13\",\"tool_14\",\"tool_15\",\"tool_16\",\"tool_17\",\"tool_18\",\"tool_19\",\"tool_20\"]}}}}", "\"name\":\"play_music\"", "\"name\":\"app_window\"", "\"name\":\"look_at_screen\"", "http GET /v1/convai/tools sk_test_capri_1234", "http POST /v1/convai/tools sk_test_capri_1234 {\"tool_config\":{\"type\":\"client\",\"name\":\"open_website\"", "\"name\":\"media\",\"description\":\"Control the music", "\"expects_response\":true,\"response_timeout_secs\":20}}", "You have tools for their PC", "tool {\"type\":\"client_tool_result\",\"tool_call_id\":\"call_1\",\"result\":\"Opened Spotify.\",\"is_error\":false}", "ran SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", "Never check in", "beg them to talk or say they left you hanging", "\"prompt\":{\"prompt\":\"You are Capri", "\"llm\":\"gemini-2.5-flash\"", "\"tts\":{\"voice_id\":\"abc\"}", "\"overrides\":{\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":true}},\"tts\":{\"voice_id\":true}}}", "http GET /v1/convai/conversation/get-signed-url?agent_id=agent_old sk_test_capri_1234", "init {\"type\":\"conversation_initiation_client_data\",\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "pong {\"type\":\"pong\",\"event_id\":7}", "chunk silent | chunk loud | chunk loud" };
                             foreach (string piece in wanted) if (log.IndexOf(piece, StringComparison.Ordinal) < 0) throw new Exception("Agent traffic was missing " + piece + ": " + log);
                             bool sawInVoice = false;
                             lock (asked) foreach (string entry in asked) if (entry.StartsWith("init ", StringComparison.Ordinal) && entry.IndexOf("a pixel art farm with a red barn. You said: \\\"Cute barn.\\\"", StringComparison.Ordinal) >= 0) sawInVoice = true;
@@ -14962,7 +15061,7 @@ namespace CapriDesktop
                             File.Delete(Brain.MemoriesPath);
                             string voiceDay = File.ReadAllText(Path.Combine(Brain.TranscriptPath, DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) + ".md"));
                             if (!memoriesInVoice || !System.Text.RegularExpressions.Regex.IsMatch(voiceDay, @"\*\*\d\d:\d\d You \(voice\):\*\* hi\n") || !System.Text.RegularExpressions.Regex.IsMatch(voiceDay, @"\*\*\d\d:\d\d Capri \(voice\):\*\* Loud and clear, choom\.\n") || !System.Text.RegularExpressions.Regex.IsMatch(voiceDay, @"\*\d\d:\d\d Job: Opened Spotify\.\*\n")) throw new Exception("Voice chat didn't start with her memories, or its lines and jobs missed her transcript: " + voiceDay);
-                            if (log.IndexOf("tool_stale", StringComparison.Ordinal) >= 0 || System.Text.RegularExpressions.Regex.Matches(log, "http POST /v1/convai/tools").Count != 18) throw new Exception("Voice chat reused a stale tool or remade a kept one: " + log);
+                            if (log.IndexOf("tool_stale", StringComparison.Ordinal) >= 0 || System.Text.RegularExpressions.Regex.Matches(log, "http POST /v1/convai/tools").Count != 20) throw new Exception("Voice chat reused a stale tool or remade a kept one: " + log);
                             Hands.Run = handsRun;
                             Hands.Catalog = handsCatalog;
                             Hands.Forget();
