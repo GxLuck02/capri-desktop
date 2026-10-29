@@ -33,7 +33,7 @@ h1 em { font-weight: 600; }
 .demo-capri { position: absolute; left: 60%; top: 31%; width: 220px; height: 220px; border: 0; border-radius: 40%; padding: 0; background: none; overflow: visible; touch-action: none; z-index: 2; }
 .demo-capri .sprite { position: absolute; left: 15.3%; top: -5.5%; width: 69.4%; height: 111%; background: url("assets/sprites/idle.webp") 0 0 / 1600% 100% no-repeat; pointer-events: none; filter: drop-shadow(0 6px 8px #00000012); animation: idle 4s ease-in-out infinite; }
 .demo-capri.dragging .sprite, .demo-capri.no-motion .sprite, .demo-capri.still .sprite { animation: none; }
-.demo-capri.riding .sprite { left: 0; top: 0; width: 100%; height: 100%; animation: none; transform: translateY(-3px) rotate(-5deg); }
+.demo-capri.riding .sprite { left: 5.73%; top: 9.38%; width: 75%; height: 100%; animation: none; transform: translateY(-3px) rotate(-5deg); transform-origin: 59.03% 40.63%; }
 .demo-capri[hidden] { display: none; }
 .taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; display: flex; align-items: center; gap: 6px; padding-right: 6px; background: linear-gradient(#3f8cf3 0, #2a63d6 12%, #245edb 50%, #1f4fbf 100%); border-top: 1px solid #6aa3ff; z-index: 3; }
 .xp-start { width: 105px; height: 30px; border: 0; padding: 0; background: url("assets/xp-start.png") 0 0 / 100% 100% no-repeat; flex: none; }
@@ -173,7 +173,7 @@ h1 em { font-weight: 600; }
 .helper-panel[hidden], .helper-tab[hidden] { display: none; }
 .helper-arrive { animation: helper-arrive .25s ease-out both; }
 .helper-capri { position: absolute; z-index: 3; bottom: calc(100% + 1px - var(--s) * .21); width: var(--s); height: var(--s); pointer-events: none; }
-.helper-sprite { position: absolute; inset: 0; background-repeat: no-repeat; transform: scaleX(-1); }
+.helper-sprite { position: absolute; left: 19.27%; top: 9.38%; width: 75%; height: 100%; background-repeat: no-repeat; transform: scaleX(-1); }
 .helper-hit { position: absolute; left: 32%; top: 4%; width: 47%; height: 75%; pointer-events: auto; cursor: pointer; }
 .helper-tab { display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); margin-left: auto; padding: 13px calc(var(--s) * .56) 13px 16px; background: #fff; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .helper-tab:hover { background: #fff; box-shadow: 0 14px 40px #00000040; }

@@ -234,6 +234,9 @@ namespace CapriDesktop
         [DataMember] public bool QuickHands;
         [DataMember] public bool Bypass;
         [DataMember] public bool HdVoice;
+        // Free voice in games is off out of the box (Lachy, 29 Oct): her HD voice keeps talking while a game is full screen.
+        // On, her free voice takes over while anything is full screen, so the game gets the graphics card back.
+        [DataMember] public bool HdGameRest;
         [DataMember] public int VoicePitch;
         [DataMember] public int VoiceSpeed = 100;
         [DataMember] public int VoiceRobot;
@@ -2556,6 +2559,17 @@ namespace CapriDesktop
             if (TypingSound) Sfx.Type("click clack", LettersPerSecond, 1);
         }
 
+        internal bool HdVoiceOn { get { return preferences.HdVoice; } }
+
+        internal bool HdGameRest { get { return preferences.HdGameRest; } }
+
+        internal void ToggleHdGameRest()
+        {
+            preferences.HdGameRest = !preferences.HdGameRest;
+            SavePreferences();
+            mainframe.Sync();
+        }
+
         internal void ToggleIntro()
         {
             preferences.NoIntro = !preferences.NoIntro;
@@ -4604,7 +4618,7 @@ namespace CapriDesktop
         private Func<string, byte[]> Hd(Func<string, byte[]> fallback)
         {
             if (!preferences.HdVoice || preferences.Silent || !qwen.Installed || clock.Elapsed.TotalSeconds < hdRest) return fallback;
-            if (Native.Gaming()) { qwen.Stop(); return fallback; }
+            if (HdStepsAside()) { qwen.Stop(); return fallback; }
             hdUsed = clock.Elapsed.TotalSeconds;
             if (!qwen.Awake) { WakeHd(); return fallback; }
             return qwen.Or(fallback, delegate(string problem) { Post(delegate { HdTrouble(problem); }); });
@@ -4618,14 +4632,17 @@ namespace CapriDesktop
             mainframe.VoiceNote(problem, true);
         }
 
-        // Her HD voice gives the graphics card back while a game runs and after 10 quiet minutes.
+        // Her HD voice gives the graphics card back after 10 quiet minutes, and while a game is full screen if Free voice in games is on.
         private void CheckHd(double now)
         {
             if (now - hdChecked < 3) return;
             hdChecked = now;
             if (wakingHd || !qwen.Awake) return;
-            if (!preferences.HdVoice || preferences.Silent || now - hdUsed > HdRest || Native.Gaming()) qwen.Stop();
+            if (!preferences.HdVoice || preferences.Silent || now - hdUsed > HdRest || HdStepsAside()) qwen.Stop();
         }
+
+        // Only with Free voice in games on does a full-screen game or video send her back to her free voice.
+        private bool HdStepsAside() { return preferences.HdGameRest && Native.Gaming(); }
 
         internal void ChooseVoiceStyle(string name)
         {
@@ -4963,7 +4980,7 @@ namespace CapriDesktop
         // she wakes it and says the line once it's up.
         private bool WakeFor(string line)
         {
-            if (testing || !preferences.HdVoice || preferences.Silent || !qwen.Installed || qwen.Awake || Native.Gaming() || clock.Elapsed.TotalSeconds < hdRest) return false;
+            if (testing || !preferences.HdVoice || preferences.Silent || !qwen.Installed || qwen.Awake || HdStepsAside() || clock.Elapsed.TotalSeconds < hdRest) return false;
             hdLine = line;
             WakeHd();
             if (hidden) SetHidden(false);
@@ -5972,7 +5989,7 @@ namespace CapriDesktop
             bool quiet = local;
             Cloud remote = brain.Remote;
             if (!testing && (voice.Key == null || quiet || voiceBroke) && kokoro.Installed && !preferences.Quiet && !preferences.Silent) ThreadPool.QueueUserWorkItem(delegate { try { kokoro.Warm(); } catch (Exception) { } });
-            if (!testing && preferences.HdVoice && (voice.Key == null || quiet || voiceBroke || preferences.Quiet) && !preferences.Silent && qwen.Installed && !qwen.Awake && clock.Elapsed.TotalSeconds >= hdRest && !Native.Gaming()) WakeHd();
+            if (!testing && preferences.HdVoice && (voice.Key == null || quiet || voiceBroke || preferences.Quiet) && !preferences.Silent && qwen.Installed && !qwen.Awake && clock.Elapsed.TotalSeconds >= hdRest && !HdStepsAside()) WakeHd();
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string said;
@@ -13208,11 +13225,29 @@ namespace CapriDesktop
                             if (mainframe.Overlap() != null) throw new Exception("The free voice row overlaps with HD picked: " + mainframe.Overlap());
                             Func<string, byte[]> hdFallback = delegate(string words) { return null; };
                             if (Hd(hdFallback) != hdFallback) throw new Exception("Her HD voice spoke before it was installed.");
+                            // Free voice in games: shown only with HD on and off out of the box, and only when it's on does a full-screen game send her to her free voice.
+                            string hdGamesPicked = mainframe.HdGamesStatus, hdGamesOn;
+                            bool hdKeptInGame, hdRestedInGame, hdKeptOutOfGame;
+                            try
+                            {
+                                Native.FakedGaming = true;
+                                hdKeptInGame = !HdStepsAside();
+                                ToggleHdGameRest();
+                                hdGamesOn = mainframe.HdGamesStatus;
+                                hdRestedInGame = HdStepsAside();
+                                Native.FakedGaming = false;
+                                hdKeptOutOfGame = !HdStepsAside();
+                                ToggleHdGameRest();
+                            }
+                            finally { Native.FakedGaming = null; }
+                            if (hdGamesPicked != "off" || hdGamesOn != "on" || !hdKeptInGame || !hdRestedInGame || !hdKeptOutOfGame || preferences.HdGameRest)
+                                throw new Exception("Free voice in games didn't work: shown " + hdGamesPicked + " then " + hdGamesOn + ", HD kept in a game with it off " + hdKeptInGame + ", rested in a game with it on " + hdRestedInGame + ", kept with nothing full screen " + hdKeptOutOfGame);
                             ChooseVoiceStyle("Sly");
                             if (preferences.HdVoice || kokoro.Style.Speaker != 6 || mainframe.FreeStatus != "Free voice: Sly | " + freeSetupText) throw new Exception("Picking a free voice didn't turn HD off: " + mainframe.FreeStatus);
+                            if (mainframe.HdGamesStatus != "-") throw new Exception("Free voice in games still showed with HD off: " + mainframe.HdGamesStatus);
                             ChooseVoiceStyle(LocalVoice.Styles[0].Name);
                             hdFitsTest = null;
-                            checks.Add("PASS HD voice: off by default, offered under the free voice only with a 6 GB graphics card, picking it sticks, and picking another free voice turns it off");
+                            checks.Add("PASS HD voice: off by default, offered under the free voice only with a 6 GB graphics card, picking it sticks, Free voice in games shows in Settings only while it's on and starts off, a full-screen game sends her to her free voice only with it on, and picking another free voice turns HD off");
                             // Their own voice: a clip in any coding Windows reads becomes a 24 kHz mono 16-bit reference with its quiet ends cut, a bad clip
                             // says why in plain words, and the free voice menu and the Her voice button switch between their clip and hers.
                             string yvRoot = Path.Combine(output, "your-voice");
@@ -15972,9 +16007,13 @@ namespace CapriDesktop
             return GetLastInputInfo(ref info) ? unchecked((uint)Environment.TickCount - info.Time) : 0;
         }
 
+        // The smoke test sets this to try both answers without a game running.
+        internal static bool? FakedGaming;
+
         // Windows' own full-screen check: busy (2) is a full-screen app or presentation, 3 is a Direct3D game in exclusive full screen.
         internal static bool Gaming()
         {
+            if (FakedGaming.HasValue) return FakedGaming.Value;
             int state;
             try { return SHQueryUserNotificationState(out state) == 0 && (state == 2 || state == 3); }
             catch (EntryPointNotFoundException) { return false; }
