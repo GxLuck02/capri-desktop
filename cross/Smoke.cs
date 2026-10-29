@@ -755,6 +755,10 @@ namespace CapriDesktop
                 Snap(pet.Talk.Typer.Content as Control, "typer.png");
                 Snap(pet.Talk.Pill.Content as Control, "pill.png");
                 Scene("desktop.png", new Window[] { pet, bubble, pet.Talk.Pill }, new PixelRect[0]);
+                string pillLook = PillFace.Check(Path.Combine(folder, "pill-states.png"));
+                if (pillLook != null) throw new Exception(pillLook);
+                if (!pet.Talk.Pill.GlitchesIn(now)) throw new Exception("The pill didn't glitch in when it showed, or a hover glitched it again.");
+                checks.Add("PASS hover pill: black cut-corner plates with a pink-to-cyan neon edge, TYPE and TALK and a segmented wave like Windows, the mic level and a red MUTED drawn the same, crisp at 100%, 150% and 200% with the same size and hit areas, and a glitch only when it shows");
                 checks.Add("PASS chat: the typing box sends a line to her brain, the reply types out in a bubble above her head");
                 // Chinese takes two columns a character and wraps without spaces, a long link breaks across lines, and every
                 // letter still shows once she's done typing.
