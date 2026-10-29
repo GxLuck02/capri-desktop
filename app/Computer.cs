@@ -106,9 +106,17 @@ namespace CapriDesktop
         internal const string Confused = "Got lost before I could start that job. " + Bigger;
         internal const string Stalled = "Got stuck on that one. " + Bigger;
         internal const string Exact = "\nTheir exact words: ";
-        // Blackwall mode in Settings (Bypass all permissions before 0.7.4): they've said yes to every step ahead of time, so she never stops to check, even to buy or delete,
-        // and nothing here refuses a step: passwords, card numbers and any key are up to their brain's provider.
-        internal static bool Bypass;
+        // Blackwall mode (Bypass all permissions before 0.7.4) is now toggles 8 to 10 of her SECURITY window: with all three on
+        // she never stops to check, even to buy or delete, and nothing here refuses a step. True while they're all on. Setting
+        // it sets toggles 1 to 10 to Blackwall's or Trusted's, like the old switch, and leaves "Hey Capri" alone.
+        internal static bool Bypass
+        {
+            get { return Security.On(Security.Pays) && Security.On(Security.Unasked) && Security.On(Security.Secrets); }
+            set { Security.Jobs(value); }
+        }
+
+        // Toggle 10, Type passwords and card numbers: off, password and card boxes are theirs to fill.
+        private static bool Typist { get { return Security.On(Security.Secrets); } }
         private const int MostTargets = 70;
 
         internal const string Prompt =
@@ -169,11 +177,39 @@ namespace CapriDesktop
         // Under Blackwall mode they've said yes to every step ahead of time, so her ask tool is only for what only they know.
         private const string BlackwallAsk = "Ask them only for something only they know, like who to message when they didn't say, or a login their job didn't give. They've said yes to every step ahead of time, so never ask before buying, paying, sending, posting, deleting or installing. When they leave a choice to you, pick it yourself.";
 
-        private static readonly string[] Rendered = { Render(false, false), Render(true, false), Written(false), Render(false, true), Render(true, true), Written(true) };
-        internal static string Tools { get { return Rendered[Bypass ? 3 : 0]; } }
-        internal static string ClaudeTools { get { return Rendered[Bypass ? 4 : 1]; } }
+        // Her ask tool's description follows SECURITY's toggles 8 to 10, so she never asks about a step they've said yes to
+        // ahead of time and Capri's own checks do the asking. Trusted and Blackwall keep the words they had.
+        internal static string AskLine()
+        {
+            bool pays = Security.On(Security.Pays), unasked = Security.On(Security.Unasked), secrets = Typist;
+            if (!pays && !unasked && !secrets) { for (int i = 0; i < Specs.GetLength(0); i++) if (Specs[i, 0] == "ask") return Specs[i, 1]; }
+            if (pays && unasked && secrets) return BlackwallAsk;
+            List<string> before = new List<string>();
+            if (!pays) before.Add("before a step that buys or pays");
+            if (!unasked) before.Add("before sending, posting, deleting or installing something their job didn't ask for");
+            before.Add("for something only they know, like who to message when they didn't say" + (secrets ? ", or a login their job didn't give" : ""));
+            string text = "Ask them only " + (before.Count == 1 ? before[0] : string.Join(", ", before.GetRange(0, before.Count - 1).ToArray()) + " or " + before[before.Count - 1]) + ".";
+            if (pays || unasked) text += " They've said yes ahead of time to " + (pays && unasked ? "buying, paying and booking, and to sending, posting, deleting or installing what their job didn't mention" : pays ? "buying, paying and booking" : "sending, posting, deleting or installing what their job didn't mention") + ", so never ask before those.";
+            return text + " When they leave a choice to you, pick it yourself. Never ask about a step their job already asked for.";
+        }
+
+        private static readonly Dictionary<string, string[]> rendered = new Dictionary<string, string[]>();
+
+        private static string[] Rendering()
+        {
+            string ask = AskLine();
+            lock (rendered)
+            {
+                string[] made;
+                if (!rendered.TryGetValue(ask, out made)) rendered[ask] = made = new[] { Render(false, ask), Render(true, ask), Written(ask) };
+                return made;
+            }
+        }
+
+        internal static string Tools { get { return Rendering()[0]; } }
+        internal static string ClaudeTools { get { return Rendering()[1]; } }
         internal static readonly string Toolset = "[{\"type\":\"computer_toolset_20260801\"}," + Render("open_app") + "," + Render("open_website") + "]";
-        internal static string Listing { get { return Rendered[Bypass ? 5 : 2]; } }
+        internal static string Listing { get { return Rendering()[2]; } }
         private static readonly Regex StepText = new Regex(@"\b(click|type|press|scroll|open_app|open_website|wait_for|wait|note|ask|done)\s*(\{[^{}]*\})", RegexOptions.Singleline);
         private static readonly Regex BareClick = new Regex(@"^\W*click\W*(\d{1,3})\W*$", RegexOptions.IgnoreCase);
         private static readonly Regex Risky = new Regex(@"\b(send|post|publish|tweet|reply|comment|buy|purchase|pay|checkout|check out|place order|order now|book now|book it|complete booking|reserve|reserve now|subscribe|donate|delete|remove|uninstall|install|format|transfer|confirm|sign out|log out|unfriend|block|report)\b", RegexOptions.IgnoreCase);
@@ -186,7 +222,7 @@ namespace CapriDesktop
         private static readonly Regex Costly = new Regex(@"\b(buy|purchase|pay|payment|checkout|check out|order|subscribe|donate|card|password|transfer|money|nitro)\b|[$\u00a3\u20ac]|\bor\b", RegexOptions.IgnoreCase);
         // "Buy it?" or "Send it now?" is a bare yes or no about a step, not a question only they can answer like "Send it to who?".
         private static readonly Regex Bare = new Regex(@"^\W*(buy|purchase|pay|order|checkout|check out|subscribe|donate|send|post|publish|tweet|reply|delete|remove|erase|trash|install|uninstall|submit|place|book|reserve|join|leave|end|hang up|close)\b(?![^?]*\b(who|whom|whose|which|what|where|when|how)\b)[^?]*\?\W*$", RegexOptions.IgnoreCase);
-        // Booking or placing something can spend their money like buying, so with Blackwall off a bare "Book it?" still reaches them.
+        // Booking or placing something can spend their money like buying, so with Pay, buy and book off a bare "Book it?" still reaches them.
         private static readonly Regex Booking = new Regex(@"^\W*(book|reserve|place)\b", RegexOptions.IgnoreCase);
         private static readonly Regex Chatty =new Regex(@"\b(message|chat|reply|comment|post|tweet|dm|whisper|channel)\b", RegexOptions.IgnoreCase);
         // Cookie banners: she takes the privacy-preserving way out, so nothing is agreed to on their behalf.
@@ -286,15 +322,15 @@ namespace CapriDesktop
         [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr window);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr window, StringBuilder text, int size);
 
-        private static string Describe(int i, bool blackwall) { return blackwall && Specs[i, 0] == "ask" ? BlackwallAsk : Specs[i, 1]; }
+        private static string Describe(int i, string ask) { return Specs[i, 0] == "ask" ? ask : Specs[i, 1]; }
 
-        private static string Render(bool claude, bool blackwall)
+        private static string Render(bool claude, string ask)
         {
             List<string> tools = new List<string>();
             for (int i = 0; i < Specs.GetLength(0); i++)
                 tools.Add(claude
-                    ? "{\"name\":\"" + Specs[i, 0] + "\",\"description\":" + Voice.Quote(Describe(i, blackwall)) + ",\"input_schema\":" + Specs[i, 2] + "}"
-                    : "{\"type\":\"function\",\"function\":{\"name\":\"" + Specs[i, 0] + "\",\"description\":" + Voice.Quote(Describe(i, blackwall)) + ",\"parameters\":" + Specs[i, 2] + "}}");
+                    ? "{\"name\":\"" + Specs[i, 0] + "\",\"description\":" + Voice.Quote(Describe(i, ask)) + ",\"input_schema\":" + Specs[i, 2] + "}"
+                    : "{\"type\":\"function\",\"function\":{\"name\":\"" + Specs[i, 0] + "\",\"description\":" + Voice.Quote(Describe(i, ask)) + ",\"parameters\":" + Specs[i, 2] + "}}");
             return "[" + string.Join(",", tools.ToArray()) + "]";
         }
 
@@ -305,7 +341,7 @@ namespace CapriDesktop
             throw new ArgumentException("There's no tool called " + tool + ".");
         }
 
-        private static string Written(bool blackwall)
+        private static string Written(string ask)
         {
             StringBuilder text = new StringBuilder("\nYour tools:");
             for (int i = 0; i < Specs.GetLength(0); i++)
@@ -313,7 +349,7 @@ namespace CapriDesktop
                 List<string> keys = new List<string>();
                 foreach (Match key in Regex.Matches(Specs[i, 2], @"""(\w+)"":\{""type"":""string"",""description"":""[^""]*""(?:,""enum"":\[([^\]]*)\])?"))
                     keys.Add("\"" + key.Groups[1].Value + "\": \"" + (key.Groups[2].Success ? key.Groups[2].Value.Replace("\"", "").Replace(",", "|") : "...") + "\"");
-                text.Append("\n- " + Specs[i, 0] + "{" + string.Join(", ", keys.ToArray()) + "}: " + Describe(i, blackwall));
+                text.Append("\n- " + Specs[i, 0] + "{" + string.Join(", ", keys.ToArray()) + "}: " + Describe(i, ask));
             }
             return text.Append("\nChoose one value from each | choice and omit unused fields.\nReply with only the one call, like: click{\"target\": \"4\"}").ToString();
         }
@@ -405,7 +441,7 @@ namespace CapriDesktop
         internal const string PayYourself = "It's at the payment page. You'll need to put in your card details and pay yourself. I don't type card numbers.";
         internal const string CardYourself = "You'll need to put in your card details yourself. I don't type card numbers.";
         internal const string NoCard = "That didn't work: they put in card details themselves. Call ask and say the page is ready for their card.";
-        // Card number, expiry and security code boxes are theirs to fill, like password boxes, unless Blackwall mode is on.
+        // Card number, expiry and security code boxes are theirs to fill, like password boxes, unless Type passwords and card numbers is on.
         private static readonly Regex CardField = new Regex(@"\b(card ?(number|no)|credit card|debit card|cvv2?|cvc2?|security code|expiry|expiration|exp\.? date|valid (thru|until))\b", RegexOptions.IgnoreCase);
 
         internal static bool CardBox(Target target) { return target != null && target.Line && CardField.IsMatch(target.Name ?? ""); }
@@ -619,6 +655,8 @@ namespace CapriDesktop
 
         internal static string Risk(string tool, ToolArguments args, Sight sight)
         {
+            // Win + R, Win + L, Ctrl + Alt + Del and the like ask first unless Things your request didn't mention is on.
+            if (tool == "press" && Barred(Chorded(args.Keys))) return "keys";
             Target target = sight == null ? null : sight.Find(args.Target);
             if (tool == "click")
             {
@@ -684,24 +722,39 @@ namespace CapriDesktop
             return word;
         }
 
+        private const string OnlyAsk = "Only call ask before you buy or pay, or before a send, post, delete or install their job didn't mention; Capri stops you herself before any step that needs their OK.";
+
+        // Her hands' prompt follows SECURITY's toggles 8 to 10 like her ask tool: Type passwords and card numbers lets her type
+        // them, Pay, buy and book drops asking before paying, and with Things your request didn't mention on too she never
+        // stops to ask. Trusted gets the prompt as written and Blackwall gets Blackwall mode's.
         internal static string Allowing(string prompt)
         {
-            if (!Bypass) return prompt;
-            const string ahead = "They turned on Blackwall mode (Bypass all permissions), so they've said yes to every step ahead of time: never stop to ask about one, even to buy, pay, send, post, delete or install.";
-            return prompt.Replace("Never type passwords, card numbers or other private details.", "Type passwords, card numbers and other private details whenever their job needs them.")
-                .Replace("If a page asks them to sign in, call ask and tell them to sign in themselves first.", "If a page asks them to sign in, use the email and password their job gives you. If it doesn't give them, call ask and tell them to sign in themselves first.")
-                .Replace(" Always call ask before you buy or pay for anything.", "").Replace(" Before you buy or pay for anything, stop and ask.", "")
-                .Replace("Only call ask before you buy or pay, or before a send, post, delete or install their job didn't mention; Capri stops you herself before any step that needs their OK.", ahead)
-                .Replace("Capri stops you herself before any step that needs their OK.", ahead);
+            bool pays = Security.On(Security.Pays), unasked = Security.On(Security.Unasked), secrets = Typist;
+            if (!pays && !unasked && !secrets) return prompt;
+            string ahead = secrets ? "They turned on Blackwall mode (Bypass all permissions), so they've said yes to every step ahead of time: never stop to ask about one, even to buy, pay, send, post, delete or install."
+                : "Their SECURITY settings say yes to every step ahead of time: never stop to ask about one, even to buy, pay, send, post, delete or install.";
+            string allowed = prompt;
+            if (secrets) allowed = allowed.Replace("Never type passwords, card numbers or other private details.", "Type passwords, card numbers and other private details whenever their job needs them.")
+                .Replace("If a page asks them to sign in, call ask and tell them to sign in themselves first.", "If a page asks them to sign in, use the email and password their job gives you. If it doesn't give them, call ask and tell them to sign in themselves first.");
+            if (pays) allowed = allowed.Replace(" Always call ask before you buy or pay for anything.", "").Replace(" Before you buy or pay for anything, stop and ask.", "");
+            if (pays && unasked) return allowed.Replace(OnlyAsk, ahead).Replace("Capri stops you herself before any step that needs their OK.", ahead);
+            if (pays) return allowed.Replace(OnlyAsk, "Only call ask before a send, post, delete or install their job didn't mention; Capri stops you herself before any step that needs their OK.");
+            if (unasked) return allowed.Replace(OnlyAsk, "Only call ask before you buy or pay; Capri stops you herself before any step that needs their OK.");
+            return allowed;
         }
 
         internal static bool Needless(string question)
         {
-            if (!Bypass && Costly.IsMatch(question ?? "")) return false;
+            // With Pay, buy and book on, a question about paying is as needless as any other.
+            bool pays = Security.On(Security.Pays);
+            if (!pays && Costly.IsMatch(question ?? "")) return false;
             // "Typed it. Want me to send it?" asks too, so every sentence counts.
-            foreach (string sentence in Regex.Split((question ?? "").Trim(), @"(?<=[.!?])\s+")) if (Checking.IsMatch(sentence) || (Bare.IsMatch(sentence) && (Bypass || !Booking.IsMatch(sentence)))) return true;
+            foreach (string sentence in Regex.Split((question ?? "").Trim(), @"(?<=[.!?])\s+")) if (Checking.IsMatch(sentence) || (Bare.IsMatch(sentence) && (pays || !Booking.IsMatch(sentence)))) return true;
             return false;
         }
+
+        // Their job asks to buy, pay for or book something itself, for Pay, buy and book with Things your request didn't mention off.
+        internal static bool Buys(string task) { return Regex.IsMatch(task ?? "", @"\b(buy|purchase|pay|order|checkout|check out|book|reserve|subscribe|donate)\b", RegexOptions.IgnoreCase); }
 
         // Typing or writing something somewhere means sending it; only an explicit draft or "don't send" keeps it in the box.
         internal static bool Unsent(string task) { return Unsending.IsMatch(task ?? "") || (Drafty.IsMatch(task ?? "") && !Sending.IsMatch(task ?? "")); }
@@ -722,6 +775,7 @@ namespace CapriDesktop
         internal static string Question(string tool, ToolArguments args, Sight sight)
         {
             Target target = sight == null ? null : sight.Find(args.Target);
+            if (tool == "press" && Barred(Chorded(args.Keys))) return "Should I press " + Chorded(args.Keys) + "?";
             if (tool == "click" && target != null) return "Should I press " + Voice.Quote(target.Name) + "?";
             if (tool == "type" && !string.IsNullOrEmpty(args.Text)) return "Should I send " + Voice.Quote(args.Text.Length > 60 ? args.Text.Substring(0, 57) + "..." : args.Text) + "?";
             return "Should I send that?";
@@ -995,7 +1049,7 @@ namespace CapriDesktop
                     return interrupted ? Why : "Scrolled " + way + ".";
                 case "type":
                     if (string.IsNullOrEmpty(args.Text)) return "There's nothing to type.";
-                    if (!Bypass && FocusedSecret()) return "Won't type in a password box. They type passwords themselves.";
+                    if (!Typist && FocusedSecret()) return "Won't type in a password box. They type passwords themselves.";
                     Write(args.Text);
                     Pause(300);
                     return interrupted ? Why : "Typed it.";
@@ -1210,7 +1264,7 @@ namespace CapriDesktop
             if (tool == "type")
             {
                 if (string.IsNullOrEmpty(args.Text)) return "There's nothing to type.";
-                if (!Bypass && ((target != null && target.Secret) || (target == null && sight.Targets.Exists(found => found.Focused && found.Secret)) || FocusedSecret())) return "Won't type in a password box. They type passwords themselves.";
+                if (!Typist && ((target != null && target.Secret) || (target == null && sight.Targets.Exists(found => found.Focused && found.Secret)) || FocusedSecret())) return "Won't type in a password box. They type passwords themselves.";
                 if (target != null)
                 {
                     Click(target.Middle, "left");
@@ -1219,7 +1273,7 @@ namespace CapriDesktop
                 }
                 else if (!Hands.Front(sight.Window)) return "Couldn't bring " + sight.Program + " to the front.";
                 if (interrupted) return Why;
-                if (!Bypass && FocusedSecret()) return "Won't type in a password box. They type passwords themselves.";
+                if (!Typist && FocusedSecret()) return "Won't type in a password box. They type passwords themselves.";
                 Write(args.Text);
                 if (args.Enter == "yes" && !interrupted) { Pause(150); Keys("enter"); }
                 Pause(700);
@@ -1249,7 +1303,24 @@ namespace CapriDesktop
             return "There's no tool called " + tool + ".";
         }
 
-        internal static bool Barred(string keys) { return !Bypass && Array.IndexOf(Banned, keys) >= 0; }
+        // Keys like Win + R and Ctrl + Alt + Del ask first (they were a flat no before the SECURITY window) unless Things your
+        // request didn't mention is on, or they said yes to one already in this job.
+        internal static bool KeysOk;
+
+        internal static bool Barred(string keys) { return !KeysOk && !Security.On(Security.Unasked) && Array.IndexOf(Banned, keys) >= 0; }
+
+        internal static string Chorded(string keys) { return Regex.Replace((keys ?? "").ToLowerInvariant(), @"\s+", ""); }
+
+        // The first barred key in Claude's key or hold_key text, or null.
+        internal static string BarredIn(string text)
+        {
+            foreach (string piece in Regex.Split((text ?? "").Trim(), @"\s+"))
+            {
+                string mapped = piece.Length == 0 ? null : Combo(piece);
+                if (mapped != null && Barred(mapped)) return mapped;
+            }
+            return null;
+        }
 
         private static bool FocusedSecret()
         {
@@ -1562,7 +1633,10 @@ namespace CapriDesktop
         // Set for Claude models that drive from screenshots with Anthropic's computer tools. Blind runs if the model turns them down.
         internal Func<string, string, string, ClaudeReply> Drive;
         internal Action Blind;
+        // Kinds of step they said yes to while the job ran, and the kinds their job asked for itself.
         private readonly HashSet<string> approved = new HashSet<string>();
+        private readonly HashSet<string> told = new HashSet<string>();
+        private readonly bool buys;
         private string risk;
         private readonly List<string> talk = new List<string>();
         private readonly List<byte[]> pictures = new List<byte[]>();
@@ -1596,13 +1670,26 @@ namespace CapriDesktop
             bool theirs = !string.IsNullOrWhiteSpace(asked) && !string.Equals(asked.Trim(), task.Trim(), StringComparison.OrdinalIgnoreCase);
             Task = theirs ? task + Computer.Exact + Voice.Quote(asked.Trim()) : task;
             Words = theirs ? asked.Trim() : task.Trim();
-            approved.UnionWith(Computer.Allowed(task));
+            Computer.KeysOk = false;
+            told.UnionWith(Computer.Allowed(task));
+            buys = Computer.Buys(task);
             if (!theirs) return;
-            approved.UnionWith(Computer.Allowed(asked));
-            if (Computer.Unsent(asked)) approved.Remove("send");
+            told.UnionWith(Computer.Allowed(asked));
+            buys = buys || Computer.Buys(asked);
+            if (Computer.Unsent(asked)) told.Remove("send");
         }
 
-        internal bool Needs(string danger) { return danger != null && !Computer.Bypass && !approved.Contains(danger); }
+        // Whether a step needs their OK first, by their SECURITY toggles. What their job asked for needs Send, post and delete
+        // what you asked for (or Pay, buy and book), what it didn't mention needs Things your request didn't mention as well,
+        // and keys like Win + R need that one. Their yes to a kind of step earlier in the job covers the rest of it. Trusted
+        // asks just where it always did: before paying, and before a send, delete or install the job didn't mention.
+        internal bool Needs(string danger)
+        {
+            if (danger == null || approved.Contains(danger)) return false;
+            if (danger == "keys") return !Security.On(Security.Unasked);
+            bool asked = danger == "buy" ? buys : told.Contains(danger);
+            return !Security.On(danger == "buy" ? Security.Pays : Security.Sends) || (!asked && !Security.On(Security.Unasked));
+        }
 
         internal bool Asking { get { return Waiting.Key != null; } }
 
@@ -1685,14 +1772,14 @@ namespace CapriDesktop
                         nudge = "\nYou asked " + Voice.Quote(said) + (skipped == 1 ? " but their job already says what to do, so don't ask: do the next step now." : " again. They already said yes, so don't ask or stop: do the next step now with a tool.") + " Capri stops you herself before any step that needs their OK.";
                         continue;
                     }
-                    // Under Blackwall mode she types passwords and cards herself, so her own question about them reaches them as she wrote it.
-                    if (tool == "ask" && !Computer.Bypass && Computer.AsksToSignIn(said, sight)) return End("asked", Computer.SignInYourself);
-                    if (tool == "ask" && !Computer.Bypass && Computer.AsksForCard(said)) return End("asked", Computer.PaymentPage(sight) ? Computer.PayYourself : Computer.CardYourself);
+                    // With Type passwords and card numbers on (Blackwall) she types them herself, so her own question about them reaches them as she wrote it.
+                    if (tool == "ask" && !Security.On(Security.Secrets) && Computer.AsksToSignIn(said, sight)) return End("asked", Computer.SignInYourself);
+                    if (tool == "ask" && !Security.On(Security.Secrets) && Computer.AsksForCard(said)) return End("asked", Computer.PaymentPage(sight) ? Computer.PayYourself : Computer.CardYourself);
                     if (tool == "ask") return End("asked", said);
                     // After a made-up detail was refused, a done over the still-empty form becomes the question.
                     if (guesses > 0 && sight != null && sight.Targets.Exists(found => Computer.DetailsForm(sight, found, Task) && string.IsNullOrEmpty(found.Value))) return End("asked", Computer.NeedsDetails(sight));
                     // A job that stops at a card form hands it to them, and a claim that it was paid never reaches them.
-                    if (!Computer.Bypass && Computer.PaymentPage(sight) && !Paid())
+                    if (!Security.On(Security.Secrets) && Computer.PaymentPage(sight) && !Paid())
                         return End("done", Computer.ClaimsPaid(said) || Computer.AsksForCard(said) || Regex.IsMatch(args.Text ?? "", @"^\W*(done)?\W*$", RegexOptions.IgnoreCase) ? Computer.PayYourself : said.TrimEnd() + (Regex.IsMatch(said, @"[.!?]\s*$") ? " " : ". ") + Computer.PayYourself);
                     string trouble = doubted || Steps.Count == 0 || Computer.Troubled(said) ? null : Computer.Trouble(sight, firstWords);
                     if (trouble != null)
@@ -1706,10 +1793,10 @@ namespace CapriDesktop
                     if (Computer.ClaimsPaid(said) && !Paid()) return End("done", Summary() + " I didn't pay for or book anything.");
                     return End("done", Regex.IsMatch(args.Text ?? "", @"^\W*(done)?\W*$", RegexOptions.IgnoreCase) ? Summary() : said);
                 }
-                if (tool == "type" && args.Enter != "yes" && approved.Contains("send") && Computer.ChatBox(args, sight)) args.Enter = "yes";
+                if (tool == "type" && args.Enter != "yes" && (told.Contains("send") || approved.Contains("send")) && Computer.ChatBox(args, sight)) args.Enter = "yes";
                 string danger = Computer.Risk(tool, args, sight);
                 // Paying with the card boxes still empty can't work, and the card is theirs to type, so she hands over instead of asking.
-                if (danger == "buy" && !Computer.Bypass && sight != null && sight.Targets.Exists(found => Computer.CardBox(found) && string.IsNullOrEmpty(found.Value))) return End("asked", Computer.PayYourself);
+                if (danger == "buy" && !Security.On(Security.Secrets) && sight != null && sight.Targets.Exists(found => Computer.CardBox(found) && string.IsNullOrEmpty(found.Value))) return End("asked", Computer.PayYourself);
                 if (Needs(danger))
                 {
                     Waiting = new KeyValuePair<string, ToolArguments>(tool, args);
@@ -1899,6 +1986,9 @@ namespace CapriDesktop
             target = null;
             question = null;
             if (!member) return null;
+            // Win + R and the like ask first unless Things your request didn't mention is on.
+            string barred = name == "key" || name == "hold_key" ? Computer.BarredIn(args.Text) : null;
+            if (barred != null) { question = "Should I press " + barred + "?"; return "keys"; }
             Sight front = Computer.Glimpse();
             Sight gate = new Sight { Window = front.Window, Title = front.Title, Program = front.Program, Bounds = front.Bounds };
             if (name == "left_click" || name == "double_click" || name == "triple_click" || name == "right_click" || name == "middle_click")
@@ -1923,6 +2013,7 @@ namespace CapriDesktop
         // Does one call and shows it in her task panel as it happens.
         private string Step(string name, ToolArguments args, bool member, Target target)
         {
+            Computer.KeysOk = approved.Contains("keys");
             bool secret = name == "type" && Computer.SecretFocus();
             if (secret) Computer.Keep(args.Text);
             ToolArguments masked = secret ? Computer.Masked(args) : args;
@@ -1981,6 +2072,7 @@ namespace CapriDesktop
 
         private string Perform(string tool, ToolArguments args, Sight sight)
         {
+            Computer.KeysOk = approved.Contains("keys");
             if (tool == "type") args.Text = Filled(Computer.Unechoed(args.Text, Task.IndexOf(Computer.Exact, StringComparison.Ordinal) >= 0 ? Words : null));
             // The window in front changed after she looked, so she looks again instead of acting on old buttons. Only Esc stops her.
             if (tool != "open_app" && tool != "open_website" && tool != "wait" && tool != "wait_for" && tool != "note" && sight != null && sight.Window != IntPtr.Zero && Computer.Front() != sight.Window)
@@ -2000,8 +2092,8 @@ namespace CapriDesktop
             else if (tool == "type" && Computer.StandIn(args.Text)) result = "That didn't work: " + Voice.Quote(args.Text.Trim()) + " isn't the real thing, and you don't know it. Call ask: tell them to sign in themselves, or ask for what's missing.";
             else if (tool == "click" && Computer.AgreesToCookies(Task, sight == null ? null : sight.Find(args.Target), sight)) result = "That didn't work: don't agree to cookies for them. Click " + Computer.CookieWayOut(sight).Label + " instead.";
             else if (tool == "click" && Computer.AddsToCart(Task, sight == null ? null : sight.Find(args.Target))) result = Computer.NoCart;
-            // Blackwall mode: the card is theirs to give, so she types it when their job does.
-            else if (tool == "type" && !Computer.Bypass && Computer.CardBox(sight == null ? null : sight.Find(args.Target))) result = Computer.NoCard;
+            // Type passwords and card numbers on (Blackwall): the card is theirs to give, so she types it when their job does.
+            else if (tool == "type" && !Security.On(Security.Secrets) && Computer.CardBox(sight == null ? null : sight.Find(args.Target))) result = Computer.NoCard;
             else if (tool == "type" && Computer.MadeUpEmail(args.Text, Known(sight)) != null) result = Computer.SigningIn(sight, Task) ? "That didn't work: don't make up an email address. If the page needs theirs, call ask and tell them to sign in themselves." : Computer.NotGiven;
             else if (unknown.Success && Task.IndexOf(unknown.Value, StringComparison.Ordinal) < 0) result = "That didn't work: there's no note called " + unknown.Value + ". Call note first, then write it.";
             else

@@ -1301,9 +1301,11 @@ namespace CapriDesktop
                     results.Add(result);
                     facts.Add(call.Key + ": " + Voice.Quote(result ?? "No result."));
                 }
-                done = string.Join(" ", results.ToArray());
+                // SECURITY held a call to ask them first: they get what did run and her question word for word, with no second brain call.
+                string held = Security.Reply(results);
+                done = held ?? string.Join(" ", results.ToArray());
                 Cloud remote = Remote;
-                string pulled = results.Count == 1 ? Hands.Pulled(results[0]) : null;
+                string pulled = held ?? (results.Count == 1 ? Hands.Pulled(results[0]) : null);
                 if (pulled != null) raw = pulled;
                 else if (results.Exists(Hands.Failed) || (remote != null && remote.Kind == "nvidia" && !calls.Exists(call => call.Key == "look_at_screen"))) raw = done;
                 else
