@@ -1024,6 +1024,7 @@ namespace CapriDesktop
             Brain.Wordiness = Math.Max(0, Math.Min(2, preferences.Wordiness));
             Brain.Recall = preferences.Recall == 16 || preferences.Recall == 32 ? preferences.Recall : 8;
             Brain.Keeping = preferences.Remembers;
+            Brain.Digging = !smoke;
             if (!smoke) Brain.Keeper = brain;
             if (!smoke) brain.Load(Path.Combine(data, "chat.json"));
             Voice.Loudness = Math.Max(0, Math.Min(150, preferences.Volume));
@@ -11408,7 +11409,8 @@ namespace CapriDesktop
                                         "{\"message\":{\"role\":\"assistant\",\"content\":\"Opened all eight.\"},\"done_reason\":\"stop\"}",
                                         "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"open_app{\\\"name\\\":\\\"Discord\\\"}\\nopen_app{\\\"name\\\":\\\"Spo\"},\"finish_reason\":\"length\"}]}",
                                         "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[" + longLocalCalls + "]},\"finish_reason\":\"tool_calls\"}]}",
-                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"So basically, choom, the thing about that is\"},\"done_reason\":\"length\"}"
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"So basically, choom, the thing about that is\"},\"done_reason\":\"length\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"Which game, choom?\"},\"done_reason\":\"stop\"}"
                                     }, longAsked, out longFake);
                                     Brain.Ollama = longUrl;
                                     try
@@ -11426,17 +11428,127 @@ namespace CapriDesktop
                                         rambler.Model = "ramble-test";
                                         rambler.Act = delegate(string name, ToolArguments args) { longOpened.Add("ramble"); return "Wrong."; };
                                         bool rambleStopped = false;
-                                        try { rambler.Ask("look at the game"); }
+                                        string rambleReply = null;
+                                        try { rambleReply = rambler.Ask("look at the game"); }
                                         catch (BrainException) { rambleStopped = true; }
                                         string[] longSent;
                                         lock (longAsked) longSent = longAsked.ToArray();
-                                        if (longReply != "Opened all eight." || string.Join(",", longOpened.ToArray()) != string.Join(",", longApps) || longLocalNames != string.Join(",", longApps) || !rambleStopped || longSent.Length != 6
+                                        if (longReply != "Opened all eight." || string.Join(",", longOpened.ToArray()) != string.Join(",", longApps) || longLocalNames != string.Join(",", longApps) || rambleStopped || rambleReply != "Which game, choom?" || longSent.Length != 7
                                             || longSent[0].IndexOf("\"num_predict\":120", StringComparison.Ordinal) < 0 || longSent[1].IndexOf("\"num_predict\":2000", StringComparison.Ordinal) < 0
-                                            || longSent[3].IndexOf("\"max_tokens\":120", StringComparison.Ordinal) < 0 || longSent[4].IndexOf("\"max_tokens\":2000", StringComparison.Ordinal) < 0 || longSent[5].IndexOf("\"num_predict\":120", StringComparison.Ordinal) < 0)
-                                            throw new Exception("A long ask on a local brain didn't get room for every call: " + longReply + " / " + string.Join(",", longOpened.ToArray()) + " / local " + longLocalNames + " / ramble stopped " + rambleStopped + " / " + longSent.Length + " requests");
+                                            || longSent[3].IndexOf("\"max_tokens\":120", StringComparison.Ordinal) < 0 || longSent[4].IndexOf("\"max_tokens\":2000", StringComparison.Ordinal) < 0 || longSent[5].IndexOf("\"num_predict\":120", StringComparison.Ordinal) < 0 || longSent[6].IndexOf("\"tools\":", StringComparison.Ordinal) >= 0)
+                                            throw new Exception("A long ask on a local brain didn't get room for every call: " + longReply + " / " + string.Join(",", longOpened.ToArray()) + " / local " + longLocalNames + " / ramble stopped " + rambleStopped + ", " + rambleReply + " / " + longSent.Length + " requests");
                                     }
                                     finally { Brain.Ollama = splitOllama; longFake.Stop(); }
-                                    checks.Add("PASS long asks on local brains: eight apps in one ask run past routing's 120-token reply on Ollama and local brains, so it's asked again with room for 2000 and all eight open; a cut-off ramble isn't asked again");
+                                    checks.Add("PASS long asks on local brains: eight apps in one ask run past routing's 120-token reply on Ollama and local brains, so it's asked again with room for 2000 and all eight open; a cut-off ramble isn't asked again, and her chat answers instead of an error");
+
+                                    // Sixty apps in one ask run out of room twice on Ollama, so each try gets double the room and all sixty open. One that
+                                    // never finishes runs the calls it wrote whole, and so do a cloud brain that turns the bigger room down and Claude.
+                                    string[] sixtyApps = new string[60];
+                                    for (int sixtyIndex = 0; sixtyIndex < 60; sixtyIndex++) sixtyApps[sixtyIndex] = "App " + (sixtyIndex + 1);
+                                    Func<int, string> sixtyText = delegate(int count)
+                                    {
+                                        System.Text.StringBuilder text = new System.Text.StringBuilder();
+                                        for (int sixtyIndex = 0; sixtyIndex < count; sixtyIndex++) text.Append("open_app{\\\"name\\\":\\\"" + sixtyApps[sixtyIndex] + "\\\"} ");
+                                        return text.ToString() + (count < 60 ? "open_app{\\\"name\\\":\\\"App" : "");
+                                    };
+                                    Func<int, bool, string> sixtyCloud = delegate(int count, bool cutOff)
+                                    {
+                                        System.Text.StringBuilder text = new System.Text.StringBuilder();
+                                        for (int sixtyIndex = 0; sixtyIndex < count; sixtyIndex++) text.Append((sixtyIndex > 0 ? "," : "") + "{\"function\":{\"name\":\"open_app\",\"arguments\":\"{\\\"name\\\":\\\"" + sixtyApps[sixtyIndex] + "\\\"}\"}}");
+                                        if (cutOff) text.Append(",{\"function\":{\"name\":\"open_app\",\"arguments\":\"{\\\"name\\\":\\\"App\"}}");
+                                        return "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[" + text + "]},\"finish_reason\":\"" + (cutOff ? "length" : "tool_calls") + "\"}]}";
+                                    };
+                                    Func<int, bool, string> sixtyClaude = delegate(int count, bool cutOff)
+                                    {
+                                        System.Text.StringBuilder text = new System.Text.StringBuilder();
+                                        for (int sixtyIndex = 0; sixtyIndex < count; sixtyIndex++) text.Append((sixtyIndex > 0 ? "," : "") + "{\"type\":\"tool_use\",\"id\":\"call" + sixtyIndex + "\",\"name\":\"open_app\",\"input\":{\"name\":\"" + sixtyApps[sixtyIndex] + "\"}}");
+                                        if (cutOff) text.Append(",{\"type\":\"tool_use\",\"id\":\"cut\",\"name\":\"open_app\",\"input\":{\"name\":\"App\"}}");
+                                        return "{\"content\":[" + text + "],\"stop_reason\":\"" + (cutOff ? "max_tokens" : "tool_use") + "\"}";
+                                    };
+                                    System.Collections.Generic.List<string> sixtyAsked = new System.Collections.Generic.List<string>(), sixtyCloudAsked = new System.Collections.Generic.List<string>(), sixtyClaudeAsked = new System.Collections.Generic.List<string>();
+                                    System.Net.Sockets.TcpListener sixtyFake, sixtyCloudFake, sixtyClaudeFake;
+                                    Brain.Ollama = FakeServer(new string[]
+                                    {
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"" + sixtyText(2) + "\"},\"done_reason\":\"length\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"" + sixtyText(40) + "\"},\"done_reason\":\"length\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"" + sixtyText(60) + "\"},\"done_reason\":\"stop\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"Opened all sixty.\"},\"done_reason\":\"stop\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"" + sixtyText(3) + "\"},\"done_reason\":\"length\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"" + sixtyText(10) + "\"},\"done_reason\":\"length\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"" + sixtyText(10) + "\"},\"done_reason\":\"length\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"Opened the first ten.\"},\"done_reason\":\"stop\"}"
+                                    }, sixtyAsked, out sixtyFake);
+                                    string sixtyNvidia = Brain.Nvidia, sixtyAnthropic = Brain.Anthropic;
+                                    Brain.Nvidia = FakeServer(new string[]
+                                    {
+                                        sixtyCloud(30, true), sixtyCloud(60, false),
+                                        sixtyCloud(5, true), "!400 {\"error\":{\"message\":\"max_tokens is too large: 4000. This model supports at most 2048 completion tokens.\"}}"
+                                    }, sixtyCloudAsked, out sixtyCloudFake);
+                                    Brain.Anthropic = FakeServer(new string[]
+                                    {
+                                        sixtyClaude(20, true), sixtyClaude(60, false),
+                                        "{\"content\":[{\"type\":\"text\",\"text\":\"Opened all sixty.\"}],\"stop_reason\":\"end_turn\"}"
+                                    }, sixtyClaudeAsked, out sixtyClaudeFake);
+                                    try
+                                    {
+                                        System.Collections.Generic.List<string> sixtyOpened = new System.Collections.Generic.List<string>();
+                                        Func<string, ToolArguments, string> sixtyAct = delegate(string name, ToolArguments args) { sixtyOpened.Add(args.Name); return "Opened " + args.Name + "."; };
+                                        Brain sixty = new Brain();
+                                        sixty.Model = "sixty-test";
+                                        sixty.Act = sixtyAct;
+                                        string sixtyReply = sixty.Ask("open all sixty of my apps");
+                                        string sixtyRan = string.Join(",", sixtyOpened.ToArray());
+                                        sixtyOpened.Clear();
+                                        Brain endless = new Brain();
+                                        endless.Model = "endless-test";
+                                        endless.Act = sixtyAct;
+                                        string endlessReply = null, endlessProblem = null;
+                                        try { endlessReply = endless.Ask("open all sixty of my apps"); }
+                                        catch (BrainException error) { endlessProblem = error.Message; }
+                                        string endlessRan = string.Join(",", sixtyOpened.ToArray());
+                                        sixtyOpened.Clear();
+                                        Brain sixtyNv = new Brain();
+                                        sixtyNv.Remote = new Cloud("nvapi-test", "nvidia/nemotron-3.5-super-vl-120b-a12b");
+                                        sixtyNv.Model = sixtyNv.Remote.Model;
+                                        sixtyNv.Act = sixtyAct;
+                                        sixtyNv.Ask("open all sixty of my apps");
+                                        string cloudRan = string.Join(",", sixtyOpened.ToArray());
+                                        sixtyOpened.Clear();
+                                        string refusedProblem = null;
+                                        try { sixtyNv.Ask("open all sixty of my apps again"); }
+                                        catch (BrainException error) { refusedProblem = error.Message; }
+                                        string refusedRan = string.Join(",", sixtyOpened.ToArray());
+                                        sixtyOpened.Clear();
+                                        Brain sixtyClaudeBrain = new Brain();
+                                        sixtyClaudeBrain.Remote = new Cloud("sk-ant-test", "claude-sonnet-5-5");
+                                        sixtyClaudeBrain.Model = sixtyClaudeBrain.Remote.Model;
+                                        sixtyClaudeBrain.Act = sixtyAct;
+                                        string claudeReply = sixtyClaudeBrain.Ask("open all sixty of my apps");
+                                        string claudeRan = string.Join(",", sixtyOpened.ToArray());
+                                        string allSixty = string.Join(",", sixtyApps), firstTen = string.Join(",", sixtyApps, 0, 10), firstFive = string.Join(",", sixtyApps, 0, 5);
+                                        string[] sixtySent, cloudSent, claudeSent;
+                                        lock (sixtyAsked) sixtySent = sixtyAsked.ToArray();
+                                        lock (sixtyCloudAsked) cloudSent = sixtyCloudAsked.ToArray();
+                                        lock (sixtyClaudeAsked) claudeSent = sixtyClaudeAsked.ToArray();
+                                        if (sixtyReply != "Opened all sixty." || sixtyRan != allSixty || sixtySent.Length != 8 || sixtySent[0].IndexOf("\"num_predict\":120", StringComparison.Ordinal) < 0 || sixtySent[1].IndexOf("\"num_predict\":2000", StringComparison.Ordinal) < 0 || sixtySent[2].IndexOf("\"num_predict\":4000", StringComparison.Ordinal) < 0)
+                                            throw new Exception("Sixty apps on Ollama didn't all open with double the room each time: " + sixtyReply + " / " + sixtyOpened.Count + " / " + sixtySent.Length + " requests");
+                                        if (endlessProblem != null || endlessReply != "Opened the first ten." || endlessRan != firstTen || sixtySent[5].IndexOf("\"num_predict\":2000", StringComparison.Ordinal) < 0 || sixtySent[6].IndexOf("\"num_predict\":4000", StringComparison.Ordinal) < 0)
+                                            throw new Exception("A brain that never finished didn't run the calls it wrote whole: " + endlessProblem + " / " + endlessReply + " / " + endlessRan);
+                                        if (cloudRan != allSixty || refusedProblem != null || refusedRan != firstFive || cloudSent.Length != 4 || cloudSent[0].IndexOf("\"max_tokens\":2000", StringComparison.Ordinal) < 0 || cloudSent[1].IndexOf("\"max_tokens\":4000", StringComparison.Ordinal) < 0 || cloudSent[3].IndexOf("\"max_tokens\":4000", StringComparison.Ordinal) < 0)
+                                            throw new Exception("A cloud brain's long list didn't get double the room, or a turned-down room lost its whole calls: " + cloudRan.Length + " / " + refusedProblem + " / " + refusedRan + " / " + cloudSent.Length + " requests");
+                                        if (claudeReply != "Opened all sixty." || claudeRan != allSixty || claudeSent.Length != 3 || claudeSent[0].IndexOf("\"max_tokens\":16000", StringComparison.Ordinal) < 0 || claudeSent[1].IndexOf("\"max_tokens\":32000", StringComparison.Ordinal) < 0)
+                                            throw new Exception("Claude's long list didn't get double the room: " + claudeReply + " / " + claudeRan.Length + " / " + claudeSent.Length + " requests");
+                                    }
+                                    finally
+                                    {
+                                        Brain.Ollama = splitOllama;
+                                        Brain.Nvidia = sixtyNvidia;
+                                        Brain.Anthropic = sixtyAnthropic;
+                                        sixtyFake.Stop();
+                                        sixtyCloudFake.Stop();
+                                        sixtyClaudeFake.Stop();
+                                    }
+                                    checks.Add("PASS no ceiling per ask: sixty apps that run out of room twice on Ollama are asked again with 2000, then 4000, and all sixty open; a brain that never finishes runs the ten calls it wrote whole without an error; an NVIDIA key's cut-off list gets 4000 and all sixty open, and one that turns the bigger room down still runs its five whole calls; Claude's gets 32000 and all sixty open");
 
                                     System.Collections.Generic.List<string> followAsked = new System.Collections.Generic.List<string>();
                                     System.Net.Sockets.TcpListener followFake;
@@ -11580,9 +11692,12 @@ namespace CapriDesktop
                                         "{\"message\":{\"role\":\"assistant\",\"content\":\"Same lobby.\"},\"done_reason\":\"stop\"}",
                                         "{\"message\":{\"role\":\"assistant\",\"content\":\"<think>I might use media\",\"thinking\":\"Still thinking.\"},\"done_reason\":\"length\"}",
                                         "{\"message\":{\"role\":\"assistant\",\"content\":\"media{\\\"action\\\":\\\"next\\\"}\",\"thinking\":\"Still thinking.\"},\"done_reason\":\"length\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"media{\\\"action\\\":\\\"next\\\"} media{\\\"act\",\"thinking\":\"Still thinking.\"},\"done_reason\":\"length\"}",
+                                        "{\"message\":{\"role\":\"assistant\",\"content\":\"Skipped to the next song.\"},\"done_reason\":\"stop\"}",
                                         "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":\"I need to choose a tool.\"},\"finish_reason\":\"length\"}]}",
                                         "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"function\":{\"name\":\"open_app\",\"arguments\":\"{\\\"name\\\":\\\"Spotify\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}",
                                         "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning\":\"Still thinking.\"},\"finish_reason\":\"length\"}]}",
+                                        "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning\":\"Still thinking, longer.\"},\"finish_reason\":\"length\"}]}",
                                         "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"<think>Choose one.\"},\"finish_reason\":\"length\"}]}",
                                         "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"open_app{\\\"name\\\":\\\"Spotify\\\"}\"},\"finish_reason\":\"stop\"}]}"
                                     }, reachAsked, out reachFake);
@@ -11596,11 +11711,13 @@ namespace CapriDesktop
                                         if (thinking.Ask("look at the game") != "A game lobby." || thinking.Ask("look at the lobby") != "Same lobby." || acted != 2) throw new Exception("A thinking tool request was lost or repeated.");
                                         Brain unfinished = new Brain();
                                         unfinished.Model = "unfinished-test";
-                                        unfinished.Act = delegate { acted++; return "Wrong."; };
+                                        string unfinishedRan = null;
+                                        unfinished.Act = delegate(string name, ToolArguments args) { acted++; unfinishedRan = name + "|" + args.Action; return "Skipped."; };
                                         bool stopped = false;
-                                        try { unfinished.Ask("look at the game"); }
+                                        string unfinishedReply = null;
+                                        try { unfinishedReply = unfinished.Ask("look at the game"); }
                                         catch (BrainException) { stopped = true; }
-                                        if (!stopped || acted != 2) throw new Exception("An unfinished request ran a partial call.");
+                                        if (stopped || acted != 3 || unfinishedRan != "media|next" || unfinishedReply != "Skipped to the next song.") throw new Exception("A reply that never finished didn't run just its whole call: " + stopped + " / " + acted + " / " + unfinishedRan + " / " + unfinishedReply);
                                         Brain localThinking = new Brain();
                                         System.Collections.Generic.List<ChatMessage> localMessages = new System.Collections.Generic.List<ChatMessage> { new ChatMessage("system", Hands.Prompt), new ChatMessage("user", "get Spotify going") };
                                         System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> localCalls = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>>();
@@ -11610,7 +11727,7 @@ namespace CapriDesktop
                                         stopped = false;
                                         try { localThinking.Complete(reachUrl, "local-test", localMessages, true, localCalls, null, 120, -1, true); }
                                         catch (BrainException) { stopped = true; }
-                                        if (!stopped || localCalls.Count != 0) throw new Exception("Local reasoning accepted an unfinished call.");
+                                        if (stopped || localCalls.Count != 0) throw new Exception("Local reasoning that never finished ran a call or gave an error.");
                                         localMessages[0] = new ChatMessage("system", Hands.Prompt + Hands.Listing);
                                         string localText = localThinking.Complete(reachUrl, "local-text-test", localMessages, false, localCalls, null, 120, -1, true);
                                         string localTool;
@@ -11618,11 +11735,11 @@ namespace CapriDesktop
                                         if (!Hands.Typed(localText, out localTool, out localArgs) || localTool != "open_app" || localArgs.Name != "Spotify") throw new Exception("Local text tools lost their call after thinking.");
                                         string[] reachSent;
                                         lock (reachAsked) reachSent = reachAsked.ToArray();
-                                        if (reachSent.Length != 12 || reachSent[0].IndexOf("\"num_predict\":120", StringComparison.Ordinal) < 0 || reachSent[1].IndexOf("\"num_predict\":2168", StringComparison.Ordinal) < 0 || reachSent[2].IndexOf("\"num_predict\":2138", StringComparison.Ordinal) < 0 || reachSent[3].IndexOf("\"num_predict\":2168", StringComparison.Ordinal) < 0 || reachSent[0].IndexOf("\"think\":false", StringComparison.Ordinal) < 0) throw new Exception("Reach did not keep its Ollama thinking budget.");
-                                        if (reachSent[7].IndexOf("\"max_tokens\":120", StringComparison.Ordinal) < 0 || reachSent[8].IndexOf("\"max_tokens\":2168", StringComparison.Ordinal) < 0 || reachSent[9].IndexOf("\"max_tokens\":2168", StringComparison.Ordinal) < 0 || reachSent[10].IndexOf("\"max_tokens\":120", StringComparison.Ordinal) < 0 || reachSent[11].IndexOf("\"max_tokens\":2168", StringComparison.Ordinal) < 0 || reachSent[11].IndexOf("\"tools\":", StringComparison.Ordinal) >= 0) throw new Exception("Local reasoning did not keep its budget or text path.");
+                                        if (reachSent.Length != 15 || reachSent[0].IndexOf("\"num_predict\":120", StringComparison.Ordinal) < 0 || reachSent[1].IndexOf("\"num_predict\":2168", StringComparison.Ordinal) < 0 || reachSent[2].IndexOf("\"num_predict\":2138", StringComparison.Ordinal) < 0 || reachSent[3].IndexOf("\"num_predict\":2168", StringComparison.Ordinal) < 0 || reachSent[0].IndexOf("\"think\":false", StringComparison.Ordinal) < 0 || reachSent[7].IndexOf("\"num_predict\":4336", StringComparison.Ordinal) < 0) throw new Exception("Reach did not keep its Ollama thinking budget.");
+                                        if (reachSent[9].IndexOf("\"max_tokens\":120", StringComparison.Ordinal) < 0 || reachSent[10].IndexOf("\"max_tokens\":2168", StringComparison.Ordinal) < 0 || reachSent[11].IndexOf("\"max_tokens\":2168", StringComparison.Ordinal) < 0 || reachSent[12].IndexOf("\"max_tokens\":4336", StringComparison.Ordinal) < 0 || reachSent[13].IndexOf("\"max_tokens\":120", StringComparison.Ordinal) < 0 || reachSent[14].IndexOf("\"max_tokens\":2168", StringComparison.Ordinal) < 0 || reachSent[14].IndexOf("\"tools\":", StringComparison.Ordinal) >= 0) throw new Exception("Local reasoning did not keep its budget or text path.");
                                     }
                                     finally { Brain.Ollama = splitOllama; reachFake.Stop(); }
-                                    checks.Add("PASS Reach thinking: 120 then 2168 tokens on Ollama and local completions, cached budgets, text tools, and no actions after a truncated retry");
+                                    checks.Add("PASS Reach thinking: 120 then 2168 tokens on Ollama and local completions, cached budgets and text tools; a reply that still runs out of room is asked again with 4336, then runs only the calls it wrote whole, and reasoning that never finishes runs nothing without an error");
                                     if (Brain.Clean("Hey choom.<unused49> <end_of_turn>") != "Hey choom." || !Brain.Garbled("<unused49><unused49><unused49><unused49>") || !Brain.Garbled("<unused49>") || !Brain.Garbled("Hey <unused49><unused49><unused49>") || Brain.Garbled("Hey choom.<end_of_turn>") || Brain.Garbled("I use <angle> brackets")) throw new Exception("Gibberish tokens were spotted wrong.");
                                     if (!Brain.Garbled("[Surariate] (Let'Aber-or several (Aber-or (Aberde-unto (Aber-or (Aber-value' (Aber-or-value-or (Aber-or-value-or-unto-or-or-to-or -or-or (Aberde-or-or-or-or-or-or (Aberde-or-or-or-or-or-or-") || !Brain.Garbled("ok ok ok ok ok ok ok ok ok") || Brain.Garbled("Honestly choom, the best way to learn Python is to just build something small. Try a script that renames your files, then a tiny game, and look stuff up when you get stuck.") || Brain.Garbled("no no no no, choom, put the kettle down") || Brain.Garbled("おはよう、チューム。今日は何をする?コーヒーでも飲む?") || Brain.Garbled("print(\"hello world\") prints hello world, choom. Hello world is the classic first program.")) throw new Exception("Looping word salad was spotted wrong.");
                                     System.Net.Sockets.TcpListener garbleFake;
@@ -12208,7 +12325,7 @@ namespace CapriDesktop
                                     }
                                     finally { Brain.OpenAi = seenOpenAi; seenFake.Stop(); Brain.Unsee(); }
                                     checks.Add("PASS screen memory replies: a glance answers SAW and SAY, read with bold, lowercase, dashes or either order; SKIP stays silent and keeps what she saw; a blocked description stays out; her chat prompt lists what she saw, oldest first, for 3 hours and across a restart");
-                                    string transcriptsWas = Brain.TranscriptPath, memoriesWas = Brain.MemoriesPath, foldOpenAi = Brain.OpenAi;
+                                    string transcriptsWas = Brain.TranscriptPath, memoriesWas = Brain.MemoriesPath, foldOpenAi = Brain.OpenAi, notesWas = Brain.MemoryPath;
                                     string memoryRoot = Path.Combine(Path.GetDirectoryName(Brain.MemoryPath), "memory-test");
                                     if (Directory.Exists(memoryRoot)) Directory.Delete(memoryRoot, true);
                                     Brain.TranscriptPath = Path.Combine(memoryRoot, "transcripts");
@@ -12252,7 +12369,8 @@ namespace CapriDesktop
                                             "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"## Wednesday 28 October 2026\\n- They finally beat Malenia in Elden Ring after 40 tries, and I called them a legend.\\n* They finally beat Malenia in Elden Ring after 40 tries, and I called them a legend.\\n- They live at 42 Wallaby Way.\\n- Their phone number is 0412 345 678.\\n- Their school is called Hillcrest High.\\n- They don't keep addresses, but they mentioned 14 Carrington Street.\\n- They hang out at 7 Ocean Parade.\\nSome chatter that isn't a bullet.\"}}]}",
                                             "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"## Earlier\\n- They like games.\"}}]}",
                                             "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"## Earlier\\n## Thursday 29 October 2026\\n- They like games, apparently.\"}}]}",
-                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"You beat the Hornet fight, choom. I remember.\"}}]}"
+                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"You beat the Hornet fight, choom. I remember.\"}}]}",
+                                            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Hornet again? You beat her once already.\"}}]}"
                                         }, foldAsked, out foldFake);
                                         Brain folder = new Brain();
                                         folder.Remote = new Cloud("sk-proj-test", "gpt-5-mini");
@@ -12276,13 +12394,38 @@ namespace CapriDesktop
                                         if (newDayOnly != null || File.ReadAllText(Brain.MemoriesPath) != longMemory + "## Thursday 29 October 2026\n- They like games, apparently.\n" || File.ReadAllText(queueFile) != "") throw new Exception("A fold that sent back only the new day lost the older ones: " + newDayOnly + " / " + File.ReadAllText(Brain.MemoriesPath));
                                         File.WriteAllText(Path.Combine(Brain.TranscriptPath, "2026-10-20.md"), "# Capri and you, Tuesday 20 October 2026\n> Kept on this PC only, never uploaded.\n\n**21:04 You:** We beat the Hornet fight in Silksong!\n**21:05 Capri:** Took you long enough.\n**21:30 You:** going to bed\n");
                                         string recalled = Brain.Recalled("remember when we beat Hornet?");
-                                        if (recalled.IndexOf("- 2026-10-20 21:04 You: We beat the Hornet fight in Silksong!", StringComparison.Ordinal) < 0 || recalled.IndexOf("going to bed", StringComparison.Ordinal) >= 0 || Brain.Recalled("how's it going?") != "" || Brain.Recalled("remember when we did stuff?") != "" || Brain.Recalled("remember my address on Carrington Street?") != "") throw new Exception("Remember when didn't find the right lines, or found an address: " + recalled);
+                                        if (recalled.IndexOf("- 2026-10-20 21:04 You: We beat the Hornet fight in Silksong!\n- 2026-10-20 21:05 Capri: Took you long enough.", StringComparison.Ordinal) < 0 || recalled.IndexOf("going to bed", StringComparison.Ordinal) >= 0 || Brain.Recalled("how's it going?") != "" || Brain.Recalled("remember when we did stuff?") != "" || Brain.Recalled("remember my address on Carrington Street?") != "") throw new Exception("Remember when didn't find the right lines, or found an address: " + recalled);
+                                        // Unasked, she digs up a telling match with its reply, and adds nothing for small talk, a word they say all the time, what's already in her chat, an address or a note already in her prompt.
+                                        Brain.Digging = true;
+                                        string dug = Brain.Recalled("Hornet keeps wrecking me in Silksong");
+                                        string dugShown = Brain.Recalled("Hornet keeps wrecking me in Silksong", new[] { "We beat the Hornet fight in Silksong!" });
+                                        File.WriteAllText(Path.Combine(Brain.TranscriptPath, "2026-10-21.md"), "# Capri and you, Wednesday 21 October 2026\n\n**09:00 You:** gonna play some games\n**09:01 Capri:** Which games?\n**09:02 You:** games with friends\n**09:03 You:** board games tonight\n");
+                                        string dugCommon = Brain.Recalled("any good games coming out?");
+                                        string dugSmall = Brain.Recalled("how's it going?") + Brain.Recalled("what are you up to tonight?") + Brain.Recalled("Carrington Street was busy today");
+                                        string fillers = "";
+                                        for (int note = 1; note < 40; note++) fillers += "- Note number " + note + "\n";
+                                        Brain.MemoryPath = Path.Combine(memoryRoot, "me.md");
+                                        File.WriteAllText(Brain.MemoryPath, Brain.NotesHead + "- Their cat is called Biscuit\n" + fillers + "- Their dog is called Pickles\n");
+                                        string dugNote = Brain.Recalled("Biscuit knocked my drink over");
+                                        string dugNewest = Brain.Recalled("Pickles chewed my headphones");
+                                        Brain.MemoryPath = notesWas;
+                                        Brain.Digging = false;
+                                        string undug = Brain.Recalled("Hornet keeps wrecking me in Silksong");
+                                        Brain.Digging = true;
+                                        if (!dug.StartsWith("\n\n(From your own chat logs and notes on this PC, earlier moments", StringComparison.Ordinal) || !dug.EndsWith("\n- 2026-10-20 21:04 You: We beat the Hornet fight in Silksong!\n- 2026-10-20 21:05 Capri: Took you long enough.)", StringComparison.Ordinal) || dug.IndexOf("Malenia", StringComparison.Ordinal) >= 0
+                                            || dugShown != "" || dugCommon != "" || dugSmall != "" || dugNote.IndexOf("\n- From your notes: Their cat is called Biscuit)", StringComparison.Ordinal) < 0 || dugNewest != "" || undug != "")
+                                            throw new Exception("Digging through her chats unasked went wrong: " + dug + " / " + dugShown + " / " + dugCommon + " / " + dugSmall + " / " + dugNote + " / " + dugNewest + " / " + undug);
                                         Brain rememberer = new Brain();
                                         rememberer.Remote = new Cloud("sk-proj-test", "gpt-5-mini");
                                         rememberer.Model = "gpt-5-mini";
                                         string recallSaid = rememberer.Ask("remember when we beat Hornet?");
                                         lock (foldAsked) foldSent = foldAsked.Count == 4 ? foldAsked[3] : "";
                                         if (recallSaid != "You beat the Hornet fight, choom. I remember." || foldSent.IndexOf("We beat the Hornet fight in Silksong!", StringComparison.Ordinal) < 0) throw new Exception("Remember when didn't reach her chat: " + recallSaid + " / " + foldSent);
+                                        // Talking about Hornet again brings the old fight into her chat, but not the lines she can already see.
+                                        string dugSaid = rememberer.Ask("Hornet keeps wrecking me in Silksong");
+                                        lock (foldAsked) foldSent = foldAsked.Count == 5 ? foldAsked[4] : "";
+                                        if (dugSaid != "Hornet again? You beat her once already." || foldSent.IndexOf("(From your own chat logs and notes on this PC, earlier moments", StringComparison.Ordinal) < 0 || foldSent.IndexOf("We beat the Hornet fight in Silksong!", StringComparison.Ordinal) < 0
+                                            || foldSent.Split(new[] { "You beat the Hornet fight, choom. I remember." }, StringSplitOptions.None).Length != 2) throw new Exception("Digging didn't reach her chat, or brought back what she could already see: " + dugSaid + " / " + foldSent);
                                         File.Delete(Brain.MemoriesPath);
                                         OpenMemories();
                                         if (File.ReadAllText(Brain.MemoriesPath) != Brain.MemoriesHead || !Directory.Exists(Brain.TranscriptPath)) throw new Exception("Open her memories didn't make memories.md.");
@@ -12299,13 +12442,15 @@ namespace CapriDesktop
                                     {
                                         Brain.TranscriptPath = transcriptsWas;
                                         Brain.MemoriesPath = memoriesWas;
+                                        Brain.MemoryPath = notesWas;
                                         Brain.OpenAi = foldOpenAi;
                                         Brain.Keeping = true;
+                                        Brain.Digging = false;
                                         Brain.Unsee();
                                         if (foldFake != null) foldFake.Stop();
                                         if (Directory.Exists(memoryRoot)) Directory.Delete(memoryRoot, true);
                                     }
-                                    checks.Add("PASS longer memory: chat, her own lines, glances and jobs go in a daily transcript on this PC, folding runs on a new day or when the lines outgrow her chat, the picked brain folds them into memories.md without addresses, schools or numbers, a fold that loses most memories is refused, a day the brain leaves out is kept unless it went into Earlier, memories.md reaches her prompt only with Remember our chats on, remember when finds old transcript lines, and the switch saves");
+                                    checks.Add("PASS longer memory: chat, her own lines, glances and jobs go in a daily transcript on this PC, folding runs on a new day or when the lines outgrow her chat, the picked brain folds them into memories.md without addresses, schools or numbers, a fold that loses most memories is refused, a day the brain leaves out is kept unless it went into Earlier, memories.md reaches her prompt only with Remember our chats on, remember when finds old transcript lines with their replies, talking about something digs up a telling old line or an old note on its own while small talk, common words, lines she can already see and addresses add nothing, and the switch saves");
                                     string curses = "King of Curses with Malevolent Shrine on the hotbar, choom? Somebody's been watching too much anime.";
                                     string[] cursed = { curses };
                                     if (!Glances.Repeats("That King of Curses moveset again? Malevolent Shrine spam incoming.", cursed, "") || !Glances.Repeats("still running that king of curses build huh", cursed, "") || !Glances.Repeats(curses, cursed, "")) throw new Exception("A glance repeated a name it already brought up.");

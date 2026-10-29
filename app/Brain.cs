@@ -250,6 +250,15 @@ namespace CapriDesktop
         internal BrainException(string message, bool told = false) : base(told ? message : Brain.Plain(message) ?? message) { Told = told || Brain.Plain(message) != null; }
     }
 
+    // A line from her chat logs, from the day it's On, or a note too old to fit in her prompt (On is null), with its words ready to search.
+    internal sealed class Moment
+    {
+        internal readonly string On;
+        internal readonly string Line;
+        internal readonly string[] Words;
+        internal Moment(string on, string line, string[] words) { On = on; Line = line; Words = words; }
+    }
+
     internal sealed class Brain
     {
         internal static string Ollama = "http://127.0.0.1:11434";
@@ -524,22 +533,31 @@ namespace CapriDesktop
             return (notes.Length == 0 ? "" : "\nYour notes about them, from me.md (they can read and edit it). Use them when they fit, and don't recite them:\n" + notes) + Memories() + Seen();
         }
 
+        // Her prompt holds her newest notes; older ones turn up when a chat is about them.
+        private const int NotesShown = 40;
+
         internal static string Notes()
         {
-            string path = MemoryPath;
-            if (path == null) return "";
-            string[] lines;
-            try { if (!File.Exists(path)) return ""; lines = File.ReadAllLines(path); }
-            catch (IOException) { return ""; }
-            catch (UnauthorizedAccessException) { return ""; }
+            List<string> kept = NoteLines();
+            int from = Math.Max(0, kept.Count - NotesShown);
+            return string.Join("\n", kept.GetRange(from, kept.Count - from).ToArray());
+        }
+
+        private static List<string> NoteLines()
+        {
             List<string> kept = new List<string>();
+            string path = MemoryPath;
+            if (path == null) return kept;
+            string[] lines;
+            try { if (!File.Exists(path)) return kept; lines = File.ReadAllLines(path); }
+            catch (IOException) { return kept; }
+            catch (UnauthorizedAccessException) { return kept; }
             foreach (string line in lines)
             {
                 string text = line.Trim();
                 if (text.Length > 0 && !text.StartsWith("#", StringComparison.Ordinal) && !text.StartsWith(">", StringComparison.Ordinal)) kept.Add(text.Length > 200 ? text.Substring(0, 200) : text);
             }
-            int from = Math.Max(0, kept.Count - 40);
-            return string.Join("\n", kept.GetRange(from, kept.Count - from).ToArray());
+            return kept;
         }
 
         internal static string Note(string fact)
@@ -882,44 +900,179 @@ namespace CapriDesktop
         }
 
         private static readonly Regex Reminiscing =new Regex(@"\b(remember|recall|remind me)\b|\b(what|when|where|how) (did|do|were|was) (we|i|you)\b|\b(yesterday|last (night|week|time)|the other day|earlier today)\b", RegexOptions.IgnoreCase);
-        private static readonly HashSet<string> Small = new HashSet<string>(("remember recall remind when what where how why who which did does was were the that this those these time times about talk talked talking chat chatted said say tell told yesterday last night week earlier today other day days our your you yours with and for have has had can could would should they them she her his him its there then than just some any all from into again still back ago capri choom hey lol please know think thing things stuff really very much like mean meant one got get gonna wanna are not but also yeah yes okay when's what's that's see saw seen look looked screen").Split(' '));
+        private static readonly HashSet<string> Small = new HashSet<string>(("remember recall remind when what where how why who which did does was were the that this those these time times about talk talked talking chat chatted said say tell told yesterday last night week earlier today other day days our your you yours with and for have has had can could would should they them she her his him its there then than just some any all from into again still back ago capri choom hey lol please know think thing things stuff really very much like mean meant one got get gonna wanna are not but also yeah yes okay when's what's that's see saw seen look looked screen " +
+            "going doing done good great nice cool fine well feel feeling felt tonight tomorrow morning evening now right make made want wanted need let gotta dunno maybe sure thanks thank bye hello hiya sup hmm hmmm omg idk tbh btw haha hahaha lmao lmfao bro dude man guys i'm i've i'll i'd you're you've you'll we're they're don't doesn't didn't can't won't isn't aren't wasn't haven't couldn't wouldn't shouldn't ain't " +
+            "anything something nothing everything someone anyone everyone kinda pretty lot lots bit little new old first next same another every each both only even ever never always sometimes often soon later yet already too way real yep yup nah nope wait ugh wow yay while because cause cuz since until after before around through without over off out here more most less mine myself yourself their whatever tho though actually literally basically honestly seriously probably definitely totally quite enough almost will may might must goes went gone come came coming take took give gave put keep kept try tried use used finally").Split(' '));
+        // Chinese, Japanese, Thai, Lao, Khmer and Burmese don't put spaces between words, and Korean glues endings onto them, so they're matched two letters at a time.
+        private const string Unspaced = @"\p{IsCJKUnifiedIdeographs}\p{IsHiragana}\p{IsKatakana}\p{IsHangulSyllables}\p{IsThai}\p{IsLao}\p{IsKhmer}\p{IsMyanmar}";
+        private static readonly Regex Wordy = new Regex("([" + Unspaced + "]+)|(?:(?![" + Unspaced + "])[\\p{L}\\p{M}\\p{N}'])+");
+        private static readonly Regex TalkLine = new Regex(@"^\*\*\d\d:\d\d ([^*]+?):\*\* (.*)$");
+        // She digs through her chats for whatever they talk about, unasked. The smoke's own chats would turn up in each other's prompts, so it digs only in its memory test.
+        internal static volatile bool Digging = true;
+        // Each day's lines, kept until its file changes, so a search reads only today's again.
+        private static readonly Dictionary<string, KeyValuePair<string, List<Moment>>> dug = new Dictionary<string, KeyValuePair<string, List<Moment>>>(StringComparer.OrdinalIgnoreCase);
 
-        // "Remember when..." gets matching lines from her transcripts, found by a plain word search on this PC.
-        internal static string Recalled(string asked)
+        // Lines from her chat logs, and notes too old for her prompt, that match what they said, found by a word search on this PC with no brain call.
+        // "Remember when..." takes any match. Anything else takes only a telling one, so most chats add nothing. Lines already in her chat stay out.
+        internal static string Recalled(string asked, IEnumerable<string> chat = null)
         {
-            string folder = TranscriptPath;
-            if (folder == null || !Keeping || !Reminiscing.IsMatch(asked ?? "")) return "";
+            asked = asked ?? "";
+            bool reminiscing = Reminiscing.IsMatch(asked);
+            if (TranscriptPath == null || !Keeping || (!reminiscing && (!Digging || asked.StartsWith("(", StringComparison.Ordinal)))) return "";
             List<string> words = new List<string>();
-            foreach (Match word in Regex.Matches(asked.ToLowerInvariant(), @"[\p{L}\p{N}']{3,}")) if (!Small.Contains(word.Value) && !words.Contains(word.Value)) words.Add(word.Value);
+            foreach (string word in Words(asked)) if (!words.Contains(word)) words.Add(word);
             if (words.Count == 0) return "";
-            string[] days;
-            try { days = Directory.GetFiles(folder, "????-??-??.md"); }
-            catch (IOException) { return ""; }
-            catch (UnauthorizedAccessException) { return ""; }
-            Array.Sort(days, StringComparer.Ordinal);
-            List<KeyValuePair<int, string>> found = new List<KeyValuePair<int, string>>();
-            for (int d = days.Length - 1; d >= 0; d--)
+            List<Moment> moments = Moments();
+            // BM25: a rare word counts for more than a common one, and a word in a short line for more than in a long one.
+            List<KeyValuePair<int, int[]>> hits = new List<KeyValuePair<int, int[]>>();
+            int[] lines = new int[words.Count];
+            double average = 0;
+            for (int i = 0; i < moments.Count; i++)
             {
-                string[] lines;
-                try { lines = File.ReadAllLines(days[d]); }
-                catch (IOException) { continue; }
-                catch (UnauthorizedAccessException) { continue; }
-                string date = Path.GetFileNameWithoutExtension(days[d]);
-                for (int i = lines.Length - 1; i >= 0; i--)
-                {
-                    if (!lines[i].StartsWith("*", StringComparison.Ordinal) || Revealing(lines[i])) continue;
-                    int score = 0;
-                    foreach (string word in words) if (Regex.IsMatch(lines[i], @"(?<![\p{L}\p{N}])" + Regex.Escape(word), RegexOptions.IgnoreCase)) score++;
-                    if (score > 0) found.Add(new KeyValuePair<int, string>(score, date + " " + lines[i].Replace("*", "")));
-                }
+                int[] counts = null;
+                average += moments[i].Words.Length;
+                for (int w = 0; w < words.Count; w++)
+                    foreach (string word in moments[i].Words)
+                        if (word == words[w])
+                        {
+                            if (counts == null) counts = new int[words.Count];
+                            if (counts[w]++ == 0) lines[w]++;
+                        }
+                if (counts != null) hits.Add(new KeyValuePair<int, int[]>(i, counts));
             }
-            if (found.Count == 0) return "";
-            // Best matches first, newest first among equals; then shown oldest first.
-            List<KeyValuePair<int, string>> best = new List<KeyValuePair<int, string>>();
-            for (int score = words.Count; score > 0 && best.Count < 8; score--) foreach (KeyValuePair<int, string> line in found) if (line.Key == score && best.Count < 8) best.Add(line);
-            List<string> shown = best.ConvertAll(line => "- " + line.Value);
-            shown.Sort(StringComparer.Ordinal);
-            return "\n\n(Lines from your own chat logs on this PC that match what they asked, oldest first. They really happened; use them if they help:\n" + string.Join("\n", shown.ToArray()) + ")";
+            if (hits.Count == 0) return "";
+            average = Math.Max(1, average / moments.Count);
+            double[] rare = new double[words.Count];
+            for (int w = 0; w < words.Count; w++) rare[w] = Math.Log(1 + (moments.Count - lines[w] + 0.5) / (lines[w] + 0.5));
+            // Unasked, a line has to match words about as rare, all together, as one said only once.
+            double telling = 0.6 * Math.Log(1 + (moments.Count - 0.5) / 1.5);
+            List<KeyValuePair<double, int>> found = new List<KeyValuePair<double, int>>();
+            foreach (KeyValuePair<int, int[]> hit in hits)
+            {
+                double score = 0, weight = 0;
+                for (int w = 0; w < words.Count; w++)
+                {
+                    int count = hit.Value[w];
+                    if (count == 0) continue;
+                    weight += rare[w];
+                    score += rare[w] * count * 2.2 / (count + 1.2 * (0.25 + 0.75 * moments[hit.Key].Words.Length / average));
+                }
+                if (reminiscing || weight >= telling) found.Add(new KeyValuePair<double, int>(score, hit.Key));
+            }
+            // Best first, newest first among equals; then shown oldest first, each with the other half of its exchange.
+            found.Sort((a, b) => a.Key != b.Key ? b.Key.CompareTo(a.Key) : b.Value.CompareTo(a.Value));
+            HashSet<string> shown = new HashSet<string>(StringComparer.Ordinal);
+            if (chat != null) foreach (string line in chat) shown.Add(Regex.Replace(line ?? "", @"\s+", " ").Trim());
+            int most = reminiscing ? 8 : 4, room = reminiscing ? 12 : 8, taken = 0;
+            double best = 0;
+            SortedSet<int> picked = new SortedSet<int>();
+            foreach (KeyValuePair<double, int> match in found)
+            {
+                if (taken == most || picked.Count >= room || (!reminiscing && match.Key < best / 2)) break;
+                // Lines about where they live or how to reach them never come back, the same rule as her notes, and nor do lines she can already see.
+                if (Revealing(moments[match.Value].Line) || shown.Contains(Said(moments[match.Value].On, moments[match.Value].Line))) continue;
+                if (taken++ == 0) best = match.Key;
+                picked.Add(match.Value);
+                int other = Partner(moments, match.Value);
+                if (other >= 0 && picked.Count < room && !Revealing(moments[other].Line) && !shown.Contains(Said(moments[other].On, moments[other].Line))) picked.Add(other);
+            }
+            if (picked.Count == 0) return "";
+            List<string> recalled = new List<string>();
+            foreach (int i in picked) recalled.Add("- " + Shown(moments[i]));
+            return (reminiscing ? "\n\n(Lines from your own chat logs and notes on this PC that match what they asked, oldest first. They really happened; use them if they help:\n"
+                : "\n\n(From your own chat logs and notes on this PC, earlier moments that may connect to what they just said, oldest first. They really happened. Bring one up only if it fits, and never list them:\n") + string.Join("\n", recalled.ToArray()) + ")";
+        }
+
+        // Her notes too old for her prompt, then every day's chat lines, oldest first.
+        private static List<Moment> Moments()
+        {
+            List<Moment> moments = new List<Moment>();
+            List<string> notes = NoteLines();
+            for (int i = 0; i < notes.Count - NotesShown; i++)
+            {
+                string note = notes[i].TrimStart('-', '*', ' ');
+                moments.Add(new Moment(null, note, Words(note)));
+            }
+            string[] days;
+            try { days = Directory.GetFiles(TranscriptPath, "????-??-??.md"); }
+            catch (IOException) { return moments; }
+            catch (UnauthorizedAccessException) { return moments; }
+            Array.Sort(days, StringComparer.Ordinal);
+            lock (dug)
+                foreach (string day in days)
+                {
+                    string stamp;
+                    try { FileInfo file = new FileInfo(day); stamp = file.LastWriteTimeUtc.Ticks + "|" + file.Length; }
+                    catch (IOException) { continue; }
+                    KeyValuePair<string, List<Moment>> kept;
+                    if (!dug.TryGetValue(day, out kept) || kept.Key != stamp)
+                    {
+                        string[] lines;
+                        try { lock (writing) lines = File.ReadAllLines(day); }
+                        catch (IOException) { continue; }
+                        catch (UnauthorizedAccessException) { continue; }
+                        string on = Path.GetFileNameWithoutExtension(day);
+                        List<Moment> read = new List<Moment>();
+                        foreach (string line in lines) if (line.StartsWith("*", StringComparison.Ordinal)) read.Add(new Moment(on, line, Words(Said(on, line))));
+                        dug[day] = kept = new KeyValuePair<string, List<Moment>>(stamp, read);
+                    }
+                    moments.AddRange(kept.Value);
+                }
+            return moments;
+        }
+
+        // The words that count, in a message or a line she kept: no filler, plain English endings off, so "beating" finds "beat" and "games" finds "game".
+        private static string[] Words(string text)
+        {
+            List<string> words = new List<string>();
+            foreach (Match run in Wordy.Matches((text ?? "").Replace('\u2019', '\'').ToLowerInvariant()))
+            {
+                string word = run.Value.Trim('\'');
+                if (run.Groups[1].Success) { for (int i = 0; i + 1 < word.Length; i++) words.Add(string.Intern(word.Substring(i, 2))); continue; }
+                if (word.EndsWith("'s", StringComparison.Ordinal)) word = word.Substring(0, word.Length - 2);
+                if (word.Length < 3 || Small.Contains(word) || (word.EndsWith("s", StringComparison.Ordinal) && Small.Contains(word.Substring(0, word.Length - 1)))) continue;
+                word = Stem(word);
+                if (word.Length >= 3 && !Small.Contains(word)) words.Add(string.Intern(word));
+            }
+            return words.ToArray();
+        }
+
+        private static string Stem(string word)
+        {
+            if (word.Length > 4 && word.EndsWith("ies", StringComparison.Ordinal)) word = word.Substring(0, word.Length - 3) + "y";
+            else if (word.Length > 5 && word.EndsWith("ing", StringComparison.Ordinal)) word = word.Substring(0, word.Length - 3);
+            else if (word.Length > 4 && word.EndsWith("ed", StringComparison.Ordinal)) word = word.Substring(0, word.Length - 2);
+            else if (word.Length > 3 && word.EndsWith("s", StringComparison.Ordinal) && !Regex.IsMatch(word, "(ss|us|is)$")) word = word.Substring(0, word.Length - 1);
+            // "running" and "run", "game" and "gaming" end up the same.
+            int last = word.Length - 1;
+            if (last > 2 && word[last] == word[last - 1] && "bdgmnprt".IndexOf(word[last]) >= 0) return word.Substring(0, last);
+            return last > 2 && word[last] == 'e' ? word.Substring(0, last) : word;
+        }
+
+        // What a kept line says, without its time and who said it.
+        private static string Said(string on, string line)
+        {
+            if (on == null) return line;
+            Match spoken = TalkLine.Match(line);
+            return spoken.Success ? spoken.Groups[2].Value : Regex.Replace(line, @"^\*\d\d:\d\d |\*$", "");
+        }
+
+        private static string Shown(Moment moment)
+        {
+            string shown = moment.On == null ? "From your notes: " + moment.Line : moment.On + " " + moment.Line.Replace("*", "");
+            return shown.Length > 240 ? shown.Substring(0, 240).TrimEnd() + "..." : shown;
+        }
+
+        // The other half of an exchange: the reply to their line, or the line her reply answered, from the same day.
+        private static int Partner(List<Moment> moments, int i)
+        {
+            Match spoken = TalkLine.Match(moments[i].Line);
+            if (moments[i].On == null || !spoken.Success) return -1;
+            bool theirs = spoken.Groups[1].Value.StartsWith("You", StringComparison.Ordinal);
+            int other = theirs ? i + 1 : i - 1;
+            if (other < 0 || other >= moments.Count || moments[other].On != moments[i].On) return -1;
+            Match answer = TalkLine.Match(moments[other].Line);
+            return answer.Success && answer.Groups[1].Value.StartsWith("You", StringComparison.Ordinal) != theirs ? other : -1;
         }
 
         internal static string[] InstalledModels()
@@ -1051,12 +1204,14 @@ namespace CapriDesktop
             List<ChatMessage> messages = new List<ChatMessage>();
             messages.Add(new ChatMessage("system", Character + Remembered() + Gap() + (act != null ? Hands.Chat : "") + Now()));
             List<ChatMessage> recent;
+            List<string> chat;
             lock (gate)
             {
                 messages.AddRange(history);
                 recent = history.GetRange(Math.Max(0, history.Count - 2), Math.Min(2, history.Count));
+                chat = history.ConvertAll(message => message.Content);
             }
-            messages.Add(new ChatMessage("user", text + Recalled(text)));
+            messages.Add(new ChatMessage("user", text + Recalled(text, chat)));
             List<KeyValuePair<string, ToolArguments>> calls = new List<KeyValuePair<string, ToolArguments>>();
             string raw = null;
             string direct;
@@ -1207,7 +1362,10 @@ namespace CapriDesktop
             }
             string written;
             ToolArguments writtenArgs;
-            if (calls.Count == 0 && Hands.Typed(raw, out written, out writtenArgs, true)) calls.Add(new KeyValuePair<string, ToolArguments>(written, writtenArgs));
+            // A list of calls written out as text runs every one of them.
+            List<KeyValuePair<string, ToolArguments>> several = calls.Count == 0 ? Hands.Written(raw) : null;
+            if (several != null && several.Count > 1) calls.AddRange(several);
+            else if (calls.Count == 0 && Hands.Typed(raw, out written, out writtenArgs, true)) calls.Add(new KeyValuePair<string, ToolArguments>(written, writtenArgs));
             if (calls.Exists(call => !Hands.Valid(call.Key, call.Value))) { calls.Clear(); throw new BrainException("Couldn't read that tool call. Try again."); }
             return raw;
         }
@@ -1278,7 +1436,7 @@ namespace CapriDesktop
             Check(ticket);
             Cloud remote = Remote;
             string listed = tools ? openAiTools ?? Hands.Tools : null;
-            if (remote != null && remote.Claude) return AskClaude(remote, messages, tools, calls, parts, ticket, claudeTools);
+            if (remote != null && remote.Claude) return AskClaude(remote, messages, tools, calls, parts, ticket, claudeTools, routing);
             if (remote != null)
             {
                 bool openAi = remote.Kind == "openai";
@@ -1296,7 +1454,8 @@ namespace CapriDesktop
                 };
                 string address = Address(remote.Kind, "/chat/completions");
                 Action<HttpWebRequest> sign = delegate(HttpWebRequest request) { Sign(request, remote.Key, false); };
-                try { return Read(Send<CompletionReply>(address, body, CloudWait, listed, sign, parts, ticket), calls); }
+                CompletionReply reply;
+                try { reply = Send<CompletionReply>(address, body, CloudWait, listed, sign, parts, ticket); }
                 catch (BrainException error)
                 {
                     // A model that turns down its reasoning_effort, like gpt-6-luna with tools, gets the value its error names, once, and keeps it.
@@ -1305,8 +1464,18 @@ namespace CapriDesktop
                     lock (efforts) efforts[remote.Model] = taken;
                     Log(address, -1, remote.Model + " takes reasoning_effort " + (taken.Length == 0 ? "left out" : taken) + ", asking again");
                     body.Effort = taken.Length == 0 ? null : taken;
-                    return Read(Send<CompletionReply>(address, body, CloudWait, listed, sign, parts, ticket), calls);
+                    reply = Send<CompletionReply>(address, body, CloudWait, listed, sign, parts, ticket);
                 }
+                CompletionMessage cut = reply != null && reply.Choices != null && reply.Choices.Length > 0 && reply.Choices[0] != null ? reply.Choices[0].Message : null;
+                if (routing && Stopped(reply) && cut != null && Unfinished(cut.Content, cut.Calls != null, cut.Thinking ?? cut.Reasoning))
+                    reply = Longer(reply, body.Limit ?? body.Tokens ?? 2000, Stopped, Whole, delegate(int room)
+                    {
+                        if (body.Limit != null) body.Limit = room;
+                        else body.Tokens = room;
+                        return Send<CompletionReply>(address, body, Math.Max(CloudWait, room * 50), listed, sign, parts, ticket);
+                    });
+                if (routing && Stopped(reply)) return CutShort(Said(reply), Whole(reply), calls);
+                return Read(reply, calls);
             }
             Engine local = Local;
             if (local != null)
@@ -1354,14 +1523,16 @@ namespace CapriDesktop
                 if (chat.Error != null) throw new BrainException(chat.Error);
                 if (chat.Message != null && chat.Message.Calls == null && Garbled(chat.Message.Content)) throw new BrainException(Gibberish, true);
             }
-            if (routing && chat.Stopped == "length" && thinker != thinking && limit < LongAsk && chat.Message != null && CutCalls(chat.Message.Content, chat.Message.Calls != null))
-            {
-                asking.Options.Limit = LongAsk;
-                chat = Send<ChatReply>(Ollama + "/api/chat", asking, 180000, listed, null, null, ticket);
-                if (chat.Error != null) throw new BrainException(chat.Error);
-            }
-            if (routing && chat.Stopped == "length") throw new BrainException("Couldn't finish that request. Try again.");
+            if (routing && chat.Stopped == "length" && chat.Message != null && Unfinished(chat.Message.Content, chat.Message.Calls != null, chat.Message.Thinking))
+                chat = Longer(chat, asking.Options.Limit, reply => reply.Stopped == "length", Whole, delegate(int room)
+                {
+                    asking.Options.Limit = room;
+                    ChatReply again = Send<ChatReply>(Ollama + "/api/chat", asking, Math.Max(180000, room * 150), listed, null, null, ticket);
+                    if (again.Error != null) throw new BrainException(again.Error);
+                    return again;
+                });
             if (chat.Message == null) return null;
+            if (routing && chat.Stopped == "length") return CutShort(chat.Message.Content, Whole(chat), calls);
             if (chat.Message.Calls != null) foreach (ToolCall call in chat.Message.Calls) if (call != null && call.Function != null) calls.Add(new KeyValuePair<string, ToolArguments>(call.Function.Name, call.Function.Arguments));
             return chat.Message.Content;
         }
@@ -1403,21 +1574,99 @@ namespace CapriDesktop
                 choice = reply.Choices != null && reply.Choices.Length > 0 ? reply.Choices[0] : null;
             }
             CompletionMessage cut = choice != null ? choice.Message : null;
-            if (routing && choice != null && choice.Stopped == "length" && thinker != thinking && limit < LongAsk && cut != null && CutCalls(cut.Content, cut.Calls != null))
-            {
-                asking.Limit = LongAsk;
-                reply = Send<CompletionReply>(address + "/v1/chat/completions", asking, 180000, listed, null, parts, ticket);
-                choice = reply.Choices != null && reply.Choices.Length > 0 ? reply.Choices[0] : null;
-            }
-            if (routing && choice != null && choice.Stopped == "length") throw new BrainException("Couldn't finish that request. Try again.");
+            if (routing && Stopped(reply) && cut != null && Unfinished(cut.Content, cut.Calls != null, cut.Thinking ?? cut.Reasoning))
+                reply = Longer(reply, asking.Limit, Stopped, Whole, delegate(int room)
+                {
+                    asking.Limit = room;
+                    return Send<CompletionReply>(address + "/v1/chat/completions", asking, Math.Max(180000, room * 150), listed, null, parts, ticket);
+                });
+            if (routing && Stopped(reply)) return CutShort(Said(reply), Whole(reply), calls);
             return Read(reply, calls);
         }
 
-        // Routing's short reply fits four or five tool calls. A longer list, like six apps at once, is cut off partway through
-        // its calls, so it's asked again with room for all of them, as much as cloud brains get. A cut-off ramble isn't.
+        // Routing's short reply fits four or five tool calls. A longer list, like a dozen apps at once, runs out of room partway
+        // through its calls, so it's asked again with double the room each time, until a reply ends by itself or a try brings no
+        // more whole calls. Then every whole call from the longest try runs, with no ceiling on how many. A cut-off ramble isn't
+        // asked again.
         private const int LongAsk = 2000;
 
-        private static bool CutCalls(string content, bool called) { return called || Regex.IsMatch(content ?? "", @"\{|<tool_call>|<\|tool"); }
+        // A reply that ran out of room partway through its calls, or before it finished thinking.
+        private static bool Unfinished(string content, bool called, string thinking)
+        {
+            return called || Regex.IsMatch(content ?? "", @"\{|<tool_call>|<\|tool") || (Clean(content).Length == 0 && (!string.IsNullOrWhiteSpace(thinking) || (content ?? "").IndexOf("<think>", StringComparison.OrdinalIgnoreCase) >= 0));
+        }
+
+        private static T Longer<T>(T reply, int was, Func<T, bool> cut, Func<T, List<KeyValuePair<string, ToolArguments>>> whole, Func<int, T> ask) where T : class
+        {
+            T longest = reply;
+            int most = whole(reply).Count;
+            for (long room = Math.Max(LongAsk, 2L * was); room <= int.MaxValue; room *= 2)
+            {
+                T again;
+                try { again = ask((int)room); }
+                // A brain that turns down the bigger room, or takes too long with it, keeps the calls it already wrote.
+                catch (BrainException) { if (most == 0) throw; break; }
+                catch (WebException error) { if (most == 0 || error.Status != WebExceptionStatus.Timeout) throw; break; }
+                if (!cut(again)) return again;
+                List<KeyValuePair<string, ToolArguments>> found = whole(again);
+                if (found.Count <= most) break;
+                longest = again;
+                most = found.Count;
+            }
+            return longest;
+        }
+
+        // A reply that still ran out of room: its whole calls run. With none, it's what it said so far, and her chat answers.
+        private static string CutShort(string content, List<KeyValuePair<string, ToolArguments>> whole, List<KeyValuePair<string, ToolArguments>> calls)
+        {
+            if (whole.Count == 0) return content ?? "";
+            calls.AddRange(whole);
+            return "";
+        }
+
+        private static bool Stopped(CompletionReply reply) { return reply != null && reply.Choices != null && reply.Choices.Length > 0 && reply.Choices[0] != null && reply.Choices[0].Stopped == "length"; }
+
+        private static string Said(CompletionReply reply) { return reply != null && reply.Choices != null && reply.Choices.Length > 0 && reply.Choices[0] != null && reply.Choices[0].Message != null ? reply.Choices[0].Message.Content : null; }
+
+        // The calls in a reply that came back whole. One cut off at the end, or one that doesn't make sense, is left out.
+        private static List<KeyValuePair<string, ToolArguments>> Whole(ChatReply chat)
+        {
+            List<KeyValuePair<string, ToolArguments>> found = new List<KeyValuePair<string, ToolArguments>>();
+            if (chat == null || chat.Message == null) return found;
+            if (chat.Message.Calls != null)
+                foreach (ToolCall call in chat.Message.Calls)
+                    if (call != null && call.Function != null && Hands.Valid(call.Function.Name, call.Function.Arguments)) found.Add(new KeyValuePair<string, ToolArguments>(call.Function.Name, call.Function.Arguments));
+            return found.Count > 0 ? found : Hands.Written(chat.Message.Content);
+        }
+
+        private static List<KeyValuePair<string, ToolArguments>> Whole(CompletionReply reply)
+        {
+            List<KeyValuePair<string, ToolArguments>> found = new List<KeyValuePair<string, ToolArguments>>();
+            CompletionMessage message = reply != null && reply.Choices != null && reply.Choices.Length > 0 && reply.Choices[0] != null ? reply.Choices[0].Message : null;
+            if (message == null) return found;
+            if (message.Calls != null)
+                foreach (CompletionCall call in message.Calls)
+                {
+                    if (call == null || call.Function == null) continue;
+                    ToolArguments args = Hands.Read(call.Function.Arguments);
+                    if (Hands.Valid(call.Function.Name, args)) found.Add(new KeyValuePair<string, ToolArguments>(call.Function.Name, args));
+                }
+            return found.Count > 0 ? found : Hands.Written(message.Content);
+        }
+
+        private static List<KeyValuePair<string, ToolArguments>> Whole(ClaudeReply reply)
+        {
+            List<KeyValuePair<string, ToolArguments>> found = new List<KeyValuePair<string, ToolArguments>>();
+            if (reply == null || reply.Content == null) return found;
+            for (int i = 0; i < reply.Content.Length; i++)
+            {
+                ClaudeBlock block = reply.Content[i];
+                // The block Claude was writing when it ran out of room can be missing the end of its input.
+                if (block == null || block.Type != "tool_use" || (i == reply.Content.Length - 1 && reply.StopReason == "max_tokens")) continue;
+                if (Hands.Valid(block.Name, block.Input)) found.Add(new KeyValuePair<string, ToolArguments>(block.Name, block.Input));
+            }
+            return found;
+        }
 
         private static string Read(CompletionReply reply, List<KeyValuePair<string, ToolArguments>> calls)
         {
@@ -1436,7 +1685,7 @@ namespace CapriDesktop
             return Visible(message.Content);
         }
 
-        private string AskClaude(Cloud remote, List<ChatMessage> messages, bool tools, List<KeyValuePair<string, ToolArguments>> calls, string parts = null, int ticket = -1, string claudeTools = null)
+        private string AskClaude(Cloud remote, List<ChatMessage> messages, bool tools, List<KeyValuePair<string, ToolArguments>> calls, string parts = null, int ticket = -1, string claudeTools = null, bool routing = false)
         {
             string model = remote.Model;
             bool fallback = Regex.IsMatch(model, @"^claude-(opus-5|sonnet-5-5|fable-5-1)");
@@ -1448,12 +1697,22 @@ namespace CapriDesktop
                 Output = Regex.IsMatch(model, @"^claude-((opus|sonnet|haiku|fable|mythos)-5|opus-4-[5-8]|sonnet-4-6)") ? new ClaudeOutput() : null,
                 Fallbacks = fallback ? "default" : null
             };
-            ClaudeReply reply = Send<ClaudeReply>(Anthropic + "/v1/messages", body, CloudWait, tools ? claudeTools ?? Hands.ClaudeTools : null, delegate(HttpWebRequest request)
+            Action<HttpWebRequest> sign = delegate(HttpWebRequest request)
             {
                 Sign(request, remote.Key, true);
                 if (fallback) request.Headers["anthropic-beta"] = "server-side-fallback-2026-07-01";
-            }, parts, ticket);
+            };
+            string listed = tools ? claudeTools ?? Hands.ClaudeTools : null;
+            ClaudeReply reply = Send<ClaudeReply>(Anthropic + "/v1/messages", body, CloudWait, listed, sign, parts, ticket);
+            Func<ClaudeReply, bool> cut = delegate(ClaudeReply said) { return said.StopReason == "max_tokens"; };
+            if (routing && cut(reply) && reply.Content != null && Array.Exists(reply.Content, block => block != null && block.Type == "tool_use"))
+                reply = Longer(reply, body.Limit, cut, Whole, delegate(int room)
+                {
+                    body.Limit = room;
+                    return Send<ClaudeReply>(Anthropic + "/v1/messages", body, Math.Max(CloudWait, room * 50), listed, sign, parts, ticket);
+                });
             if (reply.StopReason == "refusal") return Declined;
+            if (routing && cut(reply)) return CutShort(Spoken(reply, new List<KeyValuePair<string, ToolArguments>>()), Whole(reply), calls);
             return Spoken(reply, calls);
         }
 
@@ -1628,6 +1887,8 @@ namespace CapriDesktop
         internal void Load(string path)
         {
             ChatPath = path;
+            // Her chat logs are read in the background as she starts, so the first thing they say doesn't wait on months of them.
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { if (Keeping && Digging && TranscriptPath != null) Moments(); });
             SavedChat saved;
             try
             {

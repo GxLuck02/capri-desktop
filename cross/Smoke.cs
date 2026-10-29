@@ -682,9 +682,14 @@ namespace CapriDesktop
                 pet.SetRemembering(true);
                 string memoriesPath = pet.OpenMemories();
                 string recalledBoss = Brain.Recalled("remember when we beat the smoke boss?");
-                if (!transcribed || !rememberedOn || !stoppedWriting || !pet.Remembers || !Brain.Keeping || memoriesPath != Path.Combine(folder, "memories.md") || !File.Exists(memoriesPath) || !Directory.Exists(Brain.TranscriptPath) || recalledBoss.IndexOf("You: we finally beat the smoke boss", StringComparison.Ordinal) < 0)
-                    throw new Exception("Remember our chats went wrong: " + transcribed + " | " + rememberedOn + " | " + stoppedWriting + " | " + recalledBoss);
-                checks.Add("PASS remember our chats: on by default here too, a chat line goes in today's transcript, \"remember when\" finds it, off writes nothing, and Open her memories makes memories.md");
+                // Talking about it again digs it up unasked, unless it's already in her chat; small talk digs up nothing.
+                string dugBoss = Brain.Recalled("the smoke boss is back for a rematch");
+                string dugShown = Brain.Recalled("the smoke boss is back for a rematch", new[] { "we finally beat the smoke boss" });
+                string dugSmall = Brain.Recalled("how's it going?");
+                if (!transcribed || !rememberedOn || !stoppedWriting || !pet.Remembers || !Brain.Keeping || memoriesPath != Path.Combine(folder, "memories.md") || !File.Exists(memoriesPath) || !Directory.Exists(Brain.TranscriptPath) || recalledBoss.IndexOf("You: we finally beat the smoke boss", StringComparison.Ordinal) < 0
+                    || dugBoss.IndexOf("earlier moments that may connect", StringComparison.Ordinal) < 0 || dugBoss.IndexOf("You: we finally beat the smoke boss", StringComparison.Ordinal) < 0 || dugShown.IndexOf("we finally beat the smoke boss", StringComparison.Ordinal) >= 0 || dugSmall != "")
+                    throw new Exception("Remember our chats went wrong: " + transcribed + " | " + rememberedOn + " | " + stoppedWriting + " | " + recalledBoss + " | " + dugBoss + " | " + dugShown + " | " + dugSmall);
+                checks.Add("PASS remember our chats: on by default here too, a chat line goes in today's transcript, \"remember when\" finds it, talking about it again digs it up unasked unless it's already in her chat, small talk digs up nothing, off writes nothing, and Open her memories makes memories.md");
                 bool personalityMade = Brain.PersonalityPath == Path.Combine(folder, "personality.md") && File.ReadAllText(Brain.PersonalityPath) == Brain.PersonalityFile && Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Machinery;
                 File.Delete(Brain.PersonalityPath);
                 string personalityPath = pet.OpenPersonality();
