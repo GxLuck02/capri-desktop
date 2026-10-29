@@ -81,6 +81,10 @@ avec ≤ 2 s de retard, relance CPU rare sur Mac) ; Sweep ne vérifie que le nom
 ou 2e instance de Capri) ; Stop peut bloquer l'UI quelques secondes si llama-server ignore TERM ;
 un Ensure tardif après DropBuiltIn peut relancer un serveur inutilisé (fenêtre étroite).
 
+## Étape 3 — où on en est
+Design validé (3 parties), spec : `docs/superpowers/specs/2026-10-29-mac-free-voice-design.md`
+(branche `mac-step3-voice`) — en attente de relecture utilisateur, puis plan.
+
 ## Notes pour la suite
 - L'utilisateur veut rester **gratuit au maximum** : privilégier local (Ollama / llama.cpp, Kokoro) et NVIDIA gratuit.
 - Sur le M2 8 Go, utiliser `gemma4:e2b-it-qat` (4,3 Go). Le `gemma4:e2b` par défaut d'Ollama fait 7,5 Go : trop gros.
