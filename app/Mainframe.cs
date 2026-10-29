@@ -67,7 +67,6 @@ namespace CapriDesktop
         private readonly Rung[] rungs = new Rung[3];
         private int tier;
         private readonly Entry nickname;
-        private readonly Label personalityNote;
         private readonly Key showHide;
         private readonly Key perch;
         private readonly Slider sizeSlider;
@@ -115,7 +114,6 @@ namespace CapriDesktop
         private readonly Key freeVoices;
         private readonly ContextMenuStrip freeMenu;
         private readonly Key freeSetup;
-        private readonly Key herVoice;
         private bool freeReady;
         private bool yoursShown;
         private ServerSheet sheet;
@@ -360,10 +358,6 @@ namespace CapriDesktop
             freeSetup.Accent = Look.Cyan;
             freeSetup.Loud = true;
             freeSetup.Visible = false;
-            // One click from their voice back to hers, in the same spot as Get free voice, which only shows before her free voice is in.
-            herVoice = Lower(Make("Her voice", 232, 346, 124, 28, delegate { capri.UseHerVoice(); }));
-            herVoice.AccessibleName = "Back to her own HD voice";
-            herVoice.Visible = false;
             micMenu = Dropdown();
             mics = Lower(Make("Mic: default", 28, 382, 244, 28, delegate { ShowMics(); }));
             mics.Chevron = true;
@@ -391,7 +385,6 @@ namespace CapriDesktop
             for (int i = header; i < Controls.Count; i++) mainLeft.Add(new KeyValuePair<Control, int>(Controls[i], Controls[i].Left));
             int first = Controls.Count;
             Caption("YOU >", 28, 58, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
-            personalityNote = Caption("", 84, 59, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             Caption("Language", 28, 86, Font, Look.Dim);
             languageMenu = Dropdown();
             for (int i = 0; i < Brain.Languages.GetLength(0); i++)
@@ -413,8 +406,6 @@ namespace CapriDesktop
             nickname.Box.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UseNickname(); } };
             Make("Save", 280, 140, 76, 28, delegate { UseNickname(); });
             Make("Open her notes", 28, 176, 120, 28, delegate { capri.OpenNotes(); }).AccessibleName = "Open her notes: me.md, her notes about you";
-            Make("Edit personality", 156, 176, 130, 28, delegate { capri.OpenPersonality(); }).AccessibleName = "Edit her personality: personality.md";
-            Make("Reset", 294, 176, 62, 28, delegate { capri.ResetPersonality(); }).AccessibleName = "Reset her personality to her default";
             Caption("VOICE >", 28, 220, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
             styleNote = Caption("Every voice, ElevenLabs too", 88, 218, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             styleNote.AutoSize = false;
@@ -986,29 +977,9 @@ namespace CapriDesktop
             repliesName.Text = Lengths[replies.Value];
             recall.Value = Math.Max(0, Array.IndexOf(Recalls, capri.Recall));
             recallName.Text = Lengths[recall.Value];
-            ShowPersonality();
             perchFps.Value = Math.Max(0, Array.IndexOf(Companion.PerchRates, capri.PerchFps));
             ShowPerch();
             syncing = false;
-        }
-
-        // Says which personality she's using, and why it's her default when personality.md is missing, empty or can't be read.
-        internal void ShowPersonality()
-        {
-            string note = Brain.PersonalityNote;
-            personalityNote.Text = note;
-            personalityNote.ForeColor = note == Brain.HerDefault || note == Brain.YourEdit ? Look.Dim : note == Brain.LongNote ? Look.Yellow : Look.Red;
-        }
-
-        internal string PersonalityShown { get { return personalityNote.Text; } }
-
-        internal Color PersonalityColour { get { return personalityNote.ForeColor; } }
-
-        // Back from editing personality.md in Notepad, the note catches up.
-        protected override void OnActivated(EventArgs e)
-        {
-            base.OnActivated(e);
-            ShowPersonality();
         }
 
         // Past 30 fps she draws her perch more often, so the HABITS line says it costs more.
@@ -1335,7 +1306,6 @@ namespace CapriDesktop
             // A model file runs on her free voice's engine, and her free voice fills in for a server that's down.
             freeSetup.Visible = (voiceRow == 1 || voiceRow == 2) && !freeReady;
             customVoice.Width = Scaled(freeReady ? 328 : 196);
-            herVoice.Visible = voiceRow == 1 && freeReady && yoursShown;
             cloudPick.Invalidate();
             cloudVoice.Invalidate();
             if (Fold != arrangedFold) Arrange(expanded);
@@ -1463,7 +1433,6 @@ namespace CapriDesktop
             customVoice.Text = served != null ? "Voice model: " + served : "Pick a voice model...";
             freeSetup.Text = busy ? "Cancel" : "Get free voice";
             freeSetup.Visible = (voiceRow == 1 || voiceRow == 2) && !ready;
-            herVoice.Visible = voiceRow == 1 && ready && yoursShown;
             freeVoices.Width = Scaled(ready && !yoursShown ? 328 : 196);
             customVoice.Width = Scaled(ready ? 328 : 196);
             freeMenu.Items.Clear();
@@ -1473,9 +1442,13 @@ namespace CapriDesktop
                 freeMenu.Items.Add(Choice(name, name == chosen, delegate { capri.ChooseVoiceStyle(name); }));
             }
             freeMenu.Items.Add(new ToolStripSeparator());
-            ToolStripMenuItem own = Choice(!hdFits ? "HD · needs a 6 GB graphics card" : yours || kept ? "HD · her own voice" :"HD · graphics card, " + Engine.Amount(QwenVoice.PackSize), hd && !yours, delegate { if (yours) capri.UseHerVoice(); else capri.ChooseVoiceStyle(QwenVoice.Style); });
-            own.Enabled = hdFits;
-            freeMenu.Items.Add(own);
+            // Capri ships no voice clip, so HD copies only a clip they pick: before there is one, HD asks for it.
+            if (!yours && !kept)
+            {
+                ToolStripMenuItem own = Choice(!hdFits ? "HD · needs a 6 GB graphics card" : "HD · graphics card, " + Engine.Amount(QwenVoice.PackSize), hd, delegate { PickYourVoice(); });
+                own.Enabled = hdFits;
+                freeMenu.Items.Add(own);
+            }
             // Only her HD voice clones from a clip; her other styles are set voices.
             if (yours || kept)
             {
@@ -1489,7 +1462,6 @@ namespace CapriDesktop
             freeVoices.Invalidate();
             customVoice.Invalidate();
             freeSetup.Invalidate();
-            herVoice.Invalidate();
             ShowEffects();
         }
 
@@ -1498,7 +1470,7 @@ namespace CapriDesktop
         {
             using (OpenFileDialog dialog = new OpenFileDialog())
             {
-                dialog.Title = "Pick 5 to 30 seconds of you talking";
+                dialog.Title = "Pick 5 to 30 seconds of you talking, or of a voice you have the rights and consent to use";
                 dialog.Filter = "Voice clips (*.wav;*.mp3;*.m4a)|*.wav;*.mp3;*.m4a|All files (*.*)|*.*";
                 if (dialog.ShowDialog(this) == DialogResult.OK) capri.UseYourVoice(dialog.FileName);
             }
@@ -1514,11 +1486,10 @@ namespace CapriDesktop
                     ToolStripMenuItem choice = item as ToolStripMenuItem;
                     if (choice != null && (choice.Text.StartsWith("HD ", StringComparison.Ordinal) || choice.Text.IndexOf("you", StringComparison.OrdinalIgnoreCase) >= 0)) items.Add(choice.Text + (choice.Checked ? " (picked)" : ""));
                 }
-                return freeVoices.Text + " | " + (herVoice.Visible ? herVoice.Text : "-") + " | " + string.Join(", ", items.ToArray());
+                return freeVoices.Text + " | " + string.Join(", ", items.ToArray());
             }
         }
 
-        internal void ClickHerVoice() { typeof(Control).GetMethod("OnClick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(herVoice, new object[] { EventArgs.Empty }); }
 
         // Clicks the free voice menu's item that starts with this text, as they would. False if it isn't there or can't be clicked.
         internal bool PickFree(string text)
@@ -2419,7 +2390,7 @@ namespace CapriDesktop
             {
                 using (OpenFileDialog dialog = new OpenFileDialog())
                 {
-                    dialog.Title = "Pick 10 to 30 seconds of someone talking, with their OK";
+                    dialog.Title = "Pick 10 to 30 seconds of a voice you have the rights and consent to use";
                     dialog.Filter = "Voice clips (*.wav;*.mp3;*.m4a;*.flac)|*.wav;*.mp3;*.m4a;*.flac|All files (*.*)|*.*";
                     if (dialog.ShowDialog(this) == DialogResult.OK) MakeVoice(dialog.FileName);
                 }
@@ -2462,7 +2433,7 @@ namespace CapriDesktop
             {
                 using (OpenFileDialog dialog = new OpenFileDialog())
                 {
-                    dialog.Title = "Pick a clip of the voice to copy, with their OK";
+                    dialog.Title = "Pick a clip of a voice you have the rights and consent to use";
                     dialog.Filter = "Voice clips (*.wav;*.mp3;*.m4a;*.flac)|*.wav;*.mp3;*.m4a;*.flac|All files (*.*)|*.*";
                     if (dialog.ShowDialog(this) == DialogResult.OK) TakeClip(dialog.FileName);
                 }

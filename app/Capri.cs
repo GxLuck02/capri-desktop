@@ -1060,9 +1060,6 @@ namespace CapriDesktop
             startMarker = smoke ? null : Path.Combine(data, Program.StartMarker);
             Brain.LogPath = Path.Combine(data, "errors.txt");
             Brain.MemoryPath = Path.Combine(data, "me.md");
-            Brain.PersonalityPath = Path.Combine(data, Brain.PersonalityName);
-            if (smoke) foreach (string old in new[] { Brain.PersonalityPath, Brain.PersonalityBackup }) if (File.Exists(old)) File.Delete(old);
-            Brain.MakePersonality();
             Brain.MemoriesPath = Path.Combine(data, "memories.md");
             Brain.TranscriptPath = Path.Combine(data, "transcripts");
             engine = new Engine(data);
@@ -3275,29 +3272,6 @@ namespace CapriDesktop
                 using (Process.Start(new ProcessStartInfo("notepad.exe", "\"" + path + "\"") { UseShellExecute = false })) { }
             }
             catch (Exception) { Tell("open notes", "Couldn't open my notes. They live in " + path + "."); }
-        }
-
-        internal void OpenPersonality()
-        {
-            string path = Brain.PersonalityPath;
-            try
-            {
-                if (!Brain.MakePersonality()) throw new IOException("Couldn't make " + path);
-                Edit(path);
-            }
-            catch (Exception) { Tell("open personality", "Couldn't open my personality. It lives in " + path + "."); }
-            mainframe.ShowPersonality();
-        }
-
-        internal void ResetPersonality()
-        {
-            string backup = Brain.ResetPersonality();
-            mainframe.ShowPersonality();
-            if (backup == null) { Tell("reset personality", "Couldn't reset my personality. It lives in " + Brain.PersonalityPath + "."); return; }
-            if (hidden || chatting || IsDisposed) return;
-            heard = "settings";
-            box.Prompt = "> sys: ";
-            Answer(++asking, backup.Length > 0 ? Brain.ResetKept : Brain.ResetDone, TalkState.Talking);
         }
 
         // Shows memories.md in File Explorer, beside her transcripts folder.
@@ -6251,7 +6225,6 @@ namespace CapriDesktop
         }
 
         internal const string YourLine = "Got it. I'll talk like you now, choom.";
-        internal const string HerLine = "Back to my own voice, choom.";
 
         // Their own voice: a clip they pick is read, checked and cut on a worker thread, then saved where her HD voice looks for it.
         internal void UseYourVoice(string path)
@@ -6276,14 +6249,6 @@ namespace CapriDesktop
             catch (UnauthorizedAccessException error) { problem = error.Message; }
             if (problem != null) { mainframe.VoiceNote(Voice.Short("Couldn't save your voice: " + problem), true); return; }
             HearClip(YourLine);
-        }
-
-        // One click back to the clip she's built with. Theirs stays beside it for Your voice (HD) in the free voice menu.
-        internal void UseHerVoice()
-        {
-            try { YourVoice.Shelve(qwen.Folder); }
-            catch (IOException error) { mainframe.VoiceNote(Voice.Short("Couldn't switch back: " + error.Message), true); return; }
-            HearClip(HerLine);
         }
 
         internal void UseKeptVoice()
@@ -10512,14 +10477,14 @@ namespace CapriDesktop
                             checks.Add("PASS speech bubbles reuse unchanged pixels, keep typing and cursor blinks, follow content and layout changes, reopen and animate their glitches");
                             string messy = "<think>hmm</think> *waves* Capri: \"Hey choom!\" 😀";
                             if (Brain.Clean(messy) != "Hey choom!" || Brain.Clean(new string('a', 300)).Length > 222) throw new Exception("Reply cleanup failed: " + Brain.Clean(messy));
-                            if (Brain.DefaultPersonality.IndexOf("findahelpline.com", StringComparison.Ordinal) < 0 || Brain.DefaultPersonality.IndexOf("make-believe", StringComparison.Ordinal) < 0 || Brain.DefaultPersonality.IndexOf("Smoke on the Water", StringComparison.Ordinal) < 0 || Brain.DefaultPersonality.IndexOf("Your lines:", StringComparison.Ordinal) < 0
-                                || Brain.Machinery.IndexOf("Rules you never break", StringComparison.Ordinal) >= 0 || Brain.Machinery.IndexOf("helpline", StringComparison.Ordinal) >= 0 || Brain.Machinery.IndexOf("sexual", StringComparison.Ordinal) >= 0) throw new Exception("Her safety lines aren't in personality.md, or code still adds them after it.");
+                            if (Brain.Safety.IndexOf("findahelpline.com", StringComparison.Ordinal) < 0 || Brain.Safety.IndexOf("make-believe", StringComparison.Ordinal) < 0 || Brain.Safety.IndexOf("Smoke on the Water", StringComparison.Ordinal) < 0 || Brain.Safety.IndexOf("Your lines:", StringComparison.Ordinal) < 0 || Brain.DefaultPersonality.IndexOf("helpline", StringComparison.Ordinal) >= 0
+                                || Brain.Machinery.IndexOf("Rules you never break", StringComparison.Ordinal) >= 0 || Brain.Machinery.IndexOf("helpline", StringComparison.Ordinal) >= 0 || Brain.Machinery.IndexOf("sexual", StringComparison.Ordinal) >= 0) throw new Exception("Her safety lines aren't fixed in code after her personality, or her reply rules repeat them.");
                             if (Brain.Persona.IndexOf("a playful chaos gremlin", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("openly fond of them", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("good boy", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("no gushing praise", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("Never sound like a corporate assistant", StringComparison.Ordinal) < 0 || Brain.Persona.IndexOf("biggest fan", StringComparison.Ordinal) >= 0 || Brain.Persona.IndexOf("glad they", StringComparison.Ordinal) >= 0) throw new Exception("Her persona lost its playful chaos gremlin, her fondness for them, or its ban on assistant talk and gushing.");
                             string[] spared = { Brain.Sparing("Choom! You did it.", false), Brain.Sparing("Nice one, choom.", false), Brain.Sparing("Nice one, choom.", true), Brain.Sparing("Hey choom! Look at this.", true), Brain.Sparing("Choom, listen to me.", true), Brain.Sparing("Choom.", false) };
                             if (string.Join(" | ", spared) != "You did it. | Nice one, choom. | Nice one. | Hey! Look at this. | Listen to me. | Choom.") throw new Exception("She used choom wrong: " + string.Join(" | ", spared));
                             string[] named = { Brain.Sparing("Nice one, choom.", false, "Lachy"), Brain.Sparing("Choom, listen to me.", false, "Lachy"), Brain.Sparing("Choom, listen to me.", true, "Lachy"), Brain.Sparing("Chooms unite, choom!", false, "Lachy"), Brain.Sparing("Nice one, choom.", false, "") };
                             if (string.Join(" | ", named) != "Nice one, Lachy. | Lachy, listen to me. | Listen to me. | Chooms unite, Lachy! | Nice one, choom.") throw new Exception("Her nickname didn't replace choom: " + string.Join(" | ", named));
-                            checks.Add("PASS brain helpers: model pick, reply cleanup, choom only now and then and never on its own, a nickname takes choom's place, and her safety lines live in personality.md with no code screen or filter after them");
+                            checks.Add("PASS brain helpers: model pick, reply cleanup, choom only now and then and never on its own, a nickname takes choom's place, and her safety lines are fixed in code right after her personality, with no code screen or filter after them");
                             checks.Add("PASS her personality: a playful, teasing chaos gremlin who's openly fond of them and calls them a good boy, with the ban on assistant talk and gushing praise kept");
                             Brain.Log("https://integrate.api.nvidia.com/v1/chat/completions", 60012, "Timeout");
                             string details = ErrorDetails();
@@ -13942,83 +13907,15 @@ namespace CapriDesktop
                             if (pageOverlap != null) throw new Exception("Settings controls overlap: " + pageOverlap);
                             string pageOutside = mainframe.Outside();
                             if (pageOutside != null) throw new Exception("A settings control pokes out of the page: " + pageOutside);
-                            // personality.md: her default holds her safety lines, code adds only her reply rules after it, and an edit reaches her chat and voice-chat prompts on her next reply.
+                            // Her personality and safety lines are fixed in code (personality.md is gone since 0.7.6), her reply rules come last, and her chat and voice-chat prompts start with all three.
                             const string todaysPersona = "8d477080fe2773435efc60cc5ca13056f3c71aba5034e667f4e58977f262ded6";
                             Func<string, string> personaHash = delegate(string text) { using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(new System.Text.UTF8Encoding(false).GetBytes(text))).Replace("-", "").ToLowerInvariant(); };
-                            string personalityFile = Brain.PersonalityPath;
-                            string personalityBackup = Brain.PersonalityBackup;
-                            if (Brain.Stamp(Brain.DefaultPersonality) != Brain.DefaultStamp || Brain.Retired.Contains(Brain.DefaultStamp)) throw new Exception("Her default personality changed. Set Brain.DefaultStamp to " + Brain.Stamp(Brain.DefaultPersonality) + " and add the old stamp to Brain.Retired, so untouched copies of personality.md move to her new default.");
-                            bool personalityMade = personalityFile != null && Path.GetFileName(personalityFile) == "personality.md" && Path.GetDirectoryName(personalityFile) == Path.GetDirectoryName(Brain.MemoryPath) && File.Exists(personalityFile) && File.ReadAllText(personalityFile) == Brain.PersonalityFile && Brain.PersonalityFile.StartsWith("<!--", StringComparison.Ordinal);
-                            bool personalityToday = Brain.Persona.Length == 5098 && personaHash(Brain.Persona) == todaysPersona && Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Machinery && Brain.Readable(Brain.PersonalityFile) == Brain.DefaultPersonality && Brain.Personality == Brain.DefaultPersonality && Brain.PersonalityNote == Brain.HerDefault && Brain.PersonalityStamp == "" && !Agent.Stale(Agent.Version, null) && Agent.Prompt.StartsWith(Brain.Persona + Hands.Note, StringComparison.Ordinal) && mainframe.PersonalityShown == Brain.HerDefault && mainframe.PersonalityColour == Look.Dim;
-                            if (!personalityMade || !personalityToday) throw new Exception("Her default personality or rules changed: made " + personalityMade + ", " + Brain.Persona.Length + " characters, SHA-256 " + personaHash(Brain.Persona) + ". If her default or her rules changed on purpose, update todaysPersona here.");
-                            Action<string> personaEditWas = Edit;
-                            System.Collections.Generic.List<string> personaEdits = new System.Collections.Generic.List<string>();
-                            Edit = delegate(string path) { personaEdits.Add(path); };
-                            Button personalityButton = null, resetButton = null;
-                            foreach (Control control in mainframe.Controls)
-                            {
-                                if (control is Button && control.Text == "Edit personality") personalityButton = (Button)control;
-                                if (control is Button && control.Text == "Reset") resetButton = (Button)control;
-                            }
-                            if (personalityButton == null || resetButton == null) throw new Exception("The Mainframe lost its Edit personality or Reset button.");
-                            File.Delete(personalityFile);
-                            mainframe.Sync();
-                            bool personaMissing = Brain.Personality == Brain.DefaultPersonality && personaHash(Brain.Persona) == todaysPersona && Brain.PersonalityStamp == "" && mainframe.PersonalityShown == Brain.NoFile && mainframe.PersonalityColour == Look.Red && mainframe.Overlap() == null;
-                            personalityButton.PerformClick();
-                            bool personaOpened = personaEdits.Count == 1 && personaEdits[0] == personalityFile && File.Exists(personalityFile) && File.ReadAllText(personalityFile) == Brain.PersonalityFile && mainframe.PersonalityShown == Brain.HerDefault;
-                            File.WriteAllText(personalityFile, "<!-- nothing yet -->\r\n\r\n   \r\n");
-                            mainframe.Sync();
-                            bool personaBlankFalls = Brain.Personality == Brain.DefaultPersonality && personaHash(Brain.Persona) == todaysPersona && Brain.PersonalityStamp == "" && mainframe.PersonalityShown == Brain.BlankFile && mainframe.PersonalityColour == Look.Red && mainframe.Overlap() == null;
-                            File.WriteAllText(personalityFile, "");
-                            personaBlankFalls = personaBlankFalls && Brain.PersonalityNote == Brain.BlankFile && personaHash(Brain.Persona) == todaysPersona;
-                            personalityButton.PerformClick();
-                            bool personaBlankKept = personaEdits.Count == 2 && personaEdits[1] == personalityFile && File.ReadAllText(personalityFile) == "";
-                            string personaMine = "You are Capri, but grumpy: you sigh a lot and secretly love cats.\nYou call everyone \"boss\".";
-                            File.WriteAllText(personalityFile, "<!--\r\nmy notes, never sent\r\n-->\r\n\r\nYou are Capri, but grumpy: you sigh a lot and secretly love cats.   \r\n\r\n\r\nYou call everyone \"boss\".\r\n<!-- a note at the end -->\r\n");
-                            mainframe.Sync();
-                            string personaMineStamp = Brain.PersonalityStamp;
-                            bool personaEditReached = Brain.Personality == personaMine && Brain.Persona == personaMine + "\n" + Brain.Machinery && Brain.Character.StartsWith(personaMine + "\n" + Brain.Machinery, StringComparison.Ordinal) && Agent.Prompt.StartsWith(personaMine + "\n" + Brain.Machinery + Hands.Note, StringComparison.Ordinal) && Brain.Persona.IndexOf("never sent", StringComparison.Ordinal) < 0 && Brain.Persona.IndexOf("Edgerunners", StringComparison.Ordinal) < 0 && personaMineStamp.Length == 16 && personaMineStamp == Brain.Stamp(personaMine) && Agent.Stale(Agent.Version, null) && !Agent.Stale(Agent.Version, personaMineStamp) && Agent.Stale(Agent.Version - 1, personaMineStamp) && mainframe.PersonalityShown == Brain.YourEdit && mainframe.PersonalityColour == Look.Dim;
-                            bool personaLocked;
-                            using (FileStream personaLock = new FileStream(personalityFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-                            {
-                                mainframe.Sync();
-                                personaLocked = Brain.Personality == Brain.DefaultPersonality && personaHash(Brain.Persona) == todaysPersona && mainframe.PersonalityShown == Brain.CantRead && mainframe.PersonalityColour == Look.Red && mainframe.Overlap() == null;
-                            }
-                            personaLocked = personaLocked && Brain.Personality == personaMine;
-                            string personaLong = "";
-                            while (personaLong.Length < 20000) personaLong += "You remember every Night City street, every rooftop and every vending machine that ever ate your eddies. ";
-                            personaLong = personaLong.Trim();
-                            File.WriteAllText(personalityFile, personaLong);
-                            mainframe.Sync();
-                            bool personaLongKept = Brain.Personality == personaLong && Brain.Persona == personaLong + "\n" + Brain.Machinery && Agent.Prompt.StartsWith(personaLong + "\n", StringComparison.Ordinal) && mainframe.PersonalityShown == Brain.LongNote && mainframe.PersonalityColour == Look.Yellow && mainframe.Overlap() == null;
-                            snap("mainframe-personality.png");
-                            string personaTheirs = "<!-- mine -->\r\nYou are Capri, but grumpy.\r\n";
-                            File.WriteAllText(personalityFile, personaTheirs);
-                            if (File.Exists(personalityBackup)) File.Delete(personalityBackup);
-                            CloseTalk();
-                            resetButton.PerformClick();
-                            bool personaResetKept = Path.GetFileName(personalityBackup) == "personality.backup.md" && Path.GetDirectoryName(personalityBackup) == Path.GetDirectoryName(personalityFile) && File.Exists(personalityBackup) && File.ReadAllText(personalityBackup) == personaTheirs && File.ReadAllText(personalityFile) == Brain.PersonalityFile && personaHash(Brain.Persona) == todaysPersona && reply == Brain.ResetKept && mainframe.PersonalityShown == Brain.HerDefault;
-                            CloseTalk();
-                            resetButton.PerformClick();
-                            bool personaResetAgain = File.ReadAllText(personalityBackup) == personaTheirs && File.ReadAllText(personalityFile) == Brain.PersonalityFile && reply == Brain.ResetDone;
-                            CloseTalk();
-                            File.Delete(personalityFile);
-                            resetButton.PerformClick();
-                            bool personaResetMissing = File.ReadAllText(personalityFile) == Brain.PersonalityFile && File.ReadAllText(personalityBackup) == personaTheirs && reply == Brain.ResetDone;
-                            CloseTalk();
-                            string personaOld = "You are Capri, from an older Capri.";
-                            Brain.Retired.Add(Brain.Stamp(personaOld));
-                            File.WriteAllText(personalityFile, "<!-- an old note -->\n\n" + personaOld + "\n");
-                            bool personaMovedOn = Brain.MakePersonality() && File.ReadAllText(personalityFile) == Brain.PersonalityFile;
-                            File.WriteAllText(personalityFile, personaOld + " I edited this.");
-                            bool personaEditStays = Brain.MakePersonality() && Brain.Personality == personaOld + " I edited this.";
-                            Brain.Retired.Remove(Brain.Stamp(personaOld));
-                            Edit = personaEditWas;
-                            File.WriteAllText(personalityFile, Brain.PersonalityFile);
-                            File.Delete(personalityBackup);
-                            mainframe.Sync();
-                            if (!personaMissing || !personaOpened || !personaBlankFalls || !personaBlankKept || !personaEditReached || !personaLocked || !personaLongKept || !personaResetKept || !personaResetAgain || !personaResetMissing || !personaMovedOn || !personaEditStays || mainframe.PersonalityShown != Brain.HerDefault || personaHash(Brain.Persona) != todaysPersona) throw new Exception("personality.md went wrong: missing " + personaMissing + ", opened " + personaOpened + ", empty " + personaBlankFalls + "/" + personaBlankKept + ", edited " + personaEditReached + ", locked " + personaLocked + ", long " + personaLongKept + ", reset " + personaResetKept + "/" + personaResetAgain + "/" + personaResetMissing + ", old default " + personaMovedOn + "/" + personaEditStays + ", note " + mainframe.PersonalityShown + ", reply " + reply);
-                            checks.Add("PASS personality.md: her default holds her safety lines and code adds only her reply rules after it (5098 characters, known SHA-256); an edit with notes, blank lines and Windows line endings reaches her chat and voice-chat prompts on her next reply and marks her agent for re-tuning; missing, empty and locked files fall back to her default and the Mainframe says so in red; a 20,000-character one is kept whole with a yellow slow-brains warning; Edit personality opens personality.md through the test seam and makes it when missing; Reset keeps theirs as personality.backup.md and never overwrites it with her default; an untouched old default moves to the new one; nothing overlaps");
+                            bool personaEditable = false;
+                            foreach (Control control in mainframe.Controls) if (control is Button && control.Text == "Edit personality") personaEditable = true;
+                            bool personaFixed = Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Safety + "\n" + Brain.Machinery && Brain.Persona.Length == 5098 && personaHash(Brain.Persona) == todaysPersona && Brain.PersonalityStamp == ""
+                                && Brain.Character.StartsWith(Brain.Persona, StringComparison.Ordinal) && Agent.Prompt.StartsWith(Brain.Persona + Hands.Note, StringComparison.Ordinal);
+                            if (!personaFixed || personaEditable) throw new Exception("Her personality or safety lines changed, or can be edited: " + Brain.Persona.Length + " characters, SHA-256 " + personaHash(Brain.Persona) + ", Edit personality button " + personaEditable + ". If they changed on purpose, update todaysPersona here.");
+                            checks.Add("PASS her personality: fixed in code with her safety lines right after it and her reply rules last (5098 characters, known SHA-256); there's no personality.md and no Edit personality button, and her chat and voice-chat prompts start with it");
                             if (mainframe.PerchStatus != "30 fps | -" || !mainframe.PerchFits) throw new Exception("The perch fps row didn't open right: " + mainframe.PerchStatus + " / fits " + mainframe.PerchFits);
                             mainframe.SlidePerch(3);
                             string perchFast = mainframe.PerchStatus;
@@ -15229,7 +15126,7 @@ namespace CapriDesktop
                             hdFitsTest = null;
                             checks.Add("PASS HD voice: off by default, offered under the free voice only with a 6 GB graphics card, picking it sticks, Free voice in games shows in Settings only while it's on and starts off, a full-screen game sends her to her free voice only with it on, and picking another free voice turns HD off");
                             // Their own voice: a clip in any coding Windows reads becomes a 24 kHz mono 16-bit reference with its quiet ends cut, a bad clip
-                            // says why in plain words, and the free voice menu and the Her voice button switch between their clip and hers.
+                            // says why in plain words, and the free voice menu brings back a clip a test build shelved.
                             string yvRoot = Path.Combine(output, "your-voice");
                             Directory.CreateDirectory(yvRoot);
                             int yvSource = 44100;
@@ -15343,12 +15240,12 @@ namespace CapriDesktop
                             yvJunkDone.WaitOne(60000);
                             if (yvShort != "That clip has only 3 seconds of talking. Pick 5 to 30 seconds of you talking." || yvLong != "That clip is 40 seconds long. Pick 5 to 30 seconds of you talking, or trim it." || yvQuiet != YourVoice.Silent || yvMissing != "That clip isn't there anymore. Pick it again." || yvJunk != YourVoice.Unreadable)
                                 throw new Exception("A bad clip of their voice said the wrong thing: " + yvShort + " / " + yvLong + " / " + yvQuiet + " / " + yvMissing + " / " + yvJunk);
-                            // Picking a clip turns her HD voice on with it; Her voice puts hers back and Your voice (HD) brings theirs back, and she says so.
-                            string yvFolder = qwen.Folder, yvHeard = null, yvCard, yvPicked, yvOverlap, yvHers, yvTheirs;
+                            // Picking a clip turns her HD voice on with it. Capri ships no voice, so there's no Her voice to go back to, and a clip a 0.7.6 test build shelved comes back with Your voice (HD).
+                            string yvFolder = qwen.Folder, yvHeard = null, yvCard, yvPicked, yvOverlap, yvShelvedMenu, yvTheirs;
                             Func<string, byte[]> yvFreeWas = FreeSpeak;
                             FreeSpeak = delegate(string yvWords) { yvHeard = yvWords; return Voice.Wave(fxTone, 24000); };
-                            bool yvSavedRight, yvShelved, yvUnshelved;
-                            string yvHerLine, yvYourLine;
+                            bool yvSavedRight, yvUnshelved;
+                            string yvYourLine;
                             try
                             {
                                 hdFitsTest = false;
@@ -15363,11 +15260,9 @@ namespace CapriDesktop
                                 yvPicked = mainframe.YourVoiceStatus;
                                 yvOverlap = mainframe.Overlap();
                                 snap("mainframe-your-voice.png");
-                                mainframe.ClickHerVoice();
-                                for (int yvTry = 0; yvTry < 150 && yvHeard == null; yvTry++) Thread.Sleep(20);
-                                yvHerLine = yvHeard;
-                                yvHers = mainframe.YourVoiceStatus;
-                                yvShelved = !YourVoice.Active(yvFolder) && YourVoice.Saved(yvFolder) && preferences.HdVoice;
+                                YourVoice.Shelve(yvFolder);
+                                mainframe.ShowFree(true, QwenVoice.Style, false, true, false, true);
+                                yvShelvedMenu = mainframe.YourVoiceStatus;
                                 yvHeard = null;
                                 asking++;
                                 bool yvClicked = mainframe.PickFree("Your voice (HD)");
@@ -15390,13 +15285,13 @@ namespace CapriDesktop
                             asking++;
                             CloseTalk();
                             hdFitsTest = null;
-                            string yvMenu = "HD · her own voice, Your voice (HD) (picked), Pick a new clip of you...";
-                            if (yvCard != YourVoiceCard || !yvSavedRight || yvPicked != "Free voice: Your voice | Her voice | " + yvMenu || yvOverlap != null
-                                || yvHerLine != Voice.Spoken(HerLine) || !yvShelved || yvHers != "Free voice: HD | - | HD · her own voice (picked), Your voice (HD), Pick a new clip of you..."
-                                || yvYourLine != Voice.Spoken(YourLine) || !yvUnshelved || yvTheirs != "Free voice: Your voice | " + (kokoro.Installed ? "Her voice" : "-") + " | " + yvMenu
+                            string yvMenu = "Your voice (HD) (picked), Pick a new clip of you...";
+                            if (yvCard != YourVoiceCard || !yvSavedRight || yvPicked != "Free voice: Your voice | " + yvMenu || yvOverlap != null
+                                || yvShelvedMenu != "Free voice: HD | Your voice (HD), Pick a new clip of you..."
+                                || yvYourLine != Voice.Spoken(YourLine) || !yvUnshelved || yvTheirs != "Free voice: Your voice | " + yvMenu
                                 || preferences.HdVoice || YourVoice.Active(yvFolder) || mainframe.HdChoice != "HD · graphics card, " + Engine.Amount(QwenVoice.PackSize))
-                                throw new Exception("Their voice didn't switch right: card " + yvCard + ", saved " + yvSavedRight + ", picked " + yvPicked + " (" + yvOverlap + "), hers " + yvHerLine + " / " + yvShelved + " / " + yvHers + ", theirs " + yvYourLine + " / " + yvUnshelved + " / " + yvTheirs + ", after " + preferences.HdVoice + " / " + mainframe.HdChoice);
-                            checks.Add("PASS your voice: a clip of them talking as a 16-bit stereo, 24-bit, 8-bit or float WAV" + (yvPacked.Count > 0 ? ", or an " + string.Join(" or an ", yvPacked.ToArray()) + " through Windows' own decoders," : "") + " becomes a 24 kHz mono 16-bit reference for her HD voice with its quiet ends cut; too short, too long, almost silent, unreadable and missing clips each say why in plain words; without a 6 GB graphics card it says Your voice needs HD; picking one turns her HD voice on with their clip; the Her voice button puts hers back and Your voice (HD) in the free voice menu brings theirs back without picking it again, and she says so each time; nothing overlaps");
+                                throw new Exception("Their voice didn't switch right: card " + yvCard + ", saved " + yvSavedRight + ", picked " + yvPicked + " (" + yvOverlap + "), shelved " + yvShelvedMenu + ", theirs " + yvYourLine + " / " + yvUnshelved + " / " + yvTheirs + ", after " + preferences.HdVoice + " / " + mainframe.HdChoice);
+                            checks.Add("PASS your voice: a clip of them talking as a 16-bit stereo, 24-bit, 8-bit or float WAV" + (yvPacked.Count > 0 ? ", or an " + string.Join(" or an ", yvPacked.ToArray()) + " through Windows' own decoders," : "") + " becomes a 24 kHz mono 16-bit reference for her HD voice with its quiet ends cut; too short, too long, almost silent, unreadable and missing clips each say why in plain words; without a 6 GB graphics card it says Your voice needs HD; picking one turns her HD voice on with their clip; Capri ships no voice, so there's no Her voice button, and a clip a test build shelved comes back with Your voice (HD) in the free voice menu");
                             Func<byte[], string> hash = delegate(byte[] bytes) { using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant(); };
                             byte[] hdZip;
                             using (MemoryStream zipped = new MemoryStream())
@@ -15497,6 +15392,11 @@ namespace CapriDesktop
                             checks.Add("PASS HD voice pack: the qwentts.cpp engine (" + QwenVoice.Build + "), Qwen3-TTS tokenizer and 1.7B talker download with their checksums and unpack from a fake server, the old llama.cpp pack and its half-finished downloads are cleared while their clips stay, and its server starts with a 1024-frame cache and 6-second codec chunks");
                             string hdTrouble = null;
                             byte[] hdTone = Voice.Wave(new short[12000], 24000);
+                            // Capri ships no voice clip, so her HD voice gets one to copy here: a made-up tone, no one's voice.
+                            short[] hdTheirs = new short[24000 * 6];
+                            for (int i = 0; i < hdTheirs.Length; i++) hdTheirs[i] = (short)(8000 * Math.Sin(2 * Math.PI * 140 * i / 24000.0));
+                            YourVoice.Save(hdTheirs, hdVoice.Folder);
+                            string hdTheirsClip = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(hdVoice.Folder, YourVoice.Using)));
                             Action<string> hdNoted = delegate(string problem) { hdTrouble = problem; };
                             try { hdVoice.Speak("Hi."); throw new Exception("A sleeping HD voice spoke."); }
                             catch (VoiceException) { }
@@ -15514,7 +15414,7 @@ namespace CapriDesktop
                                 hdClipBody = hdAsked[hdAsked.Count - 2];
                             }
                             if (hdTrouble != null || hdRate != 24000 || hdSamples.Length != hdWave.Length || hdSamples[100] != hdWave[100]) throw new Exception("Her HD voice didn't read the server's WAV: " + hdTrouble + " / " + hdRate + " Hz / " + hdSamples.Length);
-                            if (hdClipBody.IndexOf("POST /v1/audio/voices ", StringComparison.Ordinal) != 0 || hdClipBody.IndexOf("{\"name\":\"capri\",\"ref_text\":\"Oh, there you are!", StringComparison.Ordinal) < 0 || hdClipBody.IndexOf("\"wav_b64\":\"UklGR", StringComparison.Ordinal) < 0
+                            if (hdClipBody.IndexOf("POST /v1/audio/voices ", StringComparison.Ordinal) != 0 || hdClipBody.IndexOf("{\"name\":\"capri\",\"wav_b64\":\"" + hdTheirsClip + "\"}", StringComparison.Ordinal) < 0
                                 || hdBody.IndexOf("POST /v1/audio/speech ", StringComparison.Ordinal) != 0 || hdBody.IndexOf("\"input\":\"Hey chewm, this is my HD voice.\",\"voice\":\"capri\",\"language\":\"english\",", StringComparison.Ordinal) < 0 || hdBody.IndexOf("\"response_format\":\"wav\"", StringComparison.Ordinal) < 0)
                                 throw new Exception("Her HD voice sent the wrong requests: " + (hdClipBody.Length > 300 ? hdClipBody.Substring(0, 300) : hdClipBody) + " / " + (hdBody.Length > 300 ? hdBody.Substring(0, 300) : hdBody));
                             string hdSentence = "This sentence is here so her voice has to say a long reply in more than one piece today.";
@@ -15555,30 +15455,14 @@ namespace CapriDesktop
                             for (int i = 0; !hdChanged && i < hdGlitched.Length; i++) hdChanged = hdGlitched[i] != hdLongSamples[i];
                             if (hdTrouble != null || !hdRoboted || hdRobotic.Length != hdLongSamples.Length || !hdChanged || hdRobotWas != VoiceFx.HdRobotDefault || hdGlitchWas != 0)
                                 throw new Exception("Her HD voice didn't follow its robot and glitch sliders: " + hdRobotWas + "% robot and " + hdGlitchWas + "% glitch out of the box, " + hdLongSamples.Length + " to " + hdRobotic.Length + " and " + hdGlitched.Length + " samples / " + hdTrouble);
-                            // Their voice: a saved clip goes out as her reference on the next line, and Her voice puts hers back.
-                            short[] hdTheirs = new short[24000 * 6];
-                            for (int i = 0; i < hdTheirs.Length; i++) hdTheirs[i] = (short)(8000 * Math.Sin(2 * Math.PI * 140 * i / 24000.0));
-                            YourVoice.Save(hdTheirs, hdVoice.Folder);
-                            string hdTheirsClip = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(hdVoice.Folder, YourVoice.Using)));
-                            hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom.");
-                            string hdTheirsClipBody, hdTheirsBody, hdHersClipBody, hdHersBody;
-                            lock (hdAsked)
-                            {
-                                hdTheirsClipBody = hdAsked[hdAsked.Count - 2];
-                                hdTheirsBody = hdAsked[hdAsked.Count - 1];
-                            }
+                            // Their clip went out with every line above. Shelved, she has no clip to copy, so the line goes to her free voice and she says she needs one.
                             YourVoice.Shelve(hdVoice.Folder);
-                            hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom.");
-                            lock (hdAsked)
-                            {
-                                hdHersClipBody = hdAsked[hdAsked.Count - 2];
-                                hdHersBody = hdAsked[hdAsked.Count - 1];
-                            }
-                            // Their clip comes without words, so it goes in for the sound alone.
-                            if (hdTrouble != null || hdTheirsClipBody.IndexOf("POST /v1/audio/voices ", StringComparison.Ordinal) != 0 || hdTheirsClipBody.IndexOf("{\"name\":\"capri\",\"wav_b64\":\"" + hdTheirsClip + "\"}", StringComparison.Ordinal) < 0 || hdTheirsBody.IndexOf("POST /v1/audio/speech ", StringComparison.Ordinal) != 0
-                                || hdHersClipBody.IndexOf("POST /v1/audio/voices ", StringComparison.Ordinal) != 0 || hdHersClipBody.IndexOf(hdTheirsClip, StringComparison.Ordinal) >= 0 || hdHersClipBody.IndexOf("\"ref_text\":\"Oh, there you are!", StringComparison.Ordinal) < 0 || hdHersClipBody.IndexOf("\"wav_b64\":\"UklGR", StringComparison.Ordinal) < 0
-                                || hdHersBody.IndexOf("POST /v1/audio/speech ", StringComparison.Ordinal) != 0 || !YourVoice.Saved(hdVoice.Folder) || YourVoice.Active(hdVoice.Folder))
-                                throw new Exception("Her HD voice didn't clone their clip, or didn't go back to hers: " + hdTrouble);
+                            byte[] hdNoClip = hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom.");
+                            bool hdAsksForClip = hdNoClip == hdTone && hdTrouble != null && hdTrouble.IndexOf("ships no voice", StringComparison.Ordinal) >= 0;
+                            string hdNoClipTrouble = hdTrouble;
+                            hdTrouble = null;
+                            YourVoice.Unshelve(hdVoice.Folder);
+                            if (!hdAsksForClip || !YourVoice.Active(hdVoice.Folder)) throw new Exception("Her HD voice spoke with no clip to copy, or didn't say it needs one: " + hdNoClipTrouble);
                             hdServer.Stop();
                             byte[] hdBackup = hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Still there?");
                             if (hdBackup != hdTone || hdTrouble == null) throw new Exception("A dead HD voice didn't hand the line to her free voice: " + hdTrouble);
@@ -15609,7 +15493,7 @@ namespace CapriDesktop
                             string[] hdCrashLines = Array.FindAll(File.ReadAllLines(Brain.LogPath), line => LoggedSince(line, hdCrashFrom) && line.Contains(" | HD voice | ") && line.EndsWith(" | tts-server stopped while loading with exit code 0x00000003", StringComparison.Ordinal));
                             if (hdCrash != "Her HD voice crashed loading. Close games, then try again." || hdCrashLines.Length != 1 || hdStopped != "quiet" || hdVoice.Awake) throw new Exception("Her HD voice didn't handle a crash or a stop while waking: " + hdCrash + " / " + hdCrashLines.Length + " log lines / " + hdStopped);
                             Directory.Delete(hdRoot, true);
-                            checks.Add("PASS HD voice speech: her clip goes to a fake qwentts server once, with its words, then each line asks for her by name in English with her respelled words and its WAV becomes hers at 24 kHz, a long reply goes a few sentences per call so none hits the 41 s cap, the pitch slider lifts it 6 semitones without changing its length, its own robot and glitch (both Off out of the box) change it, their saved clip goes in without words until Her voice puts hers back, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
+                            checks.Add("PASS HD voice speech: their clip (a made-up tone: Capri ships no voice) goes to a fake qwentts server once, sound alone, then each line asks for her by name in English with her respelled words and its WAV becomes hers at 24 kHz, a long reply goes a few sentences per call so none hits the 41 s cap, the pitch slider lifts it 6 semitones without changing its length, its own robot and glitch (both Off out of the box) change it, with their clip shelved she has none to copy, so the line goes to her free voice and she says so, a sleeping voice won't speak, a dead server hands the line to her free voice, a server that crashes while waking is logged with its exit code, and stopping her mid-wake is quiet (full-screen check reads " + Native.Gaming() + ")");
                             checks.Add("LIMIT HD voice synthesis not run in the smoke test; it needs the " + Engine.Amount(QwenVoice.PackSize) + " pack and a graphics card");
                             // Their own voice server: a fake one answers like Kokoro-FastAPI or vLLM-Omni would, with a 16-bit WAV, a float WAV
                             // streamed in chunks, an MP3, an error or nothing in time, and her free voice says the lines it can't.
@@ -16514,7 +16398,7 @@ namespace CapriDesktop
                             box.Leaving = clock.Elapsed.TotalSeconds - 1;
                             RenderFrame();
                             if (box.Visible || talkState != TalkState.Off) throw new Exception("Dismissing did not close the speech box.");
-                            // Nothing in code screens what they say or rewrites what she says: personality.md decides, Blackwall on or off.
+                            // Nothing in code screens what they say or rewrites what she says: her brain follows her safety lines, Blackwall on or off.
                             Func<string, string> filterThinkWas = Think;
                             Action<string> filterRunWas = Hands.Run;
                             bool filterComputerWas = Computer.Bypass, filterQuickWas = preferences.QuickHands;
@@ -16550,7 +16434,7 @@ namespace CapriDesktop
                             }
                             if (afterSong != "Sex on Fire is up, choom!" || afterSwear != "Hell yeah, this one slaps like shit." || afterHeavy != "Hey. I'm right here. Talk to me?" || filterHeard.Count != 3 || filterRan.Count != 1 || maskedReply != "Typed " + Computer.Dots + " into the password box.")
                                 throw new Exception("Code screened what they said or rewrote her reply, or a password showed: " + afterSong + " / " + afterSwear + " / " + afterHeavy + " / heard " + filterHeard.Count + " / ran " + filterRan.Count + " / " + maskedReply);
-                            checks.Add("PASS no code filters: with Blackwall off too, everything they say reaches her brain and her reply comes out as her brain wrote it, since her safety lines live in personality.md; a typed password still shows as dots in her bubble");
+                            checks.Add("PASS no code filters: with Blackwall off too, everything they say reaches her brain and her reply comes out as her brain wrote it, since her safety lines are part of her prompt; a typed password still shows as dots in her bubble");
                             Think = null;
                             brain.Model = null;
                             System.Collections.Generic.List<byte> brainlessKeys = new System.Collections.Generic.List<byte>();
@@ -17548,8 +17432,8 @@ namespace CapriDesktop
                             if (agent != null || !chatting || !resting || !pill.Chatting || mainframe.VoiceStatus.IndexOf("Voice chat resting", StringComparison.Ordinal) != 0) throw new Exception("She did not hang up and rest after one check-in: " + mainframe.VoiceStatus);
                             short[] speech = new short[Ears.Chunk];
                             for (int i = 0; i < speech.Length; i++) speech[i] = (short)(Math.Sin(i * 0.3) * 9000);
-                            // An edit to personality.md while she rests: the call she wakes into re-tunes her agent with it.
-                            File.WriteAllText(Brain.PersonalityPath, "<!-- for the call -->\r\nYou are Capri, on a call from the Mainframe.\r\n");
+                            // An agent tuned with an edited personality.md before 0.7.6 carries its stamp: the call she wakes into re-tunes it with her fixed prompt.
+                            preferences.AgentPersonality = "0123456789abcdef";
                             ears.Feed(new short[Ears.Chunk]);
                             ears.Feed(speech);
                             if (!resting) throw new Exception("One loud blip woke her.");
@@ -17565,14 +17449,12 @@ namespace CapriDesktop
                             string log;
                             lock (asked) log = string.Join(" | ", asked.ToArray());
                             if (System.Text.RegularExpressions.Regex.Matches(log, "get-signed-url").Count < 2 || System.Text.RegularExpressions.Regex.Matches(log, "init \\{").Count < 2 || log.IndexOf("woke silent | woke loud | woke loud | woke loud", StringComparison.Ordinal) < 0) throw new Exception("Talking did not reopen the link and replay what she missed: " + log);
-                            const string callPersonality = "You are Capri, on a call from the Mainframe.";
                             string tunedFor = "http PATCH /v1/convai/agents/agent_old sk_test_capri_1234 {\"conversation_config\":{\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45},\"agent\":{\"prompt\":{\"prompt\":\"";
-                            string callPrompt = Voice.Quote(callPersonality + "\n" + Brain.Machinery + Hands.Note);
+                            string callPrompt = Voice.Quote(Brain.Persona + Hands.Note);
                             callPrompt = callPrompt.Substring(1, callPrompt.Length - 2);
-                            bool retuned = System.Text.RegularExpressions.Regex.Matches(log, System.Text.RegularExpressions.Regex.Escape(tunedFor)).Count == 2 && log.IndexOf(tunedFor + callPrompt, StringComparison.Ordinal) >= 0 && log.IndexOf("init {\"type\":\"conversation_initiation_client_data\",\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":\"" + callPrompt, StringComparison.Ordinal) >= 0 && preferences.AgentPersonality == Brain.Stamp(callPersonality);
-                            File.WriteAllText(Brain.PersonalityPath, Brain.PersonalityFile);
-                            if (!retuned) throw new Exception("An edited personality.md did not re-tune her ElevenLabs agent for the next call: " + preferences.AgentPersonality + " / " + log);
-                            checks.Add("PASS personality.md on calls: an edit while she rests re-tunes her ElevenLabs agent on the next call (its prompt stamp changed), and that call starts with the new personality");
+                            bool retuned = System.Text.RegularExpressions.Regex.Matches(log, System.Text.RegularExpressions.Regex.Escape(tunedFor)).Count == 2 && log.IndexOf(tunedFor + callPrompt, StringComparison.Ordinal) >= 0 && log.IndexOf("init {\"type\":\"conversation_initiation_client_data\",\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":\"" + callPrompt, StringComparison.Ordinal) >= 0 && preferences.AgentPersonality == Brain.PersonalityStamp;
+                            if (!retuned) throw new Exception("An agent tuned with an old personality.md wasn't re-tuned with her fixed prompt on the next call: " + preferences.AgentPersonality + " / " + log);
+                            checks.Add("PASS her prompt on calls: an agent tuned with an edited personality.md before 0.7.6 is re-tuned with her fixed prompt on the next call, and that call starts with it");
                             if (agent != null || !chatting || !resting || mainframe.VoiceStatus.IndexOf("Voice chat resting", StringComparison.Ordinal) != 0) throw new Exception("A clean hang-up from ElevenLabs did not leave her resting: " + mainframe.VoiceStatus + " / " + log);
                             lock (waking) resting = false;
                             agent = new Agent();
