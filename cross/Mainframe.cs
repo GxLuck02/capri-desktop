@@ -160,6 +160,7 @@ namespace CapriDesktop
         internal void PressConnect() { Connect(); }
         internal void Choose(string model) { pet.PickModel(model); }
         internal bool OllamaShown { get { return ollama.IsVisible; } }
+        internal bool SetupShown { get { return false; } }
 
         internal string Choices
         {

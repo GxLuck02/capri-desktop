@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using Avalonia;
@@ -40,6 +43,11 @@ namespace CapriDesktop
         private double outFrom = -1;
         private TcpListener fakeVoice;
         private TcpListener fakeBrain;
+        private TcpListener hub;
+        private readonly Dictionary<string, byte[]> hubFiles = new Dictionary<string, byte[]>();
+        private readonly List<string> hubAsked = new List<string>();
+        private Engine bench;
+        private Pick testPick;
         private readonly List<string> voiceAsked = new List<string>();
         private readonly List<byte[]> spoken = new List<byte[]>();
 
@@ -63,7 +71,7 @@ namespace CapriDesktop
             if (finished) return;
             if (started < 0) started = now;
             if (stepStart < 0) stepStart = now;
-            if (now - started > 200) { Finish("Timed out at step " + step + "."); return; }
+            if (now - started > 240) { Finish("Timed out at step " + step + "."); return; }
             if (now - stepStart > 15) { checks.Add("INFO " + Seen()); Finish("Step " + step + " took longer than 15 seconds."); return; }
             try
             {
@@ -664,10 +672,75 @@ namespace CapriDesktop
             {
                 Mainframe frame = pet.Frame;
                 if (pet.OllamaModels != null) return false;
-                if (!frame.OllamaShown || frame.TextStatus.IndexOf("ollama pull gemma4:e2b", StringComparison.Ordinal) < 0) throw new Exception("With no Ollama, the Mainframe didn't say how to get a brain: " + frame.TextStatus);
-                checks.Add("PASS mainframe: Capri Mainframe opens from her menu, lists her Ollama models on NORMAL, connects and forgets an NVIDIA key on HIGHER, and says how to get Ollama when it's missing");
-                frame.Close();
+                bool told = Engine.Supported ? frame.SetupShown && frame.TextStatus.IndexOf("Set up her brain", StringComparison.Ordinal) >= 0 : frame.OllamaShown && frame.TextStatus.IndexOf("ollama pull gemma4:e2b", StringComparison.Ordinal) >= 0;
+                if (!told) throw new Exception("With no Ollama, the Mainframe didn't say how to get a brain: " + frame.TextStatus);
+                checks.Add("PASS mainframe: Capri Mainframe opens from her menu, lists her Ollama models on NORMAL, connects and forgets an NVIDIA key on HIGHER, and says how to get a brain when Ollama is missing");
                 fakeBrain.Stop();
+                return true;
+            }
+            if (step == 29)
+            {
+                if (!Engine.Supported)
+                {
+                    checks.Add("INFO built-in brain: only on a Mac with Apple silicon, skipped");
+                    pet.Frame.Close();
+                    Send(shelf, "quit");
+                    Finish(null);
+                    return true;
+                }
+                if (Engine.Fit(Machine.Unified(8L << 30)) != Engine.Picks[1] || Engine.Fit(Machine.Unified(16L << 30)) != Engine.Picks[0] || Engine.Fit(Machine.Unified(4L << 30)) != Engine.Picks[2]) throw new Exception("The Mac brain pick is wrong for 4, 8 or 16 GB of RAM.");
+                long ram = Machine.Read().Ram;
+                if (ram < (4L << 30)) throw new Exception("Couldn't read the Mac's RAM: " + ram);
+                string script = "#!/bin/sh\nexec '" + Environment.ProcessPath + "' --fake-brain \"$@\"\n";
+                string top = "llama-" + Engine.Build + "/";
+                byte[] good = Tarball(new[] { "dir", top, "" }, new[] { "file", top + "llama-server", script }, new[] { "file", top + "libggml.0.27.0.dylib", "lib" }, new[] { "link", top + "libggml.0.dylib", "libggml.0.27.0.dylib" });
+                byte[] evil = Tarball(new[] { "file", top + "../../evil", "x" }, new[] { "file", top + "llama-server", script });
+                byte[] sneaky = Tarball(new[] { "link", top + "escape", "../../evil" }, new[] { "file", top + "llama-server", script });
+                byte[] model = new byte[9 << 20];
+                new Random(7).NextBytes(model);
+                testPick = new Pick("Test Brain", "test:1b", "capri/test", "main", "test-brain.gguf", Sha(model), model.Length);
+                string tarName = Path.GetFileName(Engine.MacUrl);
+                lock (hubFiles) hubFiles["test-brain.gguf"] = model;
+                hub = Listen(ServeHub);
+                Engine.Mirror = "http://127.0.0.1:" + ((IPEndPoint)hub.LocalEndpoint).Port + "/";
+                string brainDir = Path.Combine(folder, "t", "brain");
+                if (Directory.Exists(Path.Combine(folder, "t"))) Directory.Delete(Path.Combine(folder, "t"), true);
+                bench = new Engine(Path.Combine(folder, "t"));
+                foreach (byte[] bad in new[] { evil, sneaky })
+                {
+                    lock (hubFiles) hubFiles[tarName] = bad;
+                    Engine.MacSha = Sha(bad);
+                    Engine.MacSize = bad.Length;
+                    string why = null;
+                    try { bench.Install(testPick, delegate { }); }
+                    catch (IOException error) { why = error.Message; }
+                    if (why != Engine.Unsafe || File.Exists(Path.Combine(brainDir, "evil")) || Directory.Exists(Path.Combine(brainDir, "engine-" + Engine.Build)) || Directory.Exists(Path.Combine(brainDir, "engine-" + Engine.Build + ".new"))) throw new Exception("An engine archive reaching outside its folder wasn't refused: " + why);
+                }
+                lock (hubFiles) hubFiles[tarName] = good;
+                Engine.MacSha = Sha(good);
+                Engine.MacSize = good.Length;
+                string modelPath = Path.Combine(brainDir, "models", "test-brain.gguf");
+                Pick wrong = new Pick("Test Brain", "test:1b", "capri/test", "main", "test-brain.gguf", new string('0', 64), model.Length);
+                string bad2 = null;
+                try { bench.Install(wrong, delegate { }); }
+                catch (IOException error) { bad2 = error.Message; }
+                if (bad2 != "Test Brain failed its checksum. Try again." || File.Exists(modelPath) || File.Exists(modelPath + ".part")) throw new Exception("A model with the wrong checksum wasn't refused and deleted: " + bad2);
+                string server = Path.Combine(brainDir, "engine-" + Engine.Build, "llama-server");
+                string link = Path.Combine(brainDir, "engine-" + Engine.Build, "libggml.0.dylib");
+                if (!File.Exists(server) || (File.GetUnixFileMode(server) & UnixFileMode.UserExecute) == 0 || new FileInfo(link).LinkTarget != "libggml.0.27.0.dylib") throw new Exception("The engine wasn't unpacked with its runnable server and library links.");
+                bool cancelled = false;
+                try { bench.Install(testPick, delegate(string text, long done, long total) { if (done < total) bench.Cancel = true; }); }
+                catch (OperationCanceledException) { cancelled = true; }
+                long kept = File.Exists(modelPath + ".part") ? new FileInfo(modelPath + ".part").Length : 0;
+                if (!cancelled || kept < (4L << 20) || kept >= model.Length) throw new Exception("Cancel didn't stop the download and keep what came down: " + cancelled + " | " + kept);
+                bench.Cancel = false;
+                bench.Install(testPick, delegate { });
+                bool resumed = false;
+                lock (hubAsked) foreach (string asked in hubAsked) if (asked.StartsWith("test-brain.gguf from ", StringComparison.Ordinal)) resumed = true;
+                if (!File.Exists(modelPath) || Engine.Hash(modelPath) != testPick.Sha256 || !resumed) throw new Exception("The download didn't pick up where it left off.");
+                checks.Add("PASS brain install: a Mac picks Gemma 4 E2B for 8 GB, the engine and model download, pass their checksums and unpack with links, archives reaching outside their folder and a bad checksum are refused, and Cancel picks up where it left off");
+                pet.Frame.Close();
+                hub.Stop();
                 Send(shelf, "quit");
                 Finish(null);
                 return true;
@@ -745,6 +818,45 @@ namespace CapriDesktop
             else if (path.StartsWith("/v1/models", StringComparison.Ordinal)) Answer(stream, 401, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"Invalid key\"}"));
             else Answer(stream, 404, "application/json", Encoding.UTF8.GetBytes("{}"));
         }
+
+        private void ServeHub(NetworkStream stream)
+        {
+            List<byte> read = new List<byte>();
+            int end = ReadHead(stream, read);
+            if (end < 0) return;
+            string[] lines = Encoding.ASCII.GetString(read.ToArray(), 0, end).Split(new[] { "\r\n" }, StringSplitOptions.None);
+            string name = lines[0].Split(' ')[1].TrimStart('/');
+            long from = 0;
+            foreach (string line in lines) if (line.StartsWith("Range: bytes=", StringComparison.OrdinalIgnoreCase)) from = long.Parse(line.Substring(13).TrimEnd('-'));
+            lock (hubAsked) hubAsked.Add(name + (from > 0 ? " from " + from : ""));
+            byte[] file;
+            lock (hubFiles) hubFiles.TryGetValue(name, out file);
+            if (file == null) { Answer(stream, 404, "text/plain", new byte[0]); return; }
+            byte[] part = new byte[file.Length - from];
+            Array.Copy(file, from, part, 0, part.Length);
+            Answer(stream, from > 0 ? 206 : 200, "application/octet-stream", part);
+        }
+
+        // Each entry is { "dir" | "file" | "link", name, file text or link target }.
+        private static byte[] Tarball(params string[][] entries)
+        {
+            using (MemoryStream raw = new MemoryStream())
+            {
+                using (GZipStream zip = new GZipStream(raw, CompressionLevel.Fastest, true))
+                using (TarWriter tar = new TarWriter(zip, TarEntryFormat.Pax, false))
+                    foreach (string[] entry in entries)
+                    {
+                        PaxTarEntry item = new PaxTarEntry(entry[0] == "dir" ? TarEntryType.Directory : entry[0] == "link" ? TarEntryType.SymbolicLink : TarEntryType.RegularFile, entry[1]);
+                        item.Mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+                        if (entry[0] == "link") item.LinkName = entry[2];
+                        if (entry[0] == "file") item.DataStream = new MemoryStream(Encoding.UTF8.GetBytes(entry[2]));
+                        tar.WriteEntry(item);
+                    }
+                return raw.ToArray();
+            }
+        }
+
+        private static string Sha(byte[] data) { return Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant(); }
 
         private void Serve(NetworkStream stream)
         {

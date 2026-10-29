@@ -48,7 +48,7 @@ namespace CapriDesktop
         }
     }
 
-    internal sealed class Machine
+    internal sealed partial class Machine
     {
         internal long Ram;
         internal long Vram;
@@ -72,6 +72,9 @@ namespace CapriDesktop
 
         internal static Machine Read()
         {
+#if CROSS
+            if (!OperatingSystem.IsWindows()) return ReadUnix();
+#endif
             Machine machine = new Machine();
             MemoryStatus status = new MemoryStatus();
             if (GlobalMemoryStatusEx(status)) machine.Ram = (long)status.TotalPhysical;
@@ -119,7 +122,7 @@ namespace CapriDesktop
         }
     }
 
-    internal sealed class Engine
+    internal sealed partial class Engine
     {
         internal const string Build = "b11669";
         private const string ZipUrl = "https://github.com/ggml-org/llama.cpp/releases/download/b11669/llama-b11669-bin-win-vulkan-x64.zip";
@@ -168,7 +171,11 @@ namespace CapriDesktop
         internal static string Amount(long size) { return size < 1e9 ? Math.Round(size / 1e6) + " MB" : (size / 1e9).ToString("0.#") + " GB"; }
 
         private string Folder { get { return Path.Combine(root, "engine-" + Build); } }
+#if CROSS
+        private string Server { get { return Path.Combine(Folder, OperatingSystem.IsWindows() ? "llama-server.exe" : "llama-server"); } }
+#else
         private string Server { get { return Path.Combine(Folder, "llama-server.exe"); } }
+#endif
         private string ModelPath(Pick pick) { return Path.Combine(Path.Combine(root, "models"), pick.File); }
         private string EyesPath(Pick pick) { return pick.EyesFile == null ? null : Path.Combine(Path.Combine(root, "models"), pick.EyesFile); }
 
@@ -196,6 +203,9 @@ namespace CapriDesktop
 
         internal void Install(Pick pick, Action<string, long, long> progress)
         {
+#if CROSS
+            if (!OperatingSystem.IsWindows()) { InstallMac(pick, progress); return; }
+#endif
             Directory.CreateDirectory(root);
             long needed = (File.Exists(Server) ? 0 : ZipSize * 4) + (File.Exists(ModelPath(pick)) ? 0 : pick.Size) + (256L << 20);
             string drive = Path.GetPathRoot(root);
