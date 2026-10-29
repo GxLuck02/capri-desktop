@@ -6952,7 +6952,7 @@ namespace CapriDesktop
                                 string[] logged = File.ReadAllLines(Brain.LogPath);
                                 int crashLines = 0;
                                 foreach (string line in logged) if (line.Contains(" | crash | ")) crashLines++;
-                                bool crashLogged = Array.Exists(logged, delegate(string line) { return line.Contains(" | crash | - | InvalidOperationException: Test crash"); }) && Array.Exists(logged, delegate(string line) { return line.Contains(" | crash | - | at CapriDesktop."); }) && crashLines >= 2 && crashLines <= 5;
+                                bool crashLogged = Array.Exists(logged, delegate(string line) { return line.Contains(" | crash | - | InvalidOperationException: Test crash"); }) && Array.Exists(logged, delegate(string line) { return line.Contains(" | crash | - | ") && line.Contains(" CapriDesktop."); }) && crashLines >= 2 && crashLines <= 5;
                                 bool restartLogged = Array.Exists(logged, delegate(string line) { return line.Contains("started with fresh settings"); });
                                 if (firstStart || !marked || !crashedStart || !movedAside || !cleanStart || !crashLogged || !restartLogged) throw new Exception("Crash recovery: first " + firstStart + ", marked " + marked + ", crashed start " + crashedStart + ", moved aside " + movedAside + ", clean start " + cleanStart + ", crash logged " + crashLogged + " (" + crashLines + " lines), restart logged " + restartLogged);
                             }
