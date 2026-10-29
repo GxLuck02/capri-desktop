@@ -419,9 +419,10 @@ namespace CapriDesktop
             styleNote = Caption("Every voice, ElevenLabs too", 88, 218, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             styleNote.AutoSize = false;
             styleNote.TextAlign = ContentAlignment.MiddleRight;
-            styleNote.Bounds = new Rectangle(88, 218, 172, 20);
-            // Her VOICE LAYERS window (Lachy, 29 Oct) opens from VOICE's heading, and the button says whether they're on.
-            layersKey = Make("Layers: Off", 266, 216, 90, 22, delegate { OpenLayers(); });
+            styleNote.Bounds = new Rectangle(88, 218, 192, 20);
+            // Her VOICE LAYERS window (Lachy, 29 Oct) opens from VOICE's heading, and the button lights up while they're on.
+            // "Layers: Off" and the note don't both fit the row at 150%.
+            layersKey = Make("Layers", 286, 216, 70, 22, delegate { OpenLayers(); });
             layersKey.AccessibleName = "Voice layers: two copies of her voice under her, each with its own pitch and delay";
             Caption("Volume", 28, 249, Font, Look.Dim);
             volume = PageSlider(VolumeNames, 242, "Her voice volume");
@@ -1570,11 +1571,11 @@ namespace CapriDesktop
             layered.Activate();
         }
 
-        // The Layers button says whether they're on, lit while they are, and the window follows Settings' Pitch.
+        // The Layers button is lit while they're on and says so to a screen reader, and the window follows Settings' Pitch.
         private void ShowLayers()
         {
             bool on = capri.VoiceLayers.On;
-            layersKey.Text = on ? "Layers: On" : "Layers: Off";
+            layersKey.AccessibleDescription = on ? "On" : "Off";
             if (layersKey.Picked != on) { layersKey.Picked = on; layersKey.Invalidate(); }
             if (layered != null && !layered.IsDisposed) layered.Sync();
         }
@@ -1598,20 +1599,20 @@ namespace CapriDesktop
 
         internal string LayersCrowded { get { return layered == null || layered.IsDisposed ? "not open" : layered.Crowded(); } }
 
-        // VOICE's heading at 100%, 150% and 200%: "Every voice, ElevenLabs too" and the Layers button, on or off, each fit their
-        // own text, and they don't meet. Null when they do.
+        // VOICE's heading from 100% to 200%: "Every voice, ElevenLabs too" and the Layers button each fit their own text, and
+        // they don't meet. Null when they do.
         internal string VoiceHeadingFits()
         {
             if (styleNote.Bounds.IntersectsWith(layersKey.Bounds) || styleNote.Right > layersKey.Left) return "the note runs into the Layers button";
             // Text is measured at this screen's own scale, so each font is sized for the scale being checked.
             float here = DeviceScale();
-            foreach (float zoom in new[] { 1f, 1.5f, 2f })
+            foreach (float zoom in new[] { 1f, 1.25f, 1.5f, 1.75f, 2f })
                 using (Font note = new Font(styleNote.Font.FontFamily, styleNote.Font.SizeInPoints * zoom / here, styleNote.Font.Style, GraphicsUnit.Point))
                 using (Font key = new Font(layersKey.Font.FontFamily, layersKey.Font.SizeInPoints * zoom / here, layersKey.Font.Style, GraphicsUnit.Point))
                 {
                     int wide = TextRenderer.MeasureText(styleNote.Text, note).Width, room = (int)(styleNote.Width / here * zoom);
                     if (wide > room) return "\"" + styleNote.Text + "\" is " + wide + " px in " + room + " at " + zoom;
-                    foreach (string text in new[] { "Layers: Off", "Layers: On" })
+                    foreach (string text in new[] { layersKey.Text })
                     {
                         int size = TextRenderer.MeasureText(text, key).Width + (int)Math.Ceiling(12 * zoom), keyRoom = (int)(layersKey.Width / here * zoom);
                         if (size > keyRoom) return "\"" + text + "\" is " + size + " px in " + keyRoom + " at " + zoom;

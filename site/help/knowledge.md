@@ -343,7 +343,7 @@ YOU
 - Reset: puts her default personality back straight away. Yours is kept as personality.backup.md.
 
 VOICE ("Every voice, ElevenLabs too" on the right of the heading, then the Layers button)
-- Layers: Off (0.7.6 and newer): the button at the right of VOICE's heading opens her VOICE LAYERS window. It says "Layers: On" and lights up while they're on. See "Voice layers" under Her voice.
+- Layers (0.7.6 and newer): the button at the right of VOICE's heading opens her VOICE LAYERS window. Its word lights up cyan while they're on. See "Voice layers" under Her voice.
 - Volume: Mute, 10% to 100%, 125%, 150%. Default 100%.
 - Pitch (from 0.7.5): -6 to +6 semitones. Default Normal. Higher or deeper, at the same speed.
 - Speed (from 0.7.5): 0.7x to 1.5x. Default Normal.
@@ -584,7 +584,7 @@ On Mac and Linux they're under right-click her > Settings > Voice style (Pitch, 
 ### Voice layers (0.7.6 and newer)
 Voice layers make her sound doubled, with an AI shimmer: two copies of her voice mixed in quietly under her own. They're off out of the box, so she sounds just as she always has until you turn them on, and with them off her voice is exactly the same as before.
 
-Open them with the Layers button at the right of Mainframe > Settings > VOICE's heading. It says "Layers: Off", or "Layers: On" (lit) while they're on. The VOICE LAYERS window has three channels:
+Open them with the Layers button at the right of Mainframe > Settings > VOICE's heading. Its word lights up cyan while they're on. The VOICE LAYERS window has three channels:
 - Voice layers: the on/off switch. "Off: she sounds as she always has. On: every voice she has, ElevenLabs too."
 - MAIN: her voice itself. Its Pitch is the same setting as Settings > VOICE > Pitch (-6 to +6), and the two move together.
 - LAYER 1: a copy of her voice. Pitch -12 to +12 semitones from hers, in half steps (Same is her own pitch). Delay 0 to 250 ms behind her. Out of the box +1.5 semitones and 25 ms: a little higher, just behind her.

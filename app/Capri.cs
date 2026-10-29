@@ -3027,12 +3027,12 @@ namespace CapriDesktop
                 at200 = mainframe.LayersAt(2f / machine, Path.Combine(output, "layers-200.png"));
             }
             finally { SetVoiceLayers(was); }
-            if (keyOff != "Layers: Off" || opened != "Off | Normal | +1.5, 25 ms | -2.5, 25 ms" || flipped != "On | Normal | +1.5, 25 ms | -2.5, 25 ms" || keyOn != "Layers: On (lit)"
+            if (keyOff != "Layers" || opened != "Off | Normal | +1.5, 25 ms | -2.5, 25 ms" || flipped != "On | Normal | +1.5, 25 ms | -2.5, 25 ms" || keyOn != "Layers (lit)"
                 || slid != "On | Normal | +3, 40 ms | -4.5, 90 ms / On | +3, 40 ms | -4.5, 90 ms / 3 40 -4.5 90" || mainSlid != "On | +3 | +3, 40 ms | -4.5, 90 ms / +3 | Normal | Off | Off / 3 3"
-                || fromSettings != "On | -2 | +3, 40 ms | -4.5, 90 ms" || defaulted != "On | -2 | +1.5, 25 ms | -2.5, 25 ms" || closedOff != "Off | -2 | +1.5, 25 ms | -2.5, 25 ms / Layers: Off / False" || said != "switch layer main")
+                || fromSettings != "On | -2 | +3, 40 ms | -4.5, 90 ms" || defaulted != "On | -2 | +1.5, 25 ms | -2.5, 25 ms" || closedOff != "Off | -2 | +1.5, 25 ms | -2.5, 25 ms / Layers / False" || said != "switch layer main")
                 throw new Exception("The VOICE LAYERS window went wrong: " + keyOff + " // " + opened + " // " + flipped + " // " + keyOn + " // " + slid + " // " + mainSlid + " // " + fromSettings + " // " + defaulted + " // " + closedOff + " // she spoke for: " + said);
             if (page != null || crowded != null || at100 != null || at150 != null || at200 != null) throw new Exception("The VOICE LAYERS window's layout doesn't fit: Settings " + page + " / open " + crowded + " / 100% " + at100 + " / 150% " + at150 + " / 200% " + at200);
-            checks.Add("PASS VOICE LAYERS window: Layers: Off in Settings > VOICE's heading opens it; its switch turns them on and lights the button, each layer's pitch and delay slider sets and saves it, MAIN's pitch and Settings' Pitch move together both ways, Defaults puts both layers back, and the switch and letting go of a slider have her say a line; Settings still fits, with VOICE's note and Layers button fitting their text at 100%, 150% and 200% (mainframe-settings-layers.png), and at 100%, 150% and 200% nothing in the window overlaps, pokes out or gets cut off (layers-100.png, layers-150.png, layers-200.png)");
+            checks.Add("PASS VOICE LAYERS window: the Layers button in Settings > VOICE's heading opens it; its switch turns them on and lights the button, each layer's pitch and delay slider sets and saves it, MAIN's pitch and Settings' Pitch move together both ways, Defaults puts both layers back, and the switch and letting go of a slider have her say a line; Settings still fits, with VOICE's note and Layers button fitting their text at 100%, 125%, 150%, 175% and 200% (mainframe-settings-layers.png), and at 100%, 150% and 200% nothing in the window overlaps, pokes out or gets cut off (layers-100.png, layers-150.png, layers-200.png)");
         }
 
         // Her wake word listens for HeyCapriChanged, so whatever flips the setting starts or stops it.
