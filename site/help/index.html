@@ -76,7 +76,7 @@
           <li>She glitches in and drops onto a window or the taskbar</li>
           <li>The <b>Capri Mainframe</b> opens by itself</li>
           <li><b>NORMAL</b> → <b>Set up her brain</b>. Slow PC? <b>HIGHER</b> → <b>Free key</b></li>
-          <li>She talks with her free voice. Best voice: <b>ELEVENLABS</b> under VOICE</li>
+          <li>She talks with her free voice. Best voice: <b>CLOUD VOICE</b> → <b>ElevenLabs</b> under VOICE</li>
         </ol>
         <dl class="keys">
           <dt>Pencil</dt><dd>hover her, press it, type, Enter</dd>
@@ -106,15 +106,16 @@
         </dl>
 
         <h3>VOICE</h3>
-        <p class="note">Pick one. Switching never deletes your key.</p>
+        <p class="note">Pick one. Each row keeps its own setup and key. Before 0.7.6 the rows were FREE VOICE and ELEVENLABS.</p>
         <dl class="keys">
           <dt>OFF</dt><dd>no voice: she types her replies (0.7.1)</dd>
-          <dt>FREE VOICE</dt><dd>free, runs on your PC, no credits</dd>
-          <dt>ELEVENLABS</dt><dd>sounds amazing, uses your ElevenLabs credits</dd>
-          <dt>Setup guide</dt><dd>opens the voice steps</dd>
-          <dt>Free voice</dt><dd>Her own, Bright, Sly or Sharp. <b>Get free voice</b> if it's missing</dd>
-          <dt>Key box</dt><dd>on ELEVENLABS: paste the key → <b>Connect</b></dd>
-          <dt>Voice ID</dt><dd>on ELEVENLABS: paste it or pick from your voices</dd>
+          <dt>PREBUILT LOCAL</dt><dd>her own voices: free, runs on your PC, no credits</dd>
+          <dt>CUSTOM LOCAL</dt><dd>a voice model you run on your PC: <b>Set up</b></dd>
+          <dt>CLOUD VOICE</dt><dd>ElevenLabs, Fish Audio or OpenAI, with your own key. ElevenLabs sounds amazing and uses your credits</dd>
+          <dt>Setup guide</dt><dd>on CLOUD VOICE: opens the voice steps</dd>
+          <dt>Free voice</dt><dd>on PREBUILT LOCAL: Her own, Bright, Sly, Sharp or HD. <b>Get free voice</b> if it's missing</dd>
+          <dt>Key box</dt><dd>on ElevenLabs: paste the key → <b>Connect</b></dd>
+          <dt>Voice ID</dt><dd>on ElevenLabs: paste it or pick from your voices</dd>
           <dt>Model</dt><dd>Default model, or v4</dd>
           <dt>Mic</dt><dd>pick your mic</dd>
           <dt>Test</dt><dd>she says a test line</dd>
@@ -217,18 +218,19 @@
       </section>
 
       <section id="voice" class="step">
-        <h2>Her voice <small>free, or ElevenLabs</small></h2>
+        <h2>Her voice <small>free, your own model, or a cloud voice</small></h2>
         <dl class="keys">
-          <dt>FREE VOICE</dt><dd>the installer adds it. Missing? <b>Get free voice</b> under VOICE. Windows 64-bit only</dd>
+          <dt>PREBUILT LOCAL</dt><dd>her free voice. The installer adds it. Missing? <b>Get free voice</b> under VOICE. Windows 64-bit only</dd>
           <dt>Your voice</dt><dd>HD only, 6 GB graphics card: “Free voice” menu → <b>Your voice (HD) · pick a clip of you...</b>, then 5 to 30 s of you talking (WAV, MP3 or M4A). <b>Her voice</b> switches back. For ElevenLabs, clone yours there (Instant Voice Clone) and paste its Voice ID</dd>
-          <dt>Any voice model</dt><dd><a href="https://fish.audio" target="_blank" rel="noopener noreferrer">Fish Audio</a> (free tier), OpenAI, a <a href="https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models" target="_blank" rel="noopener noreferrer">Piper, Kokoro or Kitten model file</a> she runs herself, or any speech model you run yourself, like Fish Speech, <a href="https://github.com/remsky/Kokoro-FastAPI" target="_blank" rel="noopener noreferrer">Kokoro-FastAPI</a> or Qwen3-TTS: “Free voice” menu → <b>Any voice model...</b>, pick one under <b>Voice from</b>, add its key, address or file, <b>Test</b>, <b>Use this server</b>. It gets only the words she says</dd>
-          <dt>ELEVENLABS</dt><dd>her best voice, from your own account:</dd>
+          <dt>CUSTOM LOCAL</dt><dd>a <a href="https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models" target="_blank" rel="noopener noreferrer">Piper, Kokoro, Kitten or Pocket TTS model file</a> she runs herself, or any speech model you run yourself, like Fish Speech, <a href="https://github.com/remsky/Kokoro-FastAPI" target="_blank" rel="noopener noreferrer">Kokoro-FastAPI</a> or Qwen3-TTS: <b>Set up</b>, pick one under <b>Voice from</b>, add its file or address, <b>Test</b>, <b>Use this server</b></dd>
+          <dt>CLOUD VOICE</dt><dd>its menu picks <a href="https://fish.audio" target="_blank" rel="noopener noreferrer">Fish Audio</a> (free tier), OpenAI or ElevenLabs. Fish Audio or OpenAI: <b>Set up...</b> under it, add your key, <b>Test</b>, <b>Use this server</b>. They get only the words she says</dd>
+          <dt>ElevenLabs</dt><dd>her best voice, from your own account:</dd>
         </dl>
         <ol class="moves">
           <li>Make a voice in <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer">ElevenLabs</a>: <b>Voice Design</b> with the <a href="../setup/#voice">setup guide's prompt</a>, or clone her (paid plan)</li>
           <li><b>Voices</b> → <b>My Voices</b> → <b>⋯</b> → <b>Copy Voice ID</b></li>
           <li><b>Developers</b> → <b>API Keys</b> → <b>Create Key</b>, turn <b>Restrict key</b> off, copy it</li>
-          <li>Mainframe VOICE: <b>ELEVENLABS</b>, paste the key → <b>Connect</b></li>
+          <li>Mainframe VOICE: <b>CLOUD VOICE</b> → <b>ElevenLabs</b>, paste the key → <b>Connect</b></li>
           <li>Paste the Voice ID, Model → <b>v4</b>, <b>Test</b></li>
         </ol>
         <p class="note">Keys start with <code>sk_</code>. About one credit per letter she says. Free credits refill each month. ElevenLabs voice chat uses credits too. Her free voice uses none.</p>
@@ -242,8 +244,8 @@
         <dl class="keys">
           <dt>Start, stop</dt><dd>the wave, or <b>Ctrl + Alt + V</b></dd>
           <dt>Mute mic</dt><dd><b>Ctrl + Alt + N</b>, or the mic button</dd>
-          <dt>Free</dt><dd><b>FREE VOICE</b> picked, or no key: you talk, she answers with her free voice. Her ears download the first time</dd>
-          <dt>ElevenLabs</dt><dd><b>ELEVENLABS</b> picked, a Voice ID, a mic</dd>
+          <dt>Free</dt><dd>anything but ElevenLabs picked, or no key: you talk, she answers. Her ears download the first time</dd>
+          <dt>ElevenLabs</dt><dd><b>CLOUD VOICE</b> → <b>ElevenLabs</b> picked, a Voice ID, a mic</dd>
           <dt>Resting</dt><dd>quiet for a while? Just talk and she picks up</dd>
         </dl>
         <p class="note">ElevenLabs voice chat makes a voice agent called “Capri” in your ElevenLabs account, and your voice goes to ElevenLabs while it's on. Free voice chat hears English, Spanish and 23 other European languages on your PC. She doesn't comment on your screen during voice chat. Other languages are new and not well tested.</p>
@@ -409,20 +411,22 @@
           <dt>“ElevenLabs rejected the key”</dt><dd>That isn't the key. Keys start with <code>sk_</code>. Make a new one and paste it.</dd>
           <dt>“Key is missing permissions” or “Key can't do that”</dt><dd>Make a new key with <b>Restrict key</b> turned off. <b>Forget</b> the old one, paste the new one.</dd>
           <dt>“Voice not found”</dt><dd>Paste the Voice ID from My Voices, not the name. Library voices go in My Voices first.</dd>
-          <dt>“Out of ElevenLabs credits”</dt><dd>Credits refill each month. Pick <b>FREE VOICE</b> meanwhile. “10,000 / 10,000” means all used.</dd>
-          <dt>“ElevenLabs has restricted your account”</dt><dd>Sign in at elevenlabs.io to see why. Pick <b>FREE VOICE</b> meanwhile.</dd>
+          <dt>“Out of ElevenLabs credits”</dt><dd>Credits refill each month. Pick <b>PREBUILT LOCAL</b> meanwhile. “10,000 / 10,000” means all used.</dd>
+          <dt>“ElevenLabs has restricted your account”</dt><dd>Sign in at elevenlabs.io to see why. Pick <b>PREBUILT LOCAL</b> meanwhile.</dd>
           <dt>“Free tier usage disabled”</dt><dd>Turn off your VPN and try again.</dd>
           <dt>“ElevenLabs sent a reply Capri couldn't read.”</dt><dd>ElevenLabs may be blocked where you are, or by a VPN. Try without one, then send <a href="#get-help">Copy error details</a>.</dd>
           <dt>Test shows words, no sound</dt><dd>“Voice link online” isn't proof she played. Set your speakers as the Windows default (Settings → System → Sound). Check Mainframe Settings → <b>Volume</b>. Quit and reopen Capri.</dd>
-          <dt>FREE VOICE, but she only types</dt><dd>Her free voice isn't installed. <b>Get free voice</b> under VOICE.</dd>
+          <dt>PREBUILT LOCAL, but she only types</dt><dd>Her free voice isn't installed. <b>Get free voice</b> under VOICE.</dd>
           <dt>“Can't open your speakers”</dt><dd>Turn on speakers in Settings → System → Sound. Or close the app holding them, or untick exclusive mode.</dd>
+          <dt>“Can't reach your voice server”</dt><dd>Start your server, then check its address under CUSTOM LOCAL → <b>Set up</b>. Her free voice fills in meanwhile.</dd>
+          <dt>“Fish Audio wants credit”</dt><dd>For its free tier, set Model to <code>s2.1-pro-free</code>.</dd>
         </dl>
 
         <h3>Voice chat</h3>
         <dl class="stuck">
           <dt>She can't hear you</dt><dd>Pick your mic under VOICE. Check it isn't muted. Windows Settings → Privacy &amp; security → Microphone → let desktop apps use it.</dd>
           <dt>“Can't open my voice link.”</dt><dd>Open the Mainframe. The reason and the fix are under VOICE.</dd>
-          <dt>Free voice chat when you want ElevenLabs</dt><dd>Pick <b>ELEVENLABS</b>. Voice chat follows your VOICE pick.</dd>
+          <dt>Free voice chat when you want ElevenLabs</dt><dd>Pick <b>CLOUD VOICE</b> → <b>ElevenLabs</b>. Voice chat follows your VOICE pick.</dd>
           <dt>“My ears are still downloading”</dt><dd>First time only. She says when she can hear you.</dd>
           <dt>“Voice chat needs my Voice ID”</dt><dd>Pick a voice in the Voice ID box.</dd>
           <dt>Ctrl + Alt + V does nothing</dt><dd>Another app may use it. Click the hint in the Mainframe and pick new keys.</dd>
