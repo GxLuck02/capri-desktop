@@ -691,8 +691,9 @@ Press Ctrl + Alt + V again, or the wave, to stop.
 Voice chat follows your pick under VOICE. With FREE VOICE picked, or no ElevenLabs key, it's free: you talk, she answers out loud with her free voice and your picked brain.
 - She listens with her own offline ears, a download the first time: "My ears are still downloading, so type to me for now. I'll say when I can hear you."
 - Her ears hear English and 24 other European languages, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian and Ukrainian among them. English and the rest are separate downloads, so switching between them downloads the other pack once.
-- She listens for her language from Settings. When she's on English and Windows isn't, she listens for your Windows language.
-- Her other languages (Turkish, Norwegian, Chinese, Hindi, Arabic and the rest) use Windows speech instead.
+- She listens for her language from Settings. If she's on English because nobody changed it and Windows isn't, she listens for your Windows language, for people who speak their own language to her.
+- She hears English as another language, like Japanese? Mainframe > Settings > Language, pick English (even if it already says English). From 0.7.6 a picked English means she listens in English whatever language Windows is in.
+- Her other languages (Turkish, Norwegian, Chinese, Hindi, Arabic and the rest) use Windows speech instead. From 0.7.6 Windows speech listens in the language you picked when Windows has it, not just in Windows' own speech language.
 - If her ears don't download, she says so and tries again by herself after 30 seconds, then 1, 2 and 4 minutes, then every 5.
 - "One sec, opening my ears." then "Free voice chat is on; talk and I'll type back." or similar.
 

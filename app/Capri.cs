@@ -2588,11 +2588,12 @@ namespace CapriDesktop
 
         internal string Language { get { return Brain.Language ?? "English"; } }
 
+        // A picked English is saved as English, so she listens in English. Never picked, it stays empty (agir's Japanese PC).
         internal void SetLanguage(string language)
         {
             string code = Brain.LanguageCode(language);
             Brain.Language = code == "en" ? null : language;
-            preferences.Language = code == "en" ? null : language;
+            preferences.Language = code == "en" ? "English" : language;
             brain.Forget();
             SavePreferences();
             PointEars();
@@ -4383,11 +4384,15 @@ namespace CapriDesktop
             });
         }
 
+        // The language she listens for: the one picked in Settings, English included. Left on English without ever being
+        // picked, she listens for Windows' language, for people who never changed her from English but speak their own.
+        internal static string Listening(string picked, string windows) { return LocalEars.Spoken(Brain.LanguageCode(picked), picked == null ? windows : null); }
+
         // Parakeet hears English and 24 other European languages; the rest keep Windows speech, which knows them.
         private void PointEars()
         {
             string was = parakeet.Model;
-            parakeet.Language = LocalEars.Spoken(Brain.LanguageCode(preferences.Language), System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
+            parakeet.Language = Listening(preferences.Language, System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
             if (parakeet.Model == was || !chatting || !local) return;
             Dictation closing = dictation;
             dictation = null;
@@ -5229,6 +5234,7 @@ namespace CapriDesktop
             Dictation opened;
             try { opened = Dictation.Make(); }
             catch (Exception error) { HearLater("Windows speech recognition isn't on this PC: " + Voice.Short(error.Message)); return; }
+            opened.Language = preferences.Language;
             dictation = opened;
             opened.Heard = delegate(string text) { OnUi(delegate { if (dictation == opened) HeardDictation(text); }); };
             opened.Lost = delegate(string problem) { OnUi(delegate { if (dictation == opened) DictationLost(problem); }); };
@@ -12203,8 +12209,17 @@ namespace CapriDesktop
                             SetWordiness(0);
                             SetRecall(8);
                             SetLanguage("English");
-                            if (preferences.Wander || preferences.Language != null || Brain.Language != null || Brain.Character != Brain.Persona || Brain.Clean(new string('a', 300)).Length > 230 || Brain.Window != 4096) throw new Exception("Settings did not go back to their defaults.");
-                            if (parakeet.Language != LocalEars.Spoken("en", System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName)) throw new Exception("Going back to English did not point her ears back: " + parakeet.Language);
+                            if (preferences.Wander || preferences.Language != "English" || Brain.Language != null || Brain.Character != Brain.Persona || Brain.Clean(new string('a', 300)).Length > 230 || Brain.Window != 4096) throw new Exception("Settings did not go back to their defaults.");
+                            if (parakeet.Language != "en") throw new Exception("Picking English did not point her ears at English: " + parakeet.Language);
+                            // agir: a picked English listens in English on a Japanese PC; one never picked listens for Windows' language.
+                            string[] dictationTags = { "ja-JP", "en-US", "en-GB", "en-AU", "zh-CN", "zh-TW", "nb-NO", "fil-PH" };
+                            string listenProblem = null;
+                            if (Listening("English", "ja") != "en" || Listening(null, "ja") != "ja" || Listening("Spanish", "ja") != "es" || Listening(null, "en") != "en" || Listening("Japanese", "en") != "ja") listenProblem = "listening " + Listening("English", "ja") + " / " + Listening(null, "ja");
+                            else if (WindowsDictation.Tag("English", dictationTags, "AU") != "en-AU" || WindowsDictation.Tag("English", dictationTags, "JP") != "en-US" || WindowsDictation.Tag("Japanese", dictationTags, "AU") != "ja-JP"
+                                || WindowsDictation.Tag("Traditional Chinese", dictationTags, "US") != "zh-TW" || WindowsDictation.Tag("Simplified Chinese", dictationTags, "TW") != "zh-CN" || WindowsDictation.Tag("Norwegian", dictationTags, "NO") != "nb-NO"
+                                || WindowsDictation.Tag("Filipino", dictationTags, "PH") != "fil-PH" || WindowsDictation.Tag("French", dictationTags, "FR") != null || WindowsDictation.Tag(null, dictationTags, "AU") != null) listenProblem = "dictation " + WindowsDictation.Tag("English", dictationTags, "JP");
+                            if (listenProblem != null) throw new Exception("Her listening language went wrong: " + listenProblem);
+                            checks.Add("PASS listening language: English picked in Settings is saved as English and she listens in English even when Windows speaks another language, English never picked listens for Windows' language as before, and Windows dictation opens in the picked language for their region (en-AU before en-US, Chinese by its script, Norwegian as nb), or in Windows' own when it doesn't have it");
                             mainframe.ShowSettings(false);
                             if (mainframe.SettingsShown || mainframe.ClientSize.Height != mainTall) throw new Exception("Closing settings did not bring the main page back.");
                             string mainTabs = mainframe.TabWalk();
@@ -14719,6 +14734,7 @@ namespace CapriDesktop
                             StartLocal();
                             CheckEars(clock.Elapsed.TotalSeconds);
                             if (!chatting || !local || earsReady || !earsShut || !lateStart.Started || reply != "One sec, opening my ears.") throw new Exception("Opening Windows speech looked ready to listen: " + reply);
+                            if (lateStart.Language != preferences.Language || lateStart.Language != "English") throw new Exception("Windows speech didn't open in her picked language: " + lateStart.Language);
                             replyDone = clock.Elapsed.TotalSeconds - 120;
                             UpdateTalk(clock.Elapsed.TotalSeconds);
                             if (box.Leaving >= 0) throw new Exception("The opening-ears message faded before Windows speech started.");

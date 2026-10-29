@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Windows.Foundation;
 using Windows.Media.SpeechRecognition;
@@ -19,6 +21,8 @@ namespace CapriDesktop
         };
         internal Action<string> Heard;
         internal Action<string> Lost;
+        // The language picked in Settings, English included, or null to listen in Windows' own speech language.
+        internal string Language;
 
         internal abstract void Start(Action<string> started);
         internal abstract void Hold(bool held);
@@ -77,9 +81,44 @@ namespace CapriDesktop
             });
         }
 
+        // Windows speech's dictation language for her language: the one for their region first ("en-AU"), then the first that
+        // speaks it, Chinese by its script. Null when Windows speech doesn't have it, so it listens in its own language.
+        internal static string Tag(string language, IList<string> supported, string region)
+        {
+            if (language == null || supported == null) return null;
+            string code = Brain.LanguageCode(language);
+            string script = language == "Traditional Chinese" ? "TW|HK|MO|Hant" : language == "Simplified Chinese" ? "CN|SG|Hans" : null;
+            string first = null;
+            foreach (string tag in supported)
+            {
+                if (string.IsNullOrEmpty(tag)) continue;
+                string[] parts = tag.Split('-');
+                string lead = parts[0].ToLowerInvariant();
+                if (lead != code && !(code == "no" && (lead == "nb" || lead == "nn"))) continue;
+                if (script != null && !Regex.IsMatch(tag, "-(" + script + ")(-|$)", RegexOptions.IgnoreCase)) continue;
+                if (!string.IsNullOrEmpty(region) && parts.Length > 1 && string.Equals(parts[parts.Length - 1], region, StringComparison.OrdinalIgnoreCase)) return tag;
+                if (first == null) first = tag;
+            }
+            return first;
+        }
+
+        private static Windows.Globalization.Language Tongue(string language)
+        {
+            if (language == null) return null;
+            try
+            {
+                List<string> tags = new List<string>();
+                foreach (Windows.Globalization.Language one in SpeechRecognizer.SupportedTopicLanguages) tags.Add(one.LanguageTag);
+                string tag = Tag(language, tags, System.Globalization.RegionInfo.CurrentRegion.TwoLetterISORegionName);
+                return tag == null ? null : new Windows.Globalization.Language(tag);
+            }
+            catch (Exception) { return null; }
+        }
+
         private void Open()
         {
-            SpeechRecognizer made = new SpeechRecognizer();
+            Windows.Globalization.Language tongue = Tongue(Language);
+            SpeechRecognizer made = tongue == null ? new SpeechRecognizer() : new SpeechRecognizer(tongue);
             lock (gate)
             {
                 if (closed) { made.Dispose(); throw new ObjectDisposedException("Dictation"); }
