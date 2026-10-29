@@ -4932,28 +4932,40 @@ namespace CapriDesktop
         }
 
         // She says her job's first line out loud too (Lachy, 29 Oct: "she doesnt verbally say 'on it, esc stops me'"), in the voice
-        // she's using, the way Answer picks it. It plays beside the job and leaves the reply the job ends with alone. Quiet,
-        // Silent, voice chat (which speaks for itself) and a line she's still saying keep it to her bubble.
+        // her replies use, picked the way Answer picks it (Quiet only turns her cloud voice off). It plays beside the job, after
+        // any line she's still saying, and leaves the reply the job ends with alone. Silent keeps it to her bubble, and so does
+        // ElevenLabs voice chat, which speaks for itself.
         private void SayJobStart(Job running)
         {
-            if (testing || chatting || preferences.Quiet || preferences.Silent || voiceUntil > clock.Elapsed.TotalSeconds) return;
+            if (testing || preferences.Silent || (chatting && !local)) return;
             Func<string, byte[]> own = FreeSpeak ?? (!kokoro.Installed ? null : new Func<string, byte[]>(kokoro.Speak));
-            Func<string, byte[]> free = preferences.ServerVoice ? Served(own) : FreeSpeak ?? Hd(own);
-            Func<string, byte[]> speak = local || voiceBroke ? null : Speak;
-            if (speak == null && !local && !voiceBroke && voice.Ready) speak = voice.Speak;
-            if (speak == null && (voice.Key == null || local || voiceBroke)) speak = free;
+            Func<string, byte[]> free = preferences.Quiet && !FreeChatOn ? null : preferences.ServerVoice ? Served(own) : FreeSpeak ?? Hd(own);
+            Func<string, byte[]> speak = preferences.Quiet || local || voiceBroke ? null : Speak;
+            if (speak == null && !local && !voiceBroke && voice.Ready && !preferences.Quiet) speak = voice.Speak;
+            if (speak == null && (voice.Key == null || local || voiceBroke || preferences.Quiet)) speak = free;
             if (speak == null) return;
             string words = Voice.Spoken("On it. Escape stops me.");
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string problem;
                 byte[] wav = Voiced(speak, free, words, out problem);
-                Post(delegate
+                if (wav == null) { if (problem != null) Brain.Log("job line", -1, problem); return; }
+                int tries = 0;
+                Action play = null;
+                play = delegate
                 {
-                    if (wav == null || job != running || IsDisposed || chatting || voiceUntil > clock.Elapsed.TotalSeconds) return;
-                    voiceUntil = clock.Elapsed.TotalSeconds + Voice.Seconds(wav) + 0.6;
+                    if (job != running || IsDisposed || (chatting && !local)) return;
+                    double now = clock.Elapsed.TotalSeconds;
+                    if (voiceUntil > now)
+                    {
+                        if (tries++ < 16) ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(500); Post(play); });
+                        return;
+                    }
+                    voiceUntil = now + Voice.Seconds(wav) + 0.6;
+                    CheckEars(now);
                     voice.Play(wav);
-                });
+                };
+                Post(play);
             });
         }
 
