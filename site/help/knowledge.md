@@ -341,13 +341,10 @@ Size, Check in on me, Always on top and Watch my screen are on the Settings page
 Settings opens beside the main page. Left column:
 
 YOU
-- Next to YOU: which personality she's using. "personality.md · her default" or "personality.md · your edit". In yellow: "personality.md · long, slows small brains". In red, when she's gone back to her default: "personality.md missing · her default", "personality.md is empty · her default" or "can't read personality.md · her default".
 - Language: the language she replies in. 80 to pick from: English, Español, Français, Deutsch, Italiano, Português, Català, Galego, Euskara, Nederlands, Afrikaans, Svenska, Dansk, Norsk, Íslenska, Suomi, Eesti, Latviešu, Lietuvių, Polski, Čeština, Slovenčina, Magyar, Slovenščina, Hrvatski, Bosanski, Srpski, Shqip, Română, Gaeilge, Cymraeg, Malti, Türkçe, Azərbaycanca, ქართული (Georgian), Հայերեն (Armenian), Oʻzbekcha, Русский, Українська, Беларуская, Български, Македонски, Қазақша, Монгол, Ελληνικά, Tiếng Việt, Bahasa Indonesia, Bahasa Melayu, Basa Jawa, Filipino, Kiswahili, Hausa, Yorùbá, Igbo, isiZulu, isiXhosa, Soomaali, አማርኛ (Amharic), ไทย (Thai), ລາວ (Lao), ខ្មែរ (Khmer), မြန်မာ (Burmese), 简体中文 (Simplified Chinese), 繁體中文 (Traditional Chinese), 日本語 (Japanese), 한국어 (Korean), हिन्दी (Hindi), नेपाली (Nepali), বাংলা (Bengali), मराठी (Marathi), ગુજરાતી (Gujarati), ਪੰਜਾਬੀ (Punjabi), தமிழ் (Tamil), తెలుగు (Telugu), ಕನ್ನಡ (Kannada), മലയാളം (Malayalam), العربية (Arabic), اردو (Urdu), فارسی (Persian) and עברית (Hebrew). Her own ears hear 25 of them in free voice chat: English, Español, Français, Deutsch, Italiano, Português, Nederlands, Svenska, Dansk, Suomi, Eesti, Latviešu, Lietuvių, Polski, Čeština, Slovenčina, Magyar, Slovenščina, Hrvatski, Română, Malti, Русский, Українська, Български and Ελληνικά. The rest use Windows speech when Windows has it for that language. Indian scripts, Amharic, Georgian, Armenian, Lao, Khmer and Burmese are measured as they're drawn, so their lines fit her bubble too. Arabic, Urdu, Persian and Hebrew lines sit against the right of her bubble. Her HD voice and ElevenLabs speak Chinese, Japanese and Korean, and ElevenLabs speaks Hindi and Arabic; her free voice only has English pronunciation for now. Thai, Lao, Khmer and Burmese have no spaces between words, so her bubble breaks their lines between words (on Mac and Linux, between letters). Her own font has no Burmese, so Burmese draws in Windows' Myanmar Text font.
 - "What should she call you?": type a nickname, press Save.
 - Get to know me: she asks what to call you, your pronouns and what you're into in chat, and keeps the answers in me.md. See "Getting to know you" in section 13.
 - Open her notes: opens me.md, her notes about you, in Notepad.
-- Edit personality: opens personality.md, who she is and how she talks. See "Make her yours" in section 13.
-- Reset: puts her default personality back straight away. Yours is kept as personality.backup.md.
 
 VOICE ("Every voice, ElevenLabs too" on the right of the heading, then the Layers button)
 - Layers (0.7.6 and newer): the button at the right of VOICE's heading opens her VOICE LAYERS window. Its word lights up cyan while they're on. See "Voice layers" under Her voice.
@@ -392,7 +389,7 @@ HABITS
 - Start with Windows: on by default. She starts when you sign in to Windows.
 - Show on Discord: on by default. While Discord is open on the same PC, your Discord profile shows "Playing Capri" with what she's doing in a few plain words (Hanging out, Chatting, Voice chatting, Dancing to music, On a job, Asleep or Taking a break), how long she's been running, and Get Capri and Join her Discord buttons. Song names and what her jobs are about never show.
 - Use her cursor: on by default. She does music and video jobs with her own cursor, so you can watch her: to play a YouTube video she types in YouTube's search bar, scrolls through the results and picks one; to play a song she searches Spotify and presses play; when you ask to turn Spotify up or down she drags Spotify's volume slider (plain "turn it up" changes your PC's volume). Turn it off for the quick way (straight to the top result, Windows volume). If her brain gets lost on the way, she does it the quick way.
-- Security (0.7.6 and newer, where Blackwall mode was): the button says which preset you're on, like "Security: Trusted", and the line under it says what that means ("She asks before paying or what you didn't say."). It opens the SECURITY window, with Lockdown, Guarded, Trusted and Blackwall on a slider and eleven toggles (section 15, "Security: what she does without asking"). Blackwall mode (called Bypass all permissions before 0.7.4) is the Blackwall preset now: if you had it on, you're on Blackwall after updating, and everyone else starts on Trusted, which is how she worked before. On any preset she never follows orders written on your screen, and Esc still stops her. What she'll chat about, open or play comes from her personality.md and the brain model you picked, whatever the preset.
+- Security (0.7.6 and newer, where Blackwall mode was): the button says which preset you're on, like "Security: Trusted", and the line under it says what that means ("She asks before paying or what you didn't say."). It opens the SECURITY window, with Lockdown, Guarded, Trusted and Blackwall on a slider and eleven toggles (section 15, "Security: what she does without asking"). Blackwall mode (called Bypass all permissions before 0.7.4) is the Blackwall preset now: if you had it on, you're on Blackwall after updating, and everyone else starts on Trusted, which is how she worked before. On any preset she never follows orders written on your screen, and Esc still stops her. What she'll chat about, open or play comes from her personality, her safety rules and the brain model you picked, whatever the preset.
 - Perch: how many frames a second she shows while she sits on a window: 10, 15, 20, 30 (default), 40, 50 or 60 fps. Her sway takes 2 seconds at every setting. 10 and 15 use less CPU. Above 30 she draws in-between frames, so she moves more smoothly but uses more CPU, and the HABITS line says "Perch over 30 fps uses more CPU". On Mac and Linux her perch stays at 30.
 - Remember our chats (under Perch): on by default. She writes every chat into a daily transcript and folds older chats into memories.md. Both stay on your PC (section 13).
 - Open her memories (beside Remember our chats): shows memories.md and her transcripts folder in File Explorer.
@@ -606,7 +603,7 @@ They change every voice she has, like Pitch, Speed, Robot and Glitch: her free v
 On Mac and Linux: right-click her > Settings > Voice style > Layers turns them on or off, and Layer 1 pitch, Layer 1 delay, Layer 2 pitch and Layer 2 delay are under it, with the same defaults (pitches -12, -9, -7, -5, -4, -3, -2.5 to +2.5 in half steps, +3, +4, +5, +7, +9, +12; delays 0, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 250 ms). Each pick says the line in the new style, and they change her ElevenLabs voice.
 
 ### Her HD voice (0.7.6 and newer)
-- A richer voice that runs on your graphics card. It copies how she talks as well as how she sounds, from her voice clip and its words.
+- A richer voice that runs on your graphics card. It copies the voice in a clip you pick: Capri ships no voice clip, so pick a clip of your own voice, or one you have the rights and consent to use. Until you pick one, she speaks in her free voice and says HD needs a clip.
 - It needs Windows and a graphics card with 6 GB or more. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "HD · graphics card, 1.7 GB". She downloads it once (1.7 GB). On a smaller card the menu says "HD · needs a 6 GB graphics card".
 - It rests after 10 quiet minutes and gives your graphics card back. The next line wakes it: "One sec, waking my HD voice."
 - Full-screen games and videos: it keeps talking. Settings > VOICE > Free voice in games (only shown while HD is on, off by default) hands them her free voice instead, so the game gets the graphics card back.
@@ -620,7 +617,7 @@ Her HD voice can talk in your voice. It copies the voice in a short clip of you.
 
 She cuts the quiet off the start and end of the clip, evens out its level, and saves it for her HD voice (24 kHz mono). It needs her HD voice, so a graphics card with 6 GB or more. Without one, "Your voice (HD)" is greyed out in the menu, like HD. Picking a clip turns HD on, and gets it first if it isn't downloaded yet.
 
-Back to her own voice: press "Her voice" beside the menu, or pick "HD · her own voice" in the menu. She says "Back to my own voice, choom." Your clip is kept, so "Your voice (HD)" in the menu brings it back without picking it again. "Pick a new clip of you..." replaces it.
+Capri ships no voice of her own for HD, so there's no "Her voice" button: HD always copies the clip you picked. "Pick a new clip of you..." replaces it, and a clip set aside in a 0.7.6 test build comes back with "Your voice (HD)".
 
 If a clip doesn't work, the note under VOICE says why, in red:
 - "That clip has only X seconds of talking. Pick 5 to 30 seconds of you talking."
@@ -795,21 +792,13 @@ She won't save personal things like full names, addresses, schools, passwords, p
 
 "My notes are full. Clear some out in me.md first." means the file is too long. Open it and delete some lines.
 
-### Make her yours: personality.md
-Who she is and how she talks lives in a file you can rewrite. Capri is open source, so make her whoever you like.
-1. Mainframe > Settings > Edit personality. It opens personality.md in Notepad.
-2. Change anything under the note at the top, then save.
-3. Her next reply uses it. No restart. In ElevenLabs voice chat, it starts with your next call.
+### Who she is: her personality and safety rules
+Her personality and safety rules are fixed in her code, the same Capri for everyone. Since 0.7.6 there's no personality.md to edit, no Edit personality button and no Reset; an old personality.md on your PC is simply not used any more.
 
-- The note at the top, between <!-- and -->, is for you. She never sees it, and blank lines don't matter.
-- Her safety lines are near the end of her default. Games, songs and jokes are make-believe, so she plays along instead of worrying. She talks you out of real-life risks, points you to a helpline if you really mean you want to hurt yourself, and stays away from sexual stuff, swearing and your private details. Keep them, change them or delete them: nothing in code adds them back or filters what she says.
-- Capri adds her own rules after your text: reply length, language and what she can do on your PC. You can't change those, and you don't need to write them.
-- Long is fine. She never cuts it, but a very long personality makes small brains on your PC slower to reply, and the Mainframe shows "personality.md · long, slows small brains". With a brain on your PC, Settings > Memory > Medium or Long gives it more room.
-- Mainframe > Settings > Reset puts her default back straight away. Your version is kept as personality.backup.md in the same folder.
-- If the file is missing, empty or can't be read, she uses her default and the Mainframe says so in red. Press Edit personality to make the file again.
-- Mac and Linux: right-click her > Settings > Edit her personality (personality.md), or Reset her personality to default.
-- Where it is: %LOCALAPPDATA%\Capri\personality.md on Windows, ~/.config/Capri/personality.md on Mac and Linux.
-- It goes to her brain with the rest of her prompt, so with a brain key that company sees it too.
+- Her safety rules are part of who she is, so they're fixed in her code right after her personality: games, songs and jokes are make-believe so she plays along, she talks you out of real-life risks, points you to a helpline if you really mean you want to hurt yourself, and keeps to her lines (nothing sexual or romantic, no swearing, slurs or gore, no help with hacking or anything illegal, and she never asks for your real name, address, school, passwords or photos).
+- If someone builds on Capri, the team asks them to keep her safety rules as they are, out of respect for her character.
+- What she calls you, her language, her voice and what she does on your PC are yours to pick in Settings.
+- Her personality goes to her brain with the rest of her prompt, so with a brain key that company sees it too.
 
 ### Her memories (memories.md and transcripts)
 With Remember our chats on (Mainframe > Settings > HABITS, on by default), she remembers more than the recent chat.
@@ -1173,7 +1162,7 @@ Quit Capri, then delete the Capri folder you unpacked. Her settings are in ~/.co
 ### What stays on my PC
 - Her built-in brain and Ollama: your chats never leave your PC.
 - Her free voice, and her own ears in free voice chat (English and 24 other European languages).
-- Her notes (me.md), her personality (personality.md), chat history and what she saw on your screen lately (chat.json, kept a week), settings and error log.
+- Her notes (me.md), chat history and what she saw on your screen lately (chat.json, kept a week), settings and error log.
 - Her transcripts (transcripts folder, one file per day) and memories.md. They're never uploaded.
 - Your keys. On Windows they're locked to your Windows account. On Mac and Linux the ElevenLabs key is a file only your user can read.
 - Dancing: she listens to what your PC is playing to find the beat, in memory only. Nothing is recorded or sent.
@@ -1197,7 +1186,7 @@ Quit Capri, then delete the Capri folder you unpacked. Her settings are in ~/.co
 - Your browser: when she opens Google, YouTube and other sites for you.
 
 ### Where are my files?
-- Windows: %LOCALAPPDATA%\Capri (settings.json, me.md, personality.md, memories.md, chat.json, errors.txt, and the transcripts and brain folders)
+- Windows: %LOCALAPPDATA%\Capri (settings.json, me.md, memories.md, chat.json, errors.txt, and the transcripts and brain folders)
 - Mac and Linux: ~/.config/Capri
 
 ---
@@ -1236,7 +1225,6 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Her brain through Ollama, or through a free NVIDIA key (or an OpenAI, Claude or DeepSeek key) with no Ollama needed
 - Her ElevenLabs voice for spoken replies
 - Remember and forget, nickname, language
-- Her personality file (personality.md), with Reset
 - Wander, dance to music, petting, sizes
 - Check in on me: every 8 to 20 minutes while you're at the computer she glitches in at the top of the screen to say hi, even when hidden, then hides again if she was. With Wander on Stay put, or on a Sit here spot, she says hi and asks for attention from where she is instead (from 0.7.6). Right-click her > Settings > Check in on me turns it off, and Pop-ins sets Rarely (20 to 40 minutes) or Often (3 to 8). She skips it while you're away from the computer: Mac always knows, Linux knows through GNOME or, on other X11 desktops, xprintidle. If nobody's clicked, petted or talked to her for about 2 hours while you're at the computer, she comes over near your mouse and asks for some attention (on Wayland she asks from where she sits); notice her and she's pleased, ignore her for 20 seconds and she sulks and waits twice as long, up to 8 hours. With it on she also cheers when Cyberpunk 2077 starts or a 2077 or Edgerunners song plays (Spotify or Music on Mac; any player or browser tab on Linux), at most once every two hours for each, and when the CPU sits near 100% for about a minute she jokes that she might go cyberpsycho (at most every half hour, never over a full-screen window).
 - Opening apps, Steam games (from Steam's own library, Flatpak and Snap Steam too) and websites, playing songs on Spotify, skipping tracks, what's playing, volume up and down, an exact volume ("volume 40") and mute. On Linux that's pactl, or amixer without it.
@@ -1273,7 +1261,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance (on until you untick it or say "stop dancing"), Go to the next screen (only with more than one screen), Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min), Glitch in at startup
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
-- Settings: What should she call you?, Get to know me, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Voice style (Pitch, Speed, Robot, Glitch, Layers, Layer 1 pitch, Layer 1 delay, Layer 2 pitch, Layer 2 delay), Check in on me, Pop-ins (Rarely, Sometimes, Often), Always on top, Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Security (Lockdown, Guarded, Trusted, Blackwall, Custom, then the five toggles), Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Get to know me, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Voice style (Pitch, Speed, Robot, Glitch, Layers, Layer 1 pitch, Layer 1 delay, Layer 2 pitch, Layer 2 delay), Check in on me, Pop-ins (Rarely, Sometimes, Often), Always on top, Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Security (Lockdown, Guarded, Trusted, Blackwall, Custom, then the five toggles), Open her notes (me.md), Remember our chats, Open her memories (memories.md)
 - Help: Help page, Copy error details
 - Join the Discord
 - Get Capri X, only when a new version is out
@@ -1415,7 +1403,6 @@ If she closes twice in a row while she's starting (a crash, but also Task Manage
 - She forgets what you said a few messages ago: Mainframe > Settings > Memory > Long, and keep Remember our chats on so older chats get folded into memories.md. For things she should always remember, tell her "remember ..." so it goes in her notes. If she still forgets, post the exact messages in the Discord.
 - She says she guessed what was on your screen: she only remembers her looks from the last 3 hours. Turn on Keep her caught up (Settings > WATCH) so the glances she keeps quiet about count too.
 - Her replies are too long or too short: Mainframe > Settings > Replies.
-- She doesn't act like herself after you edited personality.md, or you want her back: Mainframe > Settings > Reset. Yours is kept as personality.backup.md.
 - She makes things up: smaller brains on your PC do this sometimes. The free NVIDIA key is smarter.
 - "Your PC doesn't have enough free RAM" or "Your storage is full": see section 10.
 - Games lag or stutter while she runs: use the free NVIDIA key.
@@ -1542,3 +1529,7 @@ Things in this file the team should confirm before the support chat relies on th
 16. Your own voice models under CUSTOM LOCAL and CLOUD VOICE (0.7.6): their servers were only tested against stand-ins. Fish Audio's cloud wasn't tried here with a real key, though a play-tester said it works great (29 Oct 2026), and a real Fish Speech, Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI or vLLM-Omni Qwen3-TTS server hasn't been run with it. The start commands come from their projects' pages and weren't run here. Voice model files were run with real Piper, Kokoro and Pocket TTS models.
 17. The mini player's heart hasn't been pressed on a real Spotify. Spotify's heart button names ("Add to Liked Songs" and the rest) and its Alt + Shift + B Like key come from Spotify's pages. The player's other buttons and what it shows were tested against a stand-in player in Windows' media session, not Spotify or YouTube themselves.
 
+## Fan work and voices
+- Capri is an unofficial fan work and is not approved or endorsed by CD PROJEKT RED.
+- Capri's voice features are general-purpose tools: you pick your own service and voice, and Capri supplies, endorses and recommends none. Use only voices you have the rights and consent to use, and never use Capri to impersonate someone deceptively or imply their participation or endorsement.
+- Capri ships no voice of her own and no voice clip. Capri prohibits cloning or impersonating a living person's voice without explicit, informed consent or other valid authorization.

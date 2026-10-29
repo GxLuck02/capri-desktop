@@ -118,23 +118,17 @@ Just ask her for things, like "open Spotify", "play Blinding Lights", "pause", "
 | Ctrl + Alt + C | get her off your cursor |
 | Right-click, Move | she hops between your open windows |
 | Watch my screen | in the Mainframe: she comments as you play |
-| PREBUILT LOCAL / CUSTOM LOCAL / CLOUD VOICE | in the Mainframe under VOICE: PREBUILT LOCAL is her own voice, free on your PC, and HD in its list is a better-sounding one for graphics cards with 6 GB or more; CUSTOM LOCAL runs a voice model you set up on your PC; CLOUD VOICE is Fish Audio (free tier), ElevenLabs or OpenAI with your own key |
+| PREBUILT LOCAL / CUSTOM LOCAL / CLOUD VOICE | in the Mainframe under VOICE: PREBUILT LOCAL is her own voice, free on your PC, and HD in its list is a better-sounding one for graphics cards with 6 GB or more that copies a clip you pick (Capri ships no voice clip); CUSTOM LOCAL runs a voice model you set up on your PC; CLOUD VOICE is Fish Audio (free tier), ElevenLabs or OpenAI with your own key |
 | Help | in the Mainframe: opens the help page |
 
 </details>
 
 ## Make her yours
 
-Who she is and how she talks lives in `personality.md`, a plain text file you can rewrite. She's open source, so make her whoever you like.
+Pick what she calls you, her language, her voice and what she does on your PC from the Capri Mainframe. Who she is stays the same for everyone, and since 0.7.6 there's no `personality.md` to rewrite.
 
-1. In the Capri Mainframe, press **Settings**, then **Edit personality**. It opens in Notepad
-2. Rewrite anything under the note at the top, then save
-3. Her next reply uses it. No restart
-
-- **Where it lives:** `%LOCALAPPDATA%\Capri\personality.md` on Windows, `~/.config/Capri/personality.md` on Mac and Linux (right-click her, Settings, Edit her personality)
-- **Capri's own rules stay in the app:** reply length, language, what she can do on your PC and her safety rules come after your text, so you don't need to write them
-- **Reset** puts her default back and keeps yours as `personality.backup.md`
-- Her default is `DefaultPersonality` in [app/Brain.cs](app/Brain.cs), so a pull request can change her for everyone
+- **Her safety rules are part of who she is.** They're fixed in her code, in `Safety` in [app/Brain.cs](app/Brain.cs), right after her personality. If you build on her, please keep them as they are, out of respect for Capri's character
+- Her personality is `DefaultPersonality` in [app/Brain.cs](app/Brain.cs), so a pull request can suggest a change for everyone
 
 ## Roadmap
 
@@ -145,7 +139,7 @@ Who she is and how she talks lives in `personality.md`, a plain text file you ca
 - [x] Head pats (smh): rub your cursor back and forth over her
 - [x] Check in on me (on by default): every so often she glitches in on whatever you're doing
 - [x] With Check in on me on, she asks for your attention now and then when you ignore her
-- [x] Your own Capri: her personality in a file you can open from the Mainframe and change
+- [x] Her personality and safety rules fixed in her code, the same Capri for everyone (0.7.6)
 - [ ] A charm meter: how fond of you she is, growing as you spend time with her
 - [ ] Mischief mode: screen glitches, stealing your cursor, "you've been hacked" notes
 
@@ -256,7 +250,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build her, test her and send a
 
 ## Licence
 
-**Voices:** Capri prohibits cloning or impersonating a living person's voice without explicit, informed consent or other valid authorization. Capri ships no cloned voice: make your own with a voice design tool.
+**Fan work:** Capri is an unofficial fan work and is not approved or endorsed by CD PROJEKT RED.
+
+**Voices:** Capri's voice features are general-purpose tools: you pick your own service and voice, and Capri supplies, endorses and recommends none. Use only voices you have the rights and consent to use, and never use Capri to impersonate someone deceptively or imply their participation or endorsement. Capri prohibits cloning or impersonating a living person's voice without explicit, informed consent or other valid authorization. Capri ships no cloned voice: make your own with a voice design tool.
 
 Free for anything non-commercial: use her, share her, change her. No selling her or putting her in paid products. Credit us when you use her: her artist for her art and animations, and Capri, with a link to this page, for her code and anything else. Full terms in [LICENSE.md](LICENSE.md) (PolyForm Noncommercial 1.0.0). The credits are its Required Notices, so anyone who passes on any part of her has to pass them on too.
 
