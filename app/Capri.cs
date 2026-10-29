@@ -844,6 +844,19 @@ namespace CapriDesktop
         private readonly QwenVoice qwen;
         private readonly VoiceServer server = new VoiceServer();
         private readonly LocalEars parakeet;
+        // "Hey Capri": the wake word's own mic and spotter, open only while the setting is on and nothing pauses it.
+        private readonly WakeWord heyCapri;
+        private bool wakeOpen, settingUpWake, wakeAskedVoice, wakeTell, wakeSaid, wakeMicSaid, wakeMicMuted, wakeWarming;
+        // True only inside her smoke test's own wake checks.
+        private bool wakeChecks;
+        private double wakeRetryAt = -1, wakeMuteAt = -1;
+        private int wakeTries, wakeOpens, wakeFetches, wakeHeard;
+        private bool? wakeReadyTest, wakeVoiceTest;
+        // What the first turn-on downloads: her free voice, then the wake word's pack. Her smoke test swaps them.
+        private Action getWakeVoice, getWakePack;
+        // Windows' own mute on the mic she'd listen with. Her smoke test swaps it.
+        internal static Func<string, bool?> MicMuted = Mics.Muted;
+        private static readonly string[] WakeLines = { "I'm here.", "Yeah, choom?", "Listening.", "Right here, choom.", "Go on, I'm listening.", "You rang?" };
         private readonly Presence presence;
         private bool settingUpEars, settingUpHd, wakingHd, hdTest;
         // A voice check she says once her HD voice wakes, in place of her usual one.
@@ -1016,6 +1029,7 @@ namespace CapriDesktop
             ModelFile.Engine = LocalVoice.Folder(data);
             ModelFile.Shelf = Path.Combine(Path.Combine(data, "voice"), "models");
             parakeet = new LocalEars(data);
+            heyCapri = new WakeWord(data);
             presence = new Presence(Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
             preferences = smoke ? new Preferences() : LoadPreferences();
             ears.Chosen = preferences.Mic;
@@ -1164,6 +1178,10 @@ namespace CapriDesktop
             pill.Mute += ToggleMic;
             ears.Heard += Listen;
             ears.Level += delegate(double value) { Post(delegate { HeardLevel(value); }); };
+            heyCapri.Heard += delegate { Post(HeardHeyCapri); };
+            HeyCapriChanged += WakeChanged;
+            getWakeVoice = delegate { SetUpFreeVoice(true); };
+            getWakePack = FetchWake;
             box.Dismissed += delegate { if (box.Leaving < 0) box.Leaving = clock.Elapsed.TotalSeconds; };
             typer.Submitted += Hear;
             typer.VisibleChanged += delegate { if (!typer.Visible && replyDone >= 0) replyDone = clock.Elapsed.TotalSeconds; };
@@ -1194,6 +1212,7 @@ namespace CapriDesktop
                 CheckChat(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckHearing(clock.Elapsed.TotalSeconds);
                 CheckEars(clock.Elapsed.TotalSeconds);
+                CheckWake(clock.Elapsed.TotalSeconds);
                 CheckSlow(clock.Elapsed.TotalSeconds);
                 UpdatePill(clock.Elapsed.TotalSeconds);
                 if (!testing && UpdateDue(preferences.UpdateCheckedAt, DateTime.UtcNow.Ticks, clock.Elapsed.TotalSeconds, updateStarted)) CheckForUpdates(false);
@@ -4652,6 +4671,9 @@ namespace CapriDesktop
             mainframe.ShowMic(MicName(preferences.Mic));
             micHeard = micWarned = false;
             micQuietFrom = -1;
+            // "Hey Capri" opens the new mic on its next check.
+            if (wakeOpen) CloseWake();
+            wakeMuteAt = -1;
             if (!ears.Listening) return;
             ears.Stop();
             try { ears.Start(); }
@@ -4825,6 +4847,178 @@ namespace CapriDesktop
             balloonMainframe = true;
             tray.ShowBalloonTip(8000, "Getting Capri's free voice", Engine.Amount(LocalVoice.PackSize) + ", one time. She'll talk as soon as it's in. Click to watch it download.", ToolTipIcon.Info);
             SetUpFreeVoice(true);
+        }
+
+        private bool WakeReady { get { return wakeReadyTest ?? heyCapri.Ready; } }
+
+        // Voice chat has the mic, or they muted it (her mute or Windows'), or pressed her quiet key.
+        private bool WakePaused { get { return chatting || ears.Muted || shushed || wakeMicMuted; } }
+
+        // "Hey Capri" listens on its own mic while the setting is on. The first turn-on gets her free voice, which brings
+        // sherpa-onnx, if it isn't in, then the wake word's pack. Anything that pauses it closes the mic; while she talks the
+        // mic stays open but hears nothing, so her own voice can't wake her.
+        private void CheckWake(double now)
+        {
+            // Her smoke test flips the setting in other checks too (SECURITY's Blackwall preset turns it on), so there it
+            // only ever runs inside her own wake checks, and even then never opens the mic or downloads.
+            if (testing && !wakeChecks) return;
+            if (!preferences.HeyCapri || quitting) { if (wakeOpen) CloseWake(); return; }
+            if (!WakeReady) { if (wakeOpen) CloseWake(); GetWake(now); return; }
+            if (wakeAskedVoice || wakeTries > 0) { wakeAskedVoice = false; wakeTries = 0; wakeRetryAt = -1; }
+            heyCapri.Held = now < voiceUntil || speaker.Busy;
+            if (now >= wakeMuteAt) { wakeMuteAt = now + 2; wakeMicMuted = MicMuted(preferences.Mic) == true; }
+            if (WakePaused) { if (wakeOpen) CloseWake(); return; }
+            // A mic that stopped sending, unplugged or lost in sleep, is opened again: the picked one, or Windows' default.
+            if (wakeOpen && !testing && heyCapri.Stalled) { CloseWake(); wakeRetryAt = now + 2; return; }
+            if (!wakeOpen && now >= wakeRetryAt) OpenWake(now);
+        }
+
+        private void OpenWake(double now)
+        {
+            // Loading the spotter takes a few seconds the first time, so it loads off her thread and the mic opens after.
+            if (!testing && !heyCapri.Warmed)
+            {
+                if (wakeWarming) return;
+                wakeWarming = true;
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    string problem = null;
+                    try { heyCapri.Warm(); }
+                    catch (Exception error) { problem = Voice.Short(error.Message); }
+                    if (problem != null && !wakeMicSaid) Brain.Log("hey capri", -1, problem);
+                    Post(delegate
+                    {
+                        wakeWarming = false;
+                        if (!preferences.HeyCapri) { heyCapri.Dispose(); return; }
+                        if (problem == null) return;
+                        wakeRetryAt = clock.Elapsed.TotalSeconds + 30;
+                        if (!wakeMicSaid) { wakeMicSaid = true; WakeNote("I can't listen for \"Hey Capri\": " + problem, true); }
+                    });
+                });
+                return;
+            }
+            wakeOpens++;
+            try { if (!testing) heyCapri.Listen(preferences.Mic); }
+            catch (Exception error)
+            {
+                // A mic that won't open, or a sherpa-onnx that won't run it: said once, tried again every 30 s.
+                if (!(error is VoiceException) && !(error is IOException) && !wakeMicSaid) Brain.Log("hey capri", -1, Voice.Short(error.Message));
+                wakeRetryAt = now + 30;
+                if (!wakeMicSaid) { wakeMicSaid = true; WakeNote("I can't listen for \"Hey Capri\": " + error.Message, true); }
+                return;
+            }
+            wakeOpen = true;
+            if (wakeSaid) return;
+            wakeSaid = true;
+            string on = "Listening for \"Hey Capri\". Nothing leaves your PC until you say it.";
+            if (wakeTell) WakeNote(on, false);
+            else mainframe.VoiceNote(on, false);
+        }
+
+        private void CloseWake()
+        {
+            wakeOpen = false;
+            if (!testing) heyCapri.Pause();
+        }
+
+        // Turned on, she gets what it needs and says when she's listening; turned off, the mic closes and any download it started stops.
+        private void WakeChanged()
+        {
+            if (testing && !wakeChecks) return;
+            wakeTell = preferences.HeyCapri;
+            wakeSaid = wakeMicSaid = false;
+            wakeRetryAt = wakeMuteAt = -1;
+            wakeTries = 0;
+            if (preferences.HeyCapri) { CheckWake(clock.Elapsed.TotalSeconds); return; }
+            heyCapri.Cancel = true;
+            if (wakeAskedVoice && SettingUpVoice) kokoro.Cancel = true;
+            wakeAskedVoice = false;
+            wakeOpen = false;
+            if (!testing) heyCapri.Dispose();
+            mainframe.VoiceNote("Not listening for \"Hey Capri\".", false);
+        }
+
+        private void GetWake(double now)
+        {
+            if (settingUpWake || SettingUpVoice || now < wakeRetryAt) return;
+            if (IntPtr.Size != 8)
+            {
+                if (!wakeMicSaid) { wakeMicSaid = true; WakeNote("Listening for \"Hey Capri\" needs 64-bit Windows.", true); }
+                return;
+            }
+            if (!(wakeVoiceTest ?? heyCapri.VoiceIn))
+            {
+                // Her free voice didn't land: she waits, then tries again.
+                if (wakeAskedVoice) { wakeAskedVoice = false; wakeRetryAt = now + EarsRetryWait(++wakeTries); return; }
+                wakeAskedVoice = true;
+                // After a download she says in her bubble when she's listening, for those it was turned on for at startup too.
+                wakeTell = true;
+                WakeNote("To hear \"Hey Capri\" I need my free voice, so I'm getting it: " + Engine.Amount(LocalVoice.PackSize) + ", then " + Engine.Amount(WakeWord.PackSize) + " more, one time.", false);
+                getWakeVoice();
+                return;
+            }
+            wakeAskedVoice = false;
+            wakeTell = true;
+            WakeNote("Getting what I need to hear \"Hey Capri\": " + Engine.Amount(WakeWord.PackSize) + ", one time. It all stays on your PC.", false);
+            getWakePack();
+        }
+
+        private void FetchWake()
+        {
+            settingUpWake = true;
+            wakeFetches++;
+            heyCapri.Cancel = false;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string problem = null;
+                int shown = -1;
+                Action<string, long, long> progress = delegate(string text, long done, long total)
+                {
+                    int percent = total > 0 ? (int)(done * 10 / total) * 10 : 0;
+                    if (percent == shown) return;
+                    shown = percent;
+                    Post(delegate { if (settingUpWake && preferences.HeyCapri) mainframe.VoiceNote("Getting \"Hey Capri\" (" + Engine.Amount(WakeWord.PackSize) + "): " + percent + "%", false); });
+                };
+                try { heyCapri.Install(progress); heyCapri.Warm(); }
+                catch (OperationCanceledException) { problem = "Cancelled."; }
+                catch (Exception error) { problem = Voice.Short(error.Message); }
+                if (problem != null && problem != "Cancelled.") Brain.Log("hey capri setup", -1, problem);
+                Post(delegate
+                {
+                    settingUpWake = false;
+                    if (!preferences.HeyCapri) return;
+                    if (problem == null) { wakeTries = 0; wakeRetryAt = -1; return; }
+                    int wait = EarsRetryWait(++wakeTries);
+                    wakeRetryAt = clock.Elapsed.TotalSeconds + wait;
+                    WakeNote("\"Hey Capri\" didn't download: " + problem + " I'll try again in " + (wait < 60 ? wait + " seconds" : wait == 60 ? "a minute" : wait / 60 + " minutes") + ".", true);
+                });
+            });
+        }
+
+        // Her bubble when she's free to show it, and the Mainframe always.
+        private void WakeNote(string text, bool problem)
+        {
+            mainframe.VoiceNote(text, problem);
+            if (hidden || chatting || talkState != TalkState.Off) return;
+            Say(text);
+        }
+
+        // "Hey Capri": she glitches in if she's hidden, opens voice chat the way her talk key does and says she's there.
+        private void HeardHeyCapri()
+        {
+            if (testing && !wakeChecks) return;
+            wakeHeard++;
+            if (!preferences.HeyCapri || !wakeOpen || WakePaused || quitting || IsDisposed) return;
+            CloseWake();
+            if (hidden) SetHidden(false);
+            ToggleChat();
+            if (!chatting) return;
+            heard = "hey capri";
+            box.Prompt = "> you: ";
+            string line = WakeLines[random.Next(WakeLines.Length)];
+            // Free voice chat says it in her voice; ElevenLabs voice chat has its own voice, so there it's in her bubble.
+            if (local) Answer(++asking, line, TalkState.Talking);
+            else Begin(++asking, line, TalkState.Talking, null);
         }
 
         // One row under VOICE, with the brain setup's dotted bar, for whichever of her free voice, ears and HD voice is downloading.
@@ -6847,6 +7041,8 @@ namespace CapriDesktop
             voice.Stop();
             engine.Cancel = true;
             kokoro.Cancel = true;
+            heyCapri.Cancel = true;
+            heyCapri.Dispose();
             qwen.Cancel = true;
             qwen.Stop();
             engine.Stop();
@@ -15695,6 +15891,270 @@ namespace CapriDesktop
                             Dictation.Make = delegate { return new StandInDictation(); };
                             if (!earsFollowed) throw new Exception("Changing her language mid-chat did not reopen her ears for it: " + parakeet.Language + " / " + reply);
                             checks.Add("PASS ears follow her language: picking a language mid-chat reopens her ears with the pack for it");
+                            // Hey Capri by its flags: off opens no mic and downloads nothing; the first turn-on says what it's getting, her free
+                            // voice first, then the pack; on, it listens on its own mic, decodes nothing while she talks, and closes the mic in
+                            // voice chat, on mute, with Windows' mute and in Quiet; firing glitches her in and opens voice chat.
+                            Func<string, bool?> micMutedWas = MicMuted;
+                            Action getWakeVoiceWas = getWakeVoice, getWakePackWas = getWakePack;
+                            bool? windowsMicMuted = false;
+                            int wakeVoiceGets = 0, wakePackGets = 0;
+                            bool quietWakeWas = preferences.Quiet;
+                            string wakeFlow = null;
+                            MicMuted = delegate { return windowsMicMuted; };
+                            getWakeVoice = delegate { wakeVoiceGets++; };
+                            getWakePack = delegate { wakePackGets++; };
+                            try
+                            {
+                                CloseTalk();
+                                if (hidden) ShowHidden(false);
+                                if (new Preferences().HeyCapri) throw new Exception("Listen for \"Hey Capri\" wasn't off out of the box.");
+                                if (HeyCapriOn) SetHeyCapri(false);
+                                // Outside these checks, as when SECURITY's Blackwall preset turns it on, the smoke test's listener does nothing.
+                                string speechBefore = speech, noteBefore = mainframe.VoiceNoteText;
+                                SetHeyCapri(true);
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool smokeQuiet = !wakeOpen && !wakeAskedVoice && !settingUpWake && !SettingUpVoice && wakeVoiceGets + wakePackGets == 0 && speech == speechBefore && mainframe.VoiceNoteText == noteBefore;
+                                SetHeyCapri(false);
+                                smokeQuiet &= speech == speechBefore && mainframe.VoiceNoteText == noteBefore;
+                                if (!smokeQuiet) throw new Exception("Turning \"Hey Capri\" on in another smoke check woke her listener: " + speech + " / " + mainframe.VoiceNoteText);
+                                wakeChecks = true;
+                                wakeOpens = wakeFetches = wakeHeard = 0;
+                                double wakeAt = clock.Elapsed.TotalSeconds;
+                                wakeReadyTest = true;
+                                for (int i = 0; i < 4; i++) CheckWake(wakeAt + i * 3);
+                                HeardHeyCapri();
+                                bool offShut = !wakeOpen && wakeOpens == 0 && wakeVoiceGets + wakePackGets == 0 && !heyCapri.Listening && !chatting;
+                                wakeReadyTest = false;
+                                wakeVoiceTest = false;
+                                SetHeyCapri(true);
+                                string voiceAsk = speech;
+                                bool askedVoice = wakeVoiceGets == 1 && wakePackGets == 0 && !wakeOpen && voiceAsk == "To hear \"Hey Capri\" I need my free voice, so I'm getting it: " + Engine.Amount(LocalVoice.PackSize) + ", then " + Engine.Amount(WakeWord.PackSize) + " more, one time." && mainframe.VoiceNoteText == voiceAsk;
+                                wakeVoiceTest = true;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool askedPack = wakeVoiceGets == 1 && wakePackGets == 1 && !wakeOpen && speech == "Getting what I need to hear \"Hey Capri\": " + Engine.Amount(WakeWord.PackSize) + ", one time. It all stays on your PC.";
+                                wakeVoiceTest = null;
+                                wakeReadyTest = true;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool listens = wakeOpen && wakeOpens == 1 && speech == "Listening for \"Hey Capri\". Nothing leaves your PC until you say it." && wakeTries == 0 && !wakeAskedVoice;
+                                voiceUntil = clock.Elapsed.TotalSeconds + 5;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool heldTalking = wakeOpen && heyCapri.Held;
+                                voiceUntil = 0;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                heldTalking &= wakeOpen && !heyCapri.Held;
+                                ears.Muted = true;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool pausedMute = !wakeOpen;
+                                ears.Muted = false;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                pausedMute &= wakeOpen;
+                                windowsMicMuted = true;
+                                wakeMuteAt = -1;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool pausedWindows = !wakeOpen;
+                                windowsMicMuted = false;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool mutePolled = !wakeOpen;
+                                wakeMuteAt = -1;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                pausedWindows &= mutePolled && wakeOpen;
+                                ToggleShush();
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                HeardHeyCapri();
+                                bool pausedQuiet = shushed && !wakeOpen && !chatting;
+                                ToggleShush();
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                pausedQuiet &= wakeOpen;
+                                CloseTalk();
+                                ownEarsTest = true;
+                                preferences.Quiet = true;
+                                StartLocal();
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool pausedChat = chatting && !wakeOpen;
+                                StopChat();
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                pausedChat &= wakeOpen;
+                                SetHidden(true);
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool hiddenListens = hidden && wakeOpen;
+                                int opensBefore = wakeOpens, wakeHeardBefore = wakeHeard;
+                                HeardHeyCapri();
+                                bool fired = wakeHeard == wakeHeardBefore + 1 && !hidden && chatting && local && pill.Chatting && !wakeOpen && heard == "hey capri" && Array.IndexOf(WakeLines, reply) >= 0 && speech == reply;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                fired &= !wakeOpen;
+                                string greeting = reply;
+                                StopChat();
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                bool backAfter = wakeOpen && wakeOpens == opensBefore + 1;
+                                SetHeyCapri(false);
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                HeardHeyCapri();
+                                bool offAgain = !wakeOpen && !chatting && mainframe.VoiceNoteText == "Not listening for \"Hey Capri\".";
+                                if (!offShut || !askedVoice || !askedPack || !listens || !heldTalking || !pausedMute || !pausedWindows || !pausedQuiet || !pausedChat || !hiddenListens || !fired || !backAfter || !offAgain)
+                                    wakeFlow = "off shut " + offShut + ", asked voice " + askedVoice + ", asked pack " + askedPack + ", listens " + listens + ", held talking " + heldTalking + ", mute " + pausedMute + ", Windows mute " + pausedWindows + ", Quiet " + pausedQuiet + ", chat " + pausedChat + ", hidden listens " + hiddenListens + ", fired " + fired + " (" + greeting + "), back after " + backAfter + ", off again " + offAgain + " / " + voiceAsk + " / " + mainframe.VoiceNoteText;
+                            }
+                            finally
+                            {
+                                if (chatting) StopChat();
+                                if (HeyCapriOn) SetHeyCapri(false);
+                                wakeChecks = false;
+                                if (shushed) ToggleShush();
+                                if (hidden) ShowHidden(false);
+                                MicMuted = micMutedWas;
+                                getWakeVoice = getWakeVoiceWas;
+                                getWakePack = getWakePackWas;
+                                wakeReadyTest = wakeVoiceTest = null;
+                                ownEarsTest = null;
+                                preferences.Quiet = quietWakeWas;
+                                ears.Muted = false;
+                                CloseTalk();
+                            }
+                            if (wakeFlow != null) throw new Exception("Hey Capri went wrong: " + wakeFlow);
+                            checks.Add("PASS Hey Capri: off out of the box, and while off it opens no mic and downloads nothing; in the smoke test, turning it on outside these checks (SECURITY's Blackwall preset does) wakes nothing; the first turn-on says plainly that it's getting her free voice, then the pack; on, it listens on its own mic and says so, keeps the mic open but decodes nothing while she talks, and closes the mic in voice chat, on her mute, with Windows' mute and in Quiet, opening it again after; \"Hey Capri\" glitches her in when she's hidden, opens voice chat the way her talk key does and she says a short line; turned off, the mic closes");
+                            if (WakeWord.PackUrl != "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2" || WakeWord.PackSize != 17626723 || WakeWord.PackSha != "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a")
+                                throw new Exception("Her wake word points at the wrong download: " + WakeWord.PackUrl + " / " + WakeWord.PackSize + " / " + WakeWord.PackSha);
+                            string wakeRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "wake-test");
+                            if (Directory.Exists(wakeRoot)) Directory.Delete(wakeRoot, true);
+                            const string wakeInside = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01";
+                            string wakeSource = Path.Combine(Path.Combine(wakeRoot, "source"), wakeInside);
+                            Directory.CreateDirectory(wakeSource);
+                            foreach (string name in WakeWord.Needed) File.WriteAllBytes(Path.Combine(wakeSource, name), new byte[] { 1 });
+                            string wakeTar = Path.Combine(wakeRoot, "made.tar.bz2");
+                            using (Process packing = Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe"), "-cjf \"" + wakeTar + "\" -C \"" + Path.Combine(wakeRoot, "source") + "\" " + wakeInside) { UseShellExecute = false, CreateNoWindow = true }))
+                                if (!packing.WaitForExit(30000) || packing.ExitCode != 0) throw new Exception("Couldn't make the test wake word pack with tar.");
+                            byte[] wakeMade = File.ReadAllBytes(wakeTar);
+                            System.Net.Sockets.TcpListener wakeServer = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+                            wakeServer.Start();
+                            ThreadPool.QueueUserWorkItem(delegate
+                            {
+                                try
+                                {
+                                    using (System.Net.Sockets.TcpClient client = wakeServer.AcceptTcpClient())
+                                    using (System.Net.Sockets.NetworkStream stream = client.GetStream())
+                                    {
+                                        byte[] buffer = new byte[4096];
+                                        string request = "";
+                                        while (request.IndexOf("\r\n\r\n", StringComparison.Ordinal) < 0)
+                                        {
+                                            int read = stream.Read(buffer, 0, buffer.Length);
+                                            if (read <= 0) break;
+                                            request += System.Text.Encoding.ASCII.GetString(buffer, 0, read);
+                                        }
+                                        byte[] head = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/x-bzip2\r\nContent-Length: " + wakeMade.Length + "\r\nConnection: close\r\n\r\n");
+                                        stream.Write(head, 0, head.Length);
+                                        stream.Write(wakeMade, 0, wakeMade.Length);
+                                    }
+                                }
+                                catch (Exception) { }
+                            });
+                            string wakeUrlWas = WakeWord.PackUrl, wakeShaWas = WakeWord.PackSha;
+                            long wakeSizeWas = WakeWord.PackSize;
+                            string wakeData = Path.Combine(wakeRoot, "data");
+                            WakeWord fetchedWake = new WakeWord(wakeData);
+                            System.Collections.Generic.List<string> wakeSteps = new System.Collections.Generic.List<string>();
+                            bool wakeEmpty;
+                            try
+                            {
+                                WakeWord.PackUrl = "http://127.0.0.1:" + ((IPEndPoint)wakeServer.LocalEndpoint).Port + "/" + wakeInside + ".tar.bz2";
+                                WakeWord.PackSize = wakeMade.Length;
+                                using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) WakeWord.PackSha = BitConverter.ToString(sha.ComputeHash(wakeMade)).Replace("-", "").ToLowerInvariant();
+                                wakeEmpty = !fetchedWake.Installed && !fetchedWake.Ready;
+                                fetchedWake.Install(delegate(string text, long done, long total) { lock (wakeSteps) wakeSteps.Add(text); });
+                            }
+                            finally
+                            {
+                                WakeWord.PackUrl = wakeUrlWas;
+                                WakeWord.PackSha = wakeShaWas;
+                                WakeWord.PackSize = wakeSizeWas;
+                                wakeServer.Stop();
+                            }
+                            bool wakeWaitsOnVoice = fetchedWake.Installed && !fetchedWake.Ready && !fetchedWake.VoiceIn;
+                            Directory.CreateDirectory(LocalVoice.Folder(wakeData));
+                            foreach (string name in new[] { "sherpa-onnx-c-api.dll", "onnxruntime.dll" }) File.WriteAllBytes(Path.Combine(LocalVoice.Folder(wakeData), name), new byte[] { 1 });
+                            string wakeFolder = Path.Combine(Path.Combine(wakeData, "wake"), WakeWord.Pack);
+                            if (!wakeEmpty || !wakeWaitsOnVoice || !fetchedWake.Ready || File.Exists(wakeFolder + ".tar.bz2") || Directory.Exists(wakeFolder + ".new") || !wakeSteps.Contains("Checking her wake word") || !wakeSteps.Contains("Unpacking her wake word"))
+                                throw new Exception("Her wake word pack did not install: empty " + wakeEmpty + ", waits on voice " + wakeWaitsOnVoice + ", ready " + fetchedWake.Ready + " / " + string.Join(", ", wakeSteps.ToArray()));
+                            Directory.Delete(wakeRoot, true);
+                            checks.Add("PASS her wake word pack: pinned to k2-fsa's sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2 (17,626,723 bytes, its SHA-256), it downloads with its checksum into wake, unpacks with Windows tar and only counts as ready once her free voice brings sherpa-onnx");
+                            // The real spotter, where her free voice is on this PC: she says "Hey Capri" in her four voices and it fires each time,
+                            // and it stays quiet through everyday talk and her own lines, and through "Hey Capri" while she's talking.
+                            string herData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Capri");
+                            string wakeVoiceData = kokoro.Installed ? Path.GetDirectoryName(settingsPath) : herData;
+                            LocalVoice wakeSpeaker = new LocalVoice(wakeVoiceData);
+                            if (IntPtr.Size != 8 || !wakeSpeaker.Installed) checks.Add("LIMIT Hey Capri on real speech not run; her free voice, which brings sherpa-onnx and says the test lines, is not installed on this PC");
+                            else
+                            {
+                                // Her own pack if she has one, or a copy of the pinned download kept beside the smoke test's settings.
+                                string wakeModels = File.Exists(Path.Combine(Path.Combine(Path.Combine(herData, "wake"), WakeWord.Pack), "tokens.txt")) ? Path.Combine(herData, "wake") : Path.Combine(Path.GetDirectoryName(settingsPath), "wake-check");
+                                WakeWord realWake = new WakeWord(wakeModels, LocalVoice.Folder(wakeVoiceData));
+                                string wakeFetched = null;
+                                if (!realWake.Installed) { try { realWake.Install(delegate { }); } catch (Exception error) { wakeFetched = Voice.Short(error.Message); } }
+                                if (wakeFetched != null) checks.Add("LIMIT Hey Capri on real speech not run; the pinned pack didn't download on this PC: " + wakeFetched);
+                                else
+                                {
+                                    int pitchWas = VoiceFx.Pitch, speedWas = VoiceFx.Speed, robotWas = VoiceFx.Robot, glitchWas = VoiceFx.Glitch;
+                                    FreeStyle styleWas = wakeSpeaker.Style;
+                                    string[] wakeSays = { "Hey Capri.", "Hey Capri, what's the weather like?" };
+                                    string[] talkSays = { "Hey, can you pass me the remote?", "Hey Siri, set a timer for five minutes.", "We sailed to the island of Capri last summer.", "Hey Kerry, are you coming tonight?", "That cappuccino was really good.", "Hey, carry this box for me, would you?", "A caprese salad, please.", "Capricorn is my star sign." };
+                                    string[] herSays = { "I'm back, choom.", "Hey choom! Net's been quiet, too quiet. Time to stir up some trouble.", "Right-click me, open Capri Mainframe and pick a voice in the Voice ID box under VOICE.", "Hey, it's me, Capri.", WakeLines[0], WakeLines[1] };
+                                    System.Collections.Generic.List<string> wakeMissed = new System.Collections.Generic.List<string>(), wakeWrong = new System.Collections.Generic.List<string>();
+                                    int wakeTold = 0, wakeCaught = 0, wakeFired = 0;
+                                    short[] heldLine = null;
+                                    Func<string, short[]> say = delegate(string spoken)
+                                    {
+                                        int rate;
+                                        short[] pcm = Voice.Samples(wakeSpeaker.Speak(spoken), out rate);
+                                        if (rate != Ears.Rate) pcm = VoiceFx.Resample(pcm, rate / (double)Ears.Rate);
+                                        short[] padded = new short[pcm.Length + Ears.Rate];
+                                        Array.Copy(pcm, 0, padded, Ears.Rate * 3 / 10, pcm.Length);
+                                        return padded;
+                                    };
+                                    try
+                                    {
+                                        VoiceFx.Pitch = 0;
+                                        VoiceFx.Speed = 100;
+                                        VoiceFx.Robot = 0;
+                                        VoiceFx.Glitch = 0;
+                                        foreach (FreeStyle style in LocalVoice.Styles)
+                                        {
+                                            wakeSpeaker.Style = style;
+                                            foreach (string wakeLine in wakeSays)
+                                            {
+                                                short[] clip = say(wakeLine);
+                                                if (heldLine == null) heldLine = clip;
+                                                wakeTold++;
+                                                if (realWake.Spot(clip) > 0) wakeCaught++;
+                                                else wakeMissed.Add(style.Name + ": " + wakeLine);
+                                            }
+                                        }
+                                        wakeSpeaker.Style = LocalVoice.Styles[0];
+                                        foreach (string talkLine in talkSays) if (realWake.Spot(say(talkLine)) > 0) wakeWrong.Add(talkLine);
+                                        foreach (string herLine in herSays) if (realWake.Spot(say(herLine)) > 0) wakeWrong.Add(herLine);
+                                        // Live: what she says over her own "Hey Capri" isn't heard, and the same clip after she stops is.
+                                        realWake.Warm();
+                                        realWake.Heard += delegate { Interlocked.Increment(ref wakeFired); };
+                                        realWake.Held = true;
+                                        for (int at = 0; at + Ears.Chunk <= heldLine.Length; at += Ears.Chunk) { short[] chunk = new short[Ears.Chunk]; Array.Copy(heldLine, at, chunk, 0, chunk.Length); realWake.Feed(chunk); }
+                                        int heardHeld = wakeFired;
+                                        realWake.Held = false;
+                                        for (int pass = 0; pass < 2; pass++)
+                                            for (int at = 0; at + Ears.Chunk <= heldLine.Length; at += Ears.Chunk) { short[] chunk = new short[Ears.Chunk]; Array.Copy(heldLine, at, chunk, 0, chunk.Length); if (pass == 0) realWake.Feed(chunk); else realWake.Feed(new short[Ears.Chunk]); }
+                                        if (heardHeld != 0 || wakeFired != 1) wakeWrong.Add("live: " + heardHeld + " while she talked, " + wakeFired + " after");
+                                    }
+                                    finally
+                                    {
+                                        VoiceFx.Pitch = pitchWas;
+                                        VoiceFx.Speed = speedWas;
+                                        VoiceFx.Robot = robotWas;
+                                        VoiceFx.Glitch = glitchWas;
+                                        wakeSpeaker.Style = styleWas;
+                                        wakeSpeaker.Dispose();
+                                        realWake.Dispose();
+                                    }
+                                    if (wakeMissed.Count > 0 || wakeWrong.Count > 0) throw new Exception("Hey Capri on her free voice: missed " + string.Join(" | ", wakeMissed.ToArray()) + "; fired on " + string.Join(" | ", wakeWrong.ToArray()));
+                                    checks.Add("PASS Hey Capri on real speech: her free voice said \"Hey Capri\" " + wakeTold + " ways (her four voices, alone and before a question) and the spotter fired on all " + wakeCaught + "; it stayed quiet through " + talkSays.Length + " everyday lines (Hey Siri, Hey Kerry, the island of Capri, cappuccino and more) and " + herSays.Length + " of her own lines, and live it heard nothing of \"Hey Capri\" while she talked and fired once on it after");
+                                }
+                            }
                             bool quietBeforeCredits = preferences.Quiet;
                             preferences.Quiet = false;
                             ChatFailed("run out of credits");
