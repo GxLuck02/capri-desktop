@@ -341,6 +341,7 @@ VOICE ("Every voice, ElevenLabs too" on the right of the heading)
 - Glitch (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off. Stutters, crushed bits and skips in her voice, more as it goes up.
 - Sounds: her sound effects. Off, or 10% to 100%. Default 60%.
 - Typing sound: "When she types". A soft typing sound while her text replies type out.
+- Free voice in games (0.7.6 and newer): only shows while her HD voice is on, beside Typing sound. Off by default, so her HD voice keeps talking while a game or video is full screen. Turn it on and her free voice talks while anything is full screen, so the game gets your graphics card back.
 
 Pitch, Speed, Robot and Glitch change every voice she has: her free voice styles, HD, ElevenLabs and ElevenLabs voice chat. See "Pitch, speed, robot and glitch" under Her voice.
 
@@ -561,6 +562,13 @@ In ElevenLabs voice chat the sliders change her as she talks. A slower Speed mak
 They're saved, so they stay after a restart or update. Normal, Normal and Off (10% for HD) is her usual voice.
 
 On Mac and Linux they're under right-click her > Settings > Voice style (Pitch, Speed, Robot, Glitch), with the same steps, and they change her ElevenLabs voice. Each pick says "How do I sound now, choom?" in the new style. ElevenLabs makes that line once per voice, then it's restyled on your computer, so trying more settings uses no more credits. With her voice off she says "My voice is off, choom. Settings > Voice > Use ElevenLabs turns it back on." With no key: "Add an ElevenLabs key under Settings > Voice to hear that, choom."
+
+### Her HD voice (0.7.6 and newer)
+- A richer voice that runs on your graphics card. It copies how she talks as well as how she sounds, from her voice clip and its words.
+- It needs Windows and a graphics card with 6 GB or more. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "HD · graphics card, 1.7 GB". She downloads it once (1.7 GB). On a smaller card the menu says "HD · needs a 6 GB graphics card".
+- It rests after 10 quiet minutes and gives your graphics card back. The next line wakes it: "One sec, waking my HD voice."
+- Full-screen games and videos: it keeps talking. Settings > VOICE > Free voice in games (only shown while HD is on, off by default) hands them her free voice instead, so the game gets the graphics card back.
+- If it can't start or stops working, she says why under VOICE, talks with her free voice, and tries HD again 10 minutes later.
 
 ### Your voice (HD only, from 0.7.5)
 Her HD voice can talk in your voice. It copies the voice in a short clip of you.
