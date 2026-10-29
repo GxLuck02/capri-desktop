@@ -13,8 +13,8 @@ Contraintes de l'utilisateur : gratuit, **aucun processus orphelin**, sécurité
 (M2, 8 Go).
 
 Hors périmètre : Linux et Mac Intel (gardent Ollama ; « Set up her brain » y passe seulement par
-Ollama), l'usage des yeux pour voir l'écran (étape 6 ; ils sont téléchargés dès maintenant comme sur
-Windows), le palier cloud (inchangé).
+Ollama), l'usage des yeux pour voir l'écran et **leur téléchargement** (étape 6 : 557 Mo et ~0,6 Go de RAM
+inutiles d'ici là), le palier cloud (inchangé).
 
 ## Faits vérifiés
 
@@ -116,7 +116,7 @@ les tests) ; faux moteur = petite archive dont `llama-server` est un script qui 
 6. Gardien : serveur lancé sous un faux parent (processus `sleep`), parent tué → serveur parti en
    moins de 3 s, `server.pid` effacé.
 7. Ménage : un `server.pid` pointant vers un faux serveur vivant → tué au démarrage du moteur.
-8. Passage en HIGHER et Quit → serveur arrêté.
+8. Passage en HIGHER → serveur arrêté (Quit : vérifié à la main).
 9. Faux Ollama avec modèles → le moteur intégré n'est pas utilisé.
 10. Tous les tests existants passent.
 
