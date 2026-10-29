@@ -48,6 +48,9 @@ namespace CapriDesktop
         private readonly List<string> hubAsked = new List<string>();
         private Engine bench;
         private Pick testPick;
+        private readonly List<string> freeHeard = new List<string>();
+        private byte[] voiceTone;
+        private int voicedBefore;
         private Process sleeper;
         private int guardedPid;
         private double killedAt;
@@ -868,7 +871,93 @@ namespace CapriDesktop
                 bool tidy = !File.Exists(installed + ".zip") && !File.Exists(installed + "-libs.tar.bz2") && !Directory.Exists(installed + ".new") && !Directory.Exists(installed + ".libs");
                 if (!trial.Installed || !resumed || !clean || !tidy) throw new Exception("Her free voice didn't install cleanly: " + trial.Installed + " | " + resumed + " | " + clean + " | " + tidy);
                 checks.Add("PASS free voice install: Windows' voice pack and sherpa-onnx's Mac libraries download, pass their checksums and unpack without the Windows DLLs, archives reaching outside their folder or carrying links are refused, and Cancel picks up where it left off");
-                pet.Frame.Close();
+                if (Pet.FirstVoiceTier(true, true) != 0 || Pet.FirstVoiceTier(false, true) != 2 || Pet.FirstVoiceTier(false, false) != 1) throw new Exception("Her first voice tier is wrong.");
+                Mainframe frame = pet.Frame;
+                short[] tone = new short[24000];
+                for (int i = 0; i < tone.Length; i++) tone[i] = (short)(Math.Sin(i * 0.05) * 3000);
+                voiceTone = Voice.Wave(tone, 24000);
+                pet.FreeSpeak = delegate(string words) { lock (freeHeard) freeHeard.Add(words + "|" + pet.FreeStyleName); return voiceTone; };
+                frame.PickVoiceTier(1);
+                if (pet.Saved.VoiceTier != 1 || pet.FreeSpeaks || !frame.VoiceSetupShown || frame.VoiceStatus.IndexOf("Her free voice · ", StringComparison.Ordinal) < 0) throw new Exception("FREE VOICE without her pack didn't offer Get free voice: " + frame.VoiceStatus);
+                lock (spoken) voicedBefore = spoken.Count;
+                pet.Think = delegate(string words) { return "Text only for now, choom."; };
+                pet.Hear("say something");
+                return true;
+            }
+            if (step == 35)
+            {
+                if (pet.Talk.Reply != "Text only for now, choom.") return false;
+                lock (spoken) if (spoken.Count != voicedBefore) throw new Exception("FREE VOICE without her pack still played sound.");
+                pet.Frame.PressGetVoice();
+                if (!pet.SettingUpVoice) throw new Exception("Get free voice didn't start.");
+                return true;
+            }
+            if (step == 36)
+            {
+                Mainframe frame = pet.Frame;
+                if (pet.SettingUpVoice || pet.Talk.Reply != "Hey choom, this is my free voice.") { if (!pet.SettingUpVoice && pet.FreeProblem != null) throw new Exception("Get free voice failed: " + pet.FreeProblem); return false; }
+                if (!frame.TiersFit) return false;
+                string last;
+                lock (freeHeard) last = freeHeard.Count == 0 ? "" : freeHeard[freeHeard.Count - 1];
+                int voiced;
+                lock (spoken) voiced = spoken.Count;
+                if (!pet.FreeSpeaks || frame.VoiceSetupShown || voiced != voicedBefore + 1 || !last.EndsWith("|Her own", StringComparison.Ordinal) || last.IndexOf("free voice", StringComparison.Ordinal) < 0) throw new Exception("Her free voice didn't speak its test line: " + last + " | " + voiced + " | " + frame.VoiceStatus);
+                Snap(frame.Content as Control, "mainframe-voice.png");
+                frame.PickStyle("Sharp");
+                if (pet.FreeStyleName != "Sharp" || pet.Saved.FreeStyle != "Sharp" || frame.VoiceStatus.IndexOf("Free voice: Sharp", StringComparison.Ordinal) < 0) throw new Exception("Picking the Sharp style didn't stick: " + frame.VoiceStatus);
+                pet.Think = delegate(string words) { return "Sharp check, choom."; };
+                pet.Hear("again");
+                return true;
+            }
+            if (step == 37)
+            {
+                Mainframe frame = pet.Frame;
+                if (pet.Talk.Reply != "Sharp check, choom.") return false;
+                string last;
+                lock (freeHeard) last = freeHeard[freeHeard.Count - 1];
+                int voiced;
+                lock (spoken) voiced = spoken.Count;
+                if (voiced != voicedBefore + 2 || !last.EndsWith("|Sharp", StringComparison.Ordinal)) throw new Exception("Her reply wasn't spoken in the Sharp style: " + last + " | " + voiced);
+                checks.Add("PASS free voice: FREE VOICE without her pack types and offers Get free voice, the setup installs it and she says her test line, replies are spoken with her mouth moving, and the style picked is the one heard");
+                pet.SetLanguage("French");
+                frame.Render();
+                if (pet.FreeSpeaks || frame.VoiceStatus.IndexOf("Free voice speaks English only.", StringComparison.Ordinal) < 0) throw new Exception("In French, the Mainframe didn't say the free voice is English only: " + frame.VoiceStatus);
+                pet.Think = delegate(string words) { return "Bonjour, choom."; };
+                pet.Hear("en francais");
+                return true;
+            }
+            if (step == 38)
+            {
+                Mainframe frame = pet.Frame;
+                if (pet.Talk.Reply != "Bonjour, choom.") return false;
+                lock (spoken) if (spoken.Count != voicedBefore + 2) throw new Exception("Her free voice read a French reply.");
+                pet.SetLanguage("English");
+                frame.PickVoiceTier(0);
+                pet.Think = delegate(string words) { return "Quiet now, choom."; };
+                pet.Hear("off");
+                return true;
+            }
+            if (step == 39)
+            {
+                Mainframe frame = pet.Frame;
+                if (pet.Talk.Reply != "Quiet now, choom.") return false;
+                lock (spoken) if (spoken.Count != voicedBefore + 2 || pet.Saved.VoiceTier != 0) throw new Exception("OFF still spoke.");
+                frame.PickVoiceTier(2);
+                if (!frame.VoiceStatus.EndsWith("Paste your ElevenLabs key | Connect", StringComparison.Ordinal)) throw new Exception("ELEVENLABS didn't ask for a key: " + frame.VoiceStatus);
+                Voice.Host = FakeVoice();
+                frame.TypeVoiceKey("good-key-1234");
+                frame.PressVoiceConnect();
+                return true;
+            }
+            if (step == 40)
+            {
+                Mainframe frame = pet.Frame;
+                if (!pet.Speaks) return false;
+                if (Keys.Read("voice") != "good-key-1234" || pet.Saved.VoiceTier != 2 || !frame.VoiceStatus.EndsWith("Key saved, ends 1234 | Forget", StringComparison.Ordinal)) throw new Exception("The ElevenLabs key from the Mainframe didn't land in Keychain: " + frame.VoiceStatus);
+                checks.Add("PASS voice tiers: a non-English reply and OFF stay silent, and ELEVENLABS takes its key in the Mainframe into Keychain");
+                pet.ForgetVoice();
+                fakeVoice.Stop();
+                frame.Close();
                 hub.Stop();
                 Send(shelf, "quit");
                 Finish(null);

@@ -39,6 +39,8 @@ namespace CapriDesktop
         [DataMember] internal int Tier;
         [DataMember] internal string NvidiaModel;
         [DataMember] internal string PaidModel;
+        [DataMember] internal int? VoiceTier;
+        [DataMember] internal string FreeStyle;
     }
 
     internal sealed class Clip
@@ -178,6 +180,14 @@ namespace CapriDesktop
         private int linking;
         private Mainframe mainframe;
         private Engine builtIn;
+        private LocalVoice kokoro;
+        private double freeUsed;
+        private const string FreeHeard = "(free voice)";
+        internal Func<string, byte[]> FreeSpeak;
+        internal bool SettingUpVoice;
+        internal bool VoiceLoading;
+        internal string VoiceSetupText;
+        internal string FreeProblem;
         internal Pick SetupPick;
         internal bool SettingUp;
         internal string SetupText;
@@ -267,6 +277,10 @@ namespace CapriDesktop
             Brain.Remote = TierCloud();
             if (Brain.Remote != null) Brain.Model = Brain.Remote.Model;
             voice.VoiceId = string.IsNullOrEmpty(Saved.VoiceId) ? null : Saved.VoiceId;
+            if (Saved.VoiceTier == null) Saved.VoiceTier = FirstVoiceTier(Saved.Silent, voice.Key != null);
+            Saved.VoiceTier = Math.Max(0, Math.Min(2, Saved.VoiceTier.Value));
+            kokoro = new LocalVoice(Program.Smoke ?? folder);
+            kokoro.Style = LocalVoice.Find(Saved.FreeStyle);
             if (Program.Smoke == null) { Voice.Playback = Limbs.Speak; Voice.Silence = Limbs.Hush; }
             if (Program.Smoke == null)
             {
@@ -441,6 +455,7 @@ namespace CapriDesktop
         private void Tick()
         {
             double now = Now;
+            if (freeUsed > 0 && now - freeUsed > 900) { freeUsed = 0; ThreadPool.QueueUserWorkItem(delegate { kokoro.Dispose(); }); }
             if (outro != null && now >= outroAt) { Action next = outro; outro = null; next(); }
             if (away && !IsVisible) { if (smoke != null) smoke.Tick(now); return; }
             if (!dragging)
@@ -1643,11 +1658,99 @@ namespace CapriDesktop
             });
         }
 
-        internal bool Speaks { get { return voice.Ready && !Saved.Silent; } }
+        internal bool Speaks { get { return voice.Ready && Saved.VoiceTier == 2; } }
+
+        internal static int FirstVoiceTier(bool silent, bool key) { return silent ? 0 : key ? 2 : 1; }
+
+        internal bool English { get { return Brain.LanguageCode(Saved.Language) == "en"; } }
+
+        internal bool FreeInstalled { get { return kokoro.Installed; } }
+
+        // Her free voice only knows English, so other languages stay in text.
+        internal bool FreeSpeaks { get { return Saved.VoiceTier == 1 && English && kokoro.Installed; } }
+
+        internal string FreeStyleName { get { return kokoro.Style.Name; } }
+
+        internal string VoiceKeyTail { get { return voice.Key == null ? null : Voice.Tail(voice.Key); } }
+
+        private byte[] SpeakFree(string words)
+        {
+            freeUsed = Now;
+            return kokoro.Speak(words);
+        }
+
+        internal void ChooseVoiceTier(int tier)
+        {
+            tier = Math.Max(0, Math.Min(2, tier));
+            if (tier == Saved.VoiceTier) return;
+            Saved.VoiceTier = tier;
+            Saved.Silent = tier == 0;
+            if (tier == 0) voice.Stop();
+            Save();
+            ShowState();
+        }
+
+        internal void ChooseFreeStyle(string name)
+        {
+            kokoro.Style = LocalVoice.Find(name);
+            Saved.FreeStyle = kokoro.Style.Name;
+            Save();
+            ShowState();
+        }
+
+        // Ported from Windows' SetUpFreeVoice.
+        internal void SetUpFreeVoice()
+        {
+            if (SettingUpVoice || !LocalVoice.Supported) return;
+            SettingUpVoice = true;
+            VoiceLoading = false;
+            kokoro.Cancel = false;
+            FreeProblem = null;
+            VoiceSetupText = "Starting download";
+            ShowState();
+            Stopwatch since = Stopwatch.StartNew();
+            long shownAt = -1000;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                Action<string, long, long> progress = delegate(string text, long done, long total)
+                {
+                    long now = since.ElapsedMilliseconds;
+                    if (now - Interlocked.Read(ref shownAt) < 200 && done < total) return;
+                    Interlocked.Exchange(ref shownAt, now);
+                    string label = text + (total > 0 && done < total ? " · " + Engine.Amount(done) + " / " + Engine.Amount(total) : "");
+                    Dispatcher.UIThread.Post(delegate { if (SettingUpVoice) { VoiceSetupText = label; ShowState(); } });
+                };
+                try
+                {
+                    kokoro.Install(progress);
+                    Dispatcher.UIThread.Post(delegate { VoiceLoading = true; VoiceSetupText = "Loading her free voice"; ShowState(); });
+                    if (FreeSpeak == null) kokoro.Warm();
+                    Dispatcher.UIThread.Post(delegate
+                    {
+                        SettingUpVoice = false;
+                        VoiceLoading = false;
+                        VoiceSetupText = null;
+                        ShowState();
+                        if (Saved.VoiceTier == 1) Reply(++asking, FreeHeard, "Hey choom, this is my free voice.");
+                    });
+                }
+                catch (OperationCanceledException) { Dispatcher.UIThread.Post(delegate { SettingUpVoice = false; VoiceLoading = false; VoiceSetupText = null; FreeProblem = "Cancelled. It picks up where it left off."; ShowState(); }); }
+                catch (Exception error)
+                {
+                    string problem = Voice.Short(error.Message);
+                    Dispatcher.UIThread.Post(delegate { SettingUpVoice = false; VoiceLoading = false; VoiceSetupText = null; FreeProblem = problem; ShowState(); });
+                }
+            });
+        }
+
+        internal void CancelFreeVoice() { kokoro.Cancel = true; }
 
         private void Reply(int ticket, string heard, string said)
         {
-            if (!Speaks || Voice.Spoken(said).Length == 0) { Talk.Answer(heard, said); TypeAlong(said, ticket); return; }
+            bool paid = Speaks;
+            Func<string, byte[]> speak = paid ? new Func<string, byte[]>(voice.Speak) : FreeSpeaks ? FreeSpeak ?? new Func<string, byte[]>(SpeakFree) : null;
+            if (speak == null || Voice.Spoken(said).Length == 0) { Talk.Answer(heard, said); TypeAlong(said, ticket); return; }
+            string words = paid ? said : Voice.Spoken(said);
             Talk.Thinking(heard);
             bool[] shown = { false };
             DispatcherTimer.RunOnce(delegate
@@ -1661,12 +1764,13 @@ namespace CapriDesktop
             {
                 byte[] wav = null;
                 string problem = null;
-                try { wav = voice.Speak(said); }
-                catch (VoiceException error) { problem = Mac(error.Message); }
-                catch (Exception error) { problem = Voice.Short("Voice glitched: " + error.Message); }
+                try { wav = speak(words); }
+                catch (VoiceException error) { problem = paid ? Mac(error.Message) : error.Message; }
+                catch (Exception error) { problem = Voice.Short((paid ? "Voice glitched: " : "Her free voice glitched: ") + error.Message); }
                 Dispatcher.UIThread.Post(delegate
                 {
-                    voiceProblem = problem;
+                    if (paid) voiceProblem = problem;
+                    else { FreeProblem = problem; ShowState(); }
                     if (ticket != asking || shown[0]) return;
                     shown[0] = true;
                     double seconds = wav == null ? 0 : Voice.Seconds(wav);
@@ -1723,7 +1827,9 @@ namespace CapriDesktop
                     }
                     Saved.VoiceId = voice.VoiceId;
                     Saved.Silent = false;
+                    Saved.VoiceTier = 2;
                     Save();
+                    ShowState();
                     if (ticket != asking) return;
                     if (problem != null) Talk.Answer(KeyHeard, "Key saved, but " + voiceProblem);
                     else if (voice.VoiceId == null) Talk.Answer(KeyHeard, "Key saved, but your ElevenLabs account has no voices yet. Add one at elevenlabs.io.");
@@ -1747,7 +1853,7 @@ namespace CapriDesktop
 
         internal string VoiceStatus { get { return (voice.Key == null ? "no key" : "key " + Voice.Tail(voice.Key)) + " | " + (VoiceName() ?? "no voice") + " | " + (Speaks ? "speaking" : "quiet"); } }
 
-        internal bool VoiceWorking { get { return Speaks && voiceProblem == null; } }
+        internal bool VoiceWorking { get { return (Speaks && voiceProblem == null) || (FreeSpeaks && FreeProblem == null); } }
 
         internal bool TypingSound { get { return Saved.Typing == 1 || (Saved.Typing == 0 && !VoiceWorking); } }
 
@@ -1769,9 +1875,11 @@ namespace CapriDesktop
 
         internal void SetSpeak(bool on)
         {
+            Saved.VoiceTier = on ? 2 : 0;
             Saved.Silent = !on;
             if (!on) voice.Stop();
             Save();
+            ShowState();
         }
 
         internal void ChooseVoice(string id)
@@ -1788,6 +1896,8 @@ namespace CapriDesktop
             voices = null;
             voiceProblem = null;
             WriteVoiceKey(null);
+            if (Saved.VoiceTier == 2) Saved.VoiceTier = 1;
+            ShowState();
         }
 
         private void ListVoices()
@@ -1841,7 +1951,7 @@ namespace CapriDesktop
                 return;
             }
             MenuItem speak = new MenuItem { Header = "Use ElevenLabs", ToggleType = MenuItemToggleType.CheckBox, IsChecked = Speaks, IsEnabled = voice.VoiceId != null };
-            speak.Click += delegate { SetSpeak(Saved.Silent); };
+            speak.Click += delegate { SetSpeak(!Speaks); };
             voiceMenu.Items.Add(speak);
             voiceMenu.Items.Add(new Separator());
             if (voices == null)

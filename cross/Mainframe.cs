@@ -28,6 +28,20 @@ namespace CapriDesktop
         private readonly TextBox keyBox = new TextBox { PasswordChar = '•', Width = 230, FontFamily = Look.Mono };
         private readonly Button connect = Make("Connect");
         private readonly Button ollama = Make("Get Ollama");
+        private static readonly string[,] VoiceTiers = { { "OFF", "Silent · text only" }, { "FREE VOICE", "Free · runs on your Mac" }, { "ELEVENLABS", "Sounds amazing · paid" } };
+        private readonly RadioButton[] voiceRungs = new RadioButton[3];
+        private readonly Button styles = Make("");
+        private readonly MenuFlyout styleMenu = new MenuFlyout();
+        private readonly Button getVoice = Make("Get free voice");
+        private readonly Button cancelVoice = Make("Cancel");
+        private readonly TextBlock voiceNote = Line(10.5, Look.Dim, false);
+        private readonly TextBox elevenBox = new TextBox { PasswordChar = '•', Width = 230, FontFamily = Look.Mono };
+        private readonly Button elevenConnect = Make("Connect");
+        private StackPanel styleRow;
+        private StackPanel voiceSetupRow;
+        private StackPanel elevenRow;
+        private bool elevenSaved;
+        private int voiceTier;
         private readonly Button setUp = Make("Set up her brain");
         private readonly Button cancel = Make("Cancel");
         private readonly TextBlock setupNote = Line(10.5, Look.Dim, false);
@@ -78,6 +92,29 @@ namespace CapriDesktop
             page.Children.Add(setupNote);
             ollama.Click += delegate { Pet.Browse(Pet.OllamaPage); };
             page.Children.Add(ollama);
+            page.Children.Add(new TextBlock { Text = "VOICE", FontFamily = Look.Mono, FontSize = 12, Foreground = new SolidColorBrush(Look.Cyan), Margin = new Thickness(0, 12, 0, 0) });
+            for (int i = 0; i < voiceRungs.Length; i++)
+            {
+                int picked = i;
+                // A group of its own, so picking a voice never unticks a BRAIN tier.
+                RadioButton rung = new RadioButton { GroupName = "voice", Content = VoiceTiers[i, 0] + "  " + VoiceTiers[i, 1], FontFamily = Look.Mono, Foreground = new SolidColorBrush(Look.Ink) };
+                rung.IsCheckedChanged += delegate { if (!syncing && rung.IsChecked == true) pet.ChooseVoiceTier(picked); };
+                voiceRungs[i] = rung;
+                page.Children.Add(Row(rung));
+            }
+            styles.Flyout = styleMenu;
+            styleRow = Row(styles);
+            page.Children.Add(styleRow);
+            getVoice.Click += delegate { pet.SetUpFreeVoice(); };
+            cancelVoice.Click += delegate { pet.CancelFreeVoice(); };
+            voiceSetupRow = Row(getVoice, cancelVoice);
+            page.Children.Add(voiceSetupRow);
+            page.Children.Add(voiceNote);
+            elevenConnect.Click += delegate { ConnectEleven(); };
+            elevenBox.TextChanged += delegate { RelabelEleven(); };
+            elevenBox.AddHandler(KeyDownEvent, delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled = true; ConnectEleven(); } }, RoutingStrategies.Tunnel);
+            elevenRow = Row(elevenBox, elevenConnect);
+            page.Children.Add(elevenRow);
             Content = new Border { Background = new SolidColorBrush(Look.Panel), BorderBrush = new SolidColorBrush(Look.Red), BorderThickness = new Thickness(1), Child = page };
             Render();
         }
@@ -158,7 +195,66 @@ namespace CapriDesktop
             saved = remote != null;
             keyBox.Watermark = saved ? (tier == 1 ? "NVIDIA key saved, ends " : "Key saved, ends ") + Voice.Tail(remote.Key) : tier == 1 ? "Paste your free NVIDIA key" : "Paste a ChatGPT or Claude key";
             Relabel();
+            RenderVoice();
         }
+
+        private void RenderVoice()
+        {
+            voiceTier = pet.Saved.VoiceTier ?? 1;
+            syncing = true;
+            for (int i = 0; i < voiceRungs.Length; i++) voiceRungs[i].IsChecked = i == voiceTier;
+            syncing = false;
+            bool free = voiceTier == 1;
+            bool installed = pet.FreeInstalled;
+            styleRow.IsVisible = free && installed;
+            styles.Content = "Free voice: " + pet.FreeStyleName;
+            styleMenu.Items.Clear();
+            foreach (FreeStyle style in LocalVoice.Styles)
+            {
+                string name = style.Name;
+                MenuItem pick = new MenuItem { Header = name, ToggleType = MenuItemToggleType.Radio, GroupName = "free-style", IsChecked = name == pet.FreeStyleName };
+                pick.Click += delegate { pet.ChooseFreeStyle(name); };
+                styleMenu.Items.Add(pick);
+            }
+            voiceSetupRow.IsVisible = free && LocalVoice.Supported && (pet.SettingUpVoice || !installed);
+            getVoice.IsVisible = !pet.SettingUpVoice;
+            cancelVoice.IsVisible = pet.SettingUpVoice && !pet.VoiceLoading;
+            string note = "";
+            if (free && !LocalVoice.Supported) note = "Free voice needs a Mac with Apple silicon.";
+            else if (free && pet.SettingUpVoice) note = pet.VoiceSetupText ?? "";
+            else if (free && pet.FreeProblem != null) note = pet.FreeProblem;
+            else if (free && !installed) note = "Her free voice · " + Engine.Amount(LocalVoice.PackSize + LocalVoice.LibsSize);
+            else if (free && !pet.English) note = "Free voice speaks English only.";
+            voiceNote.Text = note;
+            voiceNote.IsVisible = note.Length > 0;
+            elevenRow.IsVisible = voiceTier == 2;
+            elevenSaved = pet.VoiceKeyTail != null;
+            elevenBox.Watermark = elevenSaved ? "Key saved, ends " + pet.VoiceKeyTail : "Paste your ElevenLabs key";
+            RelabelEleven();
+        }
+
+        private void RelabelEleven()
+        {
+            bool forget = elevenSaved && string.IsNullOrWhiteSpace(elevenBox.Text);
+            elevenConnect.Content = forget ? "Forget" : "Connect";
+            elevenConnect.Foreground = new SolidColorBrush(forget ? Look.Red : Look.Ink);
+        }
+
+        private void ConnectEleven()
+        {
+            string typed = (elevenBox.Text ?? "").Trim();
+            if (typed.Length > 0) { elevenBox.Text = ""; pet.SaveVoiceKey(typed); }
+            else if (elevenSaved) pet.ForgetVoice();
+            else elevenBox.Focus();
+        }
+
+        internal void PickVoiceTier(int pick) { voiceRungs[pick].IsChecked = true; }
+        internal void PickStyle(string name) { pet.ChooseFreeStyle(name); }
+        internal void PressGetVoice() { pet.SetUpFreeVoice(); }
+        internal void TypeVoiceKey(string key) { elevenBox.Text = key; }
+        internal void PressVoiceConnect() { ConnectEleven(); }
+        internal bool VoiceSetupShown { get { return voiceSetupRow.IsVisible && getVoice.IsVisible; } }
+        internal string VoiceStatus { get { return "voice " + voiceTier + " | " + (styleRow.IsVisible ? styles.Content : "-") + " | " + voiceNote.Text + " | " + (elevenRow.IsVisible ? elevenBox.Watermark + " | " + elevenConnect.Content : "no key row"); } }
 
         private void Relabel()
         {
