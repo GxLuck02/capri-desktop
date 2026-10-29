@@ -235,6 +235,8 @@ namespace CapriDesktop
         [DataMember] public bool StartupSet;
         [DataMember] public bool QuickHands;
         [DataMember] public bool Bypass;
+        // Listen for "Hey Capri" is off out of the box (Lachy, 29 Oct). It's a toggle in her Security window, and the Blackwall preset turns it on.
+        [DataMember] public bool HeyCapri;
         [DataMember] public bool HdVoice;
         // Free voice in games is off out of the box (Lachy, 29 Oct): her HD voice keeps talking while a game is full screen.
         // On, her free voice takes over while anything is full screen, so the game gets the graphics card back.
@@ -2515,6 +2517,20 @@ namespace CapriDesktop
             preferences.Bypass = !preferences.Bypass;
             Computer.Bypass = preferences.Bypass;
             SavePreferences();
+            mainframe.Sync();
+        }
+
+        // Her wake word listens for HeyCapriChanged, so whatever flips the setting starts or stops it.
+        internal event Action HeyCapriChanged;
+
+        internal bool HeyCapriOn { get { return preferences.HeyCapri; } }
+
+        internal void SetHeyCapri(bool on)
+        {
+            if (preferences.HeyCapri == on) return;
+            preferences.HeyCapri = on;
+            SavePreferences();
+            if (HeyCapriChanged != null) HeyCapriChanged();
             mainframe.Sync();
         }
 
