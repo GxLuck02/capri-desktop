@@ -2973,26 +2973,32 @@ namespace CapriDesktop
             // Her VOICE LAYERS window from Settings > VOICE: the switch, a slider each, MAIN's pitch and Settings' moving together,
             // Defaults, and the layout at 100%, 150% and 200%.
             int pitchWas = VoiceFx.Pitch;
-            string keyOff, opened, flipped, keyOn, slid, mainSlid, fromSettings, defaulted, closedOff, crowded, page;
+            string keyOff, opened, flipped, keyOn, slid, mainSlid, fromSettings, defaulted, closedOff, crowded, page, said;
             mainframe.ShowSettings(true);
             try
             {
                 keyOff = mainframe.LayersKeyShown;
                 mainframe.ShowLayersWindow();
                 opened = mainframe.LayersShown;
+                int asked = asking;
                 mainframe.FlipLayers();
+                said = asking > asked ? "switch" : "";
                 flipped = mainframe.LayersShown;
                 keyOn = mainframe.LayersKeyShown;
+                asked = asking;
                 mainframe.SlideLayers(1, 30);
+                said += asking > asked ? " layer" : "";
                 mainframe.SlideLayers(2, 8);
                 mainframe.SlideLayers(3, 15);
                 mainframe.SlideLayers(4, 18);
                 slid = mainframe.LayersShown + " / " + VoiceFx.Layers.Shown + " / " + preferences.LayerPitch1.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + preferences.LayerDelay1 + " " + preferences.LayerPitch2.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + preferences.LayerDelay2;
+                asked = asking;
                 mainframe.SlideLayers(0, 9);
+                said += asking > asked ? " main" : "";
                 mainSlid = mainframe.LayersShown + " / " + mainframe.VoiceStyleStatus + " / " + VoiceFx.Pitch + " " + preferences.VoicePitch;
                 mainframe.SlideVoice(0, 4);
                 fromSettings = mainframe.LayersShown;
-                page = mainframe.Overlap() ?? mainframe.Outside();
+                page = mainframe.Overlap() ?? mainframe.Outside() ?? mainframe.VoiceHeadingFits();
                 snap("mainframe-settings-layers.png");
                 crowded = mainframe.LayersCrowded;
                 mainframe.LayersDefaults();
@@ -3010,16 +3016,23 @@ namespace CapriDesktop
                 SetVoiceLayers(was);
                 mainframe.Sync();
             }
+            // Drawn with the layers on at their defaults, as they'd see it after turning them on.
             float machine = mainframe.Px(1000) / 1000f;
-            string at100 = mainframe.LayersAt(1f / machine, Path.Combine(output, "layers-100.png"));
-            string at150 = mainframe.LayersAt(1.5f / machine, Path.Combine(output, "layers-150.png"));
-            string at200 = mainframe.LayersAt(2f / machine, Path.Combine(output, "layers-200.png"));
+            string at100, at150, at200;
+            SetVoiceLayers(VoiceFx.Layering.Off.Turned(true));
+            try
+            {
+                at100 = mainframe.LayersAt(1f / machine, Path.Combine(output, "layers-100.png"));
+                at150 = mainframe.LayersAt(1.5f / machine, Path.Combine(output, "layers-150.png"));
+                at200 = mainframe.LayersAt(2f / machine, Path.Combine(output, "layers-200.png"));
+            }
+            finally { SetVoiceLayers(was); }
             if (keyOff != "Layers: Off" || opened != "Off | Normal | +1.5, 25 ms | -2.5, 25 ms" || flipped != "On | Normal | +1.5, 25 ms | -2.5, 25 ms" || keyOn != "Layers: On (lit)"
                 || slid != "On | Normal | +3, 40 ms | -4.5, 90 ms / On | +3, 40 ms | -4.5, 90 ms / 3 40 -4.5 90" || mainSlid != "On | +3 | +3, 40 ms | -4.5, 90 ms / +3 | Normal | Off | Off / 3 3"
-                || fromSettings != "On | -2 | +3, 40 ms | -4.5, 90 ms" || defaulted != "On | -2 | +1.5, 25 ms | -2.5, 25 ms" || closedOff != "Off | -2 | +1.5, 25 ms | -2.5, 25 ms / Layers: Off / False")
-                throw new Exception("The VOICE LAYERS window went wrong: " + keyOff + " // " + opened + " // " + flipped + " // " + keyOn + " // " + slid + " // " + mainSlid + " // " + fromSettings + " // " + defaulted + " // " + closedOff);
+                || fromSettings != "On | -2 | +3, 40 ms | -4.5, 90 ms" || defaulted != "On | -2 | +1.5, 25 ms | -2.5, 25 ms" || closedOff != "Off | -2 | +1.5, 25 ms | -2.5, 25 ms / Layers: Off / False" || said != "switch layer main")
+                throw new Exception("The VOICE LAYERS window went wrong: " + keyOff + " // " + opened + " // " + flipped + " // " + keyOn + " // " + slid + " // " + mainSlid + " // " + fromSettings + " // " + defaulted + " // " + closedOff + " // she spoke for: " + said);
             if (page != null || crowded != null || at100 != null || at150 != null || at200 != null) throw new Exception("The VOICE LAYERS window's layout doesn't fit: Settings " + page + " / open " + crowded + " / 100% " + at100 + " / 150% " + at150 + " / 200% " + at200);
-            checks.Add("PASS VOICE LAYERS window: Layers: Off in Settings > VOICE's heading opens it; its switch turns them on and lights the button, each layer's pitch and delay slider sets and saves it, MAIN's pitch and Settings' Pitch move together both ways, Defaults puts both layers back, and letting go has her say a line; Settings still fits (mainframe-settings-layers.png), and at 100%, 150% and 200% nothing in the window overlaps, pokes out or gets cut off (layers-100.png, layers-150.png, layers-200.png)");
+            checks.Add("PASS VOICE LAYERS window: Layers: Off in Settings > VOICE's heading opens it; its switch turns them on and lights the button, each layer's pitch and delay slider sets and saves it, MAIN's pitch and Settings' Pitch move together both ways, Defaults puts both layers back, and the switch and letting go of a slider have her say a line; Settings still fits, with VOICE's note and Layers button fitting their text at 100%, 150% and 200% (mainframe-settings-layers.png), and at 100%, 150% and 200% nothing in the window overlaps, pokes out or gets cut off (layers-100.png, layers-150.png, layers-200.png)");
         }
 
         // Her wake word listens for HeyCapriChanged, so whatever flips the setting starts or stops it.

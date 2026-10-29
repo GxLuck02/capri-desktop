@@ -592,7 +592,7 @@ Open them with the Layers button at the right of Mainframe > Settings > VOICE's 
 - Hear her: she says "How do I sound now, choom?" in her voice as it is now. Letting go of any slider, or flipping the switch, does the same.
 - Defaults: puts both layers back to +1.5 and -2.5 semitones, 25 ms, and leaves the switch as it is.
 
-Each copy changes pitch without talking faster or slower, and mixes in about 8 dB under her, so she still leads. Short delays (about 15 to 35 ms) thicken her into one doubled voice; longer ones (50 ms and up) sound like an echo behind her. Pitches far from hers (like +7 or -12) sound like a harmony or a deeper voice under her. A limiter keeps the mix from ever clipping, however loud. With a delay set, a line ends that much later while the copies finish, and her mouth moves with them.
+Each copy changes pitch without talking faster or slower, and mixes in about 8 dB under her, so she still leads. Short delays (about 15 to 35 ms) thicken her into one doubled voice; longer ones (50 ms and up) sound like an echo behind her. Pitches far from hers sound more like a harmony than a double: +7 sings a fifth above her, and -12 an octave below. A limiter keeps the mix from ever clipping, however loud. With a delay set, a line ends that much later while the copies finish, and her mouth moves with them.
 
 They change every voice she has, like Pitch, Speed, Robot and Glitch: her free voice styles, HD, ElevenLabs, CUSTOM LOCAL and Fish Audio or OpenAI voices, and ElevenLabs voice chat as she talks. Robot, Glitch, Pitch and Speed go on her first, and the copies are made from that. They're saved, so they stay after a restart or update.
 

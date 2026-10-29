@@ -122,6 +122,7 @@ namespace CapriDesktop
         private SecuritySheet guard;
         private LayersSheet layered;
         private Key layersKey;
+        private Label styleNote;
         private readonly Slider gap;
         private readonly Label gapName;
         private readonly Entry keyEntry;
@@ -415,7 +416,7 @@ namespace CapriDesktop
             Make("Edit personality", 156, 176, 130, 28, delegate { capri.OpenPersonality(); }).AccessibleName = "Edit her personality: personality.md";
             Make("Reset", 294, 176, 62, 28, delegate { capri.ResetPersonality(); }).AccessibleName = "Reset her personality to her default";
             Caption("VOICE >", 28, 220, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
-            Label styleNote = Caption("Every voice, ElevenLabs too", 88, 218, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+            styleNote = Caption("Every voice, ElevenLabs too", 88, 218, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             styleNote.AutoSize = false;
             styleNote.TextAlign = ContentAlignment.MiddleRight;
             styleNote.Bounds = new Rectangle(88, 218, 172, 20);
@@ -1596,6 +1597,28 @@ namespace CapriDesktop
         internal void CloseLayers() { if (layered != null && !layered.IsDisposed) layered.Close(); }
 
         internal string LayersCrowded { get { return layered == null || layered.IsDisposed ? "not open" : layered.Crowded(); } }
+
+        // VOICE's heading at 100%, 150% and 200%: "Every voice, ElevenLabs too" and the Layers button, on or off, each fit their
+        // own text, and they don't meet. Null when they do.
+        internal string VoiceHeadingFits()
+        {
+            if (styleNote.Bounds.IntersectsWith(layersKey.Bounds) || styleNote.Right > layersKey.Left) return "the note runs into the Layers button";
+            // Text is measured at this screen's own scale, so each font is sized for the scale being checked.
+            float here = DeviceScale();
+            foreach (float zoom in new[] { 1f, 1.5f, 2f })
+                using (Font note = new Font(styleNote.Font.FontFamily, styleNote.Font.SizeInPoints * zoom / here, styleNote.Font.Style, GraphicsUnit.Point))
+                using (Font key = new Font(layersKey.Font.FontFamily, layersKey.Font.SizeInPoints * zoom / here, layersKey.Font.Style, GraphicsUnit.Point))
+                {
+                    int wide = TextRenderer.MeasureText(styleNote.Text, note).Width, room = (int)(styleNote.Width / here * zoom);
+                    if (wide > room) return "\"" + styleNote.Text + "\" is " + wide + " px in " + room + " at " + zoom;
+                    foreach (string text in new[] { "Layers: Off", "Layers: On" })
+                    {
+                        int size = TextRenderer.MeasureText(text, key).Width + (int)Math.Ceiling(12 * zoom), keyRoom = (int)(layersKey.Width / here * zoom);
+                        if (size > keyRoom) return "\"" + text + "\" is " + size + " px in " + keyRoom + " at " + zoom;
+                    }
+                }
+            return null;
+        }
 
         internal string LayersAt(float zoom, string picture)
         {
@@ -3018,23 +3041,26 @@ namespace CapriDesktop
                 return made;
             }
 
-            // The switch, MAIN's pitch and each layer as they are now.
+            // The switch, MAIN's pitch and each layer as they are now. A slider already there is left alone, so one being
+            // dragged still says her line when it's let go.
             internal void Sync()
             {
                 syncing = true;
                 VoiceFx.Layering layers = owner.capri.VoiceLayers;
                 onOff.Checked = layers.On;
-                mainPitch.Value = owner.capri.VoicePitch + VoiceFx.MostPitch;
+                Put(mainPitch, owner.capri.VoicePitch + VoiceFx.MostPitch);
                 mainName.Text = PitchNames[mainPitch.Value];
                 for (int at = 0; at < 2; at++)
                 {
-                    pitches[at].Value = (int)Math.Round((layers.PitchOf(at + 1) + VoiceFx.Layering.MostPitch) * 2);
+                    Put(pitches[at], (int)Math.Round((layers.PitchOf(at + 1) + VoiceFx.Layering.MostPitch) * 2));
                     pitchNames[at].Text = VoiceFx.Layering.PitchName(layers.PitchOf(at + 1));
-                    delays[at].Value = (int)Math.Round(layers.DelayOf(at + 1) / (double)DelayStep);
+                    Put(delays[at], (int)Math.Round(layers.DelayOf(at + 1) / (double)DelayStep));
                     delayNames[at].Text = VoiceFx.Layering.DelayName(layers.DelayOf(at + 1));
                 }
                 syncing = false;
             }
+
+            private static void Put(Slider slider, int value) { if (slider.Value != value) slider.Value = value; }
 
             // Both layers back to how they come, on or off as they are, and a line in them.
             internal void Defaults()
