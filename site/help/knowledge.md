@@ -1146,14 +1146,14 @@ Tray or menu bar icon: Talk to her, Quiet, Hide her / Show her, Bring her back, 
 - "ElevenLabs rejected the key. Settings > Voice > New key."
 - Remove key ending XXXX removes it.
 
-### Check my screen on Mac and Linux
-Ask "check my screen", "what's on my screen?" or "can you see this?". She takes a screenshot and her brain looks at it.
+### Check my screen on Mac and Linux (0.7.6 and newer)
+0.7.4 and older can't see the screen on Mac and Linux. Update to 0.7.6. Ask "check my screen", "what's on my screen?" or "can you see this?". She takes a screenshot and her brain looks at it.
 - Her brain has to see pictures: a free NVIDIA key (nvidia/nemotron-3.5-super-vl-120b-a12b), a Claude or OpenAI key, or an Ollama model that can see pictures. DeepSeek can't.
 - Mac: the first time, macOS asks to let Capri record the screen. If she only describes your wallpaper, allow Capri under System Settings > Privacy & Security > Screen Recording, then reopen her.
 - Linux: she uses your desktop's screenshot tool: spectacle (KDE), gnome-screenshot (GNOME), grim (Sway, Hyprland and other wlroots desktops), or ImageMagick, scrot or maim on X11. If none is installed she says so; install one and ask again. GNOME on Wayland may refuse apps' screenshots.
 
-### A free NVIDIA key on Mac and Linux
-No Ollama needed, and nothing to download.
+### A free NVIDIA key on Mac and Linux (0.7.6 and newer)
+No Ollama needed, and nothing to download. 0.7.4 and older only think with Ollama on Mac and Linux; update to 0.7.6 for an API key.
 1. Right-click her > Brain > Get a free NVIDIA key. NVIDIA's key page opens.
 2. Make a key there (see "The free NVIDIA key" above) and copy it.
 3. Right-click her > Brain > Use an API key..., paste the key in her box and press Enter. It stays on this computer. (Her box closes if you click away, so copy the key first.)
