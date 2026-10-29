@@ -17,6 +17,8 @@
   <a href="https://lachydotmcg.github.io/capri-desktop/">Website</a>
   &nbsp;·&nbsp;
   <a href="https://discord.gg/F4fDHfGtFk">Discord</a>
+  &nbsp;·&nbsp;
+  <a href="#support">Support</a>
 </p>
 
 <table align="center">
@@ -238,6 +240,14 @@ Who she is and how she talks lives in `personality.md`, a plain text file you ca
 - [ ] Changing her hop-off key (Ctrl + Alt + C) too
 - [ ] The Mainframe fitting any screen shape and scaling, like Virtual Super Resolution
 - [ ] Code signing, so Windows stops warning you about her
+
+## Support
+
+Capri is free. To support the people who make her, tip them on Ko-fi:
+
+- [Lachy](https://ko-fi.com/lachysdev), developer
+- [her artist](#), animator and artist
+- [BaldDcMod](https://ko-fi.com/balddcmod), Discord moderator
 
 ## Contributing
 
