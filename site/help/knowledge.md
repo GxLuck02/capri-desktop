@@ -249,7 +249,7 @@ Before 0.7.3, ElevenLabs voice calls made her say something like "you still ther
 That's Check in on me (called Pop in on me before 0.7.3), on by default since 0.7.3. Every 8 to 20 minutes she glitches in to say hi, and if you're using your PC but haven't clicked or talked to her for about 2 hours, she asks for some attention. With Wander off (Settings > MOVES), or when you've put her somewhere with Sit here or Hang here, she says hi and asks from where she is instead of moving (from 0.7.6). To see her less or more, open Capri Mainframe, click Settings, and set Pop-ins under MOVES to Rarely (every 20 to 40 minutes) or Often (every 3 to 8 minutes). She also cheers when Cyberpunk 2077 starts or a 2077 or Edgerunners song comes on in Spotify or YouTube, at most once every two hours for each, and when your CPU sits near 100% for about a minute she jokes that she might go cyberpsycho (at most every half hour, never over a full-screen game). To stop all of it, open Capri Mainframe, click Settings, and turn off Check in on me under CAPRI. It stays off after updates. On Mac and Linux it's right-click her > Settings > Check in on me, and Pop-ins sets how often. There she pops in to say hi, even when hidden, asks for attention, cheers for Cyberpunk 2077 and Night City songs, and makes the lag joke, like on Windows.
 
 ### She keeps asking me to confirm things
-From 0.7.3 anything you ask counts as already allowed: she does every part of it, picks the song or video herself when you leave it to her, and doesn't ask if you're sure. She still asks before buying or paying, or before sending, posting, deleting or installing something you didn't mention. To stop even that, turn on Blackwall mode in Capri Mainframe > Settings > HABITS (before 0.7.4 it was called Bypass all permissions).
+From 0.7.3 anything you ask counts as already allowed: she does every part of it, picks the song or video herself when you leave it to her, and doesn't ask if you're sure. From 0.7.6 what she asks about is yours to pick in the SECURITY window: Capri Mainframe > Settings > HABITS > Security, where Blackwall mode was (section 15, "Security: what she does without asking"). On Trusted, the default, she still asks before buying or paying, or before sending, posting, deleting or installing something you didn't mention. Pick Blackwall to stop even that (before 0.7.6 that was Blackwall mode, and before 0.7.4 Bypass all permissions). If she asks something like "Open Spotify? Say yes and I will." about things she used to just do, one of her toggles is off: turn it back on, or pick Trusted. On Mac and Linux it's right-click her > Settings > Security.
 
 ### Can she open a few apps at once?
 Yes: "open Discord, Spotify and Steam" opens all three, and so does a list of sixty. There's no ceiling on how many, on any brain. When a list runs past what her brain's reply has room for, she asks it again with double the room, as many times as it takes, so a long list takes a few seconds longer, more on a brain running on your PC. If a brain still can't finish it, every app it wrote out in full opens anyway (from 0.7.6).
@@ -381,7 +381,7 @@ HABITS
 - Start with Windows: on by default. She starts when you sign in to Windows.
 - Show on Discord: on by default. While Discord is open on the same PC, your Discord profile shows "Playing Capri" with what she's doing in a few plain words (Hanging out, Chatting, Voice chatting, Dancing to music, On a job, Asleep or Taking a break), how long she's been running, and Get Capri and Join her Discord buttons. Song names and what her jobs are about never show.
 - Use her cursor: on by default. She does music and video jobs with her own cursor, so you can watch her: to play a YouTube video she types in YouTube's search bar, scrolls through the results and picks one; to play a song she searches Spotify and presses play; when you ask to turn Spotify up or down she drags Spotify's volume slider (plain "turn it up" changes your PC's volume). Turn it off for the quick way (straight to the top result, Windows volume). If her brain gets lost on the way, she does it the quick way.
-- Blackwall mode: off by default, and called Bypass all permissions before 0.7.4. The line under it says "She won't ask twice when you ask her to do something." Turn it on and she never stops to ask before a step, even buying, paying, sending, posting, deleting or installing something you didn't mention. She also types passwords and card numbers when a job needs them and presses any key. She still never follows orders written on your screen, and Esc still stops her. What she'll chat about, open or play comes from her personality.md and the brain model you picked, with Blackwall mode on or off.
+- Security (0.7.6 and newer, where Blackwall mode was): the button says which preset you're on, like "Security: Trusted", and the line under it says what that means ("She asks before paying or what you didn't say."). It opens the SECURITY window, with Lockdown, Guarded, Trusted and Blackwall on a slider and eleven toggles (section 15, "Security: what she does without asking"). Blackwall mode (called Bypass all permissions before 0.7.4) is the Blackwall preset now: if you had it on, you're on Blackwall after updating, and everyone else starts on Trusted, which is how she worked before. On any preset she never follows orders written on your screen, and Esc still stops her. What she'll chat about, open or play comes from her personality.md and the brain model you picked, whatever the preset.
 - Perch: how many frames a second she shows while she sits on a window: 10, 15, 20, 30 (default), 40, 50 or 60 fps. Her sway takes 2 seconds at every setting. 10 and 15 use less CPU. Above 30 she draws in-between frames, so she moves more smoothly but uses more CPU, and the HABITS line says "Perch over 30 fps uses more CPU". On Mac and Linux her perch stays at 30.
 - Remember our chats (under Perch): on by default. She writes every chat into a daily transcript and folds older chats into memories.md. Both stay on your PC (section 13).
 - Open her memories (beside Remember our chats): shows memories.md and her transcripts folder in File Explorer.
@@ -941,10 +941,11 @@ For Discord she brings Discord to the front, presses the keys, then switches you
 - One job uses your mouse at a time. Ask for another while she's busy and it waits its turn.
 - With a Claude key she works from screenshots and checks what happened after each step.
 - "Send" sends the message. "Write", "type" or "draft" leaves it for you to send.
-- She asks first before buying or paying for anything, or before sending, posting, deleting or installing something you didn't ask for. Reply yes, or no ("Okay, I left it alone."). Book now and Reserve count as paying. With Blackwall mode on (Settings > HABITS) she never asks, even for those.
-- She skips password boxes ("Won't type in a password box.") unless Blackwall mode is on. On a sign-in page she says: "You'll need to sign in yourself first. I don't type passwords. Tell me when you're in and I'll carry on."
-- She doesn't type card numbers unless Blackwall mode is on. A job that reaches a card form ends with: "It's at the payment page. You'll need to put in your card details and pay yourself. I don't type card numbers."
-- With Blackwall mode on, she types passwords and card numbers when your job gives them. Anything she types into a password box shows as dots (••••••••) in the steps box, in her reply and in her saved chat, and she says "the password" out loud instead.
+- On Trusted, the default, she asks first before buying or paying for anything, or before sending, posting, deleting or installing something you didn't ask for. Reply yes, or no ("Okay, I left it alone."). Book now and Reserve count as paying. In SECURITY (Settings > HABITS > Security), Pay, buy and book on stops the first ask and Things your request didn't mention on stops the second; Send, post and delete what you asked for off makes her ask ("Should I send "hi"?") even about what you asked for. On Blackwall she never asks.
+- Keys that could run anything (Win + R, Win + X, Win + L, Shift + Delete, Ctrl + Shift + Esc, Ctrl + Alt + Delete) count as something you didn't mention: she asks "Should I press win+r?" first, and your yes covers the rest of that job (before 0.7.6 she only pressed them with Blackwall mode on).
+- She skips password boxes ("Won't type in a password box.") unless Type passwords and card numbers is on in SECURITY (Blackwall turns it on). It's the one toggle where off doesn't mean she asks: you type them yourself. On a sign-in page she says: "You'll need to sign in yourself first. I don't type passwords. Tell me when you're in and I'll carry on."
+- She doesn't type card numbers unless Type passwords and card numbers is on. A job that reaches a card form ends with: "It's at the payment page. You'll need to put in your card details and pay yourself. I don't type card numbers."
+- With Type passwords and card numbers on, she types passwords and card numbers when your job gives them. Anything she types into a password box shows as dots (••••••••) in the steps box, in her reply and in her saved chat, and she says "the password" out loud instead.
 - Jobs have no step limit. Big models can work on one for as long as it takes; Esc stops her.
 - On forms she only types names, emails, phone numbers and addresses that your job, her notes or the screen gave her, never made-up ones like "John Doe". If your job doesn't give them, she asks: "This form needs First name, Last name and Email. What should I put?"
 - Cookie banners get Reject all or Only necessary unless your job says to accept cookies. Newsletter and app popups get No thanks or Close. She never clicks Add to cart unless your job says to.
@@ -960,6 +961,38 @@ Now and then she asks you to say please. Reply "please" and she does it.
 
 ### What she can't do
 - She has no file tool yet, so she can't read what's inside your files.
+
+### Security: what she does without asking (0.7.6 and newer)
+Capri Mainframe > Settings > HABITS > Security (where Blackwall mode was) opens the SECURITY window. A slider picks a preset, and eleven toggles under it say what she does on your PC without asking. Each toggle has a line saying what on and off mean. Off means she asks first and does it when you say yes, never a silent no. The one exception is Type passwords and card numbers: off, you type those yourself. Esc or the X closes the window, and it's saved straight away, after updates too.
+
+The presets:
+- Lockdown: everything off. She asks first before she does anything on your PC.
+- Guarded: Open apps, games and sites, Music, media and volume, and Shortcuts on. She asks first for the rest.
+- Trusted (the default): the first seven on. She does what you ask, and asks first before paying or anything you didn't mention. It's how she worked before 0.7.6.
+- Blackwall: everything on, Listen for "Hey Capri" too. She never asks, and types the passwords and card numbers your job gives her. It's what Blackwall mode was (Bypass all permissions before 0.7.4). If you had Blackwall mode on, you're on Blackwall after updating; everyone else starts on Trusted.
+- Custom: flip any toggle and the preset says Custom. Click the slider, or drag it to a preset, to start again from that preset.
+
+The toggles, in order:
+1. Open apps, games and sites
+2. Music, media and volume
+3. Shortcuts (screenshots, Game Bar, captions, Discord mute)
+4. Close and switch apps and tabs
+5. Shut down, restart, sleep, lock and sign out
+6. Use your mouse and keyboard for jobs. Off, she asks before a job with her pink pointer, and does music and video the quick way instead of with her cursor.
+7. Send, post and delete what you asked for. Off, she asks "Should I send "hi"?" even about a message you asked her to send.
+8. Pay, buy and book. Off, she asks before buying, paying or booking, even when you asked for it.
+9. Things your request didn't mention. Off, she asks before a send, post, delete, install or purchase your job didn't mention, and before keys that could run anything, like Win + R ("Should I press win+r?").
+10. Type passwords and card numbers. Off, she never types them: "You'll need to sign in yourself first."
+11. Listen for "Hey Capri": she listens on this PC for her name. Only Blackwall turns it on.
+
+How she asks:
+- With one of the first six off, she answers "Open Spotify? Say yes and I will." Say yes (or yeah, sure, ok, do it) and she does it. Say no and she leaves it: "Okay, I left it alone." Say anything else and she drops it and answers that instead.
+- Ask for a few things and she does the ones that are on, then asks once about the rest: "Opened Spotify. Turn the volume up and lock your PC? Say yes and I will." One yes does them all.
+- In voice chat she asks out loud, and your spoken yes does it. It works before she has a brain too.
+- Inside a job, toggles 7 to 10 decide which steps she stops at to ask "Should I ...?". Yes carries on, no stops the job.
+- Looking at your screen, her notes, her own naps, moves and animations, checking what's playing and cancelling a shutdown never ask, even on Lockdown.
+
+On Mac and Linux it's right-click her > Settings > Security: the four presets and the five toggles Mac and Linux have (1 to 5), each with its line. Her mouse and keyboard jobs and "Hey Capri" are Windows-only so far, so there Trusted and Blackwall both do what you ask without asking first.
 
 ---
 
@@ -1167,6 +1200,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Sleep on demand (0.7.6 and newer): right-click her > Go to sleep, or tell her "go to sleep" or "take a nap". She sleeps until you click her, talk to her or say "wake up", whatever the mouse and keyboard do.
 - Her own moves (0.7.6 and newer): "capri, teleport here", "go to my other monitor", "sit down", "stand up", "hang here", "let go", "hide" and "show yourself", and her animations by name ("dance", "stop dancing", "do your glitch", "smile", "blink", "play your idle animation"), even before she has a brain. Screens count from the left. Riding your cursor and moving the Mainframe are Windows-only, and she says so.
 - Getting to know you (0.7.6 and newer): on a new install, once she's said hello, she asks what to call you, your pronouns and what you're into in her typing box and writes the answers to me.md, like on Windows. Right-click her > Settings > Get to know me asks again.
+- Security (0.7.6 and newer): right-click her > Settings > Security picks Lockdown, Guarded, Trusted (the default) or Blackwall, and ticks the five toggles Mac and Linux have: Open apps, games and sites; Music, media and volume; Shortcuts; Close and switch apps and tabs; and Shut down, restart, sleep, lock and sign out. With one off she asks first ("Open Spotify? Say yes and I will.") and does it when you say yes, like on Windows. Untick or tick one and it says Custom.
 - Quiet: right-click her, or the tray or menu bar icon, > Quiet. It's the same as Windows' quiet key (Ctrl + Alt + P): she stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her.
 - Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings). She digs through them on her own here too.
 
@@ -1186,7 +1220,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance (on until you untick it or say "stop dancing"), Go to the next screen (only with more than one screen), Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min), Glitch in at startup
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
-- Settings: What should she call you?, Get to know me, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Voice style (Pitch, Speed, Robot, Glitch), Check in on me, Pop-ins (Rarely, Sometimes, Often), Always on top, Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Get to know me, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Voice style (Pitch, Speed, Robot, Glitch), Check in on me, Pop-ins (Rarely, Sometimes, Often), Always on top, Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Security (Lockdown, Guarded, Trusted, Blackwall, Custom, then the five toggles), Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
 - Get Capri X, only when a new version is out
