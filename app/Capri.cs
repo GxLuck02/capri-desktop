@@ -3828,7 +3828,10 @@ namespace CapriDesktop
             bool dancing = clip == dance || clip == perchDance;
             if (!musicOn) danceHeld = false;
             bool wanted = danceAsked || (musicOn && !preferences.NoDance && preferences.Motion && !danceHeld);
-            bool free = wanted && !hidden && !dragging && !pressed && !riding && !falling && !hanging && !walking && outro == null && speech == null && talkState == TalkState.Off && !chatting && !napAsked && !napping;
+            // Mid-job she bops along on her task panel too: the job keeps her thinking and voice chat may be on for them to cut
+            // in, so only her talking stops it there (Lachy, 29 Oct: "she didnt bop her head when i played the songs").
+            bool busy = speech != null || (working != null ? now < voiceUntil : talkState != TalkState.Off || chatting);
+            bool free = wanted && !hidden && !dragging && !pressed && !riding && !falling && !hanging && !walking && outro == null && !busy && !napAsked && !napping;
             if (dancing && !free) { Play(seat != null || onPanel ? perch : idle); UpdateAnimation(); }
             else if (!dancing && free && (clip == idle || clip == perch)) { Play(seat != null || onPanel ? perchDance : dance); frames.Start(); }
             groove.Want(!testing && musicOn && !preferences.NoDance && preferences.Motion && !hidden);
@@ -8561,6 +8564,38 @@ namespace CapriDesktop
                                 Say(null);
                                 CheckMusic(clock.Elapsed.TotalSeconds);
                                 if (clip != perchDance) throw new Exception("She did not go back to dancing after talking.");
+                                // Mid-job she keeps bopping while the job thinks and voice chat is on, and stops only while she talks (Lachy, 29 Oct).
+                                string workingWas = working;
+                                TalkState talkWas = talkState;
+                                bool chattingWas = chatting;
+                                double voiceWas = voiceUntil;
+                                try
+                                {
+                                    working = "On it. Esc stops me.";
+                                    talkState = TalkState.Thinking;
+                                    chatting = true;
+                                    CheckMusic(clock.Elapsed.TotalSeconds);
+                                    if (clip != perchDance) throw new Exception("She stopped dancing mid-job.");
+                                    voiceUntil = clock.Elapsed.TotalSeconds + 5;
+                                    CheckMusic(clock.Elapsed.TotalSeconds);
+                                    if (clip == perchDance || clip == dance) throw new Exception("She kept dancing mid-job while talking.");
+                                    voiceUntil = 0;
+                                    CheckMusic(clock.Elapsed.TotalSeconds);
+                                    if (clip != perchDance) throw new Exception("She did not go back to dancing mid-job after talking.");
+                                    working = null;
+                                    CheckMusic(clock.Elapsed.TotalSeconds);
+                                    if (clip == perchDance || clip == dance) throw new Exception("She danced through voice chat outside a job.");
+                                }
+                                finally
+                                {
+                                    working = workingWas;
+                                    talkState = talkWas;
+                                    chatting = chattingWas;
+                                    voiceUntil = voiceWas;
+                                }
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                if (clip != perchDance) throw new Exception("She did not dance again after the job checks.");
+                                checks.Add("PASS dancing mid-job: on her task panel she bops to music while the job thinks and voice chat is on, stops while she talks, and outside a job voice chat still keeps her still");
                                 Func<double, int, bool, float[]> song = delegate(double tempo, int seed, bool beats)
                                 {
                                     Random wobble = new Random(seed);
