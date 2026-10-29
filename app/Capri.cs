@@ -10968,10 +10968,11 @@ namespace CapriDesktop
                                         if (!Hands.Wants(asksJob)) throw new Exception("A messaging or call job was taken as chat: " + asksJob);
                                     foreach (string justChat in new[] { "tell me a joke", "say something funny", "what do you think of discord", "i hung up on him lol" })
                                         if (Hands.Wants(justChat)) throw new Exception("Chat was taken as a job: " + justChat);
-                                    foreach (string typedJob in new[] { "send hi in #play-testing", "great can u send a msg saying hi in general", "text hi in discord and send it", "can you tell sam hi on discord", "dm sam that im late", "join the call", "ok cool, send gg in the server" })
+                                    foreach (string typedJob in new[] { "send hi in #play-testing", "great can u send a msg saying hi in general", "text hi in discord and send it", "can you tell sam hi on discord", "dm sam that im late", "join the call", "ok cool, send gg in the server", "Capri, open up your website and install yourself." })
                                     {
                                         System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> rescued = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>>();
                                         if (typedJob == "send hi in #play-testing") rescued.Add(new System.Collections.Generic.KeyValuePair<string, ToolArguments>("open_app", new ToolArguments { Name = "Discord" }));
+                                        if (typedJob.StartsWith("Capri, open up")) rescued.Add(new System.Collections.Generic.KeyValuePair<string, ToolArguments>("open_website", new ToolArguments { Site = Hands.Home }));
                                         Hands.Rescue(typedJob, rescued);
                                         if (rescued.Count != 1 || rescued[0].Key != "use_computer" || string.IsNullOrEmpty(rescued[0].Value.Task)) throw new Exception("A typed messaging job didn't become a computer job: " + typedJob);
                                     }
