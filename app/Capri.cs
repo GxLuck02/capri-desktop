@@ -224,6 +224,12 @@ namespace CapriDesktop
         [DataMember] public string AsideKey;
         // The service CLOUD VOICE last used: ElevenLabs, Fish Audio or OpenAI. Its menu shows it while another row is in use.
         [DataMember] public string CloudVoice;
+        // Her mini player shows while music plays. It's on by default, so it's saved as switched off.
+        [DataMember] public bool NoPlayer;
+        // Where they dragged the mini player: its plate's bottom-left on screen.
+        [DataMember] public int PlayerX;
+        [DataMember] public int PlayerY;
+        [DataMember] public bool HasPlayerSpot;
 
         [OnDeserializing]
         private void Defaults(StreamingContext context)
@@ -771,6 +777,26 @@ namespace CapriDesktop
         private readonly Takeover takeover = new Takeover();
         private readonly TaskPanel taskPanel = new TaskPanel();
         private readonly HerPointer herPointer = new HerPointer();
+        // Her mini player, what Windows' media session last said, and the presses on their way to the app playing it.
+        private readonly MiniPlayer player = new MiniPlayer();
+        private readonly ContextMenuStrip playerMenu;
+        private readonly ToolStripMenuItem playerOpenItem;
+        private readonly System.Collections.Generic.Queue<System.Collections.Generic.KeyValuePair<Tune, string>> playerPresses = new System.Collections.Generic.Queue<System.Collections.Generic.KeyValuePair<Tune, string>>();
+        private bool playerSending;
+        private bool tuneBusy;
+        private double tuneAt = -10;
+        private double tuneHeard = -1;
+        private bool playerClosed;
+        private double playerHopUntil = -1;
+        private IntPtr playerFront;
+        // The song whose Spotify heart was last read, so each song's is read once.
+        private string heartRead;
+        private bool heartBusy;
+        // It stays up a minute after the music pauses. Closing it lasts until nothing has played for 10 s.
+        private const double PlayerLinger = 60;
+        private const double PlayerQuiet = 10;
+        // Windows' full-screen check, which puts the player away. Tests swap it out.
+        internal static Func<bool> FullScreen = Native.Gaming;
         private bool pointing;
         private IntPtr namedWindow;
         private string namedApp;
@@ -1061,6 +1087,17 @@ namespace CapriDesktop
             }
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("Quit Capri", null, delegate { Quit(); }));
+            playerMenu = new ContextMenuStrip();
+            playerMenu.Renderer = menu.Renderer;
+            playerMenu.ForeColor = menu.ForeColor;
+            playerMenu.BackColor = menu.BackColor;
+            playerMenu.ShowImageMargin = false;
+            playerOpenItem = new ToolStripMenuItem("Open the player", null, delegate { Tune tune = player.Tune; ThreadPool.QueueUserWorkItem(delegate { try { Tunes.Open(tune); } catch (Exception) { } }); });
+            playerMenu.Items.Add(playerOpenItem);
+            playerMenu.Items.Add(new ToolStripMenuItem("Hide for now", null, delegate { playerClosed = true; HidePlayer(); }));
+            playerMenu.Items.Add(new ToolStripMenuItem("Turn off mini player", null, delegate { TogglePlayer(); }));
+            player.Command += PlayerCommand;
+            player.Moved += SavePlayerSpot;
             tray = new NotifyIcon();
             using (Stream icon = Assembly.GetExecutingAssembly().GetManifestResourceStream("Capri.Chip.ico"))
             {
@@ -1120,6 +1157,7 @@ namespace CapriDesktop
                 if (!testing) CheckGlance(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckWander(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckMusic(clock.Elapsed.TotalSeconds);
+                if (!testing) CheckPlayer(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckHome(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckLag(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckPopIn(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
@@ -1394,11 +1432,12 @@ namespace CapriDesktop
 
         private void StayOnTop()
         {
-            if (!preferences.OnTop || hidden || !IsHandleCreated || menu.Visible) return;
+            if (!preferences.OnTop || hidden || !IsHandleCreated || menu.Visible || (playerMenu != null && playerMenu.Visible)) return;
             IntPtr foreground = Native.GetForegroundWindow();
             if (foreground == lastForeground && ++topTicks < 8) return;
             lastForeground = foreground;
             topTicks = 0;
+            if (player.Visible) Native.SetWindowPos(player.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
             Native.SetWindowPos(Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
             foreach (Form above in new Form[] { pill, box, typer }) if (above.Visible) Native.SetWindowPos(above.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
         }
@@ -3030,6 +3069,168 @@ namespace CapriDesktop
             return !string.IsNullOrWhiteSpace(artist) && length > TimeSpan.Zero && length <= TimeSpan.FromMinutes(12);
         }
 
+        // Her mini player: while something plays it shows what, read from Windows' media session about once a second off her
+        // window's thread, and she perches on it like a window edge.
+        private void CheckPlayer(double now)
+        {
+            if (preferences.NoPlayer || hidden || quitting) { HidePlayer(); return; }
+            if (!tuneBusy && now - tuneAt >= 1)
+            {
+                tuneBusy = true;
+                tuneAt = now;
+                double asked = Tunes.Now;
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    Tune tune = null;
+                    try { tune = Tunes.Read(); } catch (Exception) { }
+                    Post(delegate { tuneBusy = false; Tuned(tune, clock.Elapsed.TotalSeconds, asked); });
+                });
+            }
+            if (!player.Visible) return;
+            PlayerLegs();
+            if (!preferences.OnTop) PlayerLayer(false);
+        }
+
+        // What's playing came back. It shows while something plays and stays up a minute after a pause. Closing it keeps it
+        // away until nothing has played for a bit, and it keeps out of full-screen games and videos.
+        private void Tuned(Tune tune, double now, double asked)
+        {
+            if (tune != null && tune.Playing) tuneHeard = now;
+            else if (playerClosed && now - tuneHeard >= PlayerQuiet) { playerClosed = false; tuneHeard = -1; }
+            bool allowed = !preferences.NoPlayer && !hidden && !quitting && !playerClosed;
+            bool up = allowed && tune != null && tuneHeard >= 0 && now - tuneHeard < PlayerLinger && !FullScreen();
+            // Never out from under them while they're using it.
+            if (!up && allowed && player.Busy) { up = true; tune = tune ?? player.Tune; }
+            if (!up) { HidePlayer(); return; }
+            // A read from before their last press may not have the press in it yet.
+            if (player.Visible && asked < player.SentAt + 0.3) return;
+            ShowPlayer(tune, now);
+        }
+
+        private void ShowPlayer(Tune tune, double now)
+        {
+            bool fresh = !player.Visible;
+            player.Motion = preferences.Motion;
+            player.ShowTune(tune, preferences.HasPlayerSpot ? new Point(preferences.PlayerX, preferences.PlayerY) : (Point?)null);
+            if (fresh) { PassThrough(); PlayerLayer(true); playerHopUntil = now + 10; }
+            if (playerHopUntil >= 0 && (now > playerHopUntil || HopOnPlayer())) playerHopUntil = -1;
+            ReadHeart();
+        }
+
+        // A song already liked on Spotify shows her heart filled: Spotify's own heart is read once per song, off her window's thread.
+        private void ReadHeart()
+        {
+            Tune shown = player.Tune;
+            if (heartBusy || shown == null || !shown.Spotify || shown.Key == heartRead) return;
+            heartBusy = true;
+            heartRead = shown.Key;
+            string key = shown.Key;
+            double asked = Tunes.Now;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                bool? has = null;
+                try { has = Tunes.Hearted(); } catch (Exception) { }
+                Post(delegate { heartBusy = false; if (has.HasValue) player.Hearted(key, has.Value, asked); });
+            });
+        }
+
+        private void HidePlayer()
+        {
+            playerHopUntil = -1;
+            heartRead = null;
+            if (!player.Visible) return;
+            // Off its edge before it goes: she stands up and falls to whatever's below it.
+            if (seat != null && seat.Window == player.Handle) { StandUp(); Fall(); }
+            player.Hide();
+        }
+
+        // As it comes up with Wander on, she hops onto its top edge near its left end, like Lachy's picture. With Wander off she
+        // stays where she was put, and sits on it when they drop her there.
+        private bool HopOnPlayer()
+        {
+            if (seat != null && seat.Window == player.Handle) return true;
+            bool settled = talkState == TalkState.Off || (talkState == TalkState.Talking && replyDone >= 0 && clock.Elapsed.TotalSeconds - replyDone > 8);
+            if (!preferences.Wander || preferences.NoSitting || napAsked || napping || hidden || dragging || pressed || riding || onPanel || falling || hanging || walking || chatting || typer.Visible || menu.Visible || speech != null || !settled || (seat != null && seat.Free) || outro != null || (clip != idle && clip != perch && clip != dance && clip != perchDance)) return false;
+            Rectangle plate = player.Plate;
+            int x = plate.Left + (int)(plate.Width * MiniPlayer.Perch);
+            Ledge spot = Around().Find(ledge => ledge.Window == player.Handle && ledge.Left <= x && x <= ledge.Right);
+            if (spot == null || spot.Y - Headroom() < Screen.FromPoint(new Point(x, spot.Y)).Bounds.Top) return false;
+            GlitchOut(delegate { Hop(spot, x); }, false);
+            return true;
+        }
+
+        // Her legs over its plate, so the song's name moves out from under them.
+        private void PlayerLegs() { player.Sitting(seat != null && seat.Window == player.Handle && !hidden ? (int?)Hip().X : null, preferences.Size, facingLeft); }
+
+        // It sits just under her: over other windows with Always on top on, and among them with it off.
+        private void PlayerLayer(bool now)
+        {
+            if (!player.IsHandleCreated || !IsHandleCreated) return;
+            IntPtr front = Native.GetForegroundWindow();
+            if (!now && front == playerFront) return;
+            playerFront = front;
+            if (!preferences.OnTop) { Native.SetWindowPos(player.Handle, Handle, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); return; }
+            Native.SetWindowPos(player.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+            lastForeground = new IntPtr(-1);
+            StayOnTop();
+        }
+
+        // Presses go to the app one at a time, in the order they were made, off her window's thread.
+        private void PlayerCommand(string what)
+        {
+            if (what == "menu") { ShowPlayerMenu(); return; }
+            if (what == "close") { playerClosed = true; HidePlayer(); return; }
+            if (player.Tune == null) return;
+            lock (playerPresses)
+            {
+                playerPresses.Enqueue(new System.Collections.Generic.KeyValuePair<Tune, string>(player.Tune, what));
+                if (playerSending) return;
+                playerSending = true;
+            }
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                while (true)
+                {
+                    System.Collections.Generic.KeyValuePair<Tune, string> press;
+                    lock (playerPresses)
+                    {
+                        if (playerPresses.Count == 0) { playerSending = false; return; }
+                        press = playerPresses.Dequeue();
+                    }
+                    bool sent = false;
+                    try { sent = Tunes.Send(press.Key, press.Value); } catch (Exception) { }
+                    Post(delegate { player.Sent(press.Value, sent); tuneAt = -10; });
+                }
+            });
+        }
+
+        private void ShowPlayerMenu()
+        {
+            Tune tune = player.Tune;
+            playerOpenItem.Text = "Open " + Tunes.AppName(tune != null ? tune.App : null);
+            playerOpenItem.Enabled = tune != null;
+            playerMenu.Show(Cursor.Position);
+        }
+
+        internal bool PlayerOn { get { return !preferences.NoPlayer; } }
+
+        internal void TogglePlayer()
+        {
+            preferences.NoPlayer = !preferences.NoPlayer;
+            SavePreferences();
+            mainframe.Sync();
+            if (preferences.NoPlayer) HidePlayer();
+            else { playerClosed = false; tuneAt = -10; }
+        }
+
+        private void SavePlayerSpot(Point corner)
+        {
+            preferences.PlayerX = corner.X;
+            preferences.PlayerY = corner.Y;
+            preferences.HasPlayerSpot = true;
+            SavePreferences();
+        }
+
         private System.Collections.Generic.List<Ledge> Spots()
         {
             System.Collections.Generic.List<Ledge> spots = new System.Collections.Generic.List<Ledge>();
@@ -3622,10 +3823,11 @@ namespace CapriDesktop
 
         private bool PanelUnseen(bool unseen)
         {
-            if (!InvokeRequired) return taskPanel.Unseen(unseen);
+            // Her mini player too, so it never hides what she's working on.
+            if (!InvokeRequired) return taskPanel.Unseen(unseen) | player.Unseen(unseen);
             try
             {
-                IAsyncResult done = BeginInvoke(new Func<bool>(delegate { return taskPanel.Unseen(unseen); }));
+                IAsyncResult done = BeginInvoke(new Func<bool>(delegate { return taskPanel.Unseen(unseen) | player.Unseen(unseen); }));
                 return unseen && done.AsyncWaitHandle.WaitOne(1000) && (bool)EndInvoke(done);
             }
             catch (InvalidOperationException) { return false; }
@@ -3758,6 +3960,10 @@ namespace CapriDesktop
                 if (above.Owner != this) above.Owner = this;
                 if (above.IsHandleCreated) Native.SetWindowPos(above.Handle, new IntPtr(preferences.OnTop ? -1 : -2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
             }
+            player.Above = preferences.OnTop;
+            if (!player.IsHandleCreated) return;
+            Native.SetWindowPos(player.Handle, new IntPtr(preferences.OnTop ? -1 : -2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+            if (player.Visible) PlayerLayer(true);
         }
 
         internal void FindBrain()
@@ -3960,7 +4166,7 @@ namespace CapriDesktop
         // for one of her presses, so between presses they can drag her and the panel out of the way.
         private void PassThrough()
         {
-            foreach (Form form in new Form[] { this, pill, box, taskPanel })
+            foreach (Form form in new Form[] { this, pill, box, taskPanel, player })
             {
                 if (!form.IsHandleCreated) continue;
                 int style = Native.GetWindowLong(form.Handle, -20);
@@ -3989,6 +4195,7 @@ namespace CapriDesktop
             if (lent)
             {
                 taskPanel.LetGo();
+                player.LetGo();
                 if (pressed) { pressed = false; dragging = false; Capture = false; }
             }
             PassThrough();
