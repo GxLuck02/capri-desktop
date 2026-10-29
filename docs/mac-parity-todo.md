@@ -19,8 +19,8 @@ Dernière session : 2026-10-29. Repo : fork https://github.com/GxLuck02/capri-de
 ## Feuille de route
 - [x] Étape 1 — Mainframe + section BRAIN + Trousseau (fait le 2026-10-29)
 - [x] Étape 2 — « Set up her brain » sur Mac (llama.cpp Metal + modèle auto, Ollama en option) (fait le 2026-10-29)
-- [ ] **Étape 3 — Section VOICE : OFF / FREE VOICE (Kokoro) / ELEVENLABS** ← PROCHAINE (Kokoro gratuit en priorité)
-- [ ] Étape 4 — Chat vocal : micro, Test, raccourcis
+- [x] Étape 3 — Section VOICE : OFF / FREE VOICE (Kokoro) / ELEVENLABS (fait le 2026-10-29)
+- [ ] **Étape 4 — Chat vocal : micro, Test, raccourcis** ← PROCHAINE
 - [ ] Étape 5 — Section CAPRI + page Settings (langue, surnom, personnalité, raccourcis, démarrage, Discord, Check in)
 - [ ] Étape 6 — Voir l'écran
 - [ ] Étape 7 — Jobs avec son curseur + Blackwall (le plus risqué)
@@ -81,12 +81,18 @@ avec ≤ 2 s de retard, relance CPU rare sur Mac) ; Sweep ne vérifie que le nom
 ou 2e instance de Capri) ; Stop peut bloquer l'UI quelques secondes si llama-server ignore TERM ;
 un Ensure tardif après DropBuiltIn peut relancer un serveur inutilisé (fenêtre étroite).
 
-## Étape 3 — où on en est
-Design validé (3 parties), spec : `docs/superpowers/specs/2026-10-29-mac-free-voice-design.md`
-(branche `mac-step3-voice`) — en attente de relecture utilisateur, puis plan.
+## Étape 3 — fait
+Spec `docs/superpowers/specs/2026-10-29-mac-free-voice-design.md`, plan `docs/superpowers/plans/2026-10-29-mac-free-voice.md`.
+Pack voix Windows + libs sherpa-onnx 1.13.8 macOS arm64 (SHA-256), déballage sûr, résolveur DllImport,
+section VOICE (OFF / FREE VOICE + 4 styles / ELEVENLABS). Smoke 41 PASS. Test manuel M2 OK (elle parle,
+4 styles). Entitlement `disable-library-validation` ajouté pour une future version notarisée.
+Mineurs laissés : hardlinks/FIFO non détectés dans l'archive bz2 (SHA épinglé) ; FREE VOICE par défaut
+affiche « needs Apple silicon » sur Linux/Mac Intel.
 
 ## Notes pour la suite
 - L'utilisateur veut rester **gratuit au maximum** : privilégier local (Ollama / llama.cpp, Kokoro) et NVIDIA gratuit.
 - Sur le M2 8 Go, utiliser `gemma4:e2b-it-qat` (4,3 Go). Le `gemma4:e2b` par défaut d'Ollama fait 7,5 Go : trop gros.
 - Données Capri sur Mac : `~/Library/Application Support/Capri/` (pas ~/.config).
 - Clic droit sur Capri = deux doigts sur le trackpad.
+- Smoke : fermer les fenêtres au centre de l'écran (ex. Moniteur d'activité), sinon le test « sitting »
+  échoue (« She didn't land on the test shelf's top edge »).
