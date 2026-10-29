@@ -125,7 +125,7 @@ namespace CapriDesktop
         private static readonly int[] Recalls = { 8, 16, 32 };
         private static readonly string[] SoundNames = { "Off", "Quiet", "Normal", "Loud" };
         private static readonly int[] SoundLevels = { 0, 30, 60, 100 };
-        internal const string Offline = "My brain's offline. Install Ollama from ollama.com, then run: ollama pull gemma4:e2b, or open Capri Mainframe for a free NVIDIA key.";
+        internal static readonly string Offline = Engine.Supported ? "My brain's offline. Open Capri Mainframe and press Set up her brain, or press Free key there for a free NVIDIA key." : "My brain's offline. Install Ollama from ollama.com, then run: ollama pull gemma4:e2b, or open Capri Mainframe for a free NVIDIA key.";
         internal const string OllamaPage = "https://ollama.com/download";
         internal const string FreeKeyPage = "https://build.nvidia.com/settings/api-keys";
         private static readonly string Vault = OperatingSystem.IsMacOS() ? "Keychain" : "its file";
@@ -177,6 +177,10 @@ namespace CapriDesktop
         private string[] ollamaModels;
         private int linking;
         private Mainframe mainframe;
+        private Engine builtIn;
+        internal Pick SetupPick;
+        internal bool SettingUp;
+        internal string SetupText;
         private List<string> cloudModels;
         internal string BrainProblem;
         internal Func<bool> MusicPlaying = Music.Playing;
@@ -256,6 +260,8 @@ namespace CapriDesktop
             try { Keys.Migrate(); }
             catch (Exception error) { Brain.Log("keys", -1, "Couldn't move the voice key into Keychain: " + error.Message); }
             voice.Key = Keys.Read("voice");
+            builtIn = new Engine(Program.Smoke ?? folder);
+            if (Engine.Supported) builtIn.Sweep();
             Saved.Tier = Math.Max(0, Math.Min(2, Saved.Tier));
             Brain.Remote = TierCloud();
             if (Brain.Remote != null) Brain.Model = Brain.Remote.Model;
@@ -1117,6 +1123,7 @@ namespace CapriDesktop
         internal void PickBrain(string model)
         {
             if (string.IsNullOrEmpty(model) || model == Brain.Model) return;
+            if (Brain.Local != null) DropBuiltIn();
             Brain.Cancel();
             Brain.Model = model;
             Brain.Forget();
@@ -1331,6 +1338,7 @@ namespace CapriDesktop
             BrainProblem = null;
             cloudModels = null;
             Brain.Remote = TierCloud();
+            DropBuiltIn();
             Brain.Model = Brain.Remote == null ? null : Brain.Remote.Model;
             Brain.Forget();
             FindBrain();
@@ -1423,6 +1431,7 @@ namespace CapriDesktop
                         Brain.Cancel();
                         ++asking;
                         Brain.Remote = remote;
+                        DropBuiltIn();
                         Brain.Forget();
                         Saved.Tier = remote.Kind == "nvidia" ? 1 : 2;
                         Keep(remote);
@@ -1465,6 +1474,88 @@ namespace CapriDesktop
             RefreshBrains();
         }
 
+        internal Engine BuiltIn { get { return builtIn; } }
+
+        internal bool CanSetUp { get { return Engine.Supported || ollamaModels != null; } }
+
+        private Pick Offer { get { return SetupPick ?? Engine.Fit(Machine.Read()); } }
+
+        internal string OfferText
+        {
+            get
+            {
+                Pick pick = Offer;
+                bool engine = ollamaModels == null && Engine.Supported && !builtIn.HasServer;
+                return pick.Name + " · " + Engine.Amount(pick.Size + (engine ? Engine.MacSize : 0));
+            }
+        }
+
+        internal void UseBuiltIn(Pick pick)
+        {
+            Brain.Cancel();
+            Brain.LocalPick = pick;
+            Brain.Local = builtIn;
+            Brain.Model = pick.Name;
+            Brain.Forget();
+        }
+
+        private void DropBuiltIn()
+        {
+            if (Brain.Local != null) { Brain.Local = null; Brain.Model = null; }
+            builtIn.Stop();
+        }
+
+        // Ported from Windows' SetUpBrain: Ollama pulls it if it's running, otherwise the built-in engine installs it.
+        internal void SetUpBrain()
+        {
+            if (SettingUp || !CanSetUp) return;
+            SettingUp = true;
+            builtIn.Cancel = false;
+            Pick pick = Offer;
+            bool viaOllama = ollamaModels != null;
+            SetupText = "Starting download";
+            BrainProblem = null;
+            ShowState();
+            Stopwatch since = Stopwatch.StartNew();
+            long shownAt = -1000;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                Action<string, long, long> progress = delegate(string text, long done, long total)
+                {
+                    long now = since.ElapsedMilliseconds;
+                    if (now - Interlocked.Read(ref shownAt) < 200 && done < total) return;
+                    Interlocked.Exchange(ref shownAt, now);
+                    string label = (viaOllama ? "Downloading " + pick.Name : text) + (total > 0 ? " · " + Engine.Amount(done) + " / " + Engine.Amount(total) : "");
+                    Dispatcher.UIThread.Post(delegate { if (SettingUp) { SetupText = label; ShowState(); } });
+                };
+                try
+                {
+                    if (viaOllama) Brain.Pull(pick.Ollama, progress, delegate { return builtIn.Cancel; });
+                    else builtIn.Install(pick, progress);
+                    Dispatcher.UIThread.Post(delegate { SetupText = "Loading " + pick.Name; ShowState(); });
+                    if (!viaOllama) builtIn.Ensure(pick);
+                    Dispatcher.UIThread.Post(delegate
+                    {
+                        SettingUp = false;
+                        SetupText = null;
+                        if (Brain.Remote != null) { builtIn.Stop(); ShowState(); return; }
+                        if (viaOllama) { DropBuiltIn(); Saved.Model = pick.Ollama; Save(); FindBrain(); }
+                        else UseBuiltIn(pick);
+                        ShowState();
+                        Reply(++asking, BrainHeard, "Brain online. I'm thinking with " + pick.Name + " on this " + (OperatingSystem.IsMacOS() ? "Mac" : "computer") + " now.");
+                    });
+                }
+                catch (OperationCanceledException) { Dispatcher.UIThread.Post(delegate { SettingUp = false; SetupText = null; ShowProblem("Cancelled. It picks up where it left off."); }); }
+                catch (Exception error)
+                {
+                    string problem = Brain.Brief(error.Message) ?? (error.Message.Length > 70 ? error.Message.Substring(0, 67) + "..." : error.Message);
+                    Dispatcher.UIThread.Post(delegate { SettingUp = false; SetupText = null; ShowProblem(problem); });
+                }
+            });
+        }
+
+        internal void CancelSetup() { builtIn.Cancel = true; }
+
         internal void FindBrain()
         {
             Cloud remote = Brain.Remote;
@@ -1475,12 +1566,21 @@ namespace CapriDesktop
                 string model = null;
                 try { model = Brain.PickModel(Brain.InstalledModels(), saved, null); }
                 catch (Exception) { }
+                Pick local = model == null && Engine.Supported ? builtIn.Installed() : null;
                 Dispatcher.UIThread.Post(delegate
                 {
-                    if (Brain.Remote != null || Brain.Model != null || model == null) return;
-                    Brain.Model = model;
-                    Saved.Model = model;
-                    Save();
+                    if (Brain.Remote != null || SettingUp) return;
+                    // Ollama's models come first, like on Windows.
+                    if (model != null && Brain.Local != null) DropBuiltIn();
+                    if (Brain.Model != null) return;
+                    if (model != null)
+                    {
+                        Brain.Model = model;
+                        Saved.Model = model;
+                        Save();
+                    }
+                    else if (local != null) UseBuiltIn(local);
+                    else return;
                     ShowState();
                 });
             });
@@ -1791,6 +1891,7 @@ namespace CapriDesktop
             Talk.Dismiss();
             GlitchOut(delegate
             {
+                builtIn.Stop();
                 Save();
                 frames.Stop();
                 desktop.Shutdown(0);
@@ -1799,6 +1900,7 @@ namespace CapriDesktop
 
         internal void Finish(int code)
         {
+            builtIn.Stop();
             frames.Stop();
             Talk.Dismiss();
             desktop.Shutdown(code);

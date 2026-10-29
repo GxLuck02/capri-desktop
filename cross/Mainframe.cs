@@ -28,6 +28,10 @@ namespace CapriDesktop
         private readonly TextBox keyBox = new TextBox { PasswordChar = '•', Width = 230, FontFamily = Look.Mono };
         private readonly Button connect = Make("Connect");
         private readonly Button ollama = Make("Get Ollama");
+        private readonly Button setUp = Make("Set up her brain");
+        private readonly Button cancel = Make("Cancel");
+        private readonly TextBlock setupNote = Line(10.5, Look.Dim, false);
+        private StackPanel setupRow;
         private readonly List<Panel> rows = new List<Panel>();
         private StackPanel keyRow;
         private bool syncing;
@@ -67,6 +71,11 @@ namespace CapriDesktop
             keyBox.AddHandler(KeyDownEvent, delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled = true; Connect(); } }, RoutingStrategies.Tunnel);
             keyRow = Row(keyBox, connect);
             page.Children.Add(keyRow);
+            setUp.Click += delegate { pet.SetUpBrain(); };
+            cancel.Click += delegate { pet.CancelSetup(); };
+            setupRow = Row(setUp, cancel);
+            page.Children.Add(setupRow);
+            page.Children.Add(setupNote);
             ollama.Click += delegate { Pet.Browse(Pet.OllamaPage); };
             page.Children.Add(ollama);
             Content = new Border { Background = new SolidColorBrush(Look.Panel), BorderBrush = new SolidColorBrush(Look.Red), BorderThickness = new Thickness(1), Child = page };
@@ -115,10 +124,15 @@ namespace CapriDesktop
                 brainNote.Text = "Running on this " + (OperatingSystem.IsMacOS() ? "Mac" : "computer");
                 choices.AddRange(local);
             }
+            else if (pet.Brain.Local != null)
+            {
+                brainName.Text = "Built-in · " + pet.Brain.Model;
+                brainNote.Text = "Running on this " + (OperatingSystem.IsMacOS() ? "Mac" : "computer");
+            }
             else
             {
                 brainName.Text = "No brain yet";
-                brainNote.Text = "Install Ollama, then run: ollama pull gemma4:e2b";
+                brainNote.Text = Engine.Supported ? "Press Set up her brain, or install Ollama." : "Install Ollama, then run: ollama pull gemma4:e2b";
             }
             if (pet.BrainProblem != null) brainNote.Text = pet.BrainProblem;
             menu.Items.Clear();
@@ -132,7 +146,13 @@ namespace CapriDesktop
             // NVIDIA model names run long, so the name shortens to keep Refresh on the window.
             models.Content = new TextBlock { Text = chosen ?? "Pick a model", MaxWidth = 220, TextTrimming = TextTrimming.CharacterEllipsis };
             models.IsVisible = choices.Count > 0;
-            ollama.IsVisible = remote == null && (local == null || local.Length == 0);
+            bool empty = remote == null && (local == null || local.Length == 0) && pet.Brain.Local == null;
+            setupRow.IsVisible = pet.SettingUp || (empty && pet.CanSetUp);
+            setUp.IsVisible = !pet.SettingUp;
+            cancel.IsVisible = pet.SettingUp;
+            setupNote.IsVisible = setupRow.IsVisible;
+            setupNote.Text = !setupRow.IsVisible ? "" : pet.SettingUp ? pet.SetupText : pet.OfferText;
+            ollama.IsVisible = empty && !pet.SettingUp && !Engine.Supported;
             tierNote.Text = tier == 1 ? "Most NVIDIA models can't see your screen." : "Pick one. Only one brain runs at a time.";
             keyRow.IsVisible = tier > 0;
             saved = remote != null;
@@ -160,7 +180,9 @@ namespace CapriDesktop
         internal void PressConnect() { Connect(); }
         internal void Choose(string model) { pet.PickModel(model); }
         internal bool OllamaShown { get { return ollama.IsVisible; } }
-        internal bool SetupShown { get { return false; } }
+        internal bool SetupShown { get { return setupRow.IsVisible && setUp.IsVisible; } }
+        internal string SetupStatus { get { return setupNote.Text; } }
+        internal void PressSetUp() { pet.SetUpBrain(); }
 
         internal string Choices
         {

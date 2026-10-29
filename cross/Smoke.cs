@@ -778,6 +778,42 @@ namespace CapriDesktop
                 bench.Sweep();
                 if (!stray.WaitForExit(3000) || File.Exists(pids)) throw new Exception("A brain left over from a crash wasn't stopped at start.");
                 checks.Add("PASS brain sweep: a brain left over from a crash is stopped when Capri starts");
+                Mainframe frame = pet.Frame;
+                pet.SetupPick = testPick;
+                frame.Render();
+                if (!frame.SetupShown || frame.SetupStatus != "Test Brain · " + Engine.Amount(testPick.Size + Engine.MacSize)) throw new Exception("NORMAL with no brain didn't offer Set up her brain with its size: " + frame.SetupStatus + " | " + frame.TextStatus);
+                frame.PressSetUp();
+                if (!pet.SettingUp) throw new Exception("Set up her brain didn't start.");
+                return true;
+            }
+            if (step == 31)
+            {
+                Mainframe frame = pet.Frame;
+                if (pet.SettingUp) return false;
+                if (pet.BrainProblem != null || pet.Brain.Local == null || pet.Brain.Model != "Test Brain" || !pet.BuiltIn.Running || !frame.TextStatus.StartsWith("tier 0 | Built-in · Test Brain | Running on this Mac", StringComparison.Ordinal) || frame.SetupShown) throw new Exception("Set up her brain didn't leave her on the built-in brain: " + pet.BrainProblem + " | " + frame.TextStatus);
+                Snap(frame.Content as Control, "mainframe-builtin.png");
+                pet.Think = null;
+                pet.Hear("hi there");
+                return true;
+            }
+            if (step == 32)
+            {
+                if (pet.Talk.Reply != CapriDesktop.FakeBrain.Line) return false;
+                checks.Add("PASS set up her brain: NORMAL offers it with its size, it installs and starts her built-in brain, and she answers through it");
+                pet.ChooseTier(1);
+                if (pet.BuiltIn.Running || pet.Brain.Local != null) throw new Exception("HIGHER left her built-in brain running.");
+                pet.ChooseTier(0);
+                pet.UseBuiltIn(testPick);
+                Brain.Ollama = FakeBrain();
+                pet.FindBrain();
+                return true;
+            }
+            if (step == 33)
+            {
+                if (pet.Brain.Local != null || pet.Brain.Model == null) return false;
+                if (pet.Brain.Model != "qwen3:4b" || pet.BuiltIn.Running) throw new Exception("With Ollama models, she didn't move off her built-in brain: " + pet.Brain.Model);
+                checks.Add("PASS brain choice: HIGHER stops her built-in brain, and Ollama models come first like on Windows");
+                fakeBrain.Stop();
                 pet.Frame.Close();
                 hub.Stop();
                 Send(shelf, "quit");
