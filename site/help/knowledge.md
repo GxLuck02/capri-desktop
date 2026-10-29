@@ -229,7 +229,7 @@ Yes. She keeps the chat for up to a week, even after a restart. Mainframe > Sett
 
 She also keeps in mind what she saw on your screen in the last 3 hours, so "what did you see?" gets a real answer instead of a guess (section 16).
 
-Older chats aren't lost either. She writes every chat into a daily transcript on your PC and folds older chats into memories.md, which she reads every time you talk. Ask "remember when we beat that boss?" and she looks it up in her transcripts (section 13).
+Older chats aren't lost either. She writes every chat into a daily transcript on your PC and folds older chats into memories.md, which she reads every time you talk. She also digs through her transcripts by herself: mention something from an older chat, like the boss you beat last week, and she finds that moment and can bring it up, no "remember when" needed (from 0.7.6). Ask "remember when we beat that boss?" and she pulls up every matching line she can find (section 13).
 
 For things she should never forget, use her notes (section 13).
 
@@ -767,15 +767,17 @@ With Remember our chats on (Mainframe > Settings > HABITS, on by default), she r
 - Transcripts: every chat goes into a file per day, like transcripts\2026-10-28.md. That's typed chat, voice chat, her glances at your screen with what she saw, and the jobs she did. You can read them in any text editor.
 - memories.md: when the chat outgrows what she keeps in mind, or a new day starts, the brain you picked folds the older lines into memories.md: a short note per day, oldest first. Older days get merged into an "Earlier" section as it grows, so it never fills up. If her brain leaves a day out, she keeps that day as it was.
 - She reads memories.md every time you talk, in text and voice chat, next to her notes. Edit or delete anything in it.
-- "Remember when we beat Malenia?" makes her search her transcripts for matching lines. The search runs on your PC.
-- memories.md follows the same rule as her notes: no addresses, schools, phone numbers, emails, passwords, full names, birthdays or bank details. Chat lines with them stay in your transcript but never go to her brain for folding, and "remember when" skips them.
+- She digs through her transcripts on her own (from 0.7.6). Every time you talk to her, she searches them for the few moments that match best and hands them to her brain with what was said back, so "Hornet's wrecking me again" can get "Didn't you beat her last week?". Only a good match counts: small talk and words you say all the time add nothing, so most messages bring nothing up. Lines already in her recent chat are skipped. It also searches her older notes, the ones in me.md beyond the newest 40 that no longer fit in what she reads each time.
+- "Remember when we beat Malenia?" makes her search harder: any matching line counts, up to 8, each with its reply.
+- Both searches run on your PC, in any of her languages, and cost no extra brain calls.
+- memories.md follows the same rule as her notes: no addresses, schools, phone numbers, emails, passwords, full names, birthdays or bank details. Chat lines with them stay in your transcript but never go to her brain for folding, and her searches skip them.
 - transcripts\unfolded.txt holds the newest lines she hasn't folded in yet.
 
 Where they are: Mainframe > Settings > Open her memories shows them in File Explorer. On Windows it's %LOCALAPPDATA%\Capri\memories.md and %LOCALAPPDATA%\Capri\transcripts. On Mac and Linux it's ~/.config/Capri/memories.md and ~/.config/Capri/transcripts, and right-click her > Settings > Open her memories opens memories.md. They stay on your computer and are never uploaded.
 
 What folding costs: with her built-in brain or Ollama it's free and runs on your PC. With an API key it's one small request each time, about 600 to 2,000 words in and up to 300 words out, which is usually well under a cent. The free NVIDIA key costs nothing. She folds about once every 10 to 15 messages (less often with a longer Memory setting) and once a day, and waits until the chat has been quiet for 20 seconds so she doesn't hold up a reply.
 
-Turn Remember our chats off and she stops writing transcripts, stops folding and stops reading memories.md. Nothing gets deleted. Delete the files yourself if you want them gone.
+Turn Remember our chats off and she stops writing transcripts, stops folding, stops searching them and stops reading memories.md. Nothing gets deleted. Delete the files yourself if you want them gone.
 
 ### Nickname: "What should she call you?"
 1. Mainframe > Settings.
@@ -1058,7 +1060,7 @@ Quit Capri, then delete the Capri folder you unpacked. Her settings are in ~/.co
 - Capri has no ads and no analytics.
 
 ### What goes to the services you pick
-- A brain key (NVIDIA, OpenAI, Claude, DeepSeek): your messages, her personality, her notes, memories.md, recent chat and what she saw on your screen lately go to that company. With Watch my screen on, or when you say "check my screen", so does the screenshot. With Remember our chats on, folding sends that company the newest transcript lines too, voice chat lines included.
+- A brain key (NVIDIA, OpenAI, Claude, DeepSeek): your messages, her personality, her notes, memories.md, recent chat and what she saw on your screen lately go to that company. With Watch my screen on, or when you say "check my screen", so does the screenshot. With Remember our chats on, folding sends that company the newest transcript lines too, voice chat lines included, and the few older lines her search finds for a message go with that message.
 - ElevenLabs: the text she says out loud. In ElevenLabs voice chat: your voice, your words, her personality, her notes, memories.md and what she saw lately.
 - Free voice chat in a language other than English uses Windows speech, which goes through Microsoft.
 
@@ -1128,7 +1130,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Sleep: standing, she falls asleep after 2 minutes without the mouse or keyboard, and wakes when you're back. Right-click her > Move > Fall asleep after sets the time, or Never. She needs to know how long you've been away: Mac always does, Linux through GNOME or, on other X11 desktops, xprintidle.
 - Sleep on demand (0.7.6 and newer): right-click her > Go to sleep, or tell her "go to sleep" or "take a nap". She sleeps until you click her, talk to her or say "wake up", whatever the mouse and keyboard do.
 - Quiet: right-click her, or the tray or menu bar icon, > Quiet. It's the same as Windows' quiet key (Ctrl + Alt + P): she stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her.
-- Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings)
+- Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings). She digs through them on her own here too.
 
 ### Not yet
 - No Mainframe. Everything is in her right-click menu.
