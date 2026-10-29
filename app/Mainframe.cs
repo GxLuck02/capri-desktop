@@ -1145,7 +1145,7 @@ namespace CapriDesktop
             foreach (string name in found ?? new List<string> { remote.Model })
             {
                 string pick = name;
-                modelMenu.Items.Add(Choice(name, name == remote.Model, delegate { capri.ChooseModel(pick); ShowCloud(remote, found); }));
+                modelMenu.Items.Add(Choice(Brain.Shown(remote.Kind, name), name == remote.Model, delegate { capri.ChooseModel(pick); ShowCloud(remote, found); }));
             }
             Arrange(false);
         }
@@ -1516,6 +1516,16 @@ namespace CapriDesktop
         internal string ServerChoices { get { return sheet.Choices; } }
 
         internal string CloudPicked { get { return cloudName; } }
+
+        internal string ModelChoices
+        {
+            get
+            {
+                List<string> names = new List<string>();
+                foreach (ToolStripMenuItem item in modelMenu.Items) names.Add(item.Text + (item.Checked ? " (picked)" : ""));
+                return string.Join(", ", names);
+            }
+        }
 
         internal string CloudMenu
         {

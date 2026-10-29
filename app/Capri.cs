@@ -10949,7 +10949,7 @@ namespace CapriDesktop
                                     "{\"content\":[],\"stop_reason\":\"refusal\"}",
                                     "{\"object\":\"list\",\"data\":[{\"id\":\"deepseek-v4-pro\",\"object\":\"model\",\"owned_by\":\"deepseek\"},{\"id\":\"deepseek-flash\",\"object\":\"model\",\"owned_by\":\"deepseek\"}]}",
                                     "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"DeepSeek here.\",\"reasoning_content\":null}}]}",
-                                    "{\"object\":\"list\",\"data\":[{\"id\":\"z-ai/glm-5.3\",\"created\":735790403},{\"id\":\"z-ai/glm-5.3-flash\",\"created\":735790403},{\"id\":\"nvidia/nemotron-3.5-super-vl-120b-a12b\",\"created\":735790403},{\"id\":\"nvidia/nv-embedqa-mistral-7b-v2\",\"created\":735790403},{\"id\":\"meta/codellama-70b\",\"created\":735790403},{\"id\":\"mistralai/mistral-large-3-675b-instruct-2512\",\"created\":735790403},{\"id\":\"google/gemma-4-31b-it\",\"created\":735790403},{\"id\":\"nvidia/nemotron-4-340b-reward\",\"created\":735790403},{\"id\":\"moonshotai/kimi-k2.6\",\"created\":735790403},{\"id\":\"nvidia/ai-synthetic-video-detector\",\"created\":735790403},{\"id\":\"bigcode/starcoder2-15b\",\"created\":735790403}]}",
+                                    "{\"object\":\"list\",\"data\":[{\"id\":\"z-ai/glm-5.3\",\"created\":735790403},{\"id\":\"z-ai/glm-5.3-flash\",\"created\":735790403},{\"id\":\"nvidia/nemotron-3.5-super-vl-120b-a12b\",\"created\":735790403},{\"id\":\"nvidia/nv-embedqa-mistral-7b-v2\",\"created\":735790403},{\"id\":\"meta/codellama-70b\",\"created\":735790403},{\"id\":\"mistralai/mistral-large-3-675b-instruct-2512\",\"created\":735790403},{\"id\":\"google/gemma-4-31b-it\",\"created\":735790403},{\"id\":\"nvidia/nemotron-4-340b-reward\",\"created\":735790403},{\"id\":\"moonshotai/kimi-k2.6\",\"created\":735790403},{\"id\":\"nvidia/ai-synthetic-video-detector\",\"created\":735790403},{\"id\":\"bigcode/starcoder2-15b\",\"created\":735790403},{\"id\":\"nvidia/nemotron-3-nano-omni-30b-a3b-reasoning\",\"created\":735790403}]}",
                                     "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Free brain online.\"}}]}"
                                 }, cloudAsked, out cloudFake);
                                 string realOpenAi = Brain.OpenAi;
@@ -10987,7 +10987,7 @@ namespace CapriDesktop
                                     cloudy.Forget();
                                     string deepSaid = cloudy.Ask("hey");
                                     System.Collections.Generic.List<string> freeModels = Brain.CloudModels("nvapi-test");
-                                    if (string.Join(",", freeModels.ToArray()) != "nvidia/nemotron-3.5-super-vl-120b-a12b,mistralai/mistral-large-3-675b-instruct-2512" || Brain.DefaultCloudModel("nvidia", freeModels) != "nvidia/nemotron-3.5-super-vl-120b-a12b") throw new Exception("NVIDIA models were read wrong: " + string.Join(",", freeModels.ToArray()));
+                                    if (string.Join(",", freeModels.ToArray()) != "nvidia/nemotron-3.5-super-vl-120b-a12b,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning,mistralai/mistral-large-3-675b-instruct-2512" || Brain.DefaultCloudModel("nvidia", freeModels) != "nvidia/nemotron-3.5-super-vl-120b-a12b") throw new Exception("NVIDIA models were read wrong: " + string.Join(",", freeModels.ToArray()));
                                     cloudy.Remote = new Cloud("nvapi-test", "google/gemma-4-31b-it");
                                     cloudy.Model = "google/gemma-4-31b-it";
                                     cloudy.Forget();
@@ -11044,6 +11044,11 @@ namespace CapriDesktop
                                     if (!mainframe.TextStatus.StartsWith("tier 0 | ", StringComparison.Ordinal) || !mainframe.TextStatus.EndsWith("| no key row", StringComparison.Ordinal) || !mainframe.TiersFit) throw new Exception("The brain tiers are wrong with no key: " + mainframe.TextStatus);
                                     mainframe.ShowTiers(1, null, null);
                                     if (!mainframe.TextStatus.EndsWith("| Paste your free NVIDIA key | Connect", StringComparison.Ordinal) || !mainframe.TiersFit) throw new Exception("HIGHER without a key is wrong: " + mainframe.TextStatus);
+                                    // HIGHER's model menu marks Nemotron Super and Nemotron's reasoning model as recommended, at its top.
+                                    mainframe.ShowCloud(new Cloud("nvapi-test", "nvidia/nemotron-3.5-super-vl-120b-a12b"), freeModels);
+                                    string freeMenu = mainframe.ModelChoices;
+                                    if (freeMenu != "nvidia/nemotron-3.5-super-vl-120b-a12b · recommended (picked), nvidia/nemotron-3-nano-omni-30b-a3b-reasoning · recommended, mistralai/mistral-large-3-675b-instruct-2512")
+                                        throw new Exception("HIGHER's model menu didn't mark the recommended models: " + freeMenu);
                                     mainframe.ShowCloud(new Cloud("sk-ant-test", "claude-opus-5-5"), claudeModels);
                                     mainframe.ShowTiers(2, null, "test");
                                     if (mainframe.TextStatus != "tier 2 | Claude · claude-opus-5-5 | Using your Anthropic key | Key saved, ends test | Forget" || !mainframe.TiersFit) throw new Exception("The Mainframe did not show the API brain: " + mainframe.TextStatus);
@@ -11105,7 +11110,7 @@ namespace CapriDesktop
                                     Brain.Nvidia = realNvidia;
                                     cloudFake.Stop();
                                 }
-                                checks.Add("PASS API brain: sorts NVIDIA, OpenAI, Claude and DeepSeek keys, reads their model lists, picks defaults, sends each provider's request shape with tools, runs their tool calls, handles a refusal, and shows the brain tiers: NORMAL (free, local, start with this), HIGHER (free NVIDIA key) and MAX INTELLIGENCE (ChatGPT or Claude key), one at a time, each with its own saved key, an old key moving to its tier, and a tier without its key running her own brain");
+                                checks.Add("PASS API brain: sorts NVIDIA, OpenAI, Claude and DeepSeek keys, reads their model lists (an NVIDIA key's with Nemotron Super and Nemotron's reasoning model marked recommended at the top), picks defaults, sends each provider's request shape with tools, runs their tool calls, handles a refusal, and shows the brain tiers: NORMAL (free, local, start with this), HIGHER (free NVIDIA key) and MAX INTELLIGENCE (ChatGPT or Claude key), one at a time, each with its own saved key, an old key moving to its tier, and a tier without its key running her own brain");
                                 System.Collections.Generic.List<string> quickAsked = new System.Collections.Generic.List<string>();
                                 System.Net.Sockets.TcpListener quickFake;
                                 Brain.Nvidia = FakeServer(new string[]
