@@ -1258,6 +1258,7 @@ namespace CapriDesktop
     {
         [PreserveSig] int EnumAudioEndpoints(int flow, int states, out IntPtr devices);
         [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out ISoundDevice device);
+        [PreserveSig] int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, out ISoundDevice device);
     }
 
     [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -1345,6 +1346,38 @@ namespace CapriDesktop
                 return act((ISpeakerVolume)found) == 0;
             }
             catch (Exception) { return false; }
+            finally
+            {
+                if (found != null) Marshal.ReleaseComObject(found);
+                if (device != null) Marshal.ReleaseComObject(device);
+                if (devices != null) Marshal.ReleaseComObject(devices);
+            }
+        }
+    }
+
+    // Windows' own mute on a mic: the picked one, or the default one when none is picked or it's gone. Null when Windows won't say.
+    internal static class Mics
+    {
+        internal static bool? Muted(string id)
+        {
+            ISoundDevices devices = null;
+            ISoundDevice device = null;
+            object found = null;
+            try
+            {
+                devices = (ISoundDevices)new SoundDevices();
+                if (string.IsNullOrEmpty(id) || devices.GetDevice(id, out device) != 0 || device == null)
+                {
+                    if (device != null) Marshal.ReleaseComObject(device);
+                    device = null;
+                    if (devices.GetDefaultAudioEndpoint(1, 0, out device) != 0 || device == null) return null;
+                }
+                Guid volumeId = typeof(ISpeakerVolume).GUID;
+                if (device.Activate(ref volumeId, 23, IntPtr.Zero, out found) != 0 || found == null) return null;
+                bool muted;
+                return ((ISpeakerVolume)found).GetMute(out muted) == 0 ? muted : (bool?)null;
+            }
+            catch (Exception) { return null; }
             finally
             {
                 if (found != null) Marshal.ReleaseComObject(found);
@@ -1584,5 +1617,312 @@ namespace CapriDesktop
             catch (Exception) { }
             finally { if (tap != null) tap.Dispose(); }
         }
+    }
+
+    // "Hey Capri": k2-fsa's 3.3M-parameter streaming Zipformer keyword spotter, trained on GigaSpeech (Apache-2.0), run by the
+    // sherpa-onnx her free voice ships. It hears its own mic on the PC and keeps no audio, so nothing leaves the PC until it
+    // fires and voice chat opens.
+    internal sealed class WakeWord : IDisposable
+    {
+        internal const string Pack = "kws-zipformer-gigaspeech-3.3M-2024-01-01";
+        internal static string PackUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2";
+        internal static string PackSha = "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a";
+        internal static long PackSize = 17626723;
+        private const string Inside = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01";
+        private const string Encoder = "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx", Decoder = "decoder-epoch-12-avg-2-chunk-16-left-64.onnx", Joiner = "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx";
+        internal static readonly string[] Needed = { Encoder, Decoder, Joiner, "tokens.txt" };
+        // HEY CAPRI in the model's BPE pieces, from its own bpe.model. The boost and threshold were tuned on 918 clips of her
+        // four free voices and Windows' two, clean, under noise and from across the room: about 97% of clean and quiet
+        // "Hey Capri"s and 72% under noise fired, and none of 594 other lines or 10 minutes of talk did. A boost of 3 fired
+        // on "a caprese salad".
+        internal static string[] Phrases = { "▁HE Y ▁CA P RI" };
+        internal static float Boost = 2f;
+        internal static float Threshold = 0.1f;
+        private readonly string root;
+        private readonly string engine;
+        private readonly object gate = new object();
+        private readonly Ears mic = new Ears();
+        private IntPtr spotter, stream;
+        private volatile bool held;
+        private bool heldWas;
+        internal volatile bool Cancel;
+        // On the mic's thread.
+        internal event Action Heard;
+
+        internal WakeWord(string data) : this(Path.Combine(data, "wake"), LocalVoice.Folder(data)) { }
+
+        internal WakeWord(string models, string voice)
+        {
+            root = models;
+            engine = voice;
+            mic.Heard += Hear;
+        }
+
+        private string Folder { get { return Path.Combine(root, Pack); } }
+
+        internal bool Installed { get { return Complete(Folder); } }
+
+        // Ready to listen: the pack is in, and so is the free voice that brings sherpa-onnx.
+        internal bool Ready { get { return IntPtr.Size == 8 && Installed && File.Exists(Path.Combine(engine, "sherpa-onnx-c-api.dll")) && File.Exists(Path.Combine(engine, "onnxruntime.dll")); } }
+
+        internal bool VoiceIn { get { return File.Exists(Path.Combine(engine, "sherpa-onnx-c-api.dll")) && File.Exists(Path.Combine(engine, "onnxruntime.dll")); } }
+
+        // The mic is open: Windows shows its mic-in-use icon.
+        internal bool Listening { get { return mic.Listening; } }
+
+        // While she talks the mic stays open but nothing is decoded, so her own voice can't wake her.
+        internal bool Held { get { return held; } set { held = value; } }
+
+        private static bool Complete(string where)
+        {
+            foreach (string name in Needed) if (!File.Exists(Path.Combine(where, name))) return false;
+            return true;
+        }
+
+        internal void Install(Action<string, long, long> progress)
+        {
+            if (IntPtr.Size != 8) throw new IOException("Listening for \"Hey Capri\" needs 64-bit Windows.");
+            string folder = Folder;
+            Directory.CreateDirectory(root);
+            long needed = PackSize * 3 + (16L << 20);
+            string drive = Path.GetPathRoot(Path.GetFullPath(root));
+            if (new DriveInfo(drive).AvailableFreeSpace < needed) throw new IOException("Listening for \"Hey Capri\" needs " + Engine.Amount(needed) + " free on " + drive.TrimEnd('\\') + ".");
+            string tarball = folder + ".tar.bz2";
+            Engine.Fetch(PackUrl, tarball, PackSize, PackSha, "her wake word", progress, delegate { return Cancel; });
+            progress("Unpacking her wake word", PackSize, PackSize);
+            string staging = folder + ".new";
+            if (Directory.Exists(staging)) Directory.Delete(staging, true);
+            Directory.CreateDirectory(staging);
+            LocalEars.Untar(tarball, staging);
+            string unpacked = Path.Combine(staging, Inside);
+            if (!Complete(unpacked)) throw new IOException("The \"Hey Capri\" download is missing files.");
+            lock (gate)
+            {
+                Close();
+                if (Directory.Exists(folder)) Directory.Delete(folder, true);
+                Directory.Move(unpacked, folder);
+            }
+            Directory.Delete(staging, true);
+            File.Delete(tarball);
+        }
+
+        // Opens the spotter and the mic. Throws VoiceException when the mic won't open and IOException when the spotter won't.
+        internal void Listen(string chosen)
+        {
+            lock (gate) { Open(); Fresh(); }
+            if (mic.Listening) return;
+            mic.Chosen = chosen;
+            lastChunk = Environment.TickCount;
+            mic.Start();
+        }
+
+        // Loads the spotter and a live stream without the mic, so the next Listen opens at once. Seconds, the first time.
+        internal void Warm() { lock (gate) { Open(); if (stream == IntPtr.Zero) Fresh(); } }
+
+        internal bool Warmed { get { return spotter != IntPtr.Zero; } }
+
+        // The mic is open but nothing has come from it for 5 s: unplugged, or lost when the PC slept.
+        internal bool Stalled { get { return mic.Listening && Environment.TickCount - lastChunk > 5000; } }
+        private volatile int lastChunk;
+
+        // Hands the live stream a chunk as if the mic had heard it.
+        internal void Feed(short[] chunk) { Hear(chunk); }
+
+        // Closes the mic and keeps the spotter loaded for the next Listen.
+        internal void Pause()
+        {
+            mic.Stop();
+            lock (gate) Fresh();
+        }
+
+        public void Dispose()
+        {
+            mic.Stop();
+            lock (gate) Close();
+        }
+
+        private void Hear(short[] chunk)
+        {
+            lastChunk = Environment.TickCount;
+            bool fired = false;
+            lock (gate)
+            {
+                if (spotter == IntPtr.Zero || stream == IntPtr.Zero) return;
+                if (held) { heldWas = true; return; }
+                // What she half-heard before she spoke is dropped, so the end of her line can't finish a keyword.
+                if (heldWas) { heldWas = false; Fresh(); }
+                // A quiet room isn't decoded: only sound over three times the room's own hiss is, from half a second before
+                // it to two seconds after, so a quiet day costs almost nothing. The room's level sinks quickly, rises with the
+                // hiss over seconds, and only creeps up under talking, so a soft "Hey Capri" after loud talk still gets through.
+                // A muted or gated mic's dead silence says nothing about the room, so it's left out.
+                double level = Speaker.Loudness(chunk, 0, chunk.Length);
+                if (level < Hiss / 50) { }
+                else if (room < 0) room = level;
+                else if (level < room) room += (level - room) * 0.3;
+                else if (level < room * Louder) room += (level - room) * 0.01;
+                else room *= 1.002;
+                Chunks++;
+                if (level > Math.Max(room * Louder, Hiss))
+                {
+                    if (quietFor > After) foreach (short[] early in before) fired |= Decode(stream, Wave(early));
+                    before.Clear();
+                    quietFor = 0;
+                }
+                else if (++quietFor > After)
+                {
+                    before.Enqueue(chunk);
+                    if (before.Count > Before) before.Dequeue();
+                    return;
+                }
+                Decoded++;
+                fired |= Decode(stream, Wave(chunk));
+            }
+            Action heard = Heard;
+            if (fired && heard != null) heard();
+        }
+
+        // In 100 ms chunks: the room's level, how long it's been quiet, and the half second kept from before a sound.
+        private const int Before = 5, After = 20;
+        private const double Hiss = 0.0005;
+        internal static double Louder = 3;
+        // Chunks heard, and decoded past the quiet gate.
+        internal int Chunks, Decoded;
+        private double room = -1;
+        internal double Room { get { return room; } }
+        private int quietFor = After + 1;
+        private readonly Queue<short[]> before = new Queue<short[]>();
+
+        // How many times "Hey Capri" is in a clip of 16 kHz speech, heard on a stream of its own. For her smoke test.
+        internal int Spot(short[] clip)
+        {
+            lock (gate)
+            {
+                Open();
+                IntPtr own = SherpaOnnxCreateKeywordStream(spotter);
+                if (own == IntPtr.Zero) throw new IOException("Her wake word glitched.");
+                try
+                {
+                    int found = 0;
+                    for (int at = 0; at < clip.Length; at += Ears.Chunk)
+                    {
+                        short[] chunk = new short[Math.Min(Ears.Chunk, clip.Length - at)];
+                        Array.Copy(clip, at, chunk, 0, chunk.Length);
+                        if (Decode(own, Wave(chunk))) found++;
+                    }
+                    // A second of quiet after it, the way a room goes quiet after someone talks.
+                    for (int i = 0; i < 10; i++) if (Decode(own, new float[Ears.Chunk])) found++;
+                    return found;
+                }
+                finally { SherpaOnnxDestroyOnlineStream(own); }
+            }
+        }
+
+        private static float[] Wave(short[] chunk)
+        {
+            float[] wave = new float[chunk.Length];
+            for (int i = 0; i < chunk.Length; i++) wave[i] = chunk[i] / 32768f;
+            return wave;
+        }
+
+        private bool Decode(IntPtr on, float[] wave)
+        {
+            SherpaOnnxOnlineStreamAcceptWaveform(on, Ears.Rate, wave, wave.Length);
+            bool fired = false;
+            while (SherpaOnnxIsKeywordStreamReady(spotter, on) == 1)
+            {
+                SherpaOnnxDecodeKeywordStream(spotter, on);
+                IntPtr result = SherpaOnnxGetKeywordResult(spotter, on);
+                if (result == IntPtr.Zero) continue;
+                try
+                {
+                    IntPtr keyword = Marshal.ReadIntPtr(result);
+                    if (keyword == IntPtr.Zero || Marshal.ReadByte(keyword) == 0) continue;
+                    fired = true;
+                    SherpaOnnxResetKeywordStream(spotter, on);
+                }
+                finally { SherpaOnnxDestroyKeywordResult(result); }
+            }
+            return fired;
+        }
+
+        // A fresh start for the live stream: nothing half-heard carries over.
+        private void Fresh()
+        {
+            heldWas = false;
+            before.Clear();
+            quietFor = After + 1;
+            if (spotter == IntPtr.Zero) return;
+            if (stream != IntPtr.Zero) SherpaOnnxDestroyOnlineStream(stream);
+            stream = SherpaOnnxCreateKeywordStream(spotter);
+        }
+
+        private void Open()
+        {
+            if (spotter != IntPtr.Zero) return;
+            if (!Ready) throw new IOException("Her wake word isn't in yet.");
+            LocalVoice.Load(engine);
+            List<IntPtr> kept = new List<IntPtr>();
+            Func<string, IntPtr> keep = delegate(string value) { IntPtr pointer = LocalVoice.Utf8(value); kept.Add(pointer); return pointer; };
+            string tuning = " :" + Boost.ToString("0.###", CultureInfo.InvariantCulture) + " #" + Threshold.ToString("0.###", CultureInfo.InvariantCulture) + " @HEY_CAPRI";
+            byte[] keywords = Encoding.UTF8.GetBytes(string.Join("\n", Array.ConvertAll(Phrases, delegate(string phrase) { return phrase + tuning; })));
+            string folder = Folder;
+            // SherpaOnnxKeywordSpotterConfig from sherpa-onnx 1.13.8 on 64-bit Windows, written by offset: feat_config at 0,
+            // model_config at 8 (transducer, paraformer, zipformer2_ctc, tokens at 56, num_threads at 64, provider at 72, ...,
+            // ending at 144), then max_active_paths, num_trailing_blanks, keywords_score, keywords_threshold, keywords_file,
+            // keywords_buf at 168 and keywords_buf_size at 176. Zero leaves the library's default.
+            IntPtr config = Marshal.AllocHGlobal(ConfigBytes);
+            try
+            {
+                for (int at = 0; at < ConfigBytes; at += 8) Marshal.WriteInt64(config, at, 0);
+                Marshal.WriteInt32(config, 0, Ears.Rate);
+                Marshal.WriteInt32(config, 4, 80);
+                Marshal.WriteIntPtr(config, 8, keep(Path.Combine(folder, Encoder)));
+                Marshal.WriteIntPtr(config, 16, keep(Path.Combine(folder, Decoder)));
+                Marshal.WriteIntPtr(config, 24, keep(Path.Combine(folder, Joiner)));
+                Marshal.WriteIntPtr(config, 56, keep(Path.Combine(folder, "tokens.txt")));
+                // One thread: it runs all day.
+                Marshal.WriteInt32(config, 64, 1);
+                Marshal.WriteIntPtr(config, 72, keep("cpu"));
+                Marshal.WriteInt32(config, 144, 4);
+                Marshal.WriteInt32(config, 148, 1);
+                Marshal.WriteInt32(config, 152, BitConverter.ToInt32(BitConverter.GetBytes(Boost), 0));
+                Marshal.WriteInt32(config, 156, BitConverter.ToInt32(BitConverter.GetBytes(Threshold), 0));
+                IntPtr buffer = Marshal.AllocHGlobal(keywords.Length + 1);
+                kept.Add(buffer);
+                Marshal.Copy(keywords, 0, buffer, keywords.Length);
+                Marshal.WriteByte(buffer, keywords.Length, 0);
+                Marshal.WriteIntPtr(config, 168, buffer);
+                Marshal.WriteInt32(config, 176, keywords.Length);
+                spotter = SherpaOnnxCreateKeywordSpotter(config);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(config);
+                foreach (IntPtr pointer in kept) Marshal.FreeHGlobal(pointer);
+            }
+            if (spotter == IntPtr.Zero) throw new IOException("Her wake word wouldn't start.");
+        }
+
+        // More than the real struct's 184 bytes, which only grows at its end.
+        private const int ConfigBytes = 1024;
+
+        private void Close()
+        {
+            if (stream != IntPtr.Zero) SherpaOnnxDestroyOnlineStream(stream);
+            stream = IntPtr.Zero;
+            if (spotter != IntPtr.Zero) SherpaOnnxDestroyKeywordSpotter(spotter);
+            spotter = IntPtr.Zero;
+        }
+
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr SherpaOnnxCreateKeywordSpotter(IntPtr config);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void SherpaOnnxDestroyKeywordSpotter(IntPtr spotter);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr SherpaOnnxCreateKeywordStream(IntPtr spotter);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void SherpaOnnxDestroyOnlineStream(IntPtr stream);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void SherpaOnnxOnlineStreamAcceptWaveform(IntPtr stream, int sampleRate, float[] samples, int count);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int SherpaOnnxIsKeywordStreamReady(IntPtr spotter, IntPtr stream);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void SherpaOnnxDecodeKeywordStream(IntPtr spotter, IntPtr stream);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr SherpaOnnxGetKeywordResult(IntPtr spotter, IntPtr stream);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void SherpaOnnxDestroyKeywordResult(IntPtr result);
+        [DllImport("sherpa-onnx-c-api.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void SherpaOnnxResetKeywordStream(IntPtr spotter, IntPtr stream);
     }
 }
