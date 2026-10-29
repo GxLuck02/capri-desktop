@@ -20,7 +20,7 @@ namespace CapriDesktop
 {
     internal static class Program
     {
-        // Set when she closed while starting last time, so this start moved settings.json aside.
+        // Set when she closed while starting twice in a row, so this start moved settings.json aside and kept her keys.
         internal static bool StartedFresh;
         internal const string StartMarker = "starting.on";
         private static string lastCrash;
@@ -72,8 +72,9 @@ namespace CapriDesktop
             }
         }
 
-        // A start that never settled means she crashed while starting. Then settings.json moves aside, the same fix as
-        // deleting it, and she starts fresh. True when that happened.
+        // A start that never settled means she closed while starting: a crash, but also Task Manager, an antivirus, a stuck
+        // shutdown or the power going off in her first 15 s. Two of those in a row move settings.json aside, the same fix as
+        // deleting it, and she starts fresh with her keys kept (JustAxolotl lost theirs to one). True when that happened.
         internal static bool Starting(string data)
         {
             string marker = Path.Combine(data, StartMarker);
@@ -82,19 +83,54 @@ namespace CapriDesktop
             try
             {
                 Directory.CreateDirectory(data);
-                if (File.Exists(marker) && File.Exists(settings))
+                // The marker's second line counts the unfinished starts before the one that wrote it. One from before 0.7.6 has none.
+                int unfinished = 0;
+                if (File.Exists(marker))
+                {
+                    string[] lines = File.ReadAllLines(marker);
+                    int earlier;
+                    unfinished = 1 + (lines.Length > 1 && int.TryParse(lines[1], out earlier) && earlier > 0 ? earlier : 0);
+                }
+                if (unfinished >= 2 && File.Exists(settings))
                 {
                     string kept = Path.Combine(data, "settings.crashed.json");
                     if (File.Exists(kept)) File.Delete(kept);
                     File.Move(settings, kept);
+                    KeepKeys(kept, settings);
                     fresh = true;
-                    Brain.Log("startup", -1, "Capri closed while starting last time, so she started with fresh settings. The old ones are in settings.crashed.json.");
+                    unfinished = 0;
+                    Brain.Log("startup", -1, "Capri closed while starting twice in a row, so she started with fresh settings and kept your keys. The old ones are in settings.crashed.json.");
                 }
-                File.WriteAllText(marker, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                else if (unfinished == 1) Brain.Log("startup", -1, "Capri closed while starting last time. If it happens again, she starts with fresh settings and keeps your keys.");
+                File.WriteAllText(marker, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + Environment.NewLine + unfinished);
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
             return fresh;
+        }
+
+        // A fresh start keeps what can't crash her: her brain and voice keys with what each one is for (model, voice, agent,
+        // server), and her own keys to talk, mute, type, hide and go quiet. The rest starts like a new install. Settings that
+        // can't be read keep nothing.
+        private static void KeepKeys(string crashed, string settings)
+        {
+            Preferences old;
+            try { using (FileStream stream = File.OpenRead(crashed)) old = (Preferences)new DataContractJsonSerializer(typeof(Preferences)).ReadObject(stream); }
+            catch (Exception) { return; }
+            Preferences fresh = new Preferences { Language = Brain.SystemLanguage(System.Globalization.CultureInfo.CurrentUICulture) };
+            fresh.VoiceKey = old.VoiceKey; fresh.VoiceId = old.VoiceId; fresh.VoiceModel = old.VoiceModel;
+            fresh.AgentId = old.AgentId; fresh.AgentVersion = old.AgentVersion; fresh.AgentPolyglot = old.AgentPolyglot; fresh.AgentPersonality = old.AgentPersonality;
+            fresh.TextKey = old.TextKey; fresh.TextModel = old.TextModel;
+            fresh.NvidiaKey = old.NvidiaKey; fresh.NvidiaModel = old.NvidiaModel;
+            fresh.PaidKey = old.PaidKey; fresh.PaidModel = old.PaidModel;
+            fresh.ServerUrl = old.ServerUrl; fresh.ServerApi = old.ServerApi; fresh.ServerModel = old.ServerModel; fresh.ServerSpeaker = old.ServerSpeaker; fresh.ServerKey = old.ServerKey;
+            fresh.AsideUrl = old.AsideUrl; fresh.AsideApi = old.AsideApi; fresh.AsideModel = old.AsideModel; fresh.AsideSpeaker = old.AsideSpeaker; fresh.AsideKey = old.AsideKey;
+            fresh.CloudVoice = old.CloudVoice;
+            fresh.TalkMods = old.TalkMods; fresh.TalkVk = old.TalkVk; fresh.MuteMods = old.MuteMods; fresh.MuteVk = old.MuteVk;
+            fresh.TypeMods = old.TypeMods; fresh.TypeVk = old.TypeVk; fresh.HideMods = old.HideMods; fresh.HideVk = old.HideVk;
+            fresh.QuietMods = old.QuietMods; fresh.QuietVk = old.QuietVk;
+            try { using (FileStream stream = File.Create(settings)) new DataContractJsonSerializer(typeof(Preferences)).WriteObject(stream, fresh); }
+            catch (Exception) { try { File.Delete(settings); } catch (Exception) { } }
         }
 
         // A crash goes in errors.txt: what it was and where in her code, so Copy error details shows it.
@@ -1201,7 +1237,7 @@ namespace CapriDesktop
                 balloonPage = null;
                 balloonUpdate = false;
                 balloonMainframe = true;
-                tray.ShowBalloonTip(12000, "Capri started fresh", "She closed while starting last time, so her settings were reset, keys too. The old ones are in settings.crashed.json.", ToolTipIcon.Warning);
+                tray.ShowBalloonTip(12000, "Capri started fresh", "She closed while starting twice in a row, so her settings were reset. Your keys stayed. The old settings are in settings.crashed.json.", ToolTipIcon.Warning);
             }
         }
 
@@ -8366,29 +8402,45 @@ namespace CapriDesktop
                                 if (Directory.Exists(startCheck)) Directory.Delete(startCheck, true);
                                 Directory.CreateDirectory(startCheck);
                                 Brain.LogPath = Path.Combine(startCheck, "errors.txt");
-                                File.WriteAllText(Path.Combine(startCheck, "settings.json"), "{\"Size\":300}");
+                                string startSettings = Path.Combine(startCheck, "settings.json"), startMark = Path.Combine(startCheck, Program.StartMarker);
+                                File.WriteAllText(startSettings, "{\"Size\":300,\"Watch\":true,\"NvidiaKey\":\"kept-nvidia\",\"PaidKey\":\"kept-paid\",\"VoiceKey\":\"kept-voice-key\",\"VoiceId\":\"kept-voice\",\"ServerUrl\":\"https://api.fish.audio\",\"ServerKey\":\"kept-server\",\"TalkMods\":2,\"TalkVk\":75}");
                                 bool firstStart = Program.Starting(startCheck);
-                                bool marked = File.Exists(Path.Combine(startCheck, Program.StartMarker)) && File.Exists(Path.Combine(startCheck, "settings.json"));
+                                bool marked = File.Exists(startMark) && File.Exists(startSettings);
+                                // One start that never settled only warns: Task Manager or a stuck shutdown can do that once.
+                                bool onceClosed = Program.Starting(startCheck);
+                                bool keptOnce = File.ReadAllText(startSettings).Contains("300") && !File.Exists(Path.Combine(startCheck, "settings.crashed.json"));
                                 bool crashedStart = Program.Starting(startCheck);
-                                bool movedAside = !File.Exists(Path.Combine(startCheck, "settings.json")) && File.ReadAllText(Path.Combine(startCheck, "settings.crashed.json")).Contains("300");
-                                File.Delete(Path.Combine(startCheck, Program.StartMarker));
-                                File.WriteAllText(Path.Combine(startCheck, "settings.json"), "{\"Size\":300}");
-                                bool cleanStart = !Program.Starting(startCheck) && File.Exists(Path.Combine(startCheck, "settings.json"));
+                                Preferences afterReset;
+                                using (FileStream stream = File.OpenRead(startSettings)) afterReset = (Preferences)new DataContractJsonSerializer(typeof(Preferences)).ReadObject(stream);
+                                bool movedAside = File.ReadAllText(Path.Combine(startCheck, "settings.crashed.json")).Contains("300") && afterReset.Size == 240 && !afterReset.Watch
+                                    && afterReset.NvidiaKey == "kept-nvidia" && afterReset.PaidKey == "kept-paid" && afterReset.VoiceKey == "kept-voice-key" && afterReset.VoiceId == "kept-voice"
+                                    && afterReset.ServerUrl == "https://api.fish.audio" && afterReset.ServerKey == "kept-server" && afterReset.TalkMods == 2 && afterReset.TalkVk == 75 && afterReset.MuteVk == 0x4E
+                                    && File.ReadAllLines(startMark)[1] == "0";
+                                File.Delete(startMark);
+                                File.WriteAllText(startSettings, "{\"Size\":300}");
+                                bool cleanStart = !Program.Starting(startCheck) && File.ReadAllText(startSettings).Contains("300");
+                                // A marker from before 0.7.6 holds only the time: one unfinished start, so it warns.
+                                File.WriteAllText(startMark, "2026-10-28 10:00:00");
+                                bool oldMarker = !Program.Starting(startCheck) && File.ReadAllText(startSettings).Contains("300") && File.ReadAllLines(startMark)[1] == "1";
+                                // Settings that can't be read keep nothing, so she starts like a new install.
+                                File.WriteAllText(startSettings, "{not json");
+                                bool brokenFresh = Program.Starting(startCheck) && !File.Exists(startSettings) && File.ReadAllText(Path.Combine(startCheck, "settings.crashed.json")) == "{not json";
                                 try { throw new InvalidOperationException("Test crash " + Guid.NewGuid().ToString("N")); }
                                 catch (InvalidOperationException crash) { Program.Crashed(new System.Reflection.TargetInvocationException(crash)); Program.Crashed(crash); }
                                 string[] logged = File.ReadAllLines(Brain.LogPath);
                                 int crashLines = 0;
                                 foreach (string line in logged) if (line.Contains(" | crash | ")) crashLines++;
                                 bool crashLogged = Array.Exists(logged, delegate(string line) { return line.Contains(" | crash | - | InvalidOperationException: Test crash"); }) && Array.Exists(logged, delegate(string line) { return line.Contains(" | crash | - | at CapriDesktop."); }) && crashLines >= 2 && crashLines <= 5;
-                                bool restartLogged = Array.Exists(logged, delegate(string line) { return line.Contains("started with fresh settings"); });
-                                if (firstStart || !marked || !crashedStart || !movedAside || !cleanStart || !crashLogged || !restartLogged) throw new Exception("Crash recovery: first " + firstStart + ", marked " + marked + ", crashed start " + crashedStart + ", moved aside " + movedAside + ", clean start " + cleanStart + ", crash logged " + crashLogged + " (" + crashLines + " lines), restart logged " + restartLogged);
+                                bool restartLogged = Array.Exists(logged, delegate(string line) { return line.Contains("started with fresh settings and kept your keys"); })
+                                    && Array.Exists(logged, delegate(string line) { return line.Contains("If it happens again, she starts with fresh settings"); });
+                                if (firstStart || !marked || onceClosed || !keptOnce || !crashedStart || !movedAside || !cleanStart || !oldMarker || !brokenFresh || !crashLogged || !restartLogged) throw new Exception("Crash recovery: first " + firstStart + ", marked " + marked + ", once closed " + onceClosed + ", kept once " + keptOnce + ", crashed start " + crashedStart + ", moved aside with keys " + movedAside + ", clean start " + cleanStart + ", old marker " + oldMarker + ", broken settings " + brokenFresh + ", crash logged " + crashLogged + " (" + crashLines + " lines), restart logged " + restartLogged);
                             }
                             finally
                             {
                                 Brain.LogPath = logWas;
                                 try { Directory.Delete(startCheck, true); } catch (IOException) { }
                             }
-                            checks.Add("PASS crash recovery: a crash goes in errors.txt with where in her code it happened (once, not every tick), and if she closed while starting, the next start moves settings.json aside to settings.crashed.json, says so and starts fresh, while a clean start keeps it");
+                            checks.Add("PASS crash recovery: a crash goes in errors.txt with where in her code it happened (once, not every tick); one start that never settled (or a marker from before 0.7.6) only warns, and two in a row move settings.json aside to settings.crashed.json, say so and start fresh with her brain and voice keys, what they're for and her hotkeys kept; settings that can't be read keep nothing, and a clean start keeps them all");
                             {
                                 // A pretend Discord on its own pipe: she says hello with the app's id, shows what she's doing with her
                                 // picture and buttons, and hangs up when Show on Discord goes off.

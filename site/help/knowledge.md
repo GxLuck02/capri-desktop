@@ -1249,6 +1249,9 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 - "Installing the local speech model" is taking a while: it's about 316 MB. Wait, or press Skip and get it later with Get free voice under VOICE.
 - "Couldn't install the local speech model": Capri is still installed. Press Finish, then pick FREE VOICE in the Mainframe and press Get free voice.
 
+### "Capri started fresh": my settings were reset
+If she closes twice in a row while she's starting (a crash, but also Task Manager, an antivirus closing her, a stuck shutdown or the power going off in her first 15 seconds), the next start resets her settings and her tray icon says "Capri started fresh". From 0.7.6 she keeps your keys: brain and voice keys with the model, voice and server each one is for, and her own keys to talk, mute, type, hide and go quiet. Everything else starts like a new install, and the old settings are in settings.crashed.json in %LOCALAPPDATA%\Capri. One start that didn't finish only goes in errors.txt. Before 0.7.6 one was enough to reset everything, keys too. If it keeps happening, right-click her > Help > Copy error details and post it in the Discord.
+
 ### Mac and Linux
 - Mac says "damaged" or "can't be opened": drag Capri to Applications, run xattr -dr com.apple.quarantine /Applications/Capri.app in Terminal, open again.
 - Mac won't run it at all on macOS 12, 13 or 14: Capri needs macOS 15 or newer.
