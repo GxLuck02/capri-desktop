@@ -52,6 +52,12 @@ namespace CapriDesktop
         [DataMember] internal int? Pace;
         [DataMember] internal int Robot;
         [DataMember] internal int Glitch;
+        // Her voice layers, like Windows: off out of the box and in settings from before them, which get the layers' defaults.
+        [DataMember] internal bool Layers;
+        [DataMember] internal double? LayerPitch1;
+        [DataMember] internal int? LayerDelay1;
+        [DataMember] internal double? LayerPitch2;
+        [DataMember] internal int? LayerDelay2;
         [DataMember] internal bool NoIntro;
         [DataMember] internal bool NotOnTop;
         // Security's toggles 1 to 10 as 1s and 0s, like Windows. Missing in settings from before it, which get Trusted.
@@ -392,6 +398,13 @@ namespace CapriDesktop
         private readonly List<MenuItem> pacePicks = new List<MenuItem>();
         private readonly List<MenuItem> robotPicks = new List<MenuItem>();
         private readonly List<MenuItem> glitchPicks = new List<MenuItem>();
+        // Settings > Voice style > Layers and each layer's pitch and delay, Windows' VOICE LAYERS window. A menu can't hold every
+        // half step, so it has these.
+        internal static readonly double[] LayerPitches = { -12, -9, -7, -5, -4, -3, -2.5, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 7, 9, 12 };
+        internal static readonly int[] LayerDelays = { 0, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 250 };
+        private MenuItem layersItem;
+        private readonly List<MenuItem>[] layerPitchPicks = { new List<MenuItem>(), new List<MenuItem>() };
+        private readonly List<MenuItem>[] layerDelayPicks = { new List<MenuItem>(), new List<MenuItem>() };
         // The style line as ElevenLabs said it, and in which voice, so trying another setting restyles it instead of spending credits.
         private byte[] styleSaid;
         private string styleVoice;
@@ -459,6 +472,7 @@ namespace CapriDesktop
             VoiceFx.Speed = Math.Max(VoiceFx.Slowest, Math.Min(VoiceFx.Fastest, Saved.Pace ?? 100));
             VoiceFx.Robot = Math.Max(0, Math.Min(100, Saved.Robot));
             VoiceFx.Glitch = Math.Max(0, Math.Min(100, Saved.Glitch));
+            VoiceFx.Layers = LayersOf(Saved);
             if (Program.Smoke == null) Sfx.Out = Limbs.Sound;
             if (Program.Smoke == null) Brain.Load(Path.Combine(folder, "chat.json"));
             Limbs.Attach(Brain);
@@ -1481,6 +1495,35 @@ namespace CapriDesktop
             style.Items.Add(speed);
             style.Items.Add(robot);
             style.Items.Add(glitchy);
+            // Her voice layers (Lachy, 29 Oct): two copies of her mixed in under her, each with its own pitch and delay. Pitch above
+            // is Main's.
+            layersItem = new MenuItem { Header = "Layers", ToggleType = MenuItemToggleType.CheckBox };
+            layersItem.Click += delegate { SetLayers(VoiceFx.Layers.Turned(!VoiceFx.Layers.On)); HearStyle(); };
+            style.Items.Add(layersItem);
+            for (int layer = 1; layer <= 2; layer++)
+            {
+                int which = layer;
+                MenuItem layerPitch = new MenuItem { Header = "Layer " + layer + " pitch" };
+                foreach (double semitones in LayerPitches)
+                {
+                    double picked = semitones;
+                    MenuItem pick = new MenuItem { Header = VoiceFx.Layering.PitchName(semitones), ToggleType = MenuItemToggleType.Radio, GroupName = "layer" + layer + "pitch" };
+                    pick.Click += delegate { SetLayers(VoiceFx.Layers.With(which, picked, VoiceFx.Layers.DelayOf(which))); HearStyle(); };
+                    layerPitchPicks[layer - 1].Add(pick);
+                    layerPitch.Items.Add(pick);
+                }
+                MenuItem layerDelay = new MenuItem { Header = "Layer " + layer + " delay" };
+                foreach (int ms in LayerDelays)
+                {
+                    int picked = ms;
+                    MenuItem pick = new MenuItem { Header = VoiceFx.Layering.DelayName(ms), ToggleType = MenuItemToggleType.Radio, GroupName = "layer" + layer + "delay" };
+                    pick.Click += delegate { SetLayers(VoiceFx.Layers.With(which, VoiceFx.Layers.PitchOf(which), picked)); HearStyle(); };
+                    layerDelayPicks[layer - 1].Add(pick);
+                    layerDelay.Items.Add(pick);
+                }
+                style.Items.Add(layerPitch);
+                style.Items.Add(layerDelay);
+            }
             settings.Items.Add(style);
             checkInsItem = new MenuItem { Header = "Check in on me", ToggleType = MenuItemToggleType.CheckBox };
             checkInsItem.Click += delegate { SetCheckIns(Saved.NoCheckIns); };
@@ -1625,6 +1668,42 @@ namespace CapriDesktop
             for (int i = 0; i < pacePicks.Count; i++) pacePicks[i].IsChecked = Paces[i] == VoiceFx.Speed;
             for (int i = 0; i < robotPicks.Count; i++) robotPicks[i].IsChecked = Amounts[i] == VoiceFx.Robot;
             for (int i = 0; i < glitchPicks.Count; i++) glitchPicks[i].IsChecked = Amounts[i] == VoiceFx.Glitch;
+            VoiceFx.Layering layers = VoiceFx.Layers;
+            if (layersItem != null) layersItem.IsChecked = layers.On;
+            for (int layer = 1; layer <= 2; layer++)
+            {
+                for (int i = 0; i < layerPitchPicks[layer - 1].Count; i++) layerPitchPicks[layer - 1][i].IsChecked = LayerPitches[i] == layers.PitchOf(layer);
+                for (int i = 0; i < layerDelayPicks[layer - 1].Count; i++) layerDelayPicks[layer - 1][i].IsChecked = LayerDelays[i] == layers.DelayOf(layer);
+            }
+        }
+
+        // What Voice style's Layers menus have ticked, like Windows' VOICE LAYERS window: "On | +1.5, 25 ms | -2.5, 25 ms".
+        internal string LayersShown
+        {
+            get
+            {
+                string[] pitchNames = new string[LayerPitches.Length], delayNames = new string[LayerDelays.Length];
+                for (int i = 0; i < pitchNames.Length; i++) pitchNames[i] = VoiceFx.Layering.PitchName(LayerPitches[i]);
+                for (int i = 0; i < delayNames.Length; i++) delayNames[i] = VoiceFx.Layering.DelayName(LayerDelays[i]);
+                return (layersItem.IsChecked == true ? "On" : "Off") + " | " + Ticked(layerPitchPicks[0], pitchNames) + ", " + Ticked(layerDelayPicks[0], delayNames) + " | " + Ticked(layerPitchPicks[1], pitchNames) + ", " + Ticked(layerDelayPicks[1], delayNames);
+            }
+        }
+
+        internal static VoiceFx.Layering LayersOf(Settings saved)
+        {
+            return new VoiceFx.Layering(saved.Layers, saved.LayerPitch1 ?? VoiceFx.Layering.HigherPitch, saved.LayerDelay1 ?? VoiceFx.Layering.Behind, saved.LayerPitch2 ?? VoiceFx.Layering.LowerPitch, saved.LayerDelay2 ?? VoiceFx.Layering.Behind);
+        }
+
+        internal void SetLayers(VoiceFx.Layering layers)
+        {
+            VoiceFx.Layers = layers ?? VoiceFx.Layering.Off;
+            Saved.Layers = VoiceFx.Layers.On;
+            Saved.LayerPitch1 = VoiceFx.Layers.Pitch1;
+            Saved.LayerDelay1 = VoiceFx.Layers.Delay1;
+            Saved.LayerPitch2 = VoiceFx.Layers.Pitch2;
+            Saved.LayerDelay2 = VoiceFx.Layers.Delay2;
+            Save();
+            Sync();
         }
 
         // What Voice style's menus have ticked, like Windows' VOICE section: "+3 | 1.2x | 30% | 40%".

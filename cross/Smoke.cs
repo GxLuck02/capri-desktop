@@ -261,6 +261,34 @@ namespace CapriDesktop
                 bool stylePlain = pet.StyleShown == "Normal | Normal | Off | Off" && VoiceFx.Styled(toneWav, "Hey choom.") == toneWav;
                 if (!stylePlainBefore || !styleChanged || !stylePlain) throw new Exception("Voice style went wrong: plain before " + stylePlainBefore + ", set " + styleSet + " changed " + styleChanged + ", plain after " + stylePlain);
                 checks.Add("PASS voice style: Settings > Voice style sets her pitch, speed, robot and glitch like Windows, her ElevenLabs replies get them, and at Normal and Off her voice is untouched");
+                // Her voice layers, like Windows: the shared checks of the sound, then Voice style's Layers menus, her ElevenLabs
+                // replies getting them and the settings saving and loading.
+                string layersFound, layersWrong = VoiceFx.LayersCheck(out layersFound);
+                VoiceFx.Layering layersWas = VoiceFx.Layers;
+                string layersNew = pet.LayersShown;
+                bool layersPlain = VoiceFx.Styled(toneWav, "Hey choom.") == toneWav;
+                pet.SetLayers(VoiceFx.Layers.Turned(true));
+                string layersOn = pet.LayersShown;
+                int layersRate;
+                short[] layersSaid = Voice.Samples(VoiceFx.Styled(toneWav, "Hey choom."), out layersRate);
+                pet.SetLayers(VoiceFx.Layers.With(1, 3, 40).With(2, -4, 100));
+                string layersSet = pet.LayersShown;
+                System.Runtime.Serialization.Json.DataContractJsonSerializer layersJson = new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(Settings));
+                Settings layersLoaded;
+                using (MemoryStream layersStream = new MemoryStream())
+                {
+                    layersJson.WriteObject(layersStream, pet.Saved);
+                    layersStream.Position = 0;
+                    layersLoaded = (Settings)layersJson.ReadObject(layersStream);
+                }
+                Settings layersOld = (Settings)layersJson.ReadObject(new MemoryStream(Encoding.UTF8.GetBytes("{\"Pitch\":2,\"Glitch\":10}")));
+                pet.SetLayers(layersWas);
+                string layersBack = pet.LayersShown;
+                const string layersPlainShown = "Off | +1.5, 25 ms | -2.5, 25 ms";
+                if (layersWrong != null || layersNew != layersPlainShown || !layersPlain || layersOn != "On | +1.5, 25 ms | -2.5, 25 ms" || layersRate != 24000 || layersSaid.Length != tonePcm.Length + 600
+                    || layersSet != "On | +3, 40 ms | -4, 100 ms" || Pet.LayersOf(layersLoaded).Shown != "On | +3, 40 ms | -4, 100 ms" || Pet.LayersOf(layersOld).Shown != layersPlainShown || Pet.LayersOf(new Settings()).Shown != layersPlainShown || layersBack != layersPlainShown || VoiceFx.Styled(toneWav, "Hey choom.") != toneWav)
+                    throw new Exception("Voice layers went wrong: " + layersWrong + " / new " + layersNew + ", on " + layersOn + " (" + layersSaid.Length + " samples from " + tonePcm.Length + "), set " + layersSet + ", loaded " + Pet.LayersOf(layersLoaded).Shown + ", older " + Pet.LayersOf(layersOld).Shown + ", back " + layersBack);
+                checks.Add("PASS voice layers: Settings > Voice style > Layers turns on two copies of her under her, like Windows, with Layer 1 and Layer 2's pitch and delay in their own menus; " + layersFound + "; her ElevenLabs replies get them and come back 25 ms longer for their tails; off out of the box and in settings from before them, and off her voice is byte for byte as it was; the layers save and load as set");
                 bool loginNew = !pet.StartsAtLogin;
                 pet.SetLogin(true);
                 string loginText = File.Exists(pet.LoginFile) ? File.ReadAllText(pet.LoginFile) : "";
