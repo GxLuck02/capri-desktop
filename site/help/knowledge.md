@@ -342,7 +342,8 @@ YOU
 - Edit personality: opens personality.md, who she is and how she talks. See "Make her yours" in section 13.
 - Reset: puts her default personality back straight away. Yours is kept as personality.backup.md.
 
-VOICE ("Every voice, ElevenLabs too" on the right of the heading)
+VOICE ("Every voice, ElevenLabs too" on the right of the heading, then the Layers button)
+- Layers: Off (0.7.6 and newer): the button at the right of VOICE's heading opens her VOICE LAYERS window. It says "Layers: On" and lights up while they're on. See "Voice layers" under Her voice.
 - Volume: Mute, 10% to 100%, 125%, 150%. Default 100%.
 - Pitch (from 0.7.5): -6 to +6 semitones. Default Normal. Higher or deeper, at the same speed.
 - Speed (from 0.7.5): 0.7x to 1.5x. Default Normal.
@@ -352,7 +353,7 @@ VOICE ("Every voice, ElevenLabs too" on the right of the heading)
 - Typing sound: "When she types". A soft typing sound while her text replies type out.
 - Free voice in games (0.7.6 and newer): only shows while her HD voice is on, beside Typing sound. Off by default, so her HD voice keeps talking while a game or video is full screen. Turn it on and her free voice talks while anything is full screen, so the game gets your graphics card back.
 
-Pitch, Speed, Robot and Glitch change every voice she has: her free voice styles, HD, ElevenLabs and ElevenLabs voice chat. See "Pitch, speed, robot and glitch" under Her voice.
+Pitch, Speed, Robot and Glitch change every voice she has: her free voice styles, HD, ElevenLabs and ElevenLabs voice chat. See "Pitch, speed, robot and glitch" under Her voice. Her voice layers do too; see "Voice layers".
 
 MOVES
 - Mini player: on by default, on the right of the MOVES heading. While music plays, a small player shows what's playing, and she perches on it. See "Her mini player" in section 14.
@@ -579,6 +580,23 @@ In ElevenLabs voice chat the sliders change her as she talks. A slower Speed mak
 They're saved, so they stay after a restart or update. Normal, Normal and Off (10% for HD) is her usual voice.
 
 On Mac and Linux they're under right-click her > Settings > Voice style (Pitch, Speed, Robot, Glitch), with the same steps, and they change her ElevenLabs voice. Each pick says "How do I sound now, choom?" in the new style. ElevenLabs makes that line once per voice, then it's restyled on your computer, so trying more settings uses no more credits. With her voice off she says "My voice is off, choom. Settings > Voice > Use ElevenLabs turns it back on." With no key: "Add an ElevenLabs key under Settings > Voice to hear that, choom."
+
+### Voice layers (0.7.6 and newer)
+Voice layers make her sound doubled, with an AI shimmer: two copies of her voice mixed in quietly under her own. They're off out of the box, so she sounds just as she always has until you turn them on, and with them off her voice is exactly the same as before.
+
+Open them with the Layers button at the right of Mainframe > Settings > VOICE's heading. It says "Layers: Off", or "Layers: On" (lit) while they're on. The VOICE LAYERS window has three channels:
+- Voice layers: the on/off switch. "Off: she sounds as she always has. On: every voice she has, ElevenLabs too."
+- MAIN: her voice itself. Its Pitch is the same setting as Settings > VOICE > Pitch (-6 to +6), and the two move together.
+- LAYER 1: a copy of her voice. Pitch -12 to +12 semitones from hers, in half steps (Same is her own pitch). Delay 0 to 250 ms behind her. Out of the box +1.5 semitones and 25 ms: a little higher, just behind her.
+- LAYER 2: another copy, with its own Pitch and Delay. Out of the box -2.5 semitones and 25 ms: lower, just behind her.
+- Hear her: she says "How do I sound now, choom?" in her voice as it is now. Letting go of any slider, or flipping the switch, does the same.
+- Defaults: puts both layers back to +1.5 and -2.5 semitones, 25 ms, and leaves the switch as it is.
+
+Each copy changes pitch without talking faster or slower, and mixes in about 8 dB under her, so she still leads. Short delays (about 15 to 35 ms) thicken her into one doubled voice; longer ones (50 ms and up) sound like an echo behind her. Pitches far from hers (like +7 or -12) sound like a harmony or a deeper voice under her. A limiter keeps the mix from ever clipping, however loud. With a delay set, a line ends that much later while the copies finish, and her mouth moves with them.
+
+They change every voice she has, like Pitch, Speed, Robot and Glitch: her free voice styles, HD, ElevenLabs, CUSTOM LOCAL and Fish Audio or OpenAI voices, and ElevenLabs voice chat as she talks. Robot, Glitch, Pitch and Speed go on her first, and the copies are made from that. They're saved, so they stay after a restart or update.
+
+On Mac and Linux: right-click her > Settings > Voice style > Layers turns them on or off, and Layer 1 pitch, Layer 1 delay, Layer 2 pitch and Layer 2 delay are under it, with the same defaults (pitches -12, -9, -7, -5, -4, -3, -2.5 to +2.5 in half steps, +3, +4, +5, +7, +9, +12; delays 0, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 250 ms). Each pick says the line in the new style, and they change her ElevenLabs voice.
 
 ### Her HD voice (0.7.6 and newer)
 - A richer voice that runs on your graphics card. It copies how she talks as well as how she sounds, from her voice clip and its words.
@@ -1252,7 +1270,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance (on until you untick it or say "stop dancing"), Go to the next screen (only with more than one screen), Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min), Glitch in at startup
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
-- Settings: What should she call you?, Get to know me, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Voice style (Pitch, Speed, Robot, Glitch), Check in on me, Pop-ins (Rarely, Sometimes, Often), Always on top, Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Security (Lockdown, Guarded, Trusted, Blackwall, Custom, then the five toggles), Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Get to know me, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Voice style (Pitch, Speed, Robot, Glitch, Layers, Layer 1 pitch, Layer 1 delay, Layer 2 pitch, Layer 2 delay), Check in on me, Pop-ins (Rarely, Sometimes, Often), Always on top, Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Security (Lockdown, Guarded, Trusted, Blackwall, Custom, then the five toggles), Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
 - Get Capri X, only when a new version is out
@@ -1266,7 +1284,7 @@ Tray or menu bar icon: Talk to her, Quiet, Hide her / Show her, Bring her back, 
 3. She says "Key saved. I'll talk as X. Change it under Settings > Voice."
 4. Pick another voice from the same menu. Use ElevenLabs in that menu turns her voice on or off. (Mac and Linux have no free voice yet.)
 5. Settings > Volume sets how loud she talks, from Mute to 150%, like Windows' Volume. Sounds is her sound effects.
-6. Settings > Voice style changes her pitch, speed, robot and glitch, like Windows' sliders (see "Pitch, speed, robot and glitch").
+6. Settings > Voice style changes her pitch, speed, robot and glitch, like Windows' sliders (see "Pitch, speed, robot and glitch"), and Layers turns on her voice layers, with each layer's pitch and delay under it (see "Voice layers").
 
 - "Key saved, but your ElevenLabs account has no voices yet. Add one at elevenlabs.io." Make a voice first (section 11).
 - "ElevenLabs rejected the key. Settings > Voice > New key."
