@@ -2111,6 +2111,7 @@ namespace CapriDesktop
             private string savedUrl;
             private string savedApi;
             private string savedTail;
+            private bool addressShown = true;
 
             internal ServerSheet(Mainframe owner)
             {
@@ -2172,6 +2173,7 @@ namespace CapriDesktop
                 bool saved = owner.capri.SavedServer(cloud, out api, out address, out name, out voice, out tail);
                 Text = cloud ? "Cloud voice" : "Custom local voice";
                 title.Text = (cloud ? "CLOUD VOICE" : "CUSTOM LOCAL") + " >";
+                ShowAddress(!cloud);
                 for (int i = services.Items.Count - 1; i >= 0; i--) services.Items[i].Dispose();
                 foreach (VoiceServer.Service choice in VoiceServer.Services)
                 {
@@ -2194,6 +2196,19 @@ namespace CapriDesktop
             }
 
             private static bool Cloudy(VoiceServer.Service choice) { return choice.Url != null && VoiceServer.InCloud(choice.Url, choice.Api); }
+
+            // Fish Audio's and OpenAI's own servers never change address, so CLOUD VOICE hides the Address row and moves the rest
+            // up into its place (Lachy, 29 Oct). The address is still filled in underneath. The row is 56 px at 96 DPI, scaled
+            // like the boxes in it.
+            private void ShowAddress(bool shown)
+            {
+                if (shown == addressShown) return;
+                addressShown = shown;
+                int step = (int)Math.Round(56f * url.Height / 28) * (shown ? 1 : -1);
+                place.Visible = url.Visible = shown;
+                foreach (Control control in Controls) if (control != place && control != url && control.Top >= place.Top) control.Top += step;
+                ClientSize = new Size(ClientSize.Width, ClientSize.Height + step);
+            }
 
             // The row's first choice, or in the cloud the one with that API.
             private static VoiceServer.Service First(bool cloud, string wanted)
@@ -2397,7 +2412,7 @@ namespace CapriDesktop
 
             internal string Showing { get { return picked.Name + " | " + url.Box.Text + " | " + model.Box.Text + " | " + speaker.Box.Text + " | " + key.Cue + " | " + (forget.Visible ? "Forget" : "-") + " | " + note.Text; } }
 
-            internal string Fields { get { return place.Text + " | " + modelName.Text + " | " + voiceName.Text + " | " + (key.Visible ? "Key" : "no key") + " | " + (browse.Visible ? browse.Text : "-"); } }
+            internal string Fields { get { return (addressShown ? place.Text : "no address") + " | " + modelName.Text + " | " + voiceName.Text + " | " + (key.Visible ? "Key" : "no key") + " | " + (browse.Visible ? browse.Text : "-"); } }
 
             // Its title and the choices in its Voice from menu, for the smoke test.
             internal string Choices
