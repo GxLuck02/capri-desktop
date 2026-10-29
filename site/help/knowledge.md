@@ -430,6 +430,7 @@ Right-click her, or right-click her tray icon. Both show the same menu:
   - Sit on windows
   - Sit here / Stand up
   - Hang here / Let go
+  - Go to sleep / Wake up
   - Bring to this screen
 - Help:
   - Help page (opens this help on the website)
@@ -830,6 +831,8 @@ Turn it off: right-click her > Move > Dance to music, or Mainframe > Settings > 
 ### Sleep
 If you don't touch the mouse or keyboard for a while, she falls asleep. Move the mouse to wake her. Mainframe > Settings > Sleep sets the time, or Never. On Mac and Linux it's right-click her > Move > Fall asleep after.
 
+To put her to sleep yourself (0.7.6 and newer): right-click her > Move > Go to sleep, or tell her "go to sleep", "take a nap" or "go to bed". She finishes what she's saying, gets off her window and sleeps until you click her, talk to her or say "wake up". Using the mouse and keyboard doesn't wake her from that, and her pop-ins, check-ins and Watch my screen rest until she's up. Telling her "go to sleep" never puts your PC to sleep; "put my PC to sleep" does.
+
 ### Startup glitch
 When she starts, crimson glitch tendrils tear out from behind her, different every time, while she beams in with her sound. Mainframe > Settings > Glitch in at startup turns all of it on or off. Off: she just appears. On Mac and Linux it's right-click her > Move > Glitch in at startup; off, she starts back where she sat last time, with no glitch or sound.
 
@@ -1123,6 +1126,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - "Check my screen": she looks when you ask (see "Check my screen on Mac and Linux" below)
 - Watch my screen: right-click her > Settings > Watch my screen. She glances now and then and comments when something's worth a line, like on Windows. Glance every sets how often (10 s to 10 min, default 2 min), and Keep her caught up keeps the glances she stays quiet about. Mac asks once for Screen Recording; until you allow it and open her again, she says so once instead of watching your wallpaper. Linux only watches with tools that don't flash: grim, Spectacle on KDE, ImageMagick's import, scrot or maim. GNOME on Wayland flashes every screenshot, so there she says so and only looks when you ask.
 - Sleep: standing, she falls asleep after 2 minutes without the mouse or keyboard, and wakes when you're back. Right-click her > Move > Fall asleep after sets the time, or Never. She needs to know how long you've been away: Mac always does, Linux through GNOME or, on other X11 desktops, xprintidle.
+- Sleep on demand (0.7.6 and newer): right-click her > Go to sleep, or tell her "go to sleep" or "take a nap". She sleeps until you click her, talk to her or say "wake up", whatever the mouse and keyboard do.
 - Quiet: right-click her, or the tray or menu bar icon, > Quiet. It's the same as Windows' quiet key (Ctrl + Alt + P): she stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her.
 - Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings)
 
@@ -1137,6 +1141,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Talk to her
 - Quiet: for when you focus or game. She stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her. It's in the tray or menu bar menu too. Starting her again ends it.
 - Sit here: she sits right where she is. While she sits like that it says Stand up. Holding Shift as you drop her does Sit here too, like on Windows.
+- Go to sleep: she sleeps until you click her, talk to her or say "wake up". While she sleeps it says Wake up.
 - Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance, Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min), Glitch in at startup
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
@@ -1356,7 +1361,7 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 - She's hidden behind a game: switch the game to borderless or windowed. Check Always on top is on (Mainframe > Settings > CAPRI).
 - She doesn't dance: Dance to music must be on, and the app must show up as music in Windows.
 - She dances but her head isn't on the beat yet: give it a few seconds. Quiet songs, talking and very slow songs are harder for her to follow.
-- She's asleep: move the mouse. Change it in Settings > Sleep.
+- She's asleep: move the mouse. If you put her to sleep (Go to sleep, or "go to sleep"), click her or say "wake up" instead. Change how soon she dozes off in Settings > Sleep.
 - She's on the wrong monitor: right-click her > Move > Bring to this screen.
 
 ### Doing things on the PC
