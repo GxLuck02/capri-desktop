@@ -252,7 +252,7 @@ That's Check in on me (called Pop in on me before 0.7.3), on by default since 0.
 From 0.7.3 anything you ask counts as already allowed: she does every part of it, picks the song or video herself when you leave it to her, and doesn't ask if you're sure. She still asks before buying or paying, or before sending, posting, deleting or installing something you didn't mention. To stop even that, turn on Blackwall mode in Capri Mainframe > Settings > HABITS (before 0.7.4 it was called Bypass all permissions).
 
 ### Can she open a few apps at once?
-Yes: "open Discord, Spotify and Steam" opens all three. There's no limit per ask on any brain. On her free brain and Ollama models, a list of six or more takes a few seconds longer, because her brain gets asked a second time with room for every app.
+Yes: "open Discord, Spotify and Steam" opens all three, and so does a list of sixty. There's no ceiling on how many, on any brain. When a list runs past what her brain's reply has room for, she asks it again with double the room, as many times as it takes, so a long list takes a few seconds longer, more on a brain running on your PC. If a brain still can't finish it, every app it wrote out in full opens anyway (from 0.7.6).
 
 ---
 
