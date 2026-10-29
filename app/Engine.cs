@@ -324,9 +324,19 @@ namespace CapriDesktop
                 serverEyes = eyes;
                 serverCpu = CpuOnly;
                 serverWindow = window;
+#if CROSS
+                if (OperatingSystem.IsWindows())
+                {
+                    server = Process.Start(StartInfo(pick, eyes, serverCpu, port, window));
+                    Lower(server);
+                    Bind(server);
+                }
+                else server = Launch(StartInfo(pick, eyes, serverCpu, port, window));
+#else
                 server = Process.Start(StartInfo(pick, eyes, serverCpu, port, window));
                 Lower(server);
                 Bind(server);
+#endif
             }
             Stopwatch waited = Stopwatch.StartNew();
             while (waited.Elapsed.TotalSeconds < 180)
@@ -353,6 +363,9 @@ namespace CapriDesktop
         {
             lock (gate)
             {
+#if CROSS
+                if (!OperatingSystem.IsWindows()) { StopMac(); return; }
+#endif
                 if (server == null) return;
                 try { if (!server.HasExited) { server.Kill(); server.WaitForExit(3000); } } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
                 server.Dispose();

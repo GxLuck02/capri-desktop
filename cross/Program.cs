@@ -20,6 +20,7 @@ namespace CapriDesktop
         [STAThread]
         private static int Main(string[] args)
         {
+            if (args.Length >= 1 && args[0] == "--fake-brain") return FakeBrain.Run(args);
             if (args.Length >= 5 && args[0] == "--shelf")
             {
                 Shelf = new[] { int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), int.Parse(args[4]) };

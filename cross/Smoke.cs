@@ -48,6 +48,9 @@ namespace CapriDesktop
         private readonly List<string> hubAsked = new List<string>();
         private Engine bench;
         private Pick testPick;
+        private Process sleeper;
+        private int guardedPid;
+        private double killedAt;
         private readonly List<string> voiceAsked = new List<string>();
         private readonly List<byte[]> spoken = new List<byte[]>();
 
@@ -739,6 +742,42 @@ namespace CapriDesktop
                 lock (hubAsked) foreach (string asked in hubAsked) if (asked.StartsWith("test-brain.gguf from ", StringComparison.Ordinal)) resumed = true;
                 if (!File.Exists(modelPath) || Engine.Hash(modelPath) != testPick.Sha256 || !resumed) throw new Exception("The download didn't pick up where it left off.");
                 checks.Add("PASS brain install: a Mac picks Gemma 4 E2B for 8 GB, the engine and model download, pass their checksums and unpack with links, archives reaching outside their folder and a bad checksum are refused, and Cancel picks up where it left off");
+                Engine.ServerName = Path.GetFileNameWithoutExtension(Environment.ProcessPath);
+                bench.Ensure(testPick);
+                string pids = Path.Combine(brainDir, "server.pid");
+                string keyFile = Path.Combine(brainDir, "server.key");
+                if (!bench.Running || bench.Key == null || bench.Key.Length != 64 || File.GetUnixFileMode(keyFile) != (UnixFileMode.UserRead | UnixFileMode.UserWrite) || !File.Exists(pids)) throw new Exception("Her brain didn't start with a private secret key and a PID file.");
+                string url = bench.Address + "/v1/chat/completions";
+                if (Post(url, null) != 401 || Post(url, "wrong") != 401 || Post(url, bench.Key) != 200) throw new Exception("Her brain answered without its secret key, or refused it.");
+                int first = int.Parse(File.ReadAllText(pids).Trim());
+                bench.Stop();
+                if (bench.Running || bench.Key != null || File.Exists(keyFile) || File.Exists(pids) || Alive(first)) throw new Exception("Stopping her brain left it running or left its key behind.");
+                sleeper = Process.Start("/bin/sleep", "60");
+                bench.Parent = sleeper.Id;
+                bench.Ensure(testPick);
+                guardedPid = int.Parse(File.ReadAllText(pids).Trim());
+                sleeper.Kill();
+                sleeper.WaitForExit();
+                killedAt = now;
+                return true;
+            }
+            if (step == 30)
+            {
+                string brainDir = Path.Combine(folder, "t", "brain");
+                string pids = Path.Combine(brainDir, "server.pid");
+                if (Alive(guardedPid) || File.Exists(pids))
+                {
+                    if (now - killedAt > 3.5) throw new Exception("Her brain kept running " + (now - killedAt).ToString("0.0") + " s after Capri was gone.");
+                    return false;
+                }
+                checks.Add("PASS brain guard: her brain needs its per-launch secret key, Stop removes the key, and when Capri dies her brain goes " + (now - killedAt).ToString("0.0") + " s later");
+                bench.Parent = Environment.ProcessId;
+                bench.Stop();
+                Process stray = Process.Start(Environment.ProcessPath, "--fake-brain --port 0");
+                File.WriteAllText(pids, stray.Id.ToString());
+                bench.Sweep();
+                if (!stray.WaitForExit(3000) || File.Exists(pids)) throw new Exception("A brain left over from a crash wasn't stopped at start.");
+                checks.Add("PASS brain sweep: a brain left over from a crash is stopped when Capri starts");
                 pet.Frame.Close();
                 hub.Stop();
                 Send(shelf, "quit");
@@ -746,6 +785,34 @@ namespace CapriDesktop
                 return true;
             }
             return false;
+        }
+
+
+        private static bool Alive(int pid)
+        {
+            try { using (Process process = Process.GetProcessById(pid)) return !process.HasExited; }
+            catch (ArgumentException) { return false; }
+            catch (InvalidOperationException) { return false; }
+        }
+
+        private static int Post(string url, string key)
+        {
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+            request.Method = "POST";
+            request.ContentType = "application/json";
+            request.Proxy = null;
+            request.Timeout = 5000;
+            if (key != null) request.Headers["Authorization"] = "Bearer " + key;
+            byte[] body = Encoding.UTF8.GetBytes("{\"messages\":[]}");
+            request.ContentLength = body.Length;
+            using (Stream sent = request.GetRequestStream()) sent.Write(body, 0, body.Length);
+            try { using (HttpWebResponse response = (HttpWebResponse)request.GetResponse()) return (int)response.StatusCode; }
+            catch (WebException error)
+            {
+                HttpWebResponse response = error.Response as HttpWebResponse;
+                if (response == null) throw;
+                using (response) return (int)response.StatusCode;
+            }
         }
 
         private string FakeVoice()
@@ -782,7 +849,7 @@ namespace CapriDesktop
         }
 
         // Reads up to the blank line after the headers; whatever came after it stays in read.
-        private static int ReadHead(NetworkStream stream, List<byte> read)
+        internal static int ReadHead(NetworkStream stream, List<byte> read)
         {
             byte[] chunk = new byte[4096];
             int end = -1;
@@ -796,7 +863,7 @@ namespace CapriDesktop
             return end;
         }
 
-        private static void Answer(NetworkStream stream, int status, string type, byte[] reply)
+        internal static void Answer(NetworkStream stream, int status, string type, byte[] reply)
         {
             byte[] top = Encoding.ASCII.GetBytes("HTTP/1.1 " + status + " " + (status == 200 ? "OK" : "Error") + "\r\nContent-Type: " + type + "\r\nContent-Length: " + reply.Length + "\r\nConnection: close\r\n\r\n");
             stream.Write(top, 0, top.Length);
@@ -1017,6 +1084,60 @@ namespace CapriDesktop
             if (failure != null) lines.Add("FAIL " + failure);
             File.WriteAllLines(Path.Combine(folder, "smoke-test.txt"), lines);
             pet.Finish(failure == null ? 0 : 1);
+        }
+    }
+
+    // Plays llama-server for the smoke test: /health, and chat that needs the --api-key-file key.
+    internal static class FakeBrain
+    {
+        internal const string Line = "Built-in brain here, choom.";
+
+        internal static int Run(string[] args)
+        {
+            int port = 0;
+            string key = null;
+            for (int i = 1; i + 1 < args.Length; i++)
+            {
+                if (args[i] == "--port") port = int.Parse(args[i + 1]);
+                if (args[i] == "--api-key-file") key = File.ReadAllText(args[i + 1]).Trim();
+            }
+            TcpListener listener = new TcpListener(IPAddress.Loopback, port);
+            listener.Start();
+            while (true)
+            {
+                using (TcpClient client = listener.AcceptTcpClient())
+                {
+                    try { Serve(client.GetStream(), key); }
+                    catch (Exception) { }
+                }
+            }
+        }
+
+        private static void Serve(NetworkStream stream, string key)
+        {
+            List<byte> read = new List<byte>();
+            int end = Smoke.ReadHead(stream, read);
+            if (end < 0) return;
+            string[] lines = Encoding.ASCII.GetString(read.ToArray(), 0, end).Split(new[] { "\r\n" }, StringSplitOptions.None);
+            string path = lines[0].Split(' ')[1];
+            string given = null;
+            int length = 0;
+            foreach (string line in lines)
+            {
+                if (line.StartsWith("Authorization: Bearer ", StringComparison.OrdinalIgnoreCase)) given = line.Substring(22).Trim();
+                if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase)) length = int.Parse(line.Substring(15).Trim());
+            }
+            byte[] chunk = new byte[4096];
+            while (read.Count - end < length)
+            {
+                int got = stream.Read(chunk, 0, chunk.Length);
+                if (got <= 0) break;
+                for (int i = 0; i < got; i++) read.Add(chunk[i]);
+            }
+            if (path == "/health") Smoke.Answer(stream, 200, "application/json", Encoding.UTF8.GetBytes("{\"status\":\"ok\"}"));
+            else if (path.StartsWith("/v1/chat/completions", StringComparison.Ordinal) && (key == null || given != key)) Smoke.Answer(stream, 401, "application/json", Encoding.UTF8.GetBytes("{\"error\":{\"message\":\"Invalid API Key\"}}"));
+            else if (path.StartsWith("/v1/chat/completions", StringComparison.Ordinal)) Smoke.Answer(stream, 200, "application/json", Encoding.UTF8.GetBytes("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"" + Line + "\"},\"finish_reason\":\"stop\"}]}"));
+            else Smoke.Answer(stream, 404, "application/json", Encoding.UTF8.GetBytes("{}"));
         }
     }
 }

@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace CapriDesktop
 {
@@ -105,6 +109,115 @@ namespace CapriDesktop
                     else throw new IOException(Unsafe);
                 }
             }
+        }
+
+        internal static string ServerName = "llama-server";
+        internal int Parent = Environment.ProcessId;
+        internal string Key { get; private set; }
+
+        [DllImport("libc", SetLastError = true)] private static extern int kill(int pid, int signal);
+
+        // $1 Capri's PID, $2 PID file, $3 key file, then the server command. Nothing from a download is pasted in here.
+        private const string Guard =
+            "capri=$1; pids=$2; key=$3; shift 3\n" +
+            "\"$@\" &\n" +
+            "child=$!\n" +
+            "echo $child > \"$pids\"\n" +
+            "finish() { kill $child 2>/dev/null; wait $child 2>/dev/null; rm -f \"$pids\" \"$key\"; exit 0; }\n" +
+            "trap finish TERM INT HUP\n" +
+            "while kill -0 $capri 2>/dev/null && kill -0 $child 2>/dev/null; do sleep 2 & wait $!; done\n" +
+            "finish\n";
+
+        private string PidPath { get { return Path.Combine(root, "server.pid"); } }
+        private string KeyPath { get { return Path.Combine(root, "server.key"); } }
+
+        internal bool Running { get { lock (gate) return server != null && !server.HasExited; } }
+
+        // Runs llama-server under a small sh guard that stops it within 2 s of Capri going away, however she goes.
+        private Process Launch(ProcessStartInfo plain)
+        {
+            string secret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+            FileStreamOptions options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write, UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite };
+            using (FileStream stream = new FileStream(KeyPath, options))
+            {
+                File.SetUnixFileMode(stream.SafeFileHandle, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                using (StreamWriter writer = new StreamWriter(stream)) writer.Write(secret);
+            }
+            Key = secret;
+            ProcessStartInfo info = new ProcessStartInfo("/bin/sh");
+            info.UseShellExecute = false;
+            info.CreateNoWindow = true;
+            info.WorkingDirectory = plain.WorkingDirectory;
+            foreach (string part in new[] { "-c", Guard, "capri-guard", Parent.ToString(), PidPath, KeyPath, "/usr/bin/nice", "-n", "10", plain.FileName }) info.ArgumentList.Add(part);
+            foreach (string part in Split(plain.Arguments)) info.ArgumentList.Add(part);
+            info.ArgumentList.Add("--api-key-file");
+            info.ArgumentList.Add(KeyPath);
+            return Process.Start(info);
+        }
+
+        // StartInfo's argument string: spaces split it, double quotes group.
+        private static List<string> Split(string line)
+        {
+            List<string> parts = new List<string>();
+            StringBuilder part = new StringBuilder();
+            bool quoted = false;
+            bool any = false;
+            foreach (char c in line)
+            {
+                if (c == '"') { quoted = !quoted; any = true; }
+                else if (c == ' ' && !quoted) { if (any) parts.Add(part.ToString()); part.Clear(); any = false; }
+                else { part.Append(c); any = true; }
+            }
+            if (any) parts.Add(part.ToString());
+            return parts;
+        }
+
+        // Called with gate held. TERM lets the guard stop the server; SIGKILL is the fallback, then Sweep.
+        private void StopMac()
+        {
+            Process guard = server;
+            server = null;
+            Key = null;
+            if (guard != null)
+            {
+                try
+                {
+                    if (!guard.HasExited)
+                    {
+                        kill(guard.Id, 15);
+                        if (!guard.WaitForExit(5000)) guard.Kill();
+                    }
+                }
+                catch (InvalidOperationException) { }
+                guard.Dispose();
+            }
+            Sweep();
+        }
+
+        // A server left behind by a crash: stop it if its PID still is llama-server, and forget its key.
+        internal void Sweep()
+        {
+            try
+            {
+                if (File.Exists(PidPath))
+                {
+                    int pid;
+                    if (int.TryParse(File.ReadAllText(PidPath).Trim(), out pid))
+                    {
+                        try
+                        {
+                            using (Process old = Process.GetProcessById(pid))
+                                if (!old.HasExited && old.ProcessName == ServerName) { old.Kill(); old.WaitForExit(3000); }
+                        }
+                        catch (ArgumentException) { }
+                        catch (InvalidOperationException) { }
+                    }
+                    File.Delete(PidPath);
+                }
+                if (File.Exists(KeyPath)) File.Delete(KeyPath);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 }

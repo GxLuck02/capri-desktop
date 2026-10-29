@@ -1010,14 +1010,20 @@ namespace CapriDesktop
             string thinking = address + "|" + model;
             string listed = tools ? openAiTools ?? Hands.Tools : null;
             CompletionRequest asking = new CompletionRequest { Messages = messages.ToArray(), Limit = thinker == thinking ? limit + 2048 : limit };
-            CompletionReply reply = Send<CompletionReply>(address + "/v1/chat/completions", asking, 180000, listed, null, parts, ticket);
+            Action<HttpWebRequest> sign = null;
+#if CROSS
+            Engine local = Local;
+            string secret = local != null && address == local.Address ? local.Key : null;
+            if (secret != null) sign = delegate(HttpWebRequest request) { request.Headers["Authorization"] = "Bearer " + secret; };
+#endif
+            CompletionReply reply = Send<CompletionReply>(address + "/v1/chat/completions", asking, 180000, listed, sign, parts, ticket);
             CompletionChoice choice = reply.Choices != null && reply.Choices.Length > 0 ? reply.Choices[0] : null;
             CompletionMessage message = choice != null ? choice.Message : null;
             if (thinker != thinking && choice != null && choice.Stopped == "length" && message != null && (!string.IsNullOrEmpty(message.Thinking) || !string.IsNullOrEmpty(message.Reasoning) || (message.Content ?? "").IndexOf("<think>", StringComparison.OrdinalIgnoreCase) >= 0))
             {
                 thinker = thinking;
                 asking.Limit = limit + 2048;
-                reply = Send<CompletionReply>(address + "/v1/chat/completions", asking, 180000, listed, null, parts, ticket);
+                reply = Send<CompletionReply>(address + "/v1/chat/completions", asking, 180000, listed, sign, parts, ticket);
                 choice = reply.Choices != null && reply.Choices.Length > 0 ? reply.Choices[0] : null;
             }
             if (routing && choice != null && choice.Stopped == "length") throw new BrainException("Couldn't finish that request. Try again.");
