@@ -611,8 +611,9 @@ namespace CapriDesktop
         // every perch clip shows her artist's flipped set (the _flipped strips) on the same cells.
         private const float PerchShiftX = -26f / 384, PerchShiftY = 36f / 384;
         private readonly Clip perch = new Clip("perch", 60, 30, 1, PerchShiftX, PerchShiftY);
-        private readonly Clip perchBlink = new Clip("perch_blink", 4, 30, 1, PerchShiftX, PerchShiftY);
-        private readonly Clip perchBlinkGlitch = new Clip("perch_blink_glitch", 4, 30, 1, PerchShiftX, PerchShiftY);
+        // her artist's own blink, frames 29 to 36 of the blink set, and the same with a glitch around her eye.
+        private readonly Clip perchBlink = new Clip("perch_blink", 8, 30, 1, PerchShiftX, PerchShiftY);
+        private readonly Clip perchBlinkGlitch = new Clip("perch_blink_glitch", 8, 30, 1, PerchShiftX, PerchShiftY);
         private readonly Clip perchGlitch = new Clip("perch_glitch", 10, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip mouth = new Clip("mouth", 5, 12, 1.11f);
         private readonly Clip walk = new Clip("walk", 12, 12, 1.11f);
@@ -955,7 +956,8 @@ namespace CapriDesktop
         // mouse and keyboard until a click, a drag, talking to her or "wake up". Quiet the same way as her quiet key.
         private bool napAsked, napping;
         private const int BlinkFrom = 9;
-        private const int PerchBlinkFrom = 34;
+        // Her perch blinks where her artist drew it: loop frames 29 to 36 (index 28 on).
+        private const int PerchBlinkFrom = 28;
         // Her perch fps choices. The art is 30 fps: slower holds each frame longer, faster mixes in-betweens of neighbouring frames.
         internal static readonly int[] PerchRates = { 10, 15, 20, 30, 40, 50, 60 };
         internal bool TestFailed;
@@ -7449,13 +7451,14 @@ namespace CapriDesktop
                                     int oldCell = Advance(fpsNow), oldMix = perchMix;
                                     if (fastCell != 33 || fastMix != 128 || oldCell != 30 || oldMix != 0) framesWrong = "her perch advanced to " + fastCell + " + " + fastMix + " at 60 fps and " + oldCell + " + " + oldMix + " at 30";
                                     if (framesWrong != null) throw new Exception("Perch frames went wrong: " + framesWrong);
-                                    // Halfway from loop frame 33 to the blink: every channel of every pixel is the rounded average of the two.
+                                    // Halfway from loop frame 27 to the blink: every channel of every pixel is the rounded average of the two.
                                     int cellWide = perch.Strip.Width / perch.Count, cellHigh = perch.Strip.Height;
                                     int[] loopPixels = new int[cellWide * cellHigh], blinkPixels = new int[loopPixels.Length], mixPixels = new int[loopPixels.Length];
-                                    Pixels(perch.Strip, new Rectangle(33 * cellWide, 0, cellWide, cellHigh), loopPixels, false);
+                                    if (PerchBlinkFrom != 28 || perchBlink.Count != 8 || perchBlinkGlitch.Count != 8 || perchBlink.Strip.Width / perchBlink.Count != cellWide || perchBlink.Strip.Height != cellHigh) throw new Exception("Her perch blink isn't her artist's frames 29 to 36: " + PerchBlinkFrom + " / " + perchBlink.Count + " cells of " + perchBlink.Strip.Width / perchBlink.Count);
+                                    Pixels(perch.Strip, new Rectangle(27 * cellWide, 0, cellWide, cellHigh), loopPixels, false);
                                     Pixels(perchBlink.Strip, new Rectangle(0, 0, cellWide, cellHigh), blinkPixels, false);
                                     perchMix = 128;
-                                    Pixels(Tween(perch, 33, 34), new Rectangle(0, 0, cellWide, cellHigh), mixPixels, false);
+                                    Pixels(Tween(perch, 27, 28), new Rectangle(0, 0, cellWide, cellHigh), mixPixels, false);
                                     int mixMisses = 0, blinkChanged = 0;
                                     for (int i = 0; i < mixPixels.Length; i++)
                                     {
