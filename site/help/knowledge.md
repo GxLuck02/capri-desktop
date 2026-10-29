@@ -311,7 +311,7 @@ The main page has three sections: BRAIN, VOICE and CAPRI.
   - PREBUILT LOCAL: "Her voices · free". Her free voice and its styles, HD and Your voice (HD), in the "Free voice" menu. No key, no credits.
   - CUSTOM LOCAL: "Your own model". A voice model on your PC: a voice model file, Fish Speech, Kokoro or any OpenAI-style server. Its Set up button opens the voice model panel with only those choices. Once one is set up, clicking the row brings it straight back, and the "Voice model: <name>" button under it opens its panel again.
   - CLOUD VOICE: "Needs a key". The menu under it picks ElevenLabs, Fish Audio or OpenAI. ElevenLabs keeps its key box, Voice ID and Model there, as above. Fish Audio and OpenAI open the voice model panel with only those two: "Set up Fish Audio..." at first, then "Voice, key and model..." once it's in use. Setup guide on this row opens ElevenLabs' voice steps, or the panel for Fish Audio and OpenAI.
-  - CUSTOM LOCAL and CLOUD VOICE each keep their own setup and key, so switching between them loses neither.
+  - CUSTOM LOCAL and CLOUD VOICE each keep their own setup and key, so switching between them loses neither. CLOUD VOICE's menu keeps the service used there last, so clicking CLOUD VOICE again (even after a restart) brings back that one, not ElevenLabs.
 - Mic: "Mic: default" or "Mic: <name>". Click it to pick a mic. "Windows default" follows your Windows setting.
 - Test: she says a test line out loud.
 - "Ctrl + Alt + N mutes mic": click it to change the key (it opens Settings with Mute mic ready to change).

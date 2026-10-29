@@ -100,7 +100,7 @@ namespace CapriDesktop
         private bool off;
         private bool eleven;
         private bool wantEleven;
-        private const string Eleven = "ElevenLabs";
+        private const string Eleven = Companion.ElevenLabs;
         private static readonly string[] Clouds = { Eleven, "Fish Audio", "OpenAI" };
         private string cloudName = Eleven;
         private readonly Key cloudPick;
@@ -1265,6 +1265,7 @@ namespace CapriDesktop
             bool served = !off && !eleven && capri.ServerPicked, inCloud = served && capri.ServerInCloud;
             if (eleven) cloudName = Eleven;
             else if (inCloud) cloudName = capri.ServerCloudName;
+            else cloudName = capri.CloudChoice;
             voiceRow = off ? 0 : eleven || inCloud ? 3 : served ? 2 : 1;
             for (int i = 0; i < voiceRungs.Length; i++) voiceRungs[i].Checked = i == voiceRow;
             bool cloud = voiceRow == 3, elevenLabs = cloud && cloudName == Eleven;
@@ -1504,6 +1505,8 @@ namespace CapriDesktop
         internal void SetUpCloud() { OpenServer(true, CloudApi(cloudName)); }
 
         internal string ServerChoices { get { return sheet.Choices; } }
+
+        internal string CloudPicked { get { return cloudName; } }
 
         internal string CloudShown { get { return (cloudPick.Visible ? cloudPick.Text : "-") + " | " + (cloudVoice.Visible ? cloudVoice.Text : "-") + " | " + (customVoice.Visible ? customVoice.Text : "-"); } }
 
