@@ -256,6 +256,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build her, test her and send a
 
 ## Licence
 
+**Voices:** Capri prohibits cloning or impersonating a living person's voice without explicit, informed consent or other valid authorization. Capri ships no cloned voice: make your own with a voice design tool.
+
 Free for anything non-commercial: use her, share her, change her. No selling her or putting her in paid products. Credit us when you use her: her artist for her art and animations, and Capri, with a link to this page, for her code and anything else. Full terms in [LICENSE.md](LICENSE.md) (PolyForm Noncommercial 1.0.0). The credits are its Required Notices, so anyone who passes on any part of her has to pass them on too.
 
 Have fun and more updates to come!
