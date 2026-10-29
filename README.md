@@ -29,6 +29,17 @@
   </tr>
 </table>
 
+<p align="center">
+  <sub>Her window perch and music perch are by artist and animator <a href="#"><b>her artist</b></a>:</sub>
+</p>
+
+<table align="center">
+  <tr>
+    <td align="center"><img src="assets/readme/perch.webp" alt="Capri sitting on a window with her legs over the edge, blinking" width="110"><br><sub>Perching on your window</sub></td>
+    <td align="center"><img src="assets/readme/perch-music.webp" alt="Capri swaying to music while she sits on a window" width="110"><br><sub>Swaying to your music</sub></td>
+  </tr>
+</table>
+
 Beware that Capri may try to take over your human CPU. We take no responsibility for her actions.
 
 ## What she does
@@ -144,7 +155,7 @@ Who she is and how she talks lives in `personality.md`, a plain text file you ca
 - [x] Three brain tiers: NORMAL, HIGHER and MAX INTELLIGENCE
 - [x] Remembering things about you, in her notes (me.md)
 - [x] Keeping your chat for up to a week
-- [x] Calling you by a nickname, and replying in 20 languages
+- [x] Calling you by a nickname, and replying in 80 languages
 - [x] Saying in plain words when your PC is short on RAM or storage
 - [x] Watching your screen and commenting on your games
 - [x] Looking at your screen when you say "check my screen"
@@ -159,8 +170,9 @@ Who she is and how she talks lives in `personality.md`, a plain text file you ca
 - [x] Turning her voice off, so she just types
 - [x] Muting your mic pauses ElevenLabs voice chat
 - [x] ElevenLabs voice chat stops asking if you're still there when you go quiet or mute
-- [ ] An optional bigger voice for strong PCs (Qwen3-TTS 1.7B, or other voice models). Kokoro stays the default
-- [ ] Sliders for her free voice: pitch, the glitch effect and more, so you can tune how she sounds
+- [x] An optional HD voice for strong PCs (Qwen3-TTS 1.7B). Kokoro stays the default
+- [x] Sliders for her voice: pitch, speed, robot and glitch, so you can tune how she sounds
+- [x] Any voice model you set up yourself: a model file on your PC, your own server, or Fish Audio and OpenAI in the cloud
 
 **Jobs on your PC**
 
@@ -191,6 +203,7 @@ Who she is and how she talks lives in `personality.md`, a plain text file you ca
 - [x] Flailing and frowning when you pick her up, and glitching when you toss her
 - [x] Beaming in with crimson glitch tendrils when she starts
 - [x] Sitting on app windows, desktop icons and the bottom of your screen
+- [x] A smooth 60-frame window perch, and swaying to your music on it, animated by her artist
 - [x] Sitting or hanging anywhere: hold Shift or Ctrl when you drop her
 - [x] Riding your cursor
 - [x] Wandering between your open windows
@@ -236,4 +249,4 @@ Free for anything non-commercial: use her, share her, change her. No selling her
 
 Have fun and more updates to come!
 
-<sub>Setup guide based on Dancer's guide in the Discord. Font: Share Tech Mono (OFL). Free voice: Kokoro-82M (Apache-2.0). Her own ears: [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) for English and [v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for 25 European languages ([CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)), int8 exports by sherpa-onnx. Both run with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0). HD voice: [Qwen3-TTS 1.7B](https://github.com/QwenLM/Qwen3-TTS) (Apache-2.0), run with [qwentts.cpp](https://github.com/ServeurpersoCom/qwentts.cpp) (MIT).</sub>
+<sub>Window perch and music perch animations: [her artist](#). Setup guide based on Dancer's guide in the Discord. Font: Share Tech Mono (OFL). Free voice: Kokoro-82M (Apache-2.0). Her own ears: [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) for English and [v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for 25 European languages ([CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)), int8 exports by sherpa-onnx. Both run with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0). HD voice: [Qwen3-TTS 1.7B](https://github.com/QwenLM/Qwen3-TTS) (Apache-2.0), run with [qwentts.cpp](https://github.com/ServeurpersoCom/qwentts.cpp) (MIT).</sub>
