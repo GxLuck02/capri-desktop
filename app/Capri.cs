@@ -252,6 +252,13 @@ namespace CapriDesktop
         // glitch as HdGlitch, so the new name starts it at Off.
         [DataMember] public int HdRobot = VoiceFx.HdRobotDefault;
         [DataMember] public int HdVoiceGlitch;
+        // Her voice layers (Lachy, 29 Oct): two copies of her voice under her, each with its own pitch (semitones off hers, in
+        // half steps) and delay (ms). Off out of the box and in settings from before them, which get the layers' defaults.
+        [DataMember] public bool VoiceLayers;
+        [DataMember] public double LayerPitch1 = VoiceFx.Layering.HigherPitch;
+        [DataMember] public int LayerDelay1 = VoiceFx.Layering.Behind;
+        [DataMember] public double LayerPitch2 = VoiceFx.Layering.LowerPitch;
+        [DataMember] public int LayerDelay2 = VoiceFx.Layering.Behind;
         // Their own voice model under CUSTOM LOCAL, or Fish Audio or OpenAI under CLOUD VOICE. Its key is sealed like her other
         // keys. Its robot and glitch are its own and start at Off. ServerApi is "fish" for Fish Audio's API, and null for OpenAI's.
         [DataMember] public bool ServerVoice;
@@ -282,6 +289,10 @@ namespace CapriDesktop
         {
             VoiceSpeed = 100;
             HdRobot = VoiceFx.HdRobotDefault;
+            LayerPitch1 = VoiceFx.Layering.HigherPitch;
+            LayerDelay1 = VoiceFx.Layering.Behind;
+            LayerPitch2 = VoiceFx.Layering.LowerPitch;
+            LayerDelay2 = VoiceFx.Layering.Behind;
             Size = 240;
             Motion = true;
             OnTop = true;
@@ -1087,6 +1098,7 @@ namespace CapriDesktop
             VoiceFx.HdGlitch = Math.Max(0, Math.Min(100, preferences.HdVoiceGlitch));
             VoiceFx.ServerRobot = Math.Max(0, Math.Min(100, preferences.ServerRobot));
             VoiceFx.ServerGlitch = Math.Max(0, Math.Min(100, preferences.ServerGlitch));
+            VoiceFx.Layers = LayersOf(preferences);
             LoadServer();
             Sfx.Level = Math.Max(0, Math.Min(100, preferences.Sounds));
             Sfx.Out = delegate(short[] sound) { Post(delegate { Effect(sound); }); };
@@ -3400,6 +3412,25 @@ namespace CapriDesktop
             if (SpeaksHd) preferences.HdVoiceGlitch = VoiceFx.HdGlitch = glitch;
             else if (SpeaksServer) preferences.ServerGlitch = VoiceFx.ServerGlitch = glitch;
             else preferences.VoiceGlitch = VoiceFx.Glitch = glitch;
+            SavePreferences();
+        }
+
+        // Her VOICE LAYERS window: the switch, and each layer's pitch and delay. Every voice she has gets them.
+        internal VoiceFx.Layering VoiceLayers { get { return VoiceFx.Layers; } }
+
+        internal static VoiceFx.Layering LayersOf(Preferences saved)
+        {
+            return new VoiceFx.Layering(saved.VoiceLayers, saved.LayerPitch1, saved.LayerDelay1, saved.LayerPitch2, saved.LayerDelay2);
+        }
+
+        internal void SetVoiceLayers(VoiceFx.Layering layers)
+        {
+            VoiceFx.Layers = layers ?? VoiceFx.Layering.Off;
+            preferences.VoiceLayers = VoiceFx.Layers.On;
+            preferences.LayerPitch1 = VoiceFx.Layers.Pitch1;
+            preferences.LayerDelay1 = VoiceFx.Layers.Delay1;
+            preferences.LayerPitch2 = VoiceFx.Layers.Pitch2;
+            preferences.LayerDelay2 = VoiceFx.Layers.Delay2;
             SavePreferences();
         }
 
@@ -6658,17 +6689,18 @@ namespace CapriDesktop
             opened.Start(url, voiceId);
         }
 
-        // ElevenLabs voice chat streams its audio in, so her pitch, speed, robot and glitch go on a chunk at a time.
-        // What the styling still holds back comes out once the stream has been quiet for a moment.
+        // ElevenLabs voice chat streams its audio in, so her pitch, speed, robot, glitch and layers go on a chunk at a time.
+        // What the styling still holds back, her layers' delayed tails too, comes out once the stream has been quiet for a moment.
         private short[] ChatVoice(short[] samples)
         {
             int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, robot = VoiceFx.Robot, glitch = VoiceFx.Glitch;
-            if (chatFx != null && (chatFx.Pitch != pitch || chatFx.Speed != speed || chatFx.Robot != robot || chatFx.Glitch != glitch || chatFx.Rate != chatRate))
+            VoiceFx.Layering layers = VoiceFx.Layers;
+            if (chatFx != null && (chatFx.Pitch != pitch || chatFx.Speed != speed || chatFx.Robot != robot || chatFx.Glitch != glitch || chatFx.Rate != chatRate || !chatFx.Layers.Same(layers)))
             {
                 speaker.Play(chatFx.Flush());
                 chatFx = null;
             }
-            if (chatFx == null && (pitch != 0 || speed != 100 || robot > 0 || glitch > 0)) chatFx = new VoiceFx.Live(chatRate, pitch, speed, robot, glitch, Environment.TickCount, true);
+            if (chatFx == null && !VoiceFx.Plain(pitch, speed, robot, glitch, layers)) chatFx = new VoiceFx.Live(chatRate, pitch, speed, robot, glitch, Environment.TickCount, true, layers);
             if (chatFx == null) return samples;
             chatTail.Stop();
             chatTail.Start();
