@@ -86,7 +86,7 @@
   document.body.append(helper);
 
   // Frames, frames a second, and for her artist's 60-frame perch, how many cells go across before the strip wraps to its next row.
-  const clips = { perch: [60, 30, 10], perch_blink: [4, 30], perch_blink_glitch: [4, 30], perch_glitch: [10, 15] };
+  const clips = { perch: [60, 30, 10], perch_blink: [8, 30], perch_blink_glitch: [8, 30], perch_glitch: [10, 15] };
   const across = name => clips[name][2] || clips[name][0];
   const down = name => Math.ceil(clips[name][0] / across(name));
   const loaded = new Set();
@@ -120,8 +120,8 @@
     }
     let name = clip;
     let cell = motion ? index % clips[clip][0] : 0;
-    // A blink swaps in at cells 34 to 37 of the perch, where her artist's blink falls.
-    if (name === 'perch' && blinkWith && loaded.has(blinkWith) && cell >= 34 && cell < 38) { name = blinkWith; cell -= 34; }
+    // A blink swaps in at cells 28 to 35 of the perch: her artist's own blink, its frames 29 to 36.
+    if (name === 'perch' && blinkWith && loaded.has(blinkWith) && cell >= 28 && cell < 36) { name = blinkWith; cell -= 28; }
     if (!loaded.has(name)) return;
     if (shown === name + ':' + cell) return;
     const columns = across(name), rows = down(name);

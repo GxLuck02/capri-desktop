@@ -64,7 +64,7 @@
   const status = document.querySelector('#demo-status');
   const motion = !matchMedia('(prefers-reduced-motion: reduce)').matches;
   // Frames, frames a second, and for her artist's 60-frame perch, how many cells go across before the strip wraps to its next row.
-  const clips = { idle: [16, 8], blink: [4, 8], blink_glitch: [4, 8], grin: [16, 8], glitch: [10, 15], dangle: [24, 10], sleep: [16, 6], wake: [13, 15], perch: [60, 30, 10], perch_blink: [4, 30], perch_blink_glitch: [4, 30], perch_glitch: [10, 15], mouth: [5, 12] };
+  const clips = { idle: [16, 8], blink: [4, 8], blink_glitch: [4, 8], grin: [16, 8], glitch: [10, 15], dangle: [24, 10], sleep: [16, 6], wake: [13, 15], perch: [60, 30, 10], perch_blink: [8, 30], perch_blink_glitch: [8, 30], perch_glitch: [10, 15], mouth: [5, 12] };
   const across = name => clips[name][2] || clips[name][0];
   const down = name => Math.ceil(clips[name][0] / across(name));
   const cellAt = (name, cell) => {
@@ -119,9 +119,9 @@
     }
     let name = clip;
     let cell = motion ? index % clips[clip][0] : 0;
-    // A blink swaps in at cells 9 to 12 of her idle loop, and 34 to 37 of the perch's, where her artist's blink falls.
-    const blinkFrom = name === 'perch' ? 34 : 9;
-    if ((name === 'idle' || name === 'perch') && blinkWith && loaded.has(blinkWith) && cell >= blinkFrom && cell < blinkFrom + 4) { name = blinkWith; cell -= blinkFrom; }
+    // A blink swaps in at cells 9 to 12 of her idle loop, and at 28 to 35 of the perch's: her artist's own blink, its frames 29 to 36.
+    const blinkFrom = name === 'perch' ? 28 : 9;
+    if ((name === 'idle' || name === 'perch') && blinkWith && loaded.has(blinkWith) && cell >= blinkFrom && cell < blinkFrom + clips[blinkWith][0]) { name = blinkWith; cell -= blinkFrom; }
     capri.classList.toggle('still', clip === 'sleep' || clip === 'dangle');
     let mouth = -1;
     if (talkState === 'talking' && motion && clip === 'idle' && name !== 'blink_glitch' && loaded.has('mouth')) {
