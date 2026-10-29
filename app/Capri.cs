@@ -10234,10 +10234,10 @@ namespace CapriDesktop
                                 sheet.Save(Path.Combine(output, "clips.png"), ImageFormat.Png);
                             }
                             checks.Add("PASS all 12 clips draw: idle, blinks, grin, glitch, drag, sleep, wake and perch, plus the talking mouth");
-                            // Facing left, her perches show her artist's flipped frames: the outline of the old mirrored perch, with her
-                            // red arm and leg on the other side. The old look is the normal cell drawn as a tween, the same way.
+                            // Facing left, her perches are a plain mirror for now: her artist's flipped sets are out until the updated
+                            // ones come (Lachy, 29 Oct). The mirror is the normal cell drawn as a tween, the same way.
                             foreach (Clip seated in new[] { perch, perchBlink, perchBlinkGlitch, perchGlitch, perchDance, perchArrive, perchLeave })
-                                if (seated.Flipped == null || seated.Flipped.Size != seated.Strip.Size) throw new Exception("A perch clip has no flipped art the size of its own.");
+                                if (seated.Flipped != null) throw new Exception("A perch clip still has flipped art.");
                             bool facedWas = facingLeft, motionWas = preferences.Motion;
                             int outline = 0, sameOutline = 0, recoloured = 0;
                             try
@@ -10275,8 +10275,8 @@ namespace CapriDesktop
                                 }
                             }
                             finally { facingLeft = facedWas; preferences.Motion = motionWas; }
-                            if (sameOutline < outline * 98 / 100 || recoloured < outline * 3 / 100) throw new Exception("Facing left, her perch wasn't her artist's flipped frame: " + sameOutline + " of " + outline + " outline pixels match the mirror, " + recoloured + " recoloured.");
-                            checks.Add("PASS perch facing left: all 7 perch clips have her artist's flipped art the size of their own, drawn in the mirrored outline (" + sameOutline * 100 / outline + "% matching) with her arm and leg swapped (" + recoloured * 100 / outline + "% recoloured)");
+                            if (sameOutline < outline * 98 / 100 || recoloured > outline / 100) throw new Exception("Facing left, her perch wasn't a plain mirror: " + sameOutline + " of " + outline + " outline pixels match the mirror, " + recoloured + " recoloured.");
+                            checks.Add("PASS perch facing left: all 7 perch clips are a plain mirror until her artist's updated flipped sets come (" + sameOutline * 100 / outline + "% matching, " + recoloured * 100 / outline + "% recoloured)");
                             using (Font display = Look.Mono(14, FontStyle.Bold))
                             using (Font slanted = Look.Mono(9f, FontStyle.Italic, GraphicsUnit.Point))
                                 if (display.Name != "Share Tech Mono" || slanted.Name != "Share Tech Mono") throw new Exception("Embedded font did not load: " + display.Name);

@@ -3031,6 +3031,8 @@ namespace CapriDesktop
         internal const string Files = "file";
         internal const string FishCloud = "https://api.fish.audio";
         internal const string FishFree = "s2.1-pro-free";
+        // Her own voice on Fish Audio (Lachy, 29 Oct: "everybody could just use this voice for fish"), used when the voice box is blank.
+        internal const string FishCapri = "20a4d45fd7864a2fb5387b7b2d94ab83";
         internal const string OpenAiCloud = "https://api.openai.com/v1";
         internal const string Theirs = "Your voice server";
         // How long a server has to start answering a line, in milliseconds, before her free voice says it.
@@ -3049,8 +3051,8 @@ namespace CapriDesktop
         // Ready-made choices for its panel. Picking one fills in its API, address, model and voice; the last keeps what's typed.
         internal static readonly Service[] Services =
         {
-            new Service("Fish Audio · cloud", Fish, FishCloud, FishFree, "", "Voice ID or fish.audio link", "Paste your Fish Audio key",
-                "Fish Audio's voices. Paste a key from fish.audio and a voice's link or ID from its library. " + FishFree + " is its free tier."),
+            new Service("Fish Audio · cloud", Fish, FishCloud, FishFree, FishCapri, "Voice ID or fish.audio link", "Paste your Fish Audio key",
+                "Fish Audio's voices. Paste a key from fish.audio. She starts in her own Capri voice; paste a voice's link or ID from its library for another. " + FishFree + " is its free tier."),
             new Service("Voice model file · on your PC", Files, "", "", "", "Number or clip, optional", "Optional",
                 "A Piper, Kokoro, Kitten or Pocket TTS model for sherpa-onnx, run with no server. Browse to its .tar.bz2 or .onnx. Pocket TTS copies a voice clip, or her HD voice if blank."),
             new Service("Fish Speech · on your PC", Fish, "http://127.0.0.1:8080", "", "", "Reference ID, optional", "Optional",
@@ -3346,7 +3348,8 @@ namespace CapriDesktop
                 {
                     // Fish Audio's API takes its voice as a reference ID, and its model in a header.
                     body.Append("\"text\":").Append(Voice.Quote(piece));
-                    if (!string.IsNullOrEmpty(speaker)) body.Append(",\"reference_id\":").Append(Voice.Quote(FishVoice(speaker)));
+                    string voice = !string.IsNullOrEmpty(speaker) ? FishVoice(speaker) : url != null && url.TrimEnd('/') == FishCloud ? FishCapri : null;
+                    if (voice != null) body.Append(",\"reference_id\":").Append(Voice.Quote(voice));
                     body.Append(",\"format\":\"wav\",\"sample_rate\":").Append(YourVoice.Rate).Append('}');
                 }
                 else
