@@ -914,12 +914,9 @@ namespace CapriDesktop
             for (int w = 0; w < words.Count; w++) rare[w] = Math.Log(1 + (moments.Count - lines[w] + 0.5) / (lines[w] + 0.5));
             // Unasked, a line has to match words about as rare, all together, as one said only once.
             double telling = 0.6 * Math.Log(1 + (moments.Count - 0.5) / 1.5);
-            HashSet<string> shown = new HashSet<string>(StringComparer.Ordinal);
-            if (chat != null) foreach (string line in chat) shown.Add(Regex.Replace(line ?? "", @"\s+", " ").Trim());
             List<KeyValuePair<double, int>> found = new List<KeyValuePair<double, int>>();
             foreach (KeyValuePair<int, int[]> hit in hits)
             {
-                if (shown.Contains(Said(moments[hit.Key].On, moments[hit.Key].Line))) continue;
                 double score = 0, weight = 0;
                 for (int w = 0; w < words.Count; w++)
                 {
@@ -930,19 +927,24 @@ namespace CapriDesktop
                 }
                 if (reminiscing || weight >= telling) found.Add(new KeyValuePair<double, int>(score, hit.Key));
             }
-            if (found.Count == 0) return "";
             // Best first, newest first among equals; then shown oldest first, each with the other half of its exchange.
             found.Sort((a, b) => a.Key != b.Key ? b.Key.CompareTo(a.Key) : b.Value.CompareTo(a.Value));
+            HashSet<string> shown = new HashSet<string>(StringComparer.Ordinal);
+            if (chat != null) foreach (string line in chat) shown.Add(Regex.Replace(line ?? "", @"\s+", " ").Trim());
             int most = reminiscing ? 8 : 4, room = reminiscing ? 12 : 8, taken = 0;
+            double best = 0;
             SortedSet<int> picked = new SortedSet<int>();
             foreach (KeyValuePair<double, int> match in found)
             {
-                if (taken == most || picked.Count >= room || (!reminiscing && match.Key < found[0].Key / 2)) break;
-                taken++;
+                if (taken == most || picked.Count >= room || (!reminiscing && match.Key < best / 2)) break;
+                // Lines about where they live or how to reach them never come back, the same rule as her notes, and nor do lines she can already see.
+                if (Revealing(moments[match.Value].Line) || shown.Contains(Said(moments[match.Value].On, moments[match.Value].Line))) continue;
+                if (taken++ == 0) best = match.Key;
                 picked.Add(match.Value);
                 int other = Partner(moments, match.Value);
-                if (other >= 0 && picked.Count < room && !shown.Contains(Said(moments[other].On, moments[other].Line))) picked.Add(other);
+                if (other >= 0 && picked.Count < room && !Revealing(moments[other].Line) && !shown.Contains(Said(moments[other].On, moments[other].Line))) picked.Add(other);
             }
+            if (picked.Count == 0) return "";
             List<string> recalled = new List<string>();
             foreach (int i in picked) recalled.Add("- " + Shown(moments[i]));
             return (reminiscing ? "\n\n(Lines from your own chat logs and notes on this PC that match what they asked, oldest first. They really happened; use them if they help:\n"
@@ -957,7 +959,7 @@ namespace CapriDesktop
             for (int i = 0; i < notes.Count - NotesShown; i++)
             {
                 string note = notes[i].TrimStart('-', '*', ' ');
-                if (!Revealing(note)) moments.Add(new Moment(null, note, Words(note)));
+                moments.Add(new Moment(null, note, Words(note)));
             }
             string[] days;
             try { days = Directory.GetFiles(TranscriptPath, "????-??-??.md"); }
@@ -979,7 +981,7 @@ namespace CapriDesktop
                         catch (UnauthorizedAccessException) { continue; }
                         string on = Path.GetFileNameWithoutExtension(day);
                         List<Moment> read = new List<Moment>();
-                        foreach (string line in lines) if (line.StartsWith("*", StringComparison.Ordinal) && !Revealing(line)) read.Add(new Moment(on, line, Words(Said(on, line))));
+                        foreach (string line in lines) if (line.StartsWith("*", StringComparison.Ordinal)) read.Add(new Moment(on, line, Words(Said(on, line))));
                         dug[day] = kept = new KeyValuePair<string, List<Moment>>(stamp, read);
                     }
                     moments.AddRange(kept.Value);
@@ -1853,6 +1855,8 @@ namespace CapriDesktop
         internal void Load(string path)
         {
             ChatPath = path;
+            // Her chat logs are read in the background as she starts, so the first thing they say doesn't wait on months of them.
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { if (Keeping && Digging && TranscriptPath != null) Moments(); });
             SavedChat saved;
             try
             {
