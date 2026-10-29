@@ -120,6 +120,8 @@ namespace CapriDesktop
         private bool yoursShown;
         private ServerSheet sheet;
         private SecuritySheet guard;
+        private LayersSheet layered;
+        private Key layersKey;
         private readonly Slider gap;
         private readonly Label gapName;
         private readonly Entry keyEntry;
@@ -413,10 +415,13 @@ namespace CapriDesktop
             Make("Edit personality", 156, 176, 130, 28, delegate { capri.OpenPersonality(); }).AccessibleName = "Edit her personality: personality.md";
             Make("Reset", 294, 176, 62, 28, delegate { capri.ResetPersonality(); }).AccessibleName = "Reset her personality to her default";
             Caption("VOICE >", 28, 220, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
-            Label styleNote = Caption("Every voice, ElevenLabs too", 120, 218, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+            Label styleNote = Caption("Every voice, ElevenLabs too", 88, 218, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             styleNote.AutoSize = false;
             styleNote.TextAlign = ContentAlignment.MiddleRight;
-            styleNote.Bounds = new Rectangle(120, 218, 236, 20);
+            styleNote.Bounds = new Rectangle(88, 218, 172, 20);
+            // Her VOICE LAYERS window (Lachy, 29 Oct) opens from VOICE's heading, and the button says whether they're on.
+            layersKey = Make("Layers: Off", 266, 216, 90, 22, delegate { OpenLayers(); });
+            layersKey.AccessibleName = "Voice layers: two copies of her voice under her, each with its own pitch and delay";
             Caption("Volume", 28, 249, Font, Look.Dim);
             volume = PageSlider(VolumeNames, 242, "Her voice volume");
             volumeName = Caption("100%", 292, 249, Font, Look.Ink);
@@ -425,7 +430,7 @@ namespace CapriDesktop
             Caption("Pitch", 28, 285, Font, Look.Dim);
             pitchSlider = PageSlider(PitchNames, 278, "Her voice's pitch");
             pitchName = Caption("Normal", 292, 285, Font, Look.Ink);
-            pitchSlider.Changed += delegate { if (syncing) return; pitchName.Text = PitchNames[pitchSlider.Value]; capri.SetVoicePitch(pitchSlider.Value - VoiceFx.MostPitch); };
+            pitchSlider.Changed += delegate { if (syncing) return; pitchName.Text = PitchNames[pitchSlider.Value]; capri.SetVoicePitch(pitchSlider.Value - VoiceFx.MostPitch); ShowLayers(); };
             pitchSlider.Released += delegate { if (!syncing) capri.HearVoiceStyle(); };
             Caption("Speed", 28, 321, Font, Look.Dim);
             paceSlider = PageSlider(PaceNames, 314, "Her voice's speed");
@@ -855,7 +860,8 @@ namespace CapriDesktop
         {
             Form form = control.FindForm();
             SecuritySheet guarded = form as SecuritySheet;
-            return form == null ? 1f : form.CurrentAutoScaleDimensions.Width / 96f * (guarded != null ? guarded.Zoom : 1f);
+            LayersSheet layers = form as LayersSheet;
+            return form == null ? 1f : form.CurrentAutoScaleDimensions.Width / 96f * (guarded != null ? guarded.Zoom : layers != null ? layers.Zoom : 1f);
         }
 
         private int Scaled(int value) { return loaded ? (int)Math.Round(value * DeviceScale()) : value; }
@@ -954,6 +960,7 @@ namespace CapriDesktop
             volumeName.Text = VolumeNames[loud];
             pitchSlider.Value = capri.VoicePitch + VoiceFx.MostPitch;
             pitchName.Text = PitchNames[pitchSlider.Value];
+            ShowLayers();
             int pace = 0;
             for (int i = 0; i < Paces.Length; i++) if (Math.Abs(Paces[i] - capri.VoiceSpeed) < Math.Abs(Paces[pace] - capri.VoiceSpeed)) pace = i;
             paceSlider.Value = pace;
@@ -1551,6 +1558,55 @@ namespace CapriDesktop
             guard.Sync();
             if (!guard.Visible) guard.Show(this);
             guard.Activate();
+        }
+
+        // Her VOICE LAYERS window, over the Mainframe like SECURITY.
+        private void OpenLayers()
+        {
+            if (layered == null || layered.IsDisposed) layered = new LayersSheet(this, 1f);
+            layered.Sync();
+            if (!layered.Visible) layered.Show(this);
+            layered.Activate();
+        }
+
+        // The Layers button says whether they're on, lit while they are, and the window follows Settings' Pitch.
+        private void ShowLayers()
+        {
+            bool on = capri.VoiceLayers.On;
+            layersKey.Text = on ? "Layers: On" : "Layers: Off";
+            if (layersKey.Picked != on) { layersKey.Picked = on; layersKey.Invalidate(); }
+            if (layered != null && !layered.IsDisposed) layered.Sync();
+        }
+
+        // Her VOICE LAYERS window as they'd use it, for the smoke test: opened from VOICE, the switch flipped, a slider dragged,
+        // what it shows and how it fits at 100%, 150% and 200%.
+        internal void ShowLayersWindow() { OpenLayers(); }
+
+        internal string LayersShown { get { return layered == null || layered.IsDisposed || !layered.Visible ? null : layered.Showing; } }
+
+        internal string LayersKeyShown { get { return layersKey.Text + (layersKey.Picked ? " (lit)" : ""); } }
+
+        internal void FlipLayers() { layered.Flip(); }
+
+        // Slider 0 is MAIN's pitch, 1 and 2 Layer 1's pitch and delay, 3 and 4 Layer 2's.
+        internal void SlideLayers(int slider, int index) { layered.Slide(slider, index); }
+
+        internal void LayersDefaults() { layered.Defaults(); }
+
+        internal void CloseLayers() { if (layered != null && !layered.IsDisposed) layered.Close(); }
+
+        internal string LayersCrowded { get { return layered == null || layered.IsDisposed ? "not open" : layered.Crowded(); } }
+
+        internal string LayersAt(float zoom, string picture)
+        {
+            using (LayersSheet drawn = new LayersSheet(this, zoom))
+            {
+                drawn.Show(this);
+                string crowded = drawn.Crowded(), size = " (" + drawn.ClientSize.Width + " x " + drawn.ClientSize.Height + " at " + zoom + ")";
+                if (picture != null) drawn.Picture(picture);
+                drawn.Close();
+                return crowded == null ? null : crowded + size;
+            }
         }
 
         // Her SECURITY window as they'd use it, for the smoke test: opened from HABITS, a toggle clicked, the slider dragged
@@ -2802,6 +2858,289 @@ namespace CapriDesktop
             }
         }
 
+        // Her VOICE LAYERS window, in SECURITY's look (Lachy, 29 Oct): a switch, then MAIN, her voice itself, whose pitch is
+        // Settings > VOICE > Pitch and moves with it, and LAYER 1 and LAYER 2, copies of her mixed in under her, each with its
+        // own pitch (half steps from -12 to +12 semitones off hers) and delay (0 to 250 ms). Letting go of a slider has her say
+        // a line in it, and so does the switch. It opens from the Layers button in VOICE's heading. Zoom is 1 except in the smoke
+        // test, which draws it at 150% and 200% too.
+        private sealed class LayersSheet : Form
+        {
+            internal const int Wide = 760, Tall = 392, Column = 364, DelayStep = 5;
+            internal readonly float Zoom;
+            private static readonly string[] PitchSteps = PitchLabels();
+            private static readonly string[] DelaySteps = DelayLabels();
+            private readonly Mainframe owner;
+            private readonly Toggle onOff;
+            private readonly Slider mainPitch;
+            private readonly Label mainName;
+            private readonly Slider[] pitches = new Slider[2];
+            private readonly Slider[] delays = new Slider[2];
+            private readonly Label[] pitchNames = new Label[2];
+            private readonly Label[] delayNames = new Label[2];
+            private bool syncing;
+
+            internal LayersSheet(Mainframe owner, float zoom)
+            {
+                this.owner = owner;
+                Zoom = zoom;
+                Text = "Voice layers";
+                Icon = owner.Icon;
+                ShowInTaskbar = false;
+                FormBorderStyle = FormBorderStyle.None;
+                StartPosition = FormStartPosition.Manual;
+                AutoScaleMode = AutoScaleMode.Dpi;
+                AutoScaleDimensions = new SizeF(96, 96);
+                Font = Look.Mono(9f * zoom, FontStyle.Regular, GraphicsUnit.Point);
+                BackColor = Look.Panel;
+                ForeColor = Look.Ink;
+                DoubleBuffered = true;
+                KeyPreview = true;
+                ClientSize = new Size(Z(Wide), Z(Tall));
+                Font head = Look.Mono(9f * zoom, FontStyle.Bold, GraphicsUnit.Point), small = Look.Mono(8.5f * zoom, FontStyle.Regular, GraphicsUnit.Point);
+                Caption("VOICE LAYERS >", 28, 22, head, Look.Yellow);
+                Key shut = new Key();
+                shut.Bounds = Box(Wide - 54, 20, 26, 22);
+                shut.Glyph = 2;
+                shut.AccessibleName = "Close";
+                shut.Click += delegate { Close(); };
+                Controls.Add(shut);
+                Caption("Her voice, and two copies of it mixed in under her, each with its own pitch and delay.", 28, 48, small, Look.Dim);
+                onOff = new Toggle();
+                onOff.Text = "Voice layers";
+                onOff.Bounds = Box(28, 80, 200, 22);
+                onOff.AccessibleName = "Voice layers. Off, she sounds as she always has";
+                onOff.CheckedChanged += delegate
+                {
+                    if (syncing) return;
+                    owner.capri.SetVoiceLayers(owner.capri.VoiceLayers.Turned(onOff.Checked));
+                    owner.ShowLayers();
+                    owner.capri.HearVoiceStyle();
+                };
+                Controls.Add(onOff);
+                Caption("Off: she sounds as she always has. On: every voice she has, ElevenLabs too.", 50, 102, small, Look.Dim);
+                Make("Hear her", Wide - 236, 79, 100, 24, delegate { owner.capri.HearVoiceStyle(); }).AccessibleName = "Hear her: she says a line in her voice as it is now";
+                Make("Defaults", Wide - 128, 79, 100, 24, delegate { Defaults(); }).AccessibleName = "Defaults: Layer 1 " + VoiceFx.Layering.PitchName(VoiceFx.Layering.HigherPitch) + " and Layer 2 " + VoiceFx.Layering.PitchName(VoiceFx.Layering.LowerPitch) + " semitones, both " + VoiceFx.Layering.DelayName(VoiceFx.Layering.Behind) + " behind her";
+                Caption("MAIN >", 28, 146, head, Look.Yellow);
+                Caption("Pitch", 28, 179, Font, Look.Dim);
+                mainPitch = Bar(PitchNames, 96, 172, 300, "Her voice's pitch, the same as Settings > VOICE > Pitch");
+                mainName = Caption("Normal", 408, 179, Font, Look.Ink);
+                mainPitch.Changed += delegate
+                {
+                    if (syncing) return;
+                    owner.capri.SetVoicePitch(mainPitch.Value - VoiceFx.MostPitch);
+                    mainName.Text = PitchNames[mainPitch.Value];
+                    owner.Sync();
+                };
+                mainPitch.Released += delegate { if (!syncing) owner.capri.HearVoiceStyle(); };
+                Caption("Her voice itself. Its pitch is Settings > VOICE > Pitch, and they move together.", 28, 210, small, Look.Dim);
+                for (int layer = 1; layer <= 2; layer++)
+                {
+                    int x = layer == 1 ? 28 : 28 + Column, at = layer - 1, which = layer;
+                    Caption("LAYER " + layer + " >", x, 252, head, Look.Yellow);
+                    Caption("Pitch", x, 285, Font, Look.Dim);
+                    pitches[at] = Bar(PitchSteps, x + 68, 278, 200, "Layer " + layer + "'s pitch, in semitones from hers");
+                    pitches[at].TickEvery = 4;
+                    pitchNames[at] = Caption("Same", x + 280, 285, Font, Look.Ink);
+                    Caption("Delay", x, 321, Font, Look.Dim);
+                    delays[at] = Bar(DelaySteps, x + 68, 314, 200, "Layer " + layer + "'s delay behind her");
+                    delays[at].TickEvery = 10;
+                    delayNames[at] = Caption("0 ms", x + 280, 321, Font, Look.Ink);
+                    Caption(layer == 1 ? "Out of the box a little higher, just behind her." : "Out of the box lower, just behind her.", x, 352, small, Look.Dim);
+                    pitches[at].Changed += delegate
+                    {
+                        if (syncing) return;
+                        VoiceFx.Layering now = owner.capri.VoiceLayers;
+                        owner.capri.SetVoiceLayers(now.With(which, pitches[which - 1].Value / 2.0 - VoiceFx.Layering.MostPitch, now.DelayOf(which)));
+                        pitchNames[which - 1].Text = VoiceFx.Layering.PitchName(owner.capri.VoiceLayers.PitchOf(which));
+                    };
+                    delays[at].Changed += delegate
+                    {
+                        if (syncing) return;
+                        VoiceFx.Layering now = owner.capri.VoiceLayers;
+                        owner.capri.SetVoiceLayers(now.With(which, now.PitchOf(which), delays[which - 1].Value * DelayStep));
+                        delayNames[which - 1].Text = VoiceFx.Layering.DelayName(owner.capri.VoiceLayers.DelayOf(which));
+                    };
+                    pitches[at].Released += delegate { if (!syncing) owner.capri.HearVoiceStyle(); };
+                    delays[at].Released += delegate { if (!syncing) owner.capri.HearVoiceStyle(); };
+                }
+                Sync();
+            }
+
+            // Half steps from -12 to +12 semitones: "-12", "-11.5", ... "Same", ... "+12".
+            private static string[] PitchLabels()
+            {
+                string[] names = new string[(int)(VoiceFx.Layering.MostPitch * 4) + 1];
+                for (int i = 0; i < names.Length; i++) names[i] = VoiceFx.Layering.PitchName(i / 2.0 - VoiceFx.Layering.MostPitch);
+                return names;
+            }
+
+            private static string[] DelayLabels()
+            {
+                string[] names = new string[VoiceFx.Layering.MostDelay / DelayStep + 1];
+                for (int i = 0; i < names.Length; i++) names[i] = VoiceFx.Layering.DelayName(i * DelayStep);
+                return names;
+            }
+
+            private int Z(int value) { return (int)Math.Round(value * Zoom); }
+
+            private Rectangle Box(int x, int y, int width, int height) { return new Rectangle(Z(x), Z(y), Z(width), Z(height)); }
+
+            private Label Caption(string text, int x, int y, Font font, Color colour)
+            {
+                Label label = new Note();
+                label.Text = text;
+                label.Font = font;
+                label.ForeColor = colour;
+                label.BackColor = Look.Panel;
+                label.AutoSize = true;
+                label.Location = new Point(Z(x), Z(y));
+                Controls.Add(label);
+                return label;
+            }
+
+            private Slider Bar(string[] names, int x, int y, int width, string name)
+            {
+                Slider slider = new Slider(names);
+                slider.Bounds = Box(x, y, width, 30);
+                slider.AccessibleName = name;
+                Controls.Add(slider);
+                return slider;
+            }
+
+            private Key Make(string text, int x, int y, int width, int height, EventHandler click)
+            {
+                Key made = new Key();
+                made.Text = text;
+                made.Font = Font;
+                made.Bounds = Box(x, y, width, height);
+                made.Click += click;
+                Controls.Add(made);
+                return made;
+            }
+
+            // The switch, MAIN's pitch and each layer as they are now.
+            internal void Sync()
+            {
+                syncing = true;
+                VoiceFx.Layering layers = owner.capri.VoiceLayers;
+                onOff.Checked = layers.On;
+                mainPitch.Value = owner.capri.VoicePitch + VoiceFx.MostPitch;
+                mainName.Text = PitchNames[mainPitch.Value];
+                for (int at = 0; at < 2; at++)
+                {
+                    pitches[at].Value = (int)Math.Round((layers.PitchOf(at + 1) + VoiceFx.Layering.MostPitch) * 2);
+                    pitchNames[at].Text = VoiceFx.Layering.PitchName(layers.PitchOf(at + 1));
+                    delays[at].Value = (int)Math.Round(layers.DelayOf(at + 1) / (double)DelayStep);
+                    delayNames[at].Text = VoiceFx.Layering.DelayName(layers.DelayOf(at + 1));
+                }
+                syncing = false;
+            }
+
+            // Both layers back to how they come, on or off as they are, and a line in them.
+            internal void Defaults()
+            {
+                owner.capri.SetVoiceLayers(new VoiceFx.Layering(owner.capri.VoiceLayers.On, VoiceFx.Layering.HigherPitch, VoiceFx.Layering.Behind, VoiceFx.Layering.LowerPitch, VoiceFx.Layering.Behind));
+                Sync();
+                owner.capri.HearVoiceStyle();
+            }
+
+            // "On | Normal | +1.5, 25 ms | -2.5, 25 ms", as the window shows it, for the smoke test.
+            internal string Showing
+            {
+                get { return (onOff.Checked ? "On" : "Off") + " | " + mainName.Text + " | " + pitchNames[0].Text + ", " + delayNames[0].Text + " | " + pitchNames[1].Text + ", " + delayNames[1].Text; }
+            }
+
+            internal void Flip() { onOff.Checked = !onOff.Checked; }
+
+            internal void Slide(int slider, int index) { (slider == 0 ? mainPitch : slider == 1 ? pitches[0] : slider == 2 ? delays[0] : slider == 3 ? pitches[1] : delays[1]).Slide(index); }
+
+            // Anything that overlaps, pokes out of the window or doesn't fit its own text, or null.
+            internal string Crowded()
+            {
+                float s = ScaleOf(this);
+                for (int i = 0; i < Controls.Count; i++)
+                {
+                    Control a = Controls[i];
+                    if (!a.Visible || (a is Label && a.Text.Length == 0)) continue;
+                    if (!ClientRectangle.Contains(a.Bounds) || a.Right > ClientSize.Width - (int)(16 * s)) return "pokes out: " + (a.Text.Length > 0 ? a.Text : a.AccessibleName) + " " + a.Bounds + " in " + ClientSize;
+                    Toggle box = a as Toggle;
+                    if (box != null && TextRenderer.MeasureText(box.Text, box.Font).Width + (int)Math.Ceiling(22 * s) > box.Width) return "doesn't fit: " + box.Text + " " + TextRenderer.MeasureText(box.Text, box.Font).Width + " in " + box.Width;
+                    Key key = a as Key;
+                    if (key != null && key.Text.Length > 0 && TextRenderer.MeasureText(key.Text, key.Font).Width + (int)Math.Ceiling(12 * s) > key.Width) return "doesn't fit: " + key.Text + " " + TextRenderer.MeasureText(key.Text, key.Font).Width + " in " + key.Width;
+                    for (int j = i + 1; j < Controls.Count; j++)
+                    {
+                        Control b = Controls[j];
+                        if (!b.Visible || (b is Label && b.Text.Length == 0)) continue;
+                        if (a.Bounds.IntersectsWith(b.Bounds)) return "overlap: " + (a.Text.Length > 0 ? a.Text : a.AccessibleName) + " / " + (b.Text.Length > 0 ? b.Text : b.AccessibleName);
+                    }
+                }
+                // The widest a value can get, next to its slider: "-11.5" and "250 ms".
+                foreach (Label name in new[] { pitchNames[0], pitchNames[1], delayNames[0], delayNames[1], mainName })
+                {
+                    string widest = name == mainName ? "Normal" : Array.IndexOf(pitchNames, name) >= 0 ? "-11.5" : "250 ms";
+                    if (name.Left + TextRenderer.MeasureText(widest, name.Font).Width > ClientSize.Width - (int)(16 * s)) return "pokes out: " + widest;
+                    foreach (Control other in Controls)
+                        if (other != name && other.Visible && other.Bounds.IntersectsWith(new Rectangle(name.Left, name.Top, TextRenderer.MeasureText(widest, name.Font).Width, name.Height))) return "overlap: " + widest + " / " + (other.Text.Length > 0 ? other.Text : other.AccessibleName);
+                }
+                return null;
+            }
+
+            internal void Picture(string path)
+            {
+                using (Bitmap shot = new Bitmap(Width, Height))
+                {
+                    DrawToBitmap(shot, new Rectangle(Point.Empty, Size));
+                    shot.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+
+            // Over the Mainframe, like SECURITY, and on the screen.
+            protected override void OnLoad(EventArgs e)
+            {
+                base.OnLoad(e);
+                Rectangle area = Screen.FromControl(owner).WorkingArea;
+                int x = owner.Left + (owner.Width - Width) / 2, y = owner.Top + (int)(48 * ScaleOf(this));
+                Location = new Point(Math.Max(area.Left, Math.Min(area.Right - Width, x)), Math.Max(area.Top, Math.Min(area.Bottom - Height, y)));
+            }
+
+            protected override void OnSizeChanged(EventArgs e)
+            {
+                base.OnSizeChanged(e);
+                float s = ScaleOf(this);
+                Region old = Region;
+                using (GraphicsPath plate = Look.Plate(new RectangleF(0, 0, Width, Height), 12 * s, -1, Height / 2f, 0, true)) Region = new Region(plate);
+                if (old != null) old.Dispose();
+                Invalidate(true);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                float s = ScaleOf(this);
+                Graphics graphics = e.Graphics;
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Backdrop(graphics, this, s);
+                using (Brush red = new SolidBrush(Look.Red)) graphics.FillRectangle(red, 13 * s, 22 * s, 3 * s, Height - 46 * s);
+                using (GraphicsPath edge = Look.Plate(new RectangleF(s, s, Width - 2 * s - 1, Height - 2 * s - 1), 12 * s, -1, Height / 2f, 0, true))
+                using (Pen cyan = new Pen(Look.Cyan, 2 * s))
+                    graphics.DrawPath(cyan, edge);
+            }
+
+            // Esc closes it.
+            protected override void OnKeyDown(KeyEventArgs e)
+            {
+                if (e.KeyCode == Keys.Escape) { e.Handled = true; Close(); return; }
+                base.OnKeyDown(e);
+            }
+
+            // Dragged by any spot that isn't a control, like the Mainframe.
+            protected override void WndProc(ref Message message)
+            {
+                base.WndProc(ref message);
+                if (message.Msg == 0x0084 && message.Result == new IntPtr(1)) message.Result = new IntPtr(2);
+            }
+        }
+
         private sealed class Slider : Control
         {
             private readonly string[] labels;
@@ -2809,6 +3148,8 @@ namespace CapriDesktop
             private bool hot;
             private bool sliding;
             private int settled;
+            // A tick under every step, or every few on a slider with many, like her voice layers' pitch and delay.
+            internal int TickEvery = 1;
             internal event EventHandler Changed;
             // Once the knob or an arrow key is let go somewhere new.
             internal event EventHandler Released;
@@ -2906,7 +3247,7 @@ namespace CapriDesktop
                 using (Brush track = new SolidBrush(Track)) graphics.FillRectangle(track, start, middle - 2 * s, span, 4 * s);
                 using (Brush lit = new SolidBrush(Look.Cyan)) graphics.FillRectangle(lit, start, middle - 2 * s, thumb - start, 4 * s);
                 using (Brush tick = new SolidBrush(Edge))
-                    for (int i = 0; i < labels.Length; i++) graphics.FillRectangle(tick, start + span * i / (labels.Length - 1) - 0.5f * s, middle + 5 * s, 1.5f * s, 4 * s);
+                    for (int i = 0; i < labels.Length; i += Math.Max(1, TickEvery)) graphics.FillRectangle(tick, start + span * i / (labels.Length - 1) - 0.5f * s, middle + 5 * s, 1.5f * s, 4 * s);
                 RectangleF knob = new RectangleF(thumb - 5 * s, middle - 8 * s, 10 * s, 16 * s);
                 using (Brush fill = new SolidBrush(Field)) graphics.FillRectangle(fill, knob);
                 using (Pen edge = new Pen(hot || Focused || sliding ? Look.Cyan : Look.Ink, 1.6f * s)) graphics.DrawRectangle(edge, knob.X, knob.Y, knob.Width, knob.Height);
