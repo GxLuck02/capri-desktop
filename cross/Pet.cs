@@ -181,6 +181,7 @@ namespace CapriDesktop
         internal Pick SetupPick;
         internal bool SettingUp;
         internal string SetupText;
+        internal bool Loading;
         private List<string> cloudModels;
         internal string BrainProblem;
         internal Func<bool> MusicPlaying = Music.Playing;
@@ -1532,24 +1533,36 @@ namespace CapriDesktop
                 {
                     if (viaOllama) Brain.Pull(pick.Ollama, progress, delegate { return builtIn.Cancel; });
                     else builtIn.Install(pick, progress);
-                    Dispatcher.UIThread.Post(delegate { SetupText = "Loading " + pick.Name; ShowState(); });
+                    // Cancel only stops downloads, so it hides while the brain loads.
+                    Dispatcher.UIThread.Post(delegate { Loading = true; SetupText = "Loading " + pick.Name; ShowState(); });
                     if (!viaOllama) builtIn.Ensure(pick);
                     Dispatcher.UIThread.Post(delegate
                     {
                         SettingUp = false;
+                        Loading = false;
                         SetupText = null;
-                        if (Brain.Remote != null) { builtIn.Stop(); ShowState(); return; }
+                        // A cloud tier or an Ollama model picked meanwhile wins over the brain that just loaded.
+                        if (Brain.Remote != null || (!viaOllama && Brain.Model != null && Brain.Local == null)) { builtIn.Stop(); ShowState(); return; }
                         if (viaOllama) { DropBuiltIn(); Saved.Model = pick.Ollama; Save(); FindBrain(); }
                         else UseBuiltIn(pick);
                         ShowState();
                         Reply(++asking, BrainHeard, "Brain online. I'm thinking with " + pick.Name + " on this " + (OperatingSystem.IsMacOS() ? "Mac" : "computer") + " now.");
                     });
                 }
-                catch (OperationCanceledException) { Dispatcher.UIThread.Post(delegate { SettingUp = false; SetupText = null; ShowProblem("Cancelled. It picks up where it left off."); }); }
+                catch (OperationCanceledException) { Dispatcher.UIThread.Post(delegate { SettingUp = false; Loading = false; SetupText = null; ShowProblem("Cancelled. It picks up where it left off."); }); }
                 catch (Exception error)
                 {
                     string problem = Brain.Brief(error.Message) ?? (error.Message.Length > 70 ? error.Message.Substring(0, 67) + "..." : error.Message);
-                    Dispatcher.UIThread.Post(delegate { SettingUp = false; SetupText = null; ShowProblem(problem); });
+                    Dispatcher.UIThread.Post(delegate
+                    {
+                        SettingUp = false;
+                        Loading = false;
+                        SetupText = null;
+                        // A server that failed to load mustn't linger; leaving for the cloud stopped it on purpose, so no error then.
+                        if (Brain.Local == null) builtIn.Stop();
+                        if (Brain.Remote != null) ShowState();
+                        else ShowProblem(problem);
+                    });
                 }
             });
         }

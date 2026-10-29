@@ -149,7 +149,7 @@ namespace CapriDesktop
             bool empty = remote == null && (local == null || local.Length == 0) && pet.Brain.Local == null;
             setupRow.IsVisible = pet.SettingUp || (empty && pet.CanSetUp);
             setUp.IsVisible = !pet.SettingUp;
-            cancel.IsVisible = pet.SettingUp;
+            cancel.IsVisible = pet.SettingUp && !pet.Loading;
             setupNote.IsVisible = setupRow.IsVisible;
             setupNote.Text = !setupRow.IsVisible ? "" : pet.SettingUp ? pet.SetupText : pet.OfferText;
             ollama.IsVisible = empty && !pet.SettingUp && !Engine.Supported;
