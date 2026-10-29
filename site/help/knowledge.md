@@ -698,6 +698,19 @@ She says the site name (like "site dot com") instead of reading the whole link.
 
 Press Ctrl + Alt + V again, or the wave, to stop.
 
+### "Hey Capri" (0.7.6 and newer, Windows)
+Say "Hey Capri" and she starts voice chat, the same as Ctrl + Alt + V. If she's hidden she glitches in first. She says something short, like "I'm here." or "Yeah, choom?", then listens.
+- Where: Capri Mainframe > Settings > HABITS > Security > Listen for "Hey Capri". It's off by default, and the Blackwall preset turns it on.
+- The first time you turn it on she downloads what it needs, once, and says so in her bubble and the Mainframe: an 18 MB listening pack ("Getting what I need to hear "Hey Capri"..."), plus her free voice (316 MB) first if it isn't in yet, because the wake word runs on the speech engine that comes with it. Then: "Listening for "Hey Capri". Nothing leaves your PC until you say it."
+- What it listens for: only the words "Hey Capri", in English for now. Other words, "Hey Siri", "Capri" on its own and the island of Capri don't start it.
+- It stays on your PC. A small speech model listens on your PC for those two words and keeps no recordings. Nothing you say leaves your PC until it hears "Hey Capri" and voice chat starts. After that it's ordinary voice chat: free voice chat stays on your PC, ElevenLabs voice chat sends your voice to ElevenLabs.
+- Windows shows its microphone-in-use icon in the taskbar the whole time it's on, because her mic is open. Turn it off and the icon goes away (unless another app is using your mic).
+- It pauses during voice chat, while your mic is muted (her mute key, or muted in Windows) and in Quiet (Ctrl + Alt + P), and closes the mic meanwhile. It doesn't hear her own voice: while she talks it hears nothing.
+- It uses the mic picked under VOICE > Mic, or Windows' default mic. Pick another mic, or unplug one, and it switches by itself.
+- It's light: about 4% of one CPU core while there's sound around, close to nothing in a quiet room, and it runs on its own, without her brain.
+- It missed you? Say it clearly, at a normal pace, and nearer the mic. It's tuned to start only on "Hey Capri", so a mumbled or far-off one can be missed.
+- Mac and Linux: not yet.
+
 ### Free voice chat
 Voice chat follows your pick under VOICE. With FREE VOICE picked, or no ElevenLabs key, it's free: you talk, she answers out loud with her free voice and your picked brain.
 - She listens with her own offline ears, a download the first time: "My ears are still downloading, so type to me for now. I'll say when I can hear you."
@@ -1093,6 +1106,7 @@ Quit Capri, then delete the Capri folder you unpacked. Her settings are in ~/.co
 - Her transcripts (transcripts folder, one file per day) and memories.md. They're never uploaded.
 - Your keys. On Windows they're locked to your Windows account. On Mac and Linux the ElevenLabs key is a file only your user can read.
 - Dancing: she listens to what your PC is playing to find the beat, in memory only. Nothing is recorded or sent.
+- "Hey Capri" (Windows, off by default): it listens for those two words on your PC with its own small model. Nothing is recorded or sent until it hears them and voice chat starts. Windows shows its mic icon while it's on.
 - Capri has no ads and no analytics.
 
 ### What goes to the services you pick
