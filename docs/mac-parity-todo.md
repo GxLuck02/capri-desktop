@@ -18,8 +18,8 @@ Dernière session : 2026-10-29. Repo : fork https://github.com/GxLuck02/capri-de
 
 ## Feuille de route
 - [x] Étape 1 — Mainframe + section BRAIN + Trousseau (fait le 2026-10-29)
-- [ ] **Étape 2 — « Set up her brain » sur Mac (llama.cpp Metal + modèle auto, Ollama en option)** ← PROCHAINE
-- [ ] Étape 3 — Section VOICE : OFF / FREE VOICE (Kokoro) / ELEVENLABS
+- [x] Étape 2 — « Set up her brain » sur Mac (llama.cpp Metal + modèle auto, Ollama en option) (fait le 2026-10-29)
+- [ ] **Étape 3 — Section VOICE : OFF / FREE VOICE (Kokoro) / ELEVENLABS** ← PROCHAINE (Kokoro gratuit en priorité)
 - [ ] Étape 4 — Chat vocal : micro, Test, raccourcis
 - [ ] Étape 5 — Section CAPRI + page Settings (langue, surnom, personnalité, raccourcis, démarrage, Discord, Check in)
 - [ ] Étape 6 — Voir l'écran
@@ -70,11 +70,16 @@ refusée) → l'utilisateur les lance avec `! cross/bin/Release/net10.0/Capri --
 - Fournisseurs cloud : `app/Brain.cs` (`Cloud`, `CloudModels`, `DefaultCloudModel`, `Remote`)
 - Page clé NVIDIA gratuite : https://build.nvidia.com/settings/api-keys
 
-## Étape 2 — où on en est
-Design validé (3 parties), spec : `docs/superpowers/specs/2026-10-29-mac-builtin-brain-design.md`
-(branche `mac-step2-brain`) — en attente de relecture utilisateur, puis plan.
-Décisions : approche A (moteur llama.cpp b11669 officiel figé + SHA-256), gardien anti-orphelin, clé
-secrète via --api-key-file, Ollama prioritaire comme Windows.
+## Étape 2 — fait
+Spec `docs/superpowers/specs/2026-10-29-mac-builtin-brain-design.md`, plan `docs/superpowers/plans/2026-10-29-mac-builtin-brain.md`.
+Moteur llama.cpp b11669 (SHA-256), décompression sûre, gardien anti-orphelin, clé secrète --api-key-file,
+Ollama prioritaire. Smoke 38 PASS. Test manuel M2 OK : 1re réponse 7 s, ensuite 1-2 s ; Quit et kill -9
+ne laissent aucun llama-server ; Ollama reprend la main quand il tourne. Cancel en cours : couvert par smoke.
+
+Points mineurs laissés (relecture finale) : Crashed/Running regardent le gardien (crash du serveur vu
+avec ≤ 2 s de retard, relance CPU rare sur Mac) ; Sweep ne vérifie que le nom du processus (PID réutilisé
+ou 2e instance de Capri) ; Stop peut bloquer l'UI quelques secondes si llama-server ignore TERM ;
+un Ensure tardif après DropBuiltIn peut relancer un serveur inutilisé (fenêtre étroite).
 
 ## Notes pour la suite
 - L'utilisateur veut rester **gratuit au maximum** : privilégier local (Ollama / llama.cpp, Kokoro) et NVIDIA gratuit.
