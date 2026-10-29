@@ -16107,8 +16107,9 @@ namespace CapriDesktop
                                 preferences.Wander = true;
                                 preferences.NoSitting = false;
                                 preferences.HasPlayerSpot = true;
-                                preferences.PlayerX = backdrop.Left + 70;
-                                preferences.PlayerY = backdrop.Bottom - 64;
+                                // Right of middle and above the bottom bar, so the picture has only her and the player in it.
+                                preferences.PlayerX = backdrop.Left + Math.Max(0, backdrop.Width - 450);
+                                preferences.PlayerY = backdrop.Bottom - 90;
                                 System.Collections.Generic.List<string> shotsTaken = new System.Collections.Generic.List<string>();
                                 foreach (Tune shotTune in new[] { shotSpotify, shotLive != null && shotLive.Playing ? shotLive : null })
                                 {
