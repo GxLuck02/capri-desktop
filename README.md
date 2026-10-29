@@ -116,7 +116,7 @@ Just ask her for things, like "open Spotify", "play Blinding Lights", "pause", "
 | Ctrl + Alt + C | get her off your cursor |
 | Right-click, Move | she hops between your open windows |
 | Watch my screen | in the Mainframe: she comments as you play |
-| FREE VOICE / ELEVENLABS | in the Mainframe under VOICE: FREE VOICE runs on your PC and costs nothing, and HD in its list is a better-sounding one for graphics cards with 6 GB or more; ELEVENLABS sounds amazing and uses your ElevenLabs credits |
+| PREBUILT LOCAL / CUSTOM LOCAL / CLOUD VOICE | in the Mainframe under VOICE: PREBUILT LOCAL is her own voice, free on your PC, and HD in its list is a better-sounding one for graphics cards with 6 GB or more; CUSTOM LOCAL runs a voice model you set up on your PC; CLOUD VOICE is ElevenLabs, Fish Audio or OpenAI with your own key |
 | Help | in the Mainframe: opens the help page |
 
 </details>

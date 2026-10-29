@@ -306,6 +306,12 @@ The main page has three sections: BRAIN, VOICE and CAPRI.
   - The key box: "Paste ElevenLabs API key", then Connect. Once saved: "Key saved, ends XXXX". Forget (red) removes it.
   - Voice ID: paste your Voice ID, or pick from the list of your ElevenLabs voices (the arrow shows when your account has voices). Press Enter or click out of the box to save it.
   - Model: "Default model" or an ElevenLabs model like v4.
+- From 0.7.6 there are four rows. FREE VOICE is now PREBUILT LOCAL, and ELEVENLABS moved into CLOUD VOICE:
+  - OFF: "Silent · text only", as above. Test under it says "Her voice is OFF. Pick another row under VOICE to hear her."
+  - PREBUILT LOCAL: "Her voices · free". Her free voice and its styles, HD and Your voice (HD), in the "Free voice" menu. No key, no credits.
+  - CUSTOM LOCAL: "Your own model". A voice model on your PC: a voice model file, Fish Speech, Kokoro or any OpenAI-style server. Its Set up button opens the voice model panel with only those choices. Once one is set up, clicking the row brings it straight back, and the "Voice model: <name>" button under it opens its panel again.
+  - CLOUD VOICE: "Needs a key". The menu under it picks ElevenLabs, Fish Audio or OpenAI. ElevenLabs keeps its key box, Voice ID and Model there, as above. Fish Audio and OpenAI open the voice model panel with only those two: "Set up Fish Audio..." at first, then "Voice, key and model..." once it's in use. Setup guide on this row opens ElevenLabs' voice steps, or the panel for Fish Audio and OpenAI.
+  - CUSTOM LOCAL and CLOUD VOICE each keep their own setup and key, so switching between them loses neither.
 - Mic: "Mic: default" or "Mic: <name>". Click it to pick a mic. "Windows default" follows your Windows setting.
 - Test: she says a test line out loud.
 - "Ctrl + Alt + N mutes mic": click it to change the key (it opens Settings with Mute mic ready to change).
@@ -538,6 +544,8 @@ She has two voices. Pick one under VOICE in the Mainframe, or pick OFF (since 0.
 - FREE VOICE: "Free · runs on your PC". No key, no credits, works offline. Decent, but not as good as ElevenLabs.
 - ELEVENLABS: "Sounds amazing · paid". Her best voice, from your own ElevenLabs account. It uses your ElevenLabs credits. The Setup guide button opens the voice steps.
 
+From 0.7.6 the rows are OFF, PREBUILT LOCAL (her free voice, HD and Your voice), CUSTOM LOCAL (your own voice model on your PC) and CLOUD VOICE (ElevenLabs, Fish Audio or OpenAI). Where these steps say FREE VOICE, 0.7.6 says PREBUILT LOCAL; where they say ELEVENLABS, click CLOUD VOICE and pick ElevenLabs in its menu.
+
 ### Her free voice
 - The Windows installer installs it ("Installing the local speech model", about 316 MB).
 - If it's missing, pick FREE VOICE and press Get free voice. A dotted bar under VOICE shows the download.
@@ -554,7 +562,7 @@ Mainframe > Settings > VOICE has four sliders. They change every voice she has: 
 
 Her HD voice keeps its own Robot and Glitch. Both start at Off, so out of the box she sounds dry, just like the clip her HD voice copies. While HD is the voice she's using, those sliders show its values with HD after them ("Off · HD"), and moving them only changes HD. Her other voices share one Robot and one Glitch, which both start at Off.
 
-When you let go of a slider, she says "How do I sound now, choom?" in the voice she's using, so you can hear it. With ELEVENLABS she makes that line once (about 25 credits), then restyles the same audio on your PC, so moving the sliders again uses no more credits. If her HD voice is asleep (it rests after 10 quiet minutes), she says "One sec, waking my HD voice." first, then the line in HD. With her voice OFF she says "My voice is OFF, choom. Pick FREE VOICE to hear that." With no voice set up she says "Get my free voice under VOICE to hear that, choom."
+When you let go of a slider, she says "How do I sound now, choom?" in the voice she's using, so you can hear it. With ELEVENLABS she makes that line once (about 25 credits), then restyles the same audio on your PC, so moving the sliders again uses no more credits. If her HD voice is asleep (it rests after 10 quiet minutes), she says "One sec, waking my HD voice." first, then the line in HD. With her voice OFF she says "My voice is OFF, choom. Pick FREE VOICE to hear that." (0.7.6: "Pick PREBUILT LOCAL to hear that.") With no voice set up she says "Get my free voice under VOICE to hear that, choom."
 
 In ElevenLabs voice chat the sliders change her as she talks. A slower Speed makes her replies take a little longer to finish.
 
@@ -565,7 +573,7 @@ On Mac and Linux they're under right-click her > Settings > Voice style (Pitch, 
 ### Your voice (HD only, from 0.7.5)
 Her HD voice can talk in your voice. It copies the voice in a short clip of you.
 1. Record 5 to 30 seconds of yourself talking clearly, with no music or other people. A WAV, MP3 or M4A works. Windows' Sound Recorder saves M4A.
-2. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "Your voice (HD) · pick a clip of you...".
+2. Mainframe > VOICE > FREE VOICE (PREBUILT LOCAL in 0.7.6), open the "Free voice" menu and pick "Your voice (HD) · pick a clip of you...".
 3. Pick your clip. The menu shows "Free voice: Your voice", and she says "Got it. I'll talk like you now, choom." in your voice. If her HD voice was asleep, "One sec, waking my HD voice." comes first.
 
 She cuts the quiet off the start and end of the clip, evens out its level, and saves it for her HD voice (24 kHz mono). It needs her HD voice, so a graphics card with 6 GB or more. Without one, "Your voice (HD)" is greyed out in the menu, like HD. Picking a clip turns HD on, and gets it first if it isn't downloaded yet.
@@ -581,10 +589,13 @@ If a clip doesn't work, the note under VOICE says why, in red:
 
 Her other free voice styles (Her own, Bright, Sly and Sharp) are set voices and can't copy yours. With one of them picked, the note under VOICE says "Your voice only works with HD." For ElevenLabs, clone your voice on elevenlabs.io instead (Voice Creation > Instant Voice Clone, needs Starter or above, the same steps as cloning her below), then paste its Voice ID under VOICE.
 
-### Any voice model: Fish Audio, OpenAI, a model file or your own server (from 0.7.6)
+### Your own voice model: Fish Audio, OpenAI, a model file or your own server (from 0.7.6)
 Her voice can come from Fish Audio's cloud, OpenAI, a voice model file she runs herself, or any speech model you run behind a server. Windows only for now.
-1. Mainframe > VOICE > FREE VOICE, open the "Free voice" menu and pick "Any voice model...".
-2. Under "Voice from", pick where her voice comes from. It fills in the address, model and voice:
+1. Mainframe > VOICE:
+   - On your PC (a voice model file, Fish Speech, Kokoro or any OpenAI-style server): press Set up on the CUSTOM LOCAL row.
+   - In the cloud (Fish Audio or OpenAI): click CLOUD VOICE, then pick Fish Audio or OpenAI in the menu under it.
+   - The first 0.7.6 tester build had them all in one list instead: VOICE > FREE VOICE, open the "Free voice" menu and pick "Any voice model...".
+2. Under "Voice from", pick where her voice comes from. CUSTOM LOCAL's panel lists only the ones on your PC, and CLOUD VOICE's only Fish Audio and OpenAI. It fills in the address, model and voice:
    - Fish Audio · cloud (https://fish.audio): make an API key on fish.audio and paste it under Key. Under Voice, paste a voice's link or ID from Fish Audio's voice library (a link like https://fish.audio/m/ followed by its ID works as it is), or press the arrow in the Voice box to pick one of your own Fish Audio voices. To make a new voice, press that arrow, pick New voice from a clip..., and choose 10 to 30 seconds of someone talking (with their OK): she sends it to Fish Audio as a private voice and puts its ID in the Voice box. Model s2.1-pro-free is Fish Audio's free developer tier; with credit on your account, type s2.1-pro, s2-pro or s1 instead.
    - Voice model file · on your PC: a Piper, Kokoro, Kitten or Pocket TTS model made for sherpa-onnx (https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models), run by her free voice's engine with no server and nothing else to install. Piper voices come in 40+ languages, like vits-piper-en_US-amy-medium.tar.bz2 or vits-piper-fr_FR-siwis-medium.tar.bz2. Download one, press Browse and pick the .tar.bz2 (she unpacks it into her own folder), or the .onnx inside a folder you unpacked yourself. Language is for Kokoro models only, like es or fr-fr (en-us if blank). Speaker picks a voice in models with several, counting from 0; past the last one she uses the first. It needs her free voice installed.
    - Pocket TTS (sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2, 98 MB, English) copies a voice from a clip, on the CPU with no graphics card. Press the arrow in the Speaker or clip box and pick a WAV, MP3 or M4A of that voice (5 to 10 seconds of clear talking is enough; she uses the first 10), with that person's OK. Leave the box blank and she copies her HD voice's own clip, so she sounds close to her HD voice on any PC.
@@ -594,7 +605,7 @@ Her voice can come from Fish Audio's cloud, OpenAI, a voice model file she runs 
    - Any OpenAI-style server: anything that speaks OpenAI's speech API (POST /v1/audio/speech), like openedai-speech, AllTalk, LocalAI, or Qwen3-TTS through vLLM-Omni (NVIDIA graphics card, Linux or WSL; https://github.com/vllm-project/vllm-omni/blob/main/recipes/Qwen/Qwen3-TTS.md): from the vLLM-Omni folder, `vllm serve Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice --deploy-config vllm_omni/deploy/qwen3_tts.yaml --omni --port 8091`. Address: http://localhost:8091/v1. Voice: vivian, or another of its speakers.
 3. Model, Voice and Key are optional for servers on your PC: leave them blank to use the server's own defaults. A key goes only to the server it was typed for, as a Bearer key, and Capri keeps it encrypted on your PC like her other keys. Switching to another server with Key left blank drops the old key, so it never reaches the new one. Forget removes it.
 4. Press Test. She says "Voice link online. Miss me, choom?" through it, and the panel says how long it took. Nothing is saved yet.
-5. Press Use this server. The menu shows "Free voice: Fish Audio" (or "OpenAI", a model file's name like "en_US-amy-medium", or "Your server"), and she says the line again.
+5. Press Use this server, and she says the line again. CUSTOM LOCAL shows "Voice model: en_US-amy-medium" (a model file's name) or "Voice model: Your server", and CLOUD VOICE shows Fish Audio or OpenAI in its menu. In the first 0.7.6 tester build the menu showed "Free voice: Fish Audio" (or "OpenAI", a model file's name, or "Your server") instead.
 
 What it gets: only the words she says out loud (with "choom" respelled "chewm" so it's said right), plus the model and voice you picked. Never your chats, notes, screen or other keys. She asks for WAV; MP3, or any other sound Windows can play, works too. Long replies go a few sentences at a time.
 
@@ -604,7 +615,7 @@ If your server can't say a line, her free voice says that line instead, and the 
 - "Can't reach your voice server at localhost:8880. Is it running?"
 - "Your voice server took over 20 s to answer." It has 20 seconds to start answering each line.
 - "Your voice server has no /v1/audio/speech (HTTP 404). Check its address."
-- "Your voice server wants a key (HTTP 401). Add it under Any voice model." or "Your voice server turned down its key (HTTP 401)."
+- "Your voice server wants a key (HTTP 401). Add it under CUSTOM LOCAL > Set up." (the first 0.7.6 tester build said "Add it under Any voice model.") or "Your voice server turned down its key (HTTP 401)."
 - "Your voice server said HTTP 500: ..." with the server's own words.
 - Fish Audio and OpenAI go by name: "Fish Audio turned down its key (HTTP 401).", "Can't reach Fish Audio. Check your internet connection.", "Fish Audio can't find that voice (HTTP 404). Check its ID or link on fish.audio." or "Fish Audio is busy (HTTP 429). Try again in a moment."
 - "Fish Audio wants credit for s2.1-pro (HTTP 402). For its free tier, set Model to s2.1-pro-free." Fish Audio's paid models need credit on your Fish Audio account.
@@ -612,7 +623,7 @@ If your server can't say a line, her free voice says that line instead, and the 
 
 Without her free voice installed, she types that line instead.
 
-Back to her own voice: pick Her own, another style or HD in the menu. The address, model, voice and key you picked stay saved for next time.
+Back to her own voice: click PREBUILT LOCAL, or pick Her own, another style or HD in its menu. The address, model, voice and key you picked stay saved for next time: clicking CUSTOM LOCAL or CLOUD VOICE again brings that one back.
 
 ### Step 1: make an ElevenLabs account
 Sign up at https://elevenlabs.io. The free plan works.
@@ -638,14 +649,14 @@ Or clone her real voice (needs ElevenLabs Starter or above):
 If you'd rather keep Restrict key on, the key needs: Text to Speech and Models (Access), Voices and ElevenAgents (Read), and ElevenAgents (Write). Restrict key off is simpler and is what we recommend.
 
 ### Step 4: in the Mainframe
-1. Under VOICE, click ELEVENLABS. The key box opens: "Paste your ElevenLabs key, then press Connect."
+1. Under VOICE, click ELEVENLABS (0.7.6: click CLOUD VOICE, with ElevenLabs picked in the menu under it). The key box opens: "Paste your ElevenLabs key, then press Connect."
 2. Paste the key and press Connect.
 3. Clear the Voice ID box, then paste your Voice ID. Or pick your voice from the list.
 4. Model menu > v4.
 5. Press Test. She says "Voice link online. Miss me, choom?" Make sure you actually hear her, not just the text.
 
 ### Turning her voice off
-- 0.7.1 and newer: Capri Mainframe > VOICE > OFF. She types her replies and never talks out loud. Pick FREE VOICE or ELEVENLABS to turn it back on.
+- 0.7.1 and newer: Capri Mainframe > VOICE > OFF. She types her replies and never talks out loud. Pick FREE VOICE or ELEVENLABS to turn it back on (0.7.6: any other row).
 - 0.7.0 has no OFF row. Update to 0.7.1 (right-click her > Check for updates). Until then, Settings > Volume > Mute silences her voice.
 
 ### Switching between FREE VOICE and ELEVENLABS
@@ -655,6 +666,7 @@ Click a row under VOICE. Switching never deletes your key.
 - OFF (since 0.7.1): "Voice off. I'll type instead." Picking FREE VOICE or ELEVENLABS again: "Voice back on."
 - ELEVENLABS with no key yet: the key box opens. She keeps using her free voice until you connect a key.
 - Test builds 0.6.9 had a "Use ElevenLabs" box instead. Unticking it was the same as picking FREE VOICE.
+- 0.7.6: PREBUILT LOCAL takes FREE VOICE's place and ElevenLabs is in CLOUD VOICE's menu. She says the same lines. Picking CUSTOM LOCAL or CLOUD VOICE's Fish Audio or OpenAI stops ElevenLabs too, and she says her test line through the new voice.
 
 ### How many credits does she use?
 About one credit per letter she says with ElevenLabs. Free credits refill each month. Check your balance on elevenlabs.io. ElevenLabs voice chat uses your credits too. Her free voice uses no credits.
@@ -1277,9 +1289,9 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 - "Key is missing permissions." or "Key can't do that.": make a new key with Restrict key turned off. Delete the old key in the Capri box (Forget), paste the new one, press Connect. Older versions said "Key can't do that." whenever ElevenLabs refused, so with Restrict key off it can be something else: check you can make speech on elevenlabs.io with the same account, try without a VPN, then send Copy error details in the Discord. Newer versions only say it when ElevenLabs' answer is about the key, and show ElevenLabs' own reason otherwise.
 - "Voice not found. Add it to your ElevenLabs voices.": paste the Voice ID of a voice in your My Voices, not its name. A voice from the ElevenLabs library has to be added to My Voices first.
 - "Paste your Voice ID first." or "Needs your Voice ID.": paste a Voice ID under VOICE, or pick one from the list.
-- "Out of ElevenLabs credits. Pick FREE VOICE in the Mainframe.": your monthly credits are used up. They refill each month, or you can upgrade on ElevenLabs. Pick FREE VOICE to keep talking with no credits. With her free voice installed she switches to it by herself. If ElevenLabs shows "10,000 / 10,000", that means all of them are used, not all left. A "Total 10,000" line alone doesn't show what's left: check the used and remaining amounts on elevenlabs.io.
+- "Out of ElevenLabs credits. Pick FREE VOICE in the Mainframe." (0.7.6: "Pick PREBUILT LOCAL in the Mainframe."): your monthly credits are used up. They refill each month, or you can upgrade on ElevenLabs. Pick FREE VOICE (PREBUILT LOCAL in 0.7.6) to keep talking with no credits. With her free voice installed she switches to it by herself. If ElevenLabs shows "10,000 / 10,000", that means all of them are used, not all left. A "Total 10,000" line alone doesn't show what's left: check the used and remaining amounts on elevenlabs.io.
 - "Out of credits" but ElevenLabs shows credits left: check the usage line on elevenlabs.io. If it shows thousands left, right-click her > Help > Copy error details and post it in the Discord.
-- "ElevenLabs has restricted your account, so her voice can't connect.": ElevenLabs has blocked your account. Sign in at elevenlabs.io to see why. Pick FREE VOICE in the meantime. A new key won't fix this one.
+- "ElevenLabs has restricted your account, so her voice can't connect.": ElevenLabs has blocked your account. Sign in at elevenlabs.io to see why. Pick FREE VOICE (PREBUILT LOCAL in 0.7.6) in the meantime. A new key won't fix this one.
 - "Free Tier usage disabled": ElevenLabs turns off the free plan when it sees a VPN or proxy. Turn your VPN off and try again.
 - "ElevenLabs sent a reply Capri couldn't read.": ElevenLabs may not be available where you live, or a VPN or network is blocking it. Try without a VPN. Then right-click her > Help > Copy error details and send it in the Discord.
 - "Can't reach ElevenLabs. Check your internet."
@@ -1385,5 +1397,5 @@ Things in this file the team should confirm before the support chat relies on th
 13. "Can't open your speakers." on 0.6.2: the default-output-and-restart fix didn't work for everyone, and the underlying Windows error wasn't shown then.
 14. <unused49> replies: the CPU retry in newer builds wasn't confirmed on the reporting user's PC.
 15. Free voice chat with a real mic on a fresh PC.
-16. Any voice model (0.7.6): its servers were only tested against stand-ins. Fish Audio's cloud hasn't had a real key, and a real Fish Speech, Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI or vLLM-Omni Qwen3-TTS server hasn't been run with it. The start commands come from their projects' pages and weren't run here. Voice model files were run with real Piper, Kokoro and Pocket TTS models.
+16. Your own voice models under CUSTOM LOCAL and CLOUD VOICE (0.7.6): their servers were only tested against stand-ins. Fish Audio's cloud hasn't had a real key, and a real Fish Speech, Kokoro-FastAPI, openedai-speech, AllTalk, LocalAI or vLLM-Omni Qwen3-TTS server hasn't been run with it. The start commands come from their projects' pages and weren't run here. Voice model files were run with real Piper, Kokoro and Pocket TTS models.
 
