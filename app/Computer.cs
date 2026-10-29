@@ -1658,6 +1658,10 @@ namespace CapriDesktop
         private string lastPrint;
         private string lastTool;
         private int still;
+        // What they said to her while it ran, for its next turn, and (for brains without the computer tools) everything they've
+        // said so far, since each of those turns is written fresh.
+        private readonly List<string> heard = new List<string>();
+        private string asides = "";
 
         private sealed class Answered
         {
@@ -1694,6 +1698,25 @@ namespace CapriDesktop
         }
 
         internal bool Asking { get { return Waiting.Key != null; } }
+
+        // Something they said mid-job (Lachy, 29 Oct: "she needs to actually listen to me mid way through"). Its next turn has
+        // her do it, then carry on with the job.
+        internal void Tell(string words)
+        {
+            lock (heard) heard.Add(words.Trim());
+        }
+
+        // Their words since the last turn, quoted, or null.
+        private string Heard()
+        {
+            lock (heard)
+            {
+                if (heard.Count == 0) return null;
+                string said = string.Join(", then ", heard.ConvertAll(line => Voice.Quote(line)).ToArray());
+                heard.Clear();
+                return said;
+            }
+        }
 
         // A brain error partway through, like a rate limit mid-drag, still lets go of the mouse and hands it back.
         internal string Run()
@@ -1749,7 +1772,9 @@ namespace CapriDesktop
                 string nudged = nudge;
                 nudge = "";
                 Show("Thinking");
-                try { written = Think(Computer.Allowing(Computer.Prompt), Computer.Brief(Task, Steps, sight, notes, earlier) + (lost > 0 ? "\nYour last reply had no tool call. Reply with only one tool call, or call done." : "") + nudged, calls); }
+                string fresh = Heard();
+                if (fresh != null) asides += "\nWhile you worked they also told you " + fresh + ": do that, then finish their job.";
+                try { written = Think(Computer.Allowing(Computer.Prompt), Computer.Brief(Task, Steps, sight, notes, earlier) + asides + (lost > 0 ? "\nYour last reply had no tool call. Reply with only one tool call, or call done." : "") + nudged, calls); }
                 catch (System.Runtime.Serialization.SerializationException) { written = ""; calls.Clear(); }
                 Show(null);
                 if (Computer.Interrupted) return End("stopped", Computer.Why);
@@ -1836,6 +1861,13 @@ namespace CapriDesktop
                 if (Computer.Interrupted) return End("stopped", Computer.Why);
                 turns++;
                 Show("Thinking");
+                // What they just said rides on the last turn, after its tool results.
+                string fresh = Heard();
+                if (fresh != null)
+                {
+                    string last = talk[talk.Count - 1];
+                    talk[talk.Count - 1] = last.Substring(0, last.Length - 2) + ",{\"type\":\"text\",\"text\":" + Voice.Quote("While you work, they just told you " + fresh + ". Do that now, then carry on with their job where you left off.") + "}]}";
+                }
                 ClaudeReply reply;
                 try { reply = Drive(Computer.Allowing(Computer.Seeing), Computer.Toolset, Conversation()); }
                 catch (System.Runtime.Serialization.SerializationException) { return End("failed", "Got a reply from my brain I couldn't read. Try again."); }

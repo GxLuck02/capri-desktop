@@ -4935,7 +4935,10 @@ namespace CapriDesktop
         // her replies use, picked the way Answer picks it (Quiet only turns her cloud voice off). It plays beside the job, after
         // any line she's still saying, and leaves the reply the job ends with alone. Silent keeps it to her bubble, and so does
         // ElevenLabs voice chat, which speaks for itself.
-        private void SayJobStart(Job running)
+        private void SayJobStart(Job running) { SayAside("On it. Escape stops me.", running); }
+
+        // A line said beside her job, like her "Got it." when they tell her more mid-job. It leaves her ask's turn alone.
+        private void SayAside(string line, Job running)
         {
             if (testing || preferences.Silent || (chatting && !local)) return;
             Func<string, byte[]> own = FreeSpeak ?? (!kokoro.Installed ? null : new Func<string, byte[]>(kokoro.Speak));
@@ -4944,7 +4947,7 @@ namespace CapriDesktop
             if (speak == null && !local && !voiceBroke && voice.Ready && !preferences.Quiet) speak = voice.Speak;
             if (speak == null && (voice.Key == null || local || voiceBroke || preferences.Quiet)) speak = free;
             if (speak == null) return;
-            string words = Voice.Spoken("On it. Escape stops me.");
+            string words = Voice.Spoken(line);
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string problem;
@@ -5742,9 +5745,12 @@ namespace CapriDesktop
             if (hidden) SetHidden(false);
             ToggleChat();
             if (!chatting) return;
+            string line = WakeLines[random.Next(WakeLines.Length)];
+            // Mid-job she answers beside the job, so it keeps going and what they say next goes to it.
+            Job running = job;
+            if (local && running != null && working != null) { SayAside(line, running); return; }
             heard = "hey capri";
             box.Prompt = "> you: ";
-            string line = WakeLines[random.Next(WakeLines.Length)];
             // Free voice chat says it in her voice; ElevenLabs voice chat has its own voice, so there it's in her bubble.
             if (local) Answer(++asking, line, TalkState.Talking);
             else Begin(++asking, line, TalkState.Talking, null);
@@ -6463,8 +6469,12 @@ namespace CapriDesktop
             if (!testing && !muteKey) muteKey = ByMouse(preferences.MuteVk) || Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk);
             pill.SetChat(true, false);
             pillUntil = clock.Elapsed.TotalSeconds + 1.5;
-            brain.Cancel();
-            CloseTalk();
+            // Turned on mid-job, it leaves the job running, so what they say next goes to it.
+            if (working == null)
+            {
+                brain.Cancel();
+                CloseTalk();
+            }
             ListenLocally();
         }
 
@@ -6610,7 +6620,8 @@ namespace CapriDesktop
 
         private void CheckEars(double now)
         {
-            earsShut = local && (!earsReady || transcribing || ears.Muted || talkState == TalkState.Thinking || now < voiceUntil);
+            // A job leaves her thinking until it ends, but her ears stay open through it so they can tell her more.
+            earsShut = local && (!earsReady || transcribing || ears.Muted || (talkState == TalkState.Thinking && working == null) || now < voiceUntil);
             if (!earsShut) return;
             lock (waking) { utterance = null; preroll.Clear(); loudRun = 0; quietRun = 0; }
             pill.SetLevel(0);
@@ -6741,7 +6752,7 @@ namespace CapriDesktop
         {
             if (ticket != chatTicket || !local || !chatting) return;
             if (request != asking) { transcribing = false; CheckEars(clock.Elapsed.TotalSeconds); return; }
-            if (ears.Muted || talkState == TalkState.Thinking || clock.Elapsed.TotalSeconds < voiceUntil || !Speech(taken, wake))
+            if (ears.Muted || (talkState == TalkState.Thinking && working == null) || clock.Elapsed.TotalSeconds < voiceUntil || !Speech(taken, wake))
             {
                 transcribing = false;
                 CheckEars(clock.Elapsed.TotalSeconds);
@@ -7231,6 +7242,17 @@ namespace CapriDesktop
             text = (text ?? "").Trim();
             if (text.Length == 0) return;
             if (text.Length > 240) text = text.Substring(0, 240);
+            // Mid-job, what they say goes to the job instead of cancelling it: she says she's got it, does it, then carries on
+            // (Lachy, 29 Oct: "she needs to actually listen to me mid way through").
+            Job running = job;
+            if (running != null && working != null && !running.Asking && prompt == "> you: ")
+            {
+                running.Tell(text);
+                working = "Got it. Esc stops me.";
+                UpdateTalk(clock.Elapsed.TotalSeconds);
+                SayAside("Got it.", running);
+                return;
+            }
             if (local) { talkState = TalkState.Thinking; CheckEars(clock.Elapsed.TotalSeconds); }
             if (hidden) SetHidden(false);
             hideAsked = false;
@@ -11729,6 +11751,23 @@ namespace CapriDesktop
                                     try { driveBroke.Run(); }
                                     catch (BrainException) { driveTold = true; }
                                     if (!driveTold) throw new Exception("A credits error fell back instead of reaching them.");
+                                    // What they say mid-job rides on her next turn after its tool results, so she does it and carries on (Lachy, 29 Oct).
+                                    Job driveHeard = new Job("install capri");
+                                    System.Collections.Generic.List<string> heardTurns = new System.Collections.Generic.List<string>();
+                                    driveHeard.Drive = delegate(string driveSys, string driveToolset, string driveMessages)
+                                    {
+                                        heardTurns.Add(driveMessages);
+                                        if (heardTurns.Count > 1) return Brain.Parsed("{\"id\":\"h2\",\"content\":[{\"type\":\"text\",\"text\":\"Installed it.\"}],\"stop_reason\":\"end_turn\"}");
+                                        driveHeard.Tell("open spotify and play some music");
+                                        return Brain.Parsed("{\"id\":\"h1\",\"content\":[{\"type\":\"tool_use\",\"id\":\"h1t\",\"name\":\"screenshot\",\"toolset_name\":\"computer\",\"input\":{}}],\"stop_reason\":\"tool_use\"}");
+                                    };
+                                    string heardRun = driveHeard.Run();
+                                    string heardLast = heardTurns.Count == 2 ? heardTurns[1] : "";
+                                    int heardAt = heardLast.IndexOf("they just told you \\\"open spotify and play some music\\\"", StringComparison.Ordinal);
+                                    int resultAt = heardLast.IndexOf("\"tool_result\"", StringComparison.Ordinal);
+                                    if (heardRun != "Installed it." || heardAt < 0 || resultAt < 0 || resultAt > heardAt || heardTurns[0].Contains("spotify"))
+                                        throw new Exception("What they said mid-job didn't reach her next turn: " + heardRun + " / " + heardTurns.Count + " turns");
+                                    checks.Add("PASS mid-job words: what they say while a job runs rides on her next turn after its tool results, so she does it and carries on");
                                 }
                                 finally
                                 {
