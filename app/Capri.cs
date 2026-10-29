@@ -235,6 +235,9 @@ namespace CapriDesktop
         [DataMember] public bool StartupSet;
         [DataMember] public bool QuickHands;
         [DataMember] public bool Bypass;
+        // Her SECURITY window's toggles 1 to 10 as 1s and 0s, like "1111111000" for Trusted; "Hey Capri" is HeyCapri. Missing in
+        // settings from before it, so Blackwall mode moves to the Blackwall preset and everyone else gets Trusted.
+        [DataMember] public string Permissions;
         // Listen for "Hey Capri" is off out of the box (Lachy, 29 Oct). It's a toggle in her Security window, and the Blackwall preset turns it on.
         [DataMember] public bool HeyCapri;
         [DataMember] public bool HdVoice;
@@ -1044,6 +1047,12 @@ namespace CapriDesktop
             parakeet = new LocalEars(data);
             presence = new Presence(Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
             preferences = smoke ? new Preferences() : LoadPreferences();
+            // SECURITY: their toggles, with "Hey Capri" kept in its own setting for her wake word.
+            Migrate(preferences);
+            Security.Load(preferences.Permissions);
+            Security.HeyOn = delegate { return preferences.HeyCapri; };
+            Security.SetHey = SetHeyCapri;
+            Security.Changed = SecurityChanged;
             ears.Chosen = preferences.Mic;
             kokoro.Style = LocalVoice.Find(preferences.VoiceStyle);
             Brain.Language = Brain.LanguageCode(preferences.Language) == "en" ? null : preferences.Language;
@@ -1174,7 +1183,6 @@ namespace CapriDesktop
             Hands.Look = LookAt;
             Hands.Work = RunJob;
             brain.Act = DoTool;
-            Computer.Bypass = preferences.Bypass;
             Hands.Resume = ResumeJob;
             Hands.Rename = CallThem;
             Hands.Nap = NapTool;
@@ -2549,14 +2557,320 @@ namespace CapriDesktop
             mainframe.Sync();
         }
 
-        internal bool Bypassing { get { return preferences.Bypass; } }
+        // Blackwall mode is SECURITY's Blackwall preset now. Flipping it the old way picks Blackwall, or Trusted to go back.
+        internal bool Bypassing { get { return Computer.Bypass; } }
 
-        internal void ToggleBypass()
+        internal void ToggleBypass() { Security.Pick(Computer.Bypass ? Security.Trusted : Security.Blackwall); }
+
+        // Settings from before the SECURITY window have no toggles: Blackwall mode moves to the Blackwall preset, "Hey Capri"
+        // and all, and everyone else gets Trusted, which is how she worked without it. True when it moved them.
+        internal static bool Migrate(Preferences saved)
         {
-            preferences.Bypass = !preferences.Bypass;
-            Computer.Bypass = preferences.Bypass;
+            if (saved.Permissions != null) return false;
+            saved.Permissions = Security.Of(saved.Bypass ? Security.Blackwall : Security.Trusted);
+            if (saved.Bypass) saved.HeyCapri = true;
+            return true;
+        }
+
+        // A toggle or preset changed: it's saved, Blackwall mode's old flag follows toggles 8 to 10 for older versions, and
+        // Settings and her SECURITY window show it.
+        private void SecurityChanged()
+        {
+            preferences.Permissions = Security.Saved;
+            preferences.Bypass = Computer.Bypass;
             SavePreferences();
             mainframe.Sync();
+        }
+
+        // The smoke test's SECURITY checks: each preset's toggles, Custom after a flip, settings from before it, every gate
+        // asking when its toggle is off and running on a yes (in text and voice chat, before a brain and in her jobs),
+        // passwords staying theirs to type, her prompts following the toggles, and the window at 100%, 150% and 200%.
+        private void SecurityChecks(System.Collections.Generic.List<string> checks, string output)
+        {
+            Func<string> bits = delegate { System.Text.StringBuilder all = new System.Text.StringBuilder(); for (int i = 0; i < Security.Count; i++) all.Append(Security.On(i) ? '1' : '0'); return all.ToString(); };
+            string[] presetBits = { "00000000000", "11100000000", "11111110000", "11111111111" };
+            System.Collections.Generic.List<string> wrong = new System.Collections.Generic.List<string>();
+            for (int preset = Security.Lockdown; preset <= Security.Blackwall; preset++)
+            {
+                Security.Pick(preset);
+                string shown = bits();
+                if (shown != presetBits[preset] || Security.Preset != preset || HeyCapriOn != (preset == Security.Blackwall) || preferences.Permissions != presetBits[preset].Substring(0, 10) || preferences.Bypass != (preset == Security.Blackwall) || Computer.Bypass != (preset == Security.Blackwall))
+                    wrong.Add(Security.Presets[preset] + " " + shown + " saved " + preferences.Permissions + " hey " + HeyCapriOn);
+            }
+            Security.Pick(Security.Trusted);
+            Security.Set(Security.Open, false);
+            string customShown = mainframe.JobsStatus + " / " + Security.Saved;
+            bool custom = Security.Preset == Security.Custom && preferences.Permissions == "0111111000" && customShown == "cursor | Security: Custom / 0111111000";
+            Security.Set(Security.Open, true);
+            bool backToTrusted = Security.Preset == Security.Trusted && preferences.Permissions == "1111111000" && !HeyCapriOn;
+            if (wrong.Count > 0 || !custom || !backToTrusted) throw new Exception("SECURITY's presets went wrong: " + string.Join(" / ", wrong.ToArray()) + " / custom " + customShown + " / back " + backToTrusted);
+            checks.Add("PASS SECURITY presets: Lockdown turns every toggle off, Guarded the first three on, Trusted the first seven (the default) and Blackwall all eleven, \"Hey Capri\" included; flipping one makes it Custom, flipping it back is Trusted again, and each is saved");
+
+            DataContractJsonSerializer json = new DataContractJsonSerializer(typeof(Preferences));
+            Func<string, Preferences> older = delegate(string text) { return (Preferences)json.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text))); };
+            Preferences wasBlackwall = older("{\"Bypass\":true,\"Size\":240}"), wasDefault = older("{\"Size\":240}"), wasMixed = older("{\"Bypass\":true,\"Permissions\":\"1010000000\",\"Size\":240}");
+            bool movedBlackwall = Migrate(wasBlackwall) && wasBlackwall.Permissions == "1111111111" && wasBlackwall.HeyCapri;
+            bool movedDefault = Migrate(wasDefault) && wasDefault.Permissions == "1111111000" && !wasDefault.HeyCapri;
+            bool keptMixed = !Migrate(wasMixed) && wasMixed.Permissions == "1010000000" && !Migrate(wasBlackwall);
+            Security.Load(wasBlackwall.Permissions);
+            bool loadedBlackwall = Computer.Bypass && Security.On(Security.Mouse);
+            Security.Load(wasMixed.Permissions);
+            bool loadedMixed = Security.On(Security.Open) && !Security.On(Security.Media) && Security.On(Security.Shortcuts) && !Security.On(Security.Sends) && Security.Preset == Security.Custom;
+            Security.Load("not toggles");
+            bool unreadable = Security.Preset == Security.Trusted;
+            Security.Load(preferences.Permissions);
+            if (!movedBlackwall || !movedDefault || !keptMixed || !loadedBlackwall || !loadedMixed || !unreadable || Security.Preset != Security.Trusted) throw new Exception("SECURITY didn't take over from Blackwall mode's settings: " + movedBlackwall + " " + movedDefault + " " + keptMixed + " " + loadedBlackwall + " " + loadedMixed + " " + unreadable);
+            checks.Add("PASS SECURITY from older settings: Blackwall mode (Bypass) moves to the Blackwall preset with \"Hey Capri\" on, everyone else gets Trusted, saved toggles load as they are, and unreadable ones fall back to Trusted");
+
+            // Her own tools: each toggle off holds its call and she asks; a yes runs it once, a no leaves it and anything else drops it.
+            System.Collections.Generic.List<string> did = new System.Collections.Generic.List<string>();
+            Action<string> runWas = Hands.Run;
+            Action<byte> pressWas = Hands.Press;
+            Action<byte[]> chordWas = Hands.Chord;
+            Func<System.Collections.Generic.List<InstalledApp>> catalogWas = Hands.Catalog;
+            Func<System.Collections.Generic.List<OpenWindow>> windowsWas = Hands.Windows;
+            Func<OpenWindow, string, bool> steerWas = Hands.Steer;
+            Func<string, int, bool> powerWas = Hands.Power;
+            Func<string, string, string> workWas = Hands.Work;
+            Func<Sight> lookWas = Computer.Look;
+            Func<IntPtr> frontWas = Computer.Front;
+            Func<string, ToolArguments, Sight, string> actWas = Computer.Act;
+            Func<bool> secretWas = Computer.SecretFocus;
+            bool quickWas = preferences.QuickHands;
+            string modelWas = brain.Model;
+            string[] tools = { "open_app", "media", "shortcut", "app_window", "power", "use_computer" };
+            string[] questions = { "Open spotify? Say yes and I will.", "Turn the volume up? Say yes and I will.", "Take a screenshot? Say yes and I will.", "Switch to discord? Say yes and I will.", "Lock your PC? Say yes and I will.", "Use your mouse and keyboard to message Sam hi on Discord? Say yes and I will." };
+            string[] ranWanted = { "run spotify-id", "key AF", "chord ", "steer switch_to Discord", "power lock", "job message Sam hi on Discord" };
+            ToolArguments[] calls = { new ToolArguments { Name = "spotify" }, new ToolArguments { Action = "volume_up" }, new ToolArguments { Name = "screenshot" }, new ToolArguments { Name = "discord", Action = "switch_to" }, new ToolArguments { Action = "lock" }, new ToolArguments { Task = "message Sam hi on Discord" } };
+            System.Collections.Generic.List<string> gates = new System.Collections.Generic.List<string>(), voiceTold = new System.Collections.Generic.List<string>();
+            string declined, dropped, mixedAsk, mixedRan, voiceHeld, voiceRan, quickKey, cursorKey, noBrain, lockdownFree, textChat;
+            try
+            {
+                Hands.Run = delegate(string id) { lock (did) did.Add("run " + id); };
+                Hands.Press = delegate(byte key) { lock (did) did.Add("key " + key.ToString("X2")); };
+                Hands.Chord = delegate(byte[] keys) { lock (did) did.Add("chord " + keys.Length); };
+                Hands.Catalog = delegate { return new System.Collections.Generic.List<InstalledApp> { new InstalledApp("Spotify", "spotify-id") }; };
+                Hands.Forget();
+                OpenWindow discord = new OpenWindow(new IntPtr(9), "#general | Discord", "Discord");
+                Hands.Windows = delegate { return new System.Collections.Generic.List<OpenWindow> { discord }; };
+                Hands.Steer = delegate(OpenWindow window, string action) { lock (did) did.Add("steer " + action + " " + window.Program); return true; };
+                Hands.Power = delegate(string action, int seconds) { lock (did) did.Add("power " + action); return true; };
+                Hands.Work = delegate(string job, string asked) { lock (did) did.Add("job " + job); return "Did it."; };
+                preferences.QuickHands = true;
+                for (int i = 0; i <= Security.Mouse; i++)
+                {
+                    Security.Pick(Security.Trusted);
+                    Security.Set(i, false);
+                    did.Clear();
+                    string held = DoTool(tools[i], calls[i]);
+                    string early = string.Join(",", did.ToArray()), question = Security.Question;
+                    string yes = ResumeJob("yes");
+                    string after = string.Join(",", did.ToArray());
+                    if (!Security.IsHold(held) || early.Length > 0 || question != questions[i] || yes == null || Security.IsHold(yes) || after.IndexOf(ranWanted[i], StringComparison.Ordinal) < 0 || Security.Holding != null)
+                        gates.Add(Security.Names[i] + ": " + held + " / ran early " + early + " / asked " + question + " / yes " + yes + " / ran " + after);
+                }
+                Security.Pick(Security.Trusted);
+                Security.Set(Security.Open, false);
+                did.Clear();
+                DoTool("open_app", calls[0]);
+                declined = ResumeJob("nah") + " [" + string.Join(",", did.ToArray()) + "]";
+                DoTool("open_app", calls[0]);
+                dropped = (ResumeJob("what's the weather like?") ?? "null") + " / " + (Security.Holding ?? "nothing held") + " [" + string.Join(",", did.ToArray()) + "]";
+                // Two held and one that ran: what ran, then one question for both, and one yes runs both.
+                Security.Pick(Security.Trusted);
+                Security.Set(Security.Media, false);
+                Security.Set(Security.Power, false);
+                did.Clear();
+                System.Collections.Generic.List<string> results = new System.Collections.Generic.List<string> { DoTool("open_app", calls[0]), DoTool("media", calls[1]), DoTool("power", calls[4]) };
+                mixedAsk = Security.Reply(results);
+                mixedRan = ResumeJob("yeah") + " [" + string.Join(",", did.ToArray()) + "]";
+                // Looking, notes, her own nap, moves and animations, what's playing and cancelling a shutdown never ask, even in Lockdown.
+                Security.Pick(Security.Lockdown);
+                did.Clear();
+                string playing = DoTool("media", new ToolArguments { Action = "now_playing" }), cancel = DoTool("power", new ToolArguments { Action = "cancel" });
+                lockdownFree = (Security.IsHold(playing) || Security.IsHold(cancel) ? "held " + playing + " / " + cancel : "free") + " | " + Security.Needs("look_at_screen", null) + Security.Needs("remember", null) + Security.Needs("nap", null) + Security.Needs("move_yourself", null) + Security.Needs("animate", null);
+                // Before she has a brain her question shows on its own, and their yes works without one.
+                Security.Pick(Security.Trusted);
+                Security.Set(Security.Media, false);
+                did.Clear();
+                noBrain = Security.Said(DoTool("media", calls[1])) + " -> " + Security.Resume("ok", DoTool) + " [" + string.Join(",", did.ToArray()) + "]";
+                // Text chat: her question goes out word for word with no second brain call, and their next message's yes does it.
+                Security.Pick(Security.Trusted);
+                Security.Set(Security.Media, false);
+                did.Clear();
+                Brain talker = new Brain();
+                talker.Model = "smoke-test-model";
+                talker.Act = delegate(string talkTool, ToolArguments talkArgs) { return DoTool(talkTool, talkArgs); };
+                string talkAsked = talker.Ask("turn the volume up"), talkEarly = string.Join(",", did.ToArray());
+                textChat = talkAsked + " / " + talkEarly + " / " + talker.Ask("yes") + " [" + string.Join(",", did.ToArray()) + "]";
+                // Use your mouse and keyboard for jobs off keeps her quick tools quick, so a YouTube search doesn't take the mouse.
+                brain.Model = "smoke-test-model";
+                preferences.QuickHands = false;
+                Security.Pick(Security.Trusted);
+                cursorKey = MouseKey("open_website", new ToolArguments { Site = "youtube", Search = "lofi" }) ?? "null";
+                Security.Set(Security.Mouse, false);
+                quickKey = MouseKey("open_website", new ToolArguments { Site = "youtube", Search = "lofi" }) ?? "null";
+                // Voice chat: a held job is asked about at once instead of starting on the mouse, and their spoken yes runs it.
+                did.Clear();
+                finishedTest = delegate(string line) { lock (voiceTold) voiceTold.Add(line); };
+                voiceHeld = AgentAct(null, "use_computer", calls[5]) + " [" + string.Join(",", did.ToArray()) + "]";
+                bool answered = VoiceAnswer("yes", asking, null);
+                Stopwatch voiceWait = Stopwatch.StartNew();
+                while (voiceWait.ElapsedMilliseconds < 5000) { lock (voiceTold) if (voiceTold.Count > 0) break; Thread.Sleep(20); }
+                lock (voiceTold) lock (did) voiceRan = answered + " / " + string.Join(" | ", voiceTold.ToArray()) + " [" + string.Join(",", did.ToArray()) + "]";
+            }
+            finally
+            {
+                Hands.Run = runWas;
+                Hands.Press = pressWas;
+                Hands.Chord = chordWas;
+                Hands.Catalog = catalogWas;
+                Hands.Forget();
+                Hands.Windows = windowsWas;
+                Hands.Steer = steerWas;
+                Hands.Power = powerWas;
+                Hands.Work = workWas;
+                preferences.QuickHands = quickWas;
+                brain.Model = modelWas;
+                finishedTest = null;
+                lock (shortcutGate) { shortcutTool = null; shortcutResult = null; }
+                Security.Drop();
+                Security.Pick(Security.Trusted);
+            }
+            if (gates.Count > 0) throw new Exception("A SECURITY toggle didn't ask first or run on a yes: " + string.Join(" // ", gates.ToArray()));
+            if (declined != Security.Left + " []" || dropped != "null / nothing held []") throw new Exception("A no or a new message after her SECURITY question went wrong: " + declined + " / " + dropped);
+            if (mixedAsk != "Opened Spotify. Turn the volume up and lock your PC? Say yes and I will." || mixedRan.IndexOf("key AF", StringComparison.Ordinal) < 0 || mixedRan.IndexOf("power lock", StringComparison.Ordinal) < 0) throw new Exception("Two held calls weren't one question and one yes: " + mixedAsk + " / " + mixedRan);
+            if (lockdownFree != "free | -1-1-1-1-1") throw new Exception("Lockdown asked about something that never asks: " + lockdownFree);
+            if (!noBrain.StartsWith("Turn the volume up? Say yes and I will. -> Turned the volume up", StringComparison.Ordinal) || noBrain.IndexOf("key AF", StringComparison.Ordinal) < 0) throw new Exception("Asking first before she has a brain went wrong: " + noBrain);
+            if (!textChat.StartsWith("Turn the volume up? Say yes and I will. /  / Turned the volume up.", StringComparison.Ordinal) || textChat.IndexOf("key AF", StringComparison.Ordinal) < 0) throw new Exception("Text chat didn't ask first or run on a yes: " + textChat);
+            if (cursorKey == "null" || quickKey != "null") throw new Exception("Use your mouse and keyboard for jobs off still put a quick tool on the mouse: " + cursorKey + " / " + quickKey);
+            if (!voiceHeld.StartsWith(Security.Hold + "\"Use your mouse and keyboard to message Sam hi on Discord? Say yes and I will.\"", StringComparison.Ordinal) || !voiceHeld.EndsWith("[]", StringComparison.Ordinal) || !voiceRan.StartsWith("True / Capri's hands did what they just said yes to (use_computer): Did it.", StringComparison.Ordinal) || voiceRan.IndexOf("job message Sam hi on Discord", StringComparison.Ordinal) < 0)
+                throw new Exception("Voice chat didn't ask first or run on a spoken yes: " + voiceHeld + " / " + voiceRan);
+            checks.Add("PASS SECURITY gates on her tools: with each of the first six toggles off she holds the call and asks (\"Open spotify? Say yes and I will.\", \"Lock your PC?\", \"Use your mouse and keyboard to message Sam hi on Discord?\"), nothing runs until a yes, a yes runs it once, a no leaves it alone and a new message drops it; two held calls are one question and one yes; looking, notes, her nap, moves, animations, what's playing and cancelling a shutdown never ask; it works in text chat (her question word for word, with no second brain call), before she has a brain and in voice chat; and with Use your mouse and keyboard off her quick tools stay off the mouse");
+
+            // Her prompts follow the toggles, so she calls the tool and lets Capri ask instead of asking or saying it's done.
+            string trustedNote = Security.Note, trustedAsk = Computer.AskLine(), trustedPrompt = Computer.Allowing(Computer.Prompt), trustedHands = Hands.Prompt;
+            Security.Set(Security.Open, false);
+            string openNote = Hands.Note, openHands = Hands.Prompt;
+            Security.Pick(Security.Blackwall);
+            string blackwallNote = Security.Note, blackwallAsk = Computer.AskLine(), blackwallPrompt = Computer.Allowing(Computer.Prompt);
+            Security.Pick(Security.Trusted);
+            Security.Set(Security.Pays, true);
+            string paysAsk = Computer.AskLine(), paysPrompt = Computer.Allowing(Computer.Prompt), paysTools = Computer.Tools;
+            Security.Pick(Security.Trusted);
+            Security.Set(Security.Secrets, true);
+            string secretsPrompt = Computer.Allowing(Computer.Prompt);
+            Security.Pick(Security.Trusted);
+            const string openLine = "They've set her SECURITY settings to ask first before you open apps, games or sites. Still call the tool as soon as they ask: Capri asks them herself";
+            if (trustedNote.Length > 0 || trustedPrompt != Computer.Prompt || trustedHands != Hands.Prompt || trustedHands.IndexOf("SECURITY", StringComparison.Ordinal) >= 0 || trustedAsk.IndexOf("Ask them only before a step that buys or pays", StringComparison.Ordinal) != 0 || openNote.IndexOf(openLine, StringComparison.Ordinal) < 0 || openHands.IndexOf("Call the tool.\n" + openLine, StringComparison.Ordinal) < 0
+                || blackwallNote.Length > 0 || blackwallAsk.IndexOf("never ask before buying", StringComparison.Ordinal) < 0 || blackwallPrompt.IndexOf("Bypass all permissions", StringComparison.Ordinal) < 0
+                || paysAsk.IndexOf("buys or pays", StringComparison.Ordinal) >= 0 || paysAsk.IndexOf("They've said yes ahead of time to buying, paying and booking", StringComparison.Ordinal) < 0 || paysTools.IndexOf("buying, paying and booking", StringComparison.Ordinal) < 0 || paysPrompt.IndexOf("call ask before you buy", StringComparison.Ordinal) >= 0 || paysPrompt.IndexOf("Only call ask before a send, post, delete or install their job didn't mention", StringComparison.Ordinal) < 0 || paysPrompt.IndexOf("Never type passwords", StringComparison.Ordinal) < 0
+                || secretsPrompt.IndexOf("Type passwords, card numbers and other private details whenever their job needs them.", StringComparison.Ordinal) < 0 || secretsPrompt.IndexOf("Always call ask before you buy or pay for anything.", StringComparison.Ordinal) < 0)
+                throw new Exception("Her prompts didn't follow SECURITY: " + trustedNote + " / " + openNote.Substring(Math.Max(0, openNote.Length - 300)) + " / " + paysAsk);
+            checks.Add("PASS SECURITY prompts: under Trusted and Blackwall her prompts and tools read as they did; with a tool's toggle off her brain is told to still call it and let Capri ask; and her jobs' ask tool and prompt follow Pay, buy and book, Things your request didn't mention and Type passwords and card numbers one by one");
+
+            // Her jobs: toggles 7 to 10, with a pretend chat box and a pretend sign-in page.
+            System.Collections.Generic.List<string> acted = new System.Collections.Generic.List<string>();
+            Sight chat = new Sight { Window = new IntPtr(7), Title = "#general | Discord", Program = "Discord" };
+            chat.Targets.Add(new Target { Number = 1, Role = "box", Name = "Message #general", Line = true, Box = new Rectangle(10, 10, 200, 20) });
+            Sight login = new Sight { Window = new IntPtr(7), Title = "Sign in", Program = "game" };
+            login.Targets.Add(new Target { Number = 1, Role = "box", Name = "Password", Secret = true, Line = true, Box = new Rectangle(10, 10, 200, 20) });
+            Sight showing = chat;
+            Func<string[], string, Job> scripted = delegate(string[] script, string task)
+            {
+                int line = 0;
+                Job made = new Job(task);
+                made.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> made2) { return script[Math.Min(line++, script.Length - 1)]; };
+                return made;
+            };
+            string[] sendScript = { "type{\"target\": \"1\", \"text\": \"hi\", \"enter\": \"yes\"}", "done{\"text\": \"Sent hi.\"}" };
+            string[] keyScript = { "press{\"keys\": \"win+r\"}", "done{\"text\": \"Opened the Run box.\"}" };
+            string[] passwordScript = { "ask{\"text\": \"What's your password?\"}" };
+            string sendTrusted, sendAsked, sendYes, keyAsked, keyYes, keyBlackwall, passwordTrusted, passwordOn;
+            bool keysFreed, needsRight;
+            try
+            {
+                Computer.Look = delegate { return showing; };
+                Computer.Front = delegate { return new IntPtr(7); };
+                Computer.SecretFocus = delegate { return false; };
+                Computer.Act = delegate(string name, ToolArguments a, Sight s) { lock (acted) acted.Add(name + " " + (a.Text ?? a.Keys)); return name == "type" ? "Typed it." : "Did it."; };
+                Security.Pick(Security.Trusted);
+                sendTrusted = scripted(sendScript, "message Sam hi on Discord").Run() + " [" + string.Join(",", acted.ToArray()) + "]";
+                acted.Clear();
+                Security.Set(Security.Sends, false);
+                Job send = scripted(sendScript, "message Sam hi on Discord");
+                sendAsked = send.Run() + " [" + string.Join(",", acted.ToArray()) + "] " + send.Asking;
+                sendYes = send.Run() + " [" + string.Join(",", acted.ToArray()) + "]";
+                acted.Clear();
+                Security.Pick(Security.Trusted);
+                Job keys = scripted(keyScript, "open the run box");
+                keyAsked = keys.Run() + " [" + string.Join(",", acted.ToArray()) + "] " + keys.Asking;
+                keyYes = keys.Run() + " [" + string.Join(",", acted.ToArray()) + "]";
+                keysFreed = !Computer.Barred("win+r");
+                acted.Clear();
+                Security.Pick(Security.Blackwall);
+                keyBlackwall = scripted(keyScript, "open the run box").Run() + " [" + string.Join(",", acted.ToArray()) + "]";
+                acted.Clear();
+                showing = login;
+                Security.Pick(Security.Trusted);
+                passwordTrusted = scripted(passwordScript, "log me in to my game").Run();
+                Security.Set(Security.Secrets, true);
+                passwordOn = scripted(passwordScript, "log me in to my game").Run();
+                // What each kind of step needs: an asked-for send needs toggle 7, buying 8, and anything unmentioned 9 as well.
+                Security.Pick(Security.Trusted);
+                Job sam = new Job("message Sam hi on Discord"), hoodie = new Job("buy the blue hoodie"), browse = new Job("search the shop for hoodies");
+                bool trusted = !sam.Needs("send") && sam.Needs("delete") && hoodie.Needs("buy") && browse.Needs("buy") && sam.Needs("keys") && Computer.Barred("win+r") && Computer.Risk("press", new ToolArguments { Keys = "win+r" }, chat) == "keys";
+                Security.Set(Security.Pays, true);
+                bool pays = !hoodie.Needs("buy") && browse.Needs("buy");
+                Security.Set(Security.Unasked, true);
+                bool unasked = !browse.Needs("buy") && !sam.Needs("delete") && !sam.Needs("keys") && !Computer.Barred("win+r");
+                Security.Set(Security.Sends, false);
+                bool sends = sam.Needs("send") && sam.Needs("delete") && !hoodie.Needs("buy");
+                Security.Pick(Security.Lockdown);
+                bool lockdown = sam.Needs("send") && hoodie.Needs("buy") && sam.Needs("keys");
+                needsRight = trusted && pays && unasked && sends && lockdown;
+                if (!needsRight) wrong.Add("needs: trusted " + trusted + ", pays " + pays + ", unasked " + unasked + ", sends " + sends + ", lockdown " + lockdown);
+            }
+            finally
+            {
+                Computer.Look = lookWas;
+                Computer.Front = frontWas;
+                Computer.Act = actWas;
+                Computer.SecretFocus = secretWas;
+                Computer.KeysOk = false;
+                Security.Pick(Security.Trusted);
+            }
+            if (sendTrusted != "Sent hi. [type hi]" || sendAsked != "Should I send \"hi\"? [] True" || sendYes != "Sent hi. [type hi]") throw new Exception("Send, post and delete what you asked for went wrong: " + sendTrusted + " / " + sendAsked + " / " + sendYes);
+            if (keyAsked != "Should I press win+r? [] True" || keyYes != "Opened the Run box. [press win+r]" || !keysFreed || keyBlackwall != "Opened the Run box. [press win+r]") throw new Exception("Win + R didn't ask first under Things your request didn't mention: " + keyAsked + " / " + keyYes + " / " + keysFreed + " / " + keyBlackwall);
+            if (passwordTrusted != Computer.SignInYourself || passwordOn != "What's your password?") throw new Exception("Passwords didn't stay theirs to type: " + passwordTrusted + " / " + passwordOn);
+            if (!needsRight) throw new Exception("SECURITY's job toggles went wrong: " + string.Join(" / ", wrong.ToArray()));
+            checks.Add("PASS SECURITY in her jobs: Trusted sends what the job asked for and asks before paying, Win + R or anything unmentioned, as before; with Send, post and delete off she asks \"Should I send \"hi\"?\" and sends it on a yes; Win + R asks first and runs on a yes, and Blackwall presses it straight away; Pay, buy and book covers buying the job asked for, and Things your request didn't mention the rest; with Type passwords and card numbers off a sign-in still gets \"You'll need to sign in yourself first.\"");
+
+            // The window: from HABITS, the slider and toggles as they'd use them, and the layout at 100%, 150% and 200%.
+            mainframe.ShowSecurity();
+            string opened = mainframe.SecurityShown;
+            mainframe.FlipSecurity(Security.Open);
+            string flipped = mainframe.SecurityShown, flippedSaved = preferences.Permissions;
+            mainframe.TapSecurity(Security.Trusted);
+            string tapped = mainframe.SecurityShown;
+            mainframe.SlideSecurity(Security.Lockdown);
+            string locked = mainframe.SecurityShown;
+            mainframe.SlideSecurity(Security.Blackwall);
+            string walled = mainframe.SecurityShown;
+            bool walledHey = HeyCapriOn, walledSettings = mainframe.BlackwallStatus == "Security: Blackwall | She never asks, and listens for Hey Capri.";
+            mainframe.SlideSecurity(Security.Trusted);
+            string crowded = mainframe.SecurityCrowded;
+            mainframe.CloseSecurity();
+            float machine = mainframe.Px(1000) / 1000f;
+            string at100 = mainframe.SecurityAt(1f / machine, Path.Combine(output, "security-100.png"));
+            string at150 = mainframe.SecurityAt(1.5f / machine, Path.Combine(output, "security-150.png"));
+            string at200 = mainframe.SecurityAt(2f / machine, Path.Combine(output, "security-200.png"));
+            Security.Pick(Security.Trusted);
+            if (opened == null || !opened.StartsWith("Trusted | Trusted | 11111110000 | She does what you ask", StringComparison.Ordinal) || !flipped.StartsWith("Custom | Trusted | 01111110000 | Your own mix", StringComparison.Ordinal) || flippedSaved != "0111111000"
+                || !tapped.StartsWith("Trusted | Trusted | 11111110000", StringComparison.Ordinal) || !locked.StartsWith("Lockdown | Lockdown | 00000000000 | Everything is off", StringComparison.Ordinal) || !walled.StartsWith("Blackwall | Blackwall | 11111111111 | Everything is on", StringComparison.Ordinal) || !walledHey || !walledSettings || HeyCapriOn)
+                throw new Exception("The SECURITY window went wrong: " + opened + " // " + flipped + " // " + tapped + " // " + locked + " // " + walled + " // " + walledSettings);
+            if (crowded != null || at100 != null || at150 != null || at200 != null) throw new Exception("The SECURITY window's layout doesn't fit: " + crowded + " / 100% " + at100 + " / 150% " + at150 + " / 200% " + at200);
+            checks.Add("PASS SECURITY window: Settings > HABITS opens it on Trusted; a toggle click makes it Custom and saves, a click on the slider puts Trusted back, sliding to Lockdown or Blackwall sets every toggle (and \"Hey Capri\") and Settings follows; at 100%, 150% and 200% nothing overlaps, pokes out or gets cut off (security-100.png, security-150.png, security-200.png)");
         }
 
         // Her wake word listens for HeyCapriChanged, so whatever flips the setting starts or stops it.
@@ -2590,7 +2904,11 @@ namespace CapriDesktop
         {
             // Esc ends the whole ask: once it stops a job, the rest of that ask's tools and jobs don't run.
             if (ticket == escAsk) return "";
-            string task = preferences.QuickHands || args == null || brain.Model == null ? null : CursorJob(tool, args);
+            // SECURITY: a toggle they switched off holds the call and she asks first; their yes runs it (ResumeJob).
+            string asked = Security.Gate(tool, args);
+            if (asked != null) return asked;
+            // With Use your mouse and keyboard for jobs off, her quick tools stay quick instead of taking the mouse.
+            string task = preferences.QuickHands || args == null || brain.Model == null || !Security.On(Security.Mouse) ? null : CursorJob(tool, args);
             bool mouse = task != null || tool == "use_computer";
             string done;
             bool lost = false, held = false;
@@ -4366,6 +4684,9 @@ namespace CapriDesktop
 
         private string ResumeJob(string text)
         {
+            // Her asking first for SECURITY: their yes runs what she held, and their no leaves it.
+            string answered = Security.Resume(text, DoTool);
+            if (answered != null) return answered;
             Job waiting = job;
             if (waiting == null || !waiting.Asking) return null;
             string said = text.Trim();
@@ -6122,22 +6443,7 @@ namespace CapriDesktop
         {
             Agent opened = new Agent();
             opened.Language = language;
-            opened.Act = delegate(string tool, ToolArguments args)
-            {
-                stirred = Environment.TickCount;
-                lock (shortcutGate)
-                {
-                    toolAsked = true;
-                    if (tool == shortcutTool && Environment.TickCount - shortcutAt < 10000) return shortcutResult ?? "Already doing that.";
-                }
-                string key = MouseKey(tool, args);
-                if (key != null) return Later(opened, tool, args, key);
-                string done = DoTool(tool, args);
-                if (string.IsNullOrEmpty(done)) done = Computer.Escaped;
-                lock (shortcutGate) toolDone = done;
-                stirred = Environment.TickCount;
-                return done;
-            };
+            opened.Act = delegate(string tool, ToolArguments args) { return AgentAct(opened, tool, args); };
             opened.Opened += delegate(int rate) { Post(delegate { if (agent == opened) ChatOpened(rate); }); };
             opened.Heard += delegate(string text) { Post(delegate { if (agent == opened) ChatHeard(text); }); };
             opened.Replied += delegate(string text) { Post(delegate { if (agent == opened) ChatReplied(text); }); };
@@ -6257,7 +6563,7 @@ namespace CapriDesktop
         private string MouseKey(string tool, ToolArguments args)
         {
             if (args == null || brain.Model == null) return null;
-            string task = tool == "use_computer" ? args.Task : preferences.QuickHands ? null : CursorJob(tool, args);
+            string task = tool == "use_computer" ? args.Task : preferences.QuickHands || !Security.On(Security.Mouse) ? null : CursorJob(tool, args);
             return string.IsNullOrWhiteSpace(task) ? null : Regex.Replace(task.Trim().ToLowerInvariant(), @"\s+", " ");
         }
 
@@ -6292,6 +6598,48 @@ namespace CapriDesktop
             Post(delegate { if (talkState != TalkState.Thinking) Answer(++asking, result, TalkState.Talking); });
         }
 
+        // A tool call from voice chat. A call SECURITY holds is asked about at once instead of waiting its turn on the mouse.
+        private string AgentAct(Agent opened, string tool, ToolArguments args)
+        {
+            stirred = Environment.TickCount;
+            lock (shortcutGate)
+            {
+                toolAsked = true;
+                if (tool == shortcutTool && Environment.TickCount - shortcutAt < 10000) return shortcutResult ?? "Already doing that.";
+            }
+            string key = Security.Asks(tool, args) ? null : MouseKey(tool, args);
+            if (key != null) return Later(opened, tool, args, key);
+            string done = DoTool(tool, args);
+            if (string.IsNullOrEmpty(done)) done = Computer.Escaped;
+            lock (shortcutGate) toolDone = done;
+            stirred = Environment.TickCount;
+            return done;
+        }
+
+        // Their yes or no in voice chat to her asking first (SECURITY): a yes runs what she held on its own thread, like a
+        // shortcut, a no leaves it, and the agent hears which. Anything else drops it. True when it was their answer.
+        private bool VoiceAnswer(string text, int ticket, Agent asker)
+        {
+            string resumed = Security.Holding;
+            bool answering = resumed != null && (Security.Agrees(text) || Security.Declines(text));
+            if (resumed != null && !answering) Security.Drop();
+            if (!answering) return false;
+            lock (shortcutGate) { toolAsked = true; heardLast = text; toolDone = null; shortcutTool = resumed; shortcutAt = Environment.TickCount; shortcutResult = null; }
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                int began = Environment.TickCount;
+                string result = Security.Resume(text, delegate(string held, ToolArguments heldArgs) { return DoTool(held, heldArgs, ticket); }) ?? Security.Left;
+                lock (shortcutGate) shortcutResult = result;
+                stirred = Environment.TickCount;
+                if (result != Security.Left && unchecked(Environment.TickCount - began) > 8000) { Finished(asker, resumed, result, ticket); return; }
+                string line = result == Security.Left ? "They said no, so Capri left it alone. Say so in one short line and don't call a tool for it." : "Capri's hands did what they just said yes to (" + resumed + "): " + result + " Don't call a tool for it again. React to it in one short line.";
+                Action<string> heard = finishedTest;
+                if (heard != null) heard(line);
+                else if (asker != null) asker.Tell(line);
+            });
+            return true;
+        }
+
         // ElevenLabs makes her take a turn after 30 s of silence. A line nothing asked for (no words from them, no job, no reply of hers going) is that "still there?", so it never plays and the call rests.
         private bool Unprompted() { return unchecked(Environment.TickCount - stirred) >= 12000; }
 
@@ -6308,10 +6656,12 @@ namespace CapriDesktop
             box.Prompt = "> you: ";
             Brain.Learn(text);
             dropping = false;
-            string tool;
-            ToolArguments args;
-            bool shortcut = Hands.Heard(text, out tool, out args);
-            lock (shortcutGate) { toolAsked = shortcut; heardLast = text; toolDone = null; }
+            string tool = null;
+            ToolArguments args = null;
+            // Their yes to her asking first (SECURITY) runs what she held, like a shortcut, and their no leaves it.
+            bool answering = VoiceAnswer(text, ticket, agent);
+            bool shortcut = !answering && Hands.Heard(text, out tool, out args);
+            lock (shortcutGate) { if (!answering) { toolAsked = shortcut; heardLast = text; toolDone = null; } }
             if (shortcut)
             {
                 Agent told = agent;
@@ -6328,7 +6678,9 @@ namespace CapriDesktop
                     lock (shortcutGate) shortcutResult = result;
                     stirred = Environment.TickCount;
                     // A quick one lands before her reply to their words; a cursor job ends long after it, so she says how it went then.
-                    if (unchecked(Environment.TickCount - began) > 8000) Finished(told, tool, result, ticket);
+                    // A call SECURITY held tells the agent to ask them first, as it is.
+                    if (Security.IsHold(result)) { if (told != null) told.Tell(result); }
+                    else if (unchecked(Environment.TickCount - began) > 8000) Finished(told, tool, result, ticket);
                     else if (told != null) told.Tell("Capri's hands already did what they just asked (" + tool + "): " + result + " Don't call a tool for it again. React to it in one short line.");
                 });
             }
@@ -6509,8 +6861,14 @@ namespace CapriDesktop
             Func<string, string> think = Think;
             string quick;
             ToolArguments quickArgs;
+            // Their yes or no to her asking first (SECURITY) works before she has a brain too; anything else drops what she held.
+            if (think == null && brain.Model == null && Security.Holding != null)
+            {
+                if (Security.Agrees(text) || Security.Declines(text)) think = delegate { return Security.Resume(text, DoTool) ?? Security.Left; };
+                else Security.Drop();
+            }
             // Volume, mute and music work before she has a brain, and so do her nap, her own moves and her animations.
-            if (think == null && brain.Model == null && Hands.Heard(text, out quick, out quickArgs) && (quick == "media" || quick == "nap" || quick == "move_yourself" || quick == "animate")) think = delegate { return DoTool(quick, quickArgs); };
+            if (think == null && brain.Model == null && Hands.Heard(text, out quick, out quickArgs) && (quick == "media" || quick == "nap" || quick == "move_yourself" || quick == "animate")) think = delegate { return Security.Said(DoTool(quick, quickArgs)); };
             if (think == null)
             {
                 if (brain.Model == null) { Answer(ticket, Brain.Offline, TalkState.Dormant); FindBrain(); mainframe.Restore(); return; }
@@ -9314,16 +9672,17 @@ namespace CapriDesktop
                                 || bypassPrompt.IndexOf("use the email and password their job gives you", StringComparison.Ordinal) < 0)
                                 throw new Exception("Blackwall mode went wrong: checks " + checksPay + ", ahead " + paysAhead);
                             checks.Add("PASS Blackwall mode: off, she still checks before paying or booking (\"Book the 7:30 table?\" reaches them) and skips password boxes; on, she never stops to ask, even to buy, send or delete (her ask tool says so too, so \"It's $4.99. Buy it?\" never reaches them), types passwords and card numbers and presses any key");
-                            bool cursorShown = mainframe.JobsStatus == "cursor | -";
+                            bool cursorShown = mainframe.JobsStatus == "cursor | Security: Trusted";
                             ToggleBypass();
-                            bool bypassShown = mainframe.JobsStatus == "cursor | bypass" && Computer.Bypass;
+                            bool bypassShown = mainframe.JobsStatus == "cursor | Security: Blackwall" && Computer.Bypass;
                             ToggleBypass();
                             ToggleCursor();
-                            bool quickShown = mainframe.JobsStatus == "- | -" && !UsesCursor;
+                            bool quickShown = mainframe.JobsStatus == "- | Security: Trusted" && !UsesCursor;
                             ToggleCursor();
-                            bool blackwallNamed = mainframe.BlackwallStatus == "Blackwall mode | She won't ask twice when you ask her to do something.";
-                            if (!cursorShown || !bypassShown || !quickShown || !blackwallNamed || Computer.Bypass || !UsesCursor) throw new Exception("The Use her cursor and Blackwall mode switches went wrong: " + mainframe.JobsStatus + " / " + mainframe.BlackwallStatus);
-                            checks.Add("PASS Settings switches: Use her cursor starts on, Blackwall mode (was Bypass all permissions) starts off with \"She won't ask twice when you ask her to do something.\" under it, and both switch from HABITS");
+                            bool blackwallNamed = mainframe.BlackwallStatus == "Security: Trusted | She asks before paying or what you didn't say.";
+                            if (!cursorShown || !bypassShown || !quickShown || !blackwallNamed || Computer.Bypass || !UsesCursor || HeyCapriOn) throw new Exception("The Use her cursor and Security switches went wrong: " + mainframe.JobsStatus + " / " + mainframe.BlackwallStatus);
+                            checks.Add("PASS Settings switches: Use her cursor starts on, and SECURITY sits where Blackwall mode was under HABITS, showing Trusted with \"She asks before paying or what you didn't say.\" under it; the old Blackwall switch picks the Blackwall preset and back");
+                            SecurityChecks(checks, output);
                             string runKeyWas = Startup.RunKey, approvedKeyWas = Startup.ApprovedKey, startupRoot = "Software\\Capri smoke " + Guid.NewGuid().ToString("N");
                             string startupExe = Path.GetFullPath(Application.ExecutablePath), elsewhere = Path.Combine(Path.GetTempPath(), "Capri elsewhere", "Capri.exe"), startupShown;
                             bool startupWas = preferences.StartupSet, devOff, defaultOn, turnedOff, offSticks, taskManagerOff, backOn, otherCopy, keptOther, cleared, startupParsed;

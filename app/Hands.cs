@@ -57,6 +57,352 @@ namespace CapriDesktop
         internal InstalledApp(string name, string id) { Name = name; Id = id; }
     }
 
+    // Her SECURITY window (Lachy, 29 Oct): a toggle for each kind of thing she does on their PC, set by a slider of four presets.
+    // A toggle that's off means she asks first in chat ("Open Spotify? Say yes and I will.") and does it on their yes, never a
+    // silent no. Typing passwords and card numbers is the one exception: with it off they type those themselves. Trusted, the
+    // default, is how she worked before the window, and Blackwall is Blackwall mode (Bypass all permissions before 0.7.4) plus
+    // listening for "Hey Capri". The gate is in code: her tools stop here, and her jobs' steps stop in Computer's checks.
+    internal static class Security
+    {
+        internal const int Open = 0, Media = 1, Shortcuts = 2, Windows = 3, Power = 4, Mouse = 5, Sends = 6, Pays = 7, Unasked = 8, Secrets = 9, Wake = 10, Count = 11;
+        internal const int Lockdown = 0, Guarded = 1, Trusted = 2, Blackwall = 3, Custom = 4;
+        internal static readonly string[] Names = { "Open apps, games and sites", "Music, media and volume", "Shortcuts (screenshots, Game Bar, captions, Discord mute)", "Close and switch apps and tabs", "Shut down, restart, sleep, lock and sign out", "Use your mouse and keyboard for jobs", "Send, post and delete what you asked for", "Pay, buy and book", "Things your request didn't mention", "Type passwords and card numbers", "Listen for \"Hey Capri\"" };
+        internal static readonly string[] Lines =
+        {
+            "On: she opens them when you ask. Off: she asks first.",
+            "On: she plays music and sets the volume. Off: she asks first.",
+            "On: she presses them for you. Off: she asks first.",
+            "On: she switches and closes them. Off: she asks first.",
+            "On: she does it as soon as you ask. Off: she asks first.",
+            "On: she clicks and types in your apps. Off: she asks first.",
+            "On: she sends it without checking again. Off: she asks first.",
+            "On: she pays and books without checking. Off: she asks first.",
+            "On: she does the extra steps a job needs. Off: she asks first.",
+            "On: she types the ones your job gives her. Off: you type them.",
+            "On: she listens on this PC for her name. Off: she doesn't."
+        };
+        internal static readonly string[] Presets = { "Lockdown", "Guarded", "Trusted", "Blackwall", "Custom" };
+        private static readonly string[] Told =
+        {
+            "Everything is off: she asks first before she does anything on your PC.",
+            "She opens apps and sites, plays music and presses shortcuts, and asks first for the rest.",
+            "She does what you ask, and asks first before paying or anything you didn't mention.",
+            "Everything is on: she never asks, types passwords and card numbers, and listens for \"Hey Capri\".",
+            "Your own mix. Pick a preset to start again from it."
+        };
+        // The Settings line under her SECURITY button, short enough for its row.
+        private static readonly string[] Shorts = { "She asks first before everything.", "Apps, music and shortcuts. She asks for the rest.", "She asks before paying or what you didn't say.", "She never asks, and listens for Hey Capri.", "Your own mix of toggles." };
+        // Lockdown has them all off, Guarded the first three on, Trusted the first seven and Blackwall all eleven.
+        private static readonly int[] Masks = { 0, 0x7, 0x7F, 0x7FF };
+        private static int mask = 0x7F;
+        private static readonly object gate = new object();
+        // Toggle 11 is her wake word's own setting on Windows, read and set through these. Elsewhere it's kept here with the rest.
+        internal static Func<bool> HeyOn;
+        internal static Action<bool> SetHey;
+        // Whether this PC has a toggle's feature at all: Mac and Linux have the first five, with no jobs or wake word yet.
+        internal static Func<int, bool> Has = delegate { return true; };
+        // Saves and redraws whatever shows them, once a toggle or preset changes.
+        internal static Action Changed;
+        internal const string Yes = " Say yes and I will.";
+        internal const string Left = "Okay, I left it alone.";
+        // A tool result that held the call to ask first. Voice chat reads it as it is; text chat says only the question.
+        internal const string Hold = "Not done yet: their SECURITY settings ask first. Ask them ";
+
+        internal static bool On(int toggle)
+        {
+            if (toggle == Wake && HeyOn != null) return HeyOn();
+            lock (gate) return (mask & (1 << toggle)) != 0;
+        }
+
+        internal static void Set(int toggle, bool on)
+        {
+            if (On(toggle) == on) return;
+            if (toggle == Wake && SetHey != null) SetHey(on);
+            else lock (gate) mask = on ? mask | (1 << toggle) : mask & ~(1 << toggle);
+            Action changed = Changed;
+            if (changed != null) changed();
+        }
+
+        // Every toggle as bits, toggle 1 in the lowest, with "Hey Capri" read from where it lives.
+        internal static int Mask
+        {
+            get
+            {
+                int bits;
+                lock (gate) bits = mask;
+                if (HeyOn != null) bits = (bits & 0x3FF) | (HeyOn() ? 1 << Wake : 0);
+                return bits;
+            }
+        }
+
+        internal static void Pick(int preset)
+        {
+            if (preset < 0 || preset >= Masks.Length) return;
+            bool wake = (Masks[preset] & (1 << Wake)) != 0;
+            lock (gate) mask = Masks[preset];
+            if (SetHey != null && On(Wake) != wake) SetHey(wake);
+            Action changed = Changed;
+            if (changed != null) changed();
+        }
+
+        // Toggles 1 to 10 the way Blackwall mode's switch used to set them, leaving "Hey Capri" alone. Nothing is saved.
+        internal static void Jobs(bool blackwall) { lock (gate) mask = (mask & (1 << Wake)) | (Masks[blackwall ? Blackwall : Trusted] & 0x3FF); }
+
+        // The preset their toggles match, or Custom. "Hey Capri" only counts where there's a wake word.
+        internal static int Preset
+        {
+            get
+            {
+                int bits = Mask, counted = Has(Wake) ? 0x7FF : 0x3FF;
+                for (int i = 0; i < Masks.Length; i++) if ((bits & counted) == (Masks[i] & counted)) return i;
+                return Custom;
+            }
+        }
+
+        internal static string PresetName { get { return Presets[Preset]; } }
+
+        // What the preset does, in a line. Without her jobs (Mac and Linux so far) Trusted never asks either, and without a
+        // wake word Blackwall's line doesn't promise one.
+        internal static string PresetLine(int preset)
+        {
+            if (preset == Trusted && !Has(Mouse)) return "She does what you ask without asking first.";
+            if (preset == Blackwall && !Has(Wake)) return "Everything is on: she never asks before doing what you ask.";
+            return Told[Math.Max(0, Math.Min(Custom, preset))];
+        }
+
+        internal static string Short { get { int preset = Preset; return preset == Blackwall && !Has(Wake) ? "She never asks first." : Shorts[preset]; } }
+
+        // Toggles 1 to 10 as 1s and 0s for their settings file, like "1111111000" for Trusted.
+        internal static string Saved { get { int bits; lock (gate) bits = mask; return Marks(bits); } }
+
+        internal static int MaskOf(int preset) { return Masks[preset]; }
+
+        // A preset's toggles 1 to 10 the way Saved writes them.
+        internal static string Of(int preset) { return Marks(Masks[preset]); }
+
+        private static string Marks(int bits)
+        {
+            char[] marks = new char[Wake];
+            for (int i = 0; i < Wake; i++) marks[i] = (bits & (1 << i)) != 0 ? '1' : '0';
+            return new string(marks);
+        }
+
+        // Their saved toggles, or Trusted for anything unreadable. "Hey Capri" stays where it lives.
+        internal static void Load(string saved, bool wake = false)
+        {
+            int bits = 0;
+            if (saved == null || saved.Length != Wake || saved.Trim('0', '1').Length > 0) bits = Masks[Trusted] & 0x3FF;
+            else for (int i = 0; i < Wake; i++) if (saved[i] == '1') bits |= 1 << i;
+            lock (gate) mask = bits | (wake ? 1 << Wake : 0);
+        }
+
+        // Which toggle one of her tools needs, or -1 for one that never asks: looking at the screen, her notes, her own nap,
+        // moves and animations, checking what's playing and cancelling a shutdown.
+        internal static int Needs(string tool, ToolArguments args)
+        {
+            string action = args == null ? null : args.Action;
+            switch (tool)
+            {
+                case "open_app": case "open_website": return Open;
+                case "media": return action == "now_playing" ? -1 : Media;
+                case "play_music": return Media;
+                case "shortcut": return Shortcuts;
+                case "app_window": return Windows;
+                case "power": return action == "cancel" ? -1 : Power;
+                case "use_computer": return Mouse;
+                default: return -1;
+            }
+        }
+
+        private sealed class Held
+        {
+            internal string Tool;
+            internal ToolArguments Args;
+            internal string Asked;
+        }
+
+        private static readonly List<Held> held = new List<Held>();
+        // Calls their yes let through, each once.
+        private static readonly List<string> cleared = new List<string>();
+
+        // True when the toggle this call needs is off here, so she'd ask first.
+        internal static bool Asks(string tool, ToolArguments args)
+        {
+            int toggle = Needs(tool, args);
+            if (toggle < 0 || !Has(toggle) || On(toggle)) return false;
+            lock (gate) return !cleared.Contains(Asking(tool, args));
+        }
+
+        // Null when the call can run. Otherwise she holds it and the result says what to ask them.
+        internal static string Gate(string tool, ToolArguments args)
+        {
+            int toggle = Needs(tool, args);
+            if (toggle < 0 || !Has(toggle) || On(toggle)) return null;
+            string asked = Asking(tool, args);
+            lock (gate)
+            {
+                if (cleared.Remove(asked)) return null;
+                if (!held.Exists(call => call.Asked == asked)) held.Add(new Held { Tool = tool, Args = args == null ? new ToolArguments() : args.Copy(), Asked = asked });
+            }
+            return Hold + "\"" + Up(asked) + "?" + Yes + "\" and wait for their answer. Their yes runs it, so don't call the tool again.";
+        }
+
+        internal static bool IsHold(string result) { return result != null && result.StartsWith(Hold, StringComparison.Ordinal); }
+
+        // The tool she's holding, if any.
+        internal static string Holding { get { lock (gate) return held.Count == 0 ? null : held[0].Tool; } }
+
+        // Her question for everything she's holding, like "Open Discord and open Spotify? Say yes and I will."
+        internal static string Question
+        {
+            get
+            {
+                List<string> asked = new List<string>();
+                lock (gate) foreach (Held call in held) asked.Add(call.Asked);
+                if (asked.Count == 0) return null;
+                string all = asked.Count == 1 ? asked[0] : string.Join(", ", asked.GetRange(0, asked.Count - 1).ToArray()) + " and " + asked[asked.Count - 1];
+                return Up(all) + "?" + Yes;
+            }
+        }
+
+        // What she says after her tools ran when one was held: what did run, then her question. Null when nothing was held.
+        internal static string Reply(List<string> results)
+        {
+            if (!results.Exists(IsHold)) return null;
+            List<string> done = results.FindAll(result => !IsHold(result) && !string.IsNullOrEmpty(result));
+            string question = Question ?? "";
+            return done.Count == 0 ? question : string.Join(" ", done.ToArray()) + " " + question;
+        }
+
+        // A held result shown on its own, like before she has a brain, becomes just her question.
+        internal static string Said(string result) { return IsHold(result) ? Question ?? result : result; }
+
+        internal static bool Agrees(string said)
+        {
+            string text = (said ?? "").Trim();
+            return Hands.Agrees(text) || Regex.IsMatch(text, @"^(yes|yeah|yep|yup|ya|yea|sure|ok|okay|do it|go ahead|go for it|send it|press it|oui)\b[\s.!,]*(please|pls|plz|choom)?[\s.!]*$", RegexOptions.IgnoreCase);
+        }
+
+        internal static bool Declines(string said) { return Regex.IsMatch((said ?? "").Trim(), @"^(no|nah|nope|don't|do not|stop|cancel|never mind|nevermind|leave it|non)\b", RegexOptions.IgnoreCase); }
+
+        // Their answer to her asking first: yes runs what she held, each call once; no leaves it alone; anything else drops it
+        // and goes on as a new message. Null when nothing was held or it wasn't a yes or no.
+        internal static string Resume(string text, Func<string, ToolArguments, string> run)
+        {
+            List<Held> waiting;
+            lock (gate)
+            {
+                if (held.Count == 0) return null;
+                waiting = new List<Held>(held);
+                held.Clear();
+            }
+            if (Declines(text)) return Left;
+            if (!Agrees(text)) return null;
+            List<string> done = new List<string>();
+            foreach (Held call in waiting)
+            {
+                lock (gate) cleared.Add(call.Asked);
+                string result;
+                try { result = run(call.Tool, call.Args); }
+                finally { lock (gate) cleared.Remove(call.Asked); }
+                if (!string.IsNullOrEmpty(result)) done.Add(Said(result));
+            }
+            return done.Count == 0 ? "Done." : string.Join(" ", done.ToArray());
+        }
+
+        // Drops whatever she was holding, when they've moved on to something else.
+        internal static void Drop() { lock (gate) held.Clear(); }
+
+        private static string Up(string text) { return string.IsNullOrEmpty(text) ? text : char.ToUpperInvariant(text[0]) + text.Substring(1); }
+
+        private static string Plain(string text, string fallback)
+        {
+            string cleaned = Regex.Replace((text ?? "").Trim(), @"\s+", " ").TrimEnd('.', '!', '?', ' ');
+            if (cleaned.Length == 0) return fallback;
+            return cleaned.Length > 70 ? cleaned.Substring(0, 67).TrimEnd() + "..." : cleaned;
+        }
+
+        // What she'd do, in a few words: "open Spotify", "turn the volume up", "close Discord".
+        internal static string Asking(string tool, ToolArguments args)
+        {
+            ToolArguments a = args ?? new ToolArguments();
+            switch (tool)
+            {
+                case "open_app": return "open " + Plain(a.Name, "that app");
+                case "open_website":
+                    string site = Plain(a.Site, "that site");
+                    return string.IsNullOrWhiteSpace(a.Search) ? "open " + site : "search " + Regex.Replace(site, @"^(https?://)?(www\.)?|\.(com|org|net|tv)(/.*)?$", "", RegexOptions.IgnoreCase) + " for " + Plain(a.Search, "that");
+                case "media":
+                    switch (a.Action)
+                    {
+                        case "play_pause": return "play or pause what's playing";
+                        case "next": return "skip to the next track";
+                        case "previous": return "go back a track";
+                        case "volume_up": return "turn the volume up";
+                        case "volume_down": return "turn the volume down";
+                        case "volume_set": return "set the volume to " + Plain(a.Level, "that") + (Regex.IsMatch(a.Level ?? "", @"^\s*\d+\s*$") ? "%" : "");
+                        case "mute": return "mute your PC";
+                        case "unmute": return "unmute your PC";
+                        default: return "control what's playing";
+                    }
+                case "play_music": return "play " + Plain(a.Song, "some music") + (a.App == "spotify" ? " on Spotify" : a.App == "youtube" ? " on YouTube" : "");
+                case "shortcut":
+                    switch (a.Name)
+                    {
+                        case "discord_mute": return "mute or unmute your mic in Discord";
+                        case "discord_deafen": return "deafen or undeafen you in Discord";
+                        case "screenshot": return "take a screenshot";
+                        case "clip_that": return "clip the last 30 seconds";
+                        case "record": return "start or stop recording";
+                        case "game_bar": return "open the Game Bar";
+                        case "show_desktop": return "show the desktop";
+                        case "task_manager": return "open Task Manager";
+                        case "clipboard": return "open your clipboard history";
+                        case "emoji": return "open the emoji picker";
+                        case "voice_typing": return "start voice typing";
+                        case "live_captions": return "turn Live Captions on or off";
+                        case "narrator": return "turn Narrator on or off";
+                        case "magnifier": return "zoom in with Magnifier";
+                        case "magnifier_off": return "close Magnifier";
+                        case "color_filters": return "turn colour filters on or off";
+                        case "quick_settings": return "open Quick Settings";
+                        default: return "press that shortcut";
+                    }
+                case "app_window": return (a.Action == "close" ? "close " : a.Action == "minimize" ? "minimize " : "switch to ") + Plain(a.Name, "that app");
+                case "power":
+                    string when = Regex.IsMatch(a.Minutes ?? "", @"^\s*\d+\s*$") && a.Minutes.Trim() != "0" ? " in " + a.Minutes.Trim() + (a.Minutes.Trim() == "1" ? " minute" : " minutes") : "";
+                    switch (a.Action)
+                    {
+                        case "shut_down": return "shut down your PC" + when;
+                        case "restart": return "restart your PC" + when;
+                        case "sleep": return "put your PC to sleep" + when;
+                        case "lock": return "lock your PC" + when;
+                        case "sign_out": return "sign you out" + when;
+                        default: return "do that to your PC";
+                    }
+                case "use_computer":
+                    string job = Plain(Hands.Asked(a.Task ?? ""), "");
+                    return job.Length == 0 ? "use your mouse and keyboard for that" : "use your mouse and keyboard to " + char.ToLowerInvariant(job[0]) + job.Substring(1);
+                default: return "do that";
+            }
+        }
+
+        // Her brain's line about toggles that are off, so she still calls the tool and lets Capri ask instead of asking
+        // herself or saying it's done. Empty under Trusted and Blackwall, so their prompts are as they were.
+        internal static string Note
+        {
+            get
+            {
+                string[] what = { "open apps, games or sites", "play music or change the volume", "press shortcuts", "switch to or close apps and tabs", "shut down, restart, sleep, lock or sign out of their PC", "use their mouse and keyboard for a job" };
+                List<string> off = new List<string>();
+                for (int i = 0; i <= Mouse; i++) if (Has(i) && !On(i)) off.Add(what[i]);
+                if (off.Count == 0) return "";
+                string list = off.Count == 1 ? off[0] : string.Join(", ", off.GetRange(0, off.Count - 1).ToArray()) + " or " + off[off.Count - 1];
+                return "\nThey've set her SECURITY settings to ask first before you " + list + ". Still call the tool as soon as they ask: Capri asks them herself and does it when they say yes, so never ask them yourself, and never say it's done before it is.";
+            }
+        }
+    }
+
     internal sealed class OpenWindow
     {
         internal readonly IntPtr Handle;
@@ -67,7 +413,10 @@ namespace CapriDesktop
 
     internal static class Hands
     {
-        internal const string Note =
+        // Her chat and voice chat line about her tools, with SECURITY's line after it while one of her tools' toggles is off.
+        internal static string Note { get { return Noted + Security.Note; } }
+
+        private const string Noted =
             "\nYou have tools for their PC: open (launch, play) their apps and games, switch to, minimize or close apps that are open, play songs or videos they name, open websites or search them, control their music and volume, look at their screen, and use their mouse and keyboard for jobs inside apps and sites. " +
             "Use a tool whenever they ask you to do something like that, and never say you did or are doing it without one. Look at their screen when they ask what you see or what you think of something on it. Only close an app when they ask you to. " +
             "Your own website, where people download you, is " + Home + ". " +
@@ -83,7 +432,11 @@ namespace CapriDesktop
             "You have a web browser: when they ask something you don't know or that changes, like the weather, news, scores, prices or times, search Google for it instead of guessing or saying you can't. " +
             "Most messages are just chat, not jobs: answer those as yourself, with your own opinions and tastes, and don't offer to open, play or look at anything unless they ask.";
 
-        internal const string Prompt =
+        // Her hands' prompt. While one of her tools' toggles is off in SECURITY, its line goes in after "Call the tool.", so she
+        // still calls it and Capri asks them.
+        internal static string Prompt { get { string note = Security.Note; return note.Length == 0 ? Handing : Handing.Replace("Call the tool.\n", "Call the tool." + note + "\n"); } }
+
+        private const string Handing =
             "You are the hands of Capri, a desktop companion on the user's Windows PC. You don't chat.\n" +
             "Act only on their latest request. Earlier messages are context for names, not commands to repeat. Call one tool for each thing they ask for, however many there are (open Discord, Spotify and Steam is three open_app calls): open an app, game or website, search a site, play music, control media or volume, check the current song, switch to, minimize or close an app, or look at their screen when asked about it. Use the names they gave.\n" +
             "If the job needs clicking, typing or more than one step, like opening an app and then searching, going somewhere or making something in it, call use_computer once with the whole job in their words.\n" +
@@ -820,7 +1173,7 @@ namespace CapriDesktop
             return best;
         }
 
-        private static string Asked(string said)
+        internal static string Asked(string said)
         {
             said = Dots(Regex.Replace(said ?? "", @"^[\s¿¡]+", ""));
             string text = Lead.Replace(Opener.Replace(Regex.Replace((said ?? "").Replace('\u2019', '\'').Trim(), @"\s+", " "), ""), "");

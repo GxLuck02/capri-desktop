@@ -54,6 +54,8 @@ namespace CapriDesktop
         [DataMember] internal int Glitch;
         [DataMember] internal bool NoIntro;
         [DataMember] internal bool NotOnTop;
+        // Security's toggles 1 to 10 as 1s and 0s, like Windows. Missing in settings from before it, which get Trusted.
+        [DataMember] internal string Permissions;
     }
 
     // The bits of GitHub's latest release she reads to tell them about an update.
@@ -255,6 +257,9 @@ namespace CapriDesktop
         // "Playing Capri" on their Discord profile, like on Windows. Off in the smoke test.
         private readonly Presence presence;
         private MenuItem discordItem;
+        private MenuItem securityMenu;
+        private readonly List<MenuItem> securityPicks = new List<MenuItem>();
+        private readonly List<MenuItem> securityToggles = new List<MenuItem>();
         private MenuItem memoriesItem;
         private double nextStatus;
         private MenuItem updateItem;
@@ -423,6 +428,10 @@ namespace CapriDesktop
             folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Capri");
             fresh = Program.Smoke == null && !File.Exists(Path.Combine(folder, "cross.json"));
             Saved = Program.Smoke != null ? new Settings() : Load();
+            // Security, like Windows: Mac and Linux have the first five toggles' features, and settings from before it get Trusted.
+            Security.Has = delegate(int toggle) { return toggle <= Security.Power; };
+            Security.Load(Saved.Permissions);
+            Security.Changed = delegate { Saved.Permissions = Security.Saved; Save(); if (ContextMenu != null) Sync(); };
             LoginFile = Program.Smoke != null ? Path.Combine(Program.Smoke, OperatingSystem.IsMacOS() ? "capri.plist" : "capri.desktop") : Limbs.LoginFile();
             // A copy that moved since they ticked it takes the login entry over, so it doesn't point at the old place.
             if (Program.Smoke == null && File.Exists(LoginFile)) Limbs.SetLogin(LoginFile, Environment.ProcessPath, true, OperatingSystem.IsMacOS());
@@ -1511,6 +1520,33 @@ namespace CapriDesktop
             discordItem = new MenuItem { Header = "Show on Discord", ToggleType = MenuItemToggleType.CheckBox };
             discordItem.Click += delegate { SetDiscord(Saved.NoDiscord); };
             settings.Items.Add(discordItem);
+            // Security, like Windows' SECURITY window (Lachy, 29 Oct): Lockdown, Guarded, Trusted and Blackwall set the toggles
+            // under them, and flipping one makes it Custom. Each toggle has its plain line. Off means she asks first and does it
+            // on your yes. Mac and Linux have the first five; her mouse and keyboard jobs and "Hey Capri" are Windows-only so far.
+            securityMenu = new MenuItem { Header = "Security: " + Security.PresetName };
+            for (int i = 0; i <= Security.Custom; i++)
+            {
+                int preset = i;
+                MenuItem pick = new MenuItem { Header = Security.Presets[i], ToggleType = MenuItemToggleType.Radio, GroupName = "security", IsEnabled = i != Security.Custom };
+                ToolTip.SetTip(pick, Security.PresetLine(i));
+                pick.Click += delegate { if (preset != Security.Custom) Security.Pick(preset); };
+                securityPicks.Add(pick);
+                securityMenu.Items.Add(pick);
+            }
+            securityMenu.Items.Add(new Separator());
+            for (int i = 0; i < Security.Count; i++)
+            {
+                if (!Security.Has(i)) continue;
+                int toggle = i;
+                StackPanel face = new StackPanel();
+                face.Children.Add(new TextBlock { Text = Security.Names[i] });
+                face.Children.Add(new TextBlock { Text = Security.Lines[i], FontSize = 11, Foreground = new SolidColorBrush(Look.Dim) });
+                MenuItem item = new MenuItem { Header = face, ToggleType = MenuItemToggleType.CheckBox, Tag = i };
+                item.Click += delegate { Security.Set(toggle, !Security.On(toggle)); };
+                securityToggles.Add(item);
+                securityMenu.Items.Add(item);
+            }
+            settings.Items.Add(securityMenu);
             settings.Items.Add(notes);
             settings.Items.Add(memoriesItem);
             settings.Items.Add(memories);
@@ -1567,6 +1603,9 @@ namespace CapriDesktop
             for (int i = 0; i < soundPicks.Count; i++) soundPicks[i].IsChecked = SoundLevels[i] == Sfx.Level;
             typingItem.IsChecked = TypingSound;
             discordItem.IsChecked = !Saved.NoDiscord;
+            securityMenu.Header = "Security: " + Security.PresetName;
+            for (int i = 0; i < securityPicks.Count; i++) securityPicks[i].IsChecked = i == Security.Preset;
+            foreach (MenuItem item in securityToggles) item.IsChecked = Security.On((int)item.Tag);
             memoriesItem.IsChecked = !Saved.NoMemories;
             checkInsItem.IsChecked = !Saved.NoCheckIns;
             for (int i = 0; i < popPicks.Count; i++) popPicks[i].IsChecked = i == PopPace;
@@ -2340,6 +2379,32 @@ namespace CapriDesktop
                 }
                 return string.Join(" | ", shown);
             }
+        }
+
+        // Her Security menu as it shows, for the smoke test: its header, then each preset and toggle with a star when it's
+        // ticked, like "Security: Trusted | Lockdown | Guarded | *Trusted | Blackwall | Custom (off) | - | *Open apps, games and sites (On: ...)".
+        internal string SecurityShown
+        {
+            get
+            {
+                List<string> shown = new List<string> { securityMenu.Header as string };
+                foreach (object item in securityMenu.Items)
+                {
+                    MenuItem entry = item as MenuItem;
+                    if (entry == null) { shown.Add("-"); continue; }
+                    StackPanel face = entry.Header as StackPanel;
+                    string name = face == null ? entry.Header as string : ((TextBlock)face.Children[0]).Text + " (" + ((TextBlock)face.Children[1]).Text + ")";
+                    shown.Add((entry.IsChecked ? "*" : "") + name + (entry.IsEnabled ? "" : " (off)"));
+                }
+                return string.Join(" | ", shown);
+            }
+        }
+
+        // Clicks a preset (0 to 3) or, with preset -1, a toggle in her Security menu, the way a click does.
+        internal void ClickSecurity(int preset, int toggle)
+        {
+            MenuItem item = preset >= 0 ? securityPicks[preset] : securityToggles.Find(delegate(MenuItem entry) { return (int)entry.Tag == toggle; });
+            item.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
         }
 
         // Ollama has no models yet: she pulls her own brain, shows how far it's got on the Brain menu, then picks it and says so.

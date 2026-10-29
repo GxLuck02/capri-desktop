@@ -77,7 +77,7 @@ namespace CapriDesktop
         private readonly Toggle startup;
         private readonly Toggle discord;
         private readonly Toggle cursor;
-        private readonly Toggle bypass;
+        private readonly Key security;
         private readonly Key talkKeys;
         private readonly Key muteKeys;
         private readonly Key typeKeys;
@@ -119,6 +119,7 @@ namespace CapriDesktop
         private bool freeReady;
         private bool yoursShown;
         private ServerSheet sheet;
+        private SecuritySheet guard;
         private readonly Slider gap;
         private readonly Label gapName;
         private readonly Entry keyEntry;
@@ -516,10 +517,11 @@ namespace CapriDesktop
             startup = Check("Start with Windows", 28 + c, 506, 150, delegate { if (!syncing) capri.ToggleStartup(); });
             discord = Check("Show on Discord", 186 + c, 506, 170, delegate { if (!syncing) capri.ToggleDiscord(); });
             cursor = Check("Use her cursor", 28 + c, 538, 150, delegate { if (!syncing) capri.ToggleCursor(); });
-            // Blackwall mode was "Bypass all permissions" until 0.7.4; its label says what it does.
-            bypass = Check("Blackwall mode", 186 + c, 538, 170, delegate { if (!syncing) capri.ToggleBypass(); });
-            bypass.AccessibleName = "Blackwall mode. She won't ask twice when you ask her to do something";
-            blackwallNote = Caption("She won't ask twice when you ask her to do something.", 28 + c, 562, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
+            // SECURITY took Blackwall mode's place (Lachy, 29 Oct): its button opens her SECURITY window, and the line under it
+            // says what the preset does. Blackwall mode is its Blackwall preset now.
+            security = Make("Security: " + Security.PresetName, 186 + c, 538, 170, 22, delegate { OpenSecurity(); });
+            security.AccessibleName = "Security: what she does on your PC without asking first";
+            blackwallNote = Caption(Security.Short, 28 + c, 562, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             blackwallNote.AutoSize = false;
             blackwallNote.TextAlign = ContentAlignment.MiddleRight;
             blackwallNote.Bounds = new Rectangle(28 + c, 562, 328, 18);
@@ -628,9 +630,9 @@ namespace CapriDesktop
 
         internal bool DiscordShown { get { return discord.Checked; } }
 
-        internal string JobsStatus { get { return (cursor.Checked ? "cursor" : "-") + " | " + (bypass.Checked ? "bypass" : "-"); } }
+        internal string JobsStatus { get { return (cursor.Checked ? "cursor" : "-") + " | " + security.Text; } }
 
-        internal string BlackwallStatus { get { return bypass.Text + " | " + blackwallNote.Text; } }
+        internal string BlackwallStatus { get { return security.Text + " | " + blackwallNote.Text; } }
 
         internal string SettingsStatus { get { return languages.Text + " | " + volumeName.Text + " | " + soundsName.Text + " | " + wanderName.Text + " | " + sleepName.Text + " | " + (dance.Checked ? "dance" : "-") + " | " + (intro.Checked ? "intro" : "-") + " | " + repliesName.Text + " | " + recallName.Text + " | " + bubbleName.Text; } }
 
@@ -847,11 +849,13 @@ namespace CapriDesktop
 
         private float DeviceScale() { return CurrentAutoScaleDimensions.Width / 96f; }
 
-        // The scale of whichever of her windows a control is on: the Mainframe, or their voice server's panel.
+        // The scale of whichever of her windows a control is on: the Mainframe, their voice server's panel or her SECURITY
+        // window, which the smoke test also draws at 150% and 200%.
         private static float ScaleOf(Control control)
         {
             Form form = control.FindForm();
-            return form == null ? 1f : form.CurrentAutoScaleDimensions.Width / 96f;
+            SecuritySheet guarded = form as SecuritySheet;
+            return form == null ? 1f : form.CurrentAutoScaleDimensions.Width / 96f * (guarded != null ? guarded.Zoom : 1f);
         }
 
         private int Scaled(int value) { return loaded ? (int)Math.Round(value * DeviceScale()) : value; }
@@ -925,7 +929,9 @@ namespace CapriDesktop
             startup.Checked = capri.StartsWithWindows;
             discord.Checked = capri.OnDiscord;
             cursor.Checked = capri.UsesCursor;
-            bypass.Checked = capri.Bypassing;
+            security.Text = "Security: " + Security.PresetName;
+            blackwallNote.Text = Security.Short;
+            if (guard != null && !guard.IsDisposed) guard.Sync();
             watch.Checked = capri.Watching;
             caughtUp.Checked = capri.CaughtUp;
             stayOnModel.Checked = capri.StayOnModel;
@@ -1536,6 +1542,45 @@ namespace CapriDesktop
             sheet.Fill(cloud, api);
             if (!sheet.Visible) sheet.Show(this);
             sheet.Activate();
+        }
+
+        // Her SECURITY window, over the Mainframe like their voice server's panel.
+        private void OpenSecurity()
+        {
+            if (guard == null || guard.IsDisposed) guard = new SecuritySheet(this, 1f);
+            guard.Sync();
+            if (!guard.Visible) guard.Show(this);
+            guard.Activate();
+        }
+
+        // Her SECURITY window as they'd use it, for the smoke test: opened from HABITS, a toggle clicked, the slider dragged
+        // or clicked, and what it shows.
+        internal void ShowSecurity() { OpenSecurity(); }
+
+        internal string SecurityShown { get { return guard == null || guard.IsDisposed || !guard.Visible ? null : guard.Showing; } }
+
+        internal void FlipSecurity(int toggle) { guard.Flip(toggle); }
+
+        internal void SlideSecurity(int preset) { guard.Slide(preset); }
+
+        internal void TapSecurity(int preset) { guard.Tap(preset); }
+
+        internal void CloseSecurity() { if (guard != null && !guard.IsDisposed) guard.Close(); }
+
+        internal string SecurityCrowded { get { return guard == null || guard.IsDisposed ? "not open" : guard.Crowded(); } }
+
+        // Her SECURITY window drawn at a scale of the screen's own (1.5 for 150% on a 100% screen), checked for overlaps and
+        // text that doesn't fit, with its picture saved. Null when it all fits.
+        internal string SecurityAt(float zoom, string picture)
+        {
+            using (SecuritySheet drawn = new SecuritySheet(this, zoom))
+            {
+                drawn.Show(this);
+                string crowded = drawn.Crowded(), size = " (" + drawn.ClientSize.Width + " x " + drawn.ClientSize.Height + " at " + zoom + ")";
+                if (picture != null) drawn.Picture(picture);
+                drawn.Close();
+                return crowded == null ? null : crowded + size;
+            }
         }
 
         // The VOICE rows and CLOUD VOICE's service menu as they'd click them, and CUSTOM LOCAL's Set up, for the smoke test.
@@ -2544,6 +2589,219 @@ namespace CapriDesktop
             }
         }
 
+        // Her SECURITY window, in Settings' look (Lachy, 29 Oct): a slider of four presets, Lockdown, Guarded, Trusted and
+        // Blackwall, that sets the toggles under it, and a toggle with a plain line for each kind of thing she does on their PC.
+        // Flipping one makes it Custom, and a click on the slider puts the preset under its knob back. Her hands' toggles are on
+        // the left and her jobs' on the right. It opens from Settings > HABITS, where Blackwall mode was. Zoom is 1 except in
+        // the smoke test, which draws it at 150% and 200% too.
+        private sealed class SecuritySheet : Form
+        {
+            internal const int Wide = 900, Tall = 470, Column = 410;
+            internal readonly float Zoom;
+            private readonly Mainframe owner;
+            private readonly Slider presets;
+            private readonly Label presetName;
+            private readonly Label presetLine;
+            private readonly Toggle[] toggles = new Toggle[Security.Count];
+            private bool syncing;
+
+            internal SecuritySheet(Mainframe owner, float zoom)
+            {
+                this.owner = owner;
+                Zoom = zoom;
+                Text = "Security";
+                Icon = owner.Icon;
+                ShowInTaskbar = false;
+                FormBorderStyle = FormBorderStyle.None;
+                StartPosition = FormStartPosition.Manual;
+                AutoScaleMode = AutoScaleMode.Dpi;
+                AutoScaleDimensions = new SizeF(96, 96);
+                Font = Look.Mono(9f * zoom, FontStyle.Regular, GraphicsUnit.Point);
+                BackColor = Look.Panel;
+                ForeColor = Look.Ink;
+                DoubleBuffered = true;
+                KeyPreview = true;
+                ClientSize = new Size(Z(Wide), Z(Tall));
+                Font head = Look.Mono(9f * zoom, FontStyle.Bold, GraphicsUnit.Point), small = Look.Mono(8.5f * zoom, FontStyle.Regular, GraphicsUnit.Point);
+                Caption("SECURITY >", 28, 22, head, Look.Yellow);
+                Key shut = new Key();
+                shut.Bounds = Box(Wide - 54, 20, 26, 22);
+                shut.Glyph = 2;
+                shut.AccessibleName = "Close";
+                shut.Click += delegate { Close(); };
+                Controls.Add(shut);
+                Caption("What she does on your PC without asking. With a toggle off she asks first, and does it when you say yes.", 28, 48, small, Look.Dim);
+                Caption("Preset", 28, 87, Font, Look.Dim);
+                presets = new Slider(new[] { Security.Presets[0], Security.Presets[1], Security.Presets[2], Security.Presets[3] });
+                presets.Bounds = Box(96, 80, 300, 30);
+                presets.AccessibleName = "Security preset: Lockdown, Guarded, Trusted or Blackwall";
+                presets.Changed += delegate { if (!syncing) Security.Pick(presets.Value); };
+                presets.MouseUp += delegate { if (!syncing && Security.Preset == Security.Custom) Security.Pick(presets.Value); };
+                Controls.Add(presets);
+                presetName = Caption(Security.PresetName, 408, 87, Font, Look.Ink);
+                presetLine = Caption("", 28, 118, small, Look.Dim);
+                Caption("HER HANDS >", 28, 154, head, Look.Yellow);
+                Caption("HER JOBS >", 52 + Column, 154, head, Look.Yellow);
+                Caption("LISTENING >", 52 + Column, 372, head, Look.Yellow);
+                for (int i = 0; i < Security.Count; i++)
+                {
+                    int x = i <= Security.Mouse ? 28 : 52 + Column;
+                    int y = i <= Security.Mouse ? 180 + 46 * i : i < Security.Wake ? 180 + 46 * (i - Security.Sends) : 398;
+                    int toggle = i;
+                    Toggle box = new Toggle();
+                    box.Text = Security.Names[i];
+                    box.Bounds = Box(x, y, Column, 22);
+                    box.AccessibleName = Security.Names[i] + ". " + Security.Lines[i];
+                    box.CheckedChanged += delegate { if (!syncing) Security.Set(toggle, toggles[toggle].Checked); };
+                    Controls.Add(box);
+                    toggles[i] = box;
+                    Caption(Security.Lines[i], x + 22, y + 22, small, Look.Dim);
+                }
+                Sync();
+            }
+
+            private int Z(int value) { return (int)Math.Round(value * Zoom); }
+
+            private Rectangle Box(int x, int y, int width, int height) { return new Rectangle(Z(x), Z(y), Z(width), Z(height)); }
+
+            private Label Caption(string text, int x, int y, Font font, Color colour)
+            {
+                Label label = new Note();
+                label.Text = text;
+                label.Font = font;
+                label.ForeColor = colour;
+                label.BackColor = Look.Panel;
+                label.AutoSize = true;
+                label.Location = new Point(Z(x), Z(y));
+                Controls.Add(label);
+                return label;
+            }
+
+            // The toggles and preset as they are now. Custom leaves the knob on the nearest preset.
+            internal void Sync()
+            {
+                syncing = true;
+                int preset = Security.Preset;
+                presets.Value = preset == Security.Custom ? Nearest() : preset;
+                presetName.Text = Security.Presets[preset];
+                presetName.ForeColor = preset == Security.Custom ? Look.Yellow : Look.Ink;
+                presetLine.Text = Security.PresetLine(preset);
+                for (int i = 0; i < Security.Count; i++) toggles[i].Checked = Security.On(i);
+                syncing = false;
+            }
+
+            // The preset fewest toggles away from theirs.
+            private static int Nearest()
+            {
+                int bits = Security.Mask, best = Security.Trusted, fewest = int.MaxValue;
+                for (int preset = 0; preset < Security.Custom; preset++)
+                {
+                    int apart = 0, differ = bits ^ Security.MaskOf(preset);
+                    for (int i = 0; i < Security.Count; i++) if ((differ & (1 << i)) != 0) apart++;
+                    if (apart < fewest) { fewest = apart; best = preset; }
+                }
+                return best;
+            }
+
+            // The preset, where the knob is, each toggle as 1 or 0 and the preset's line, for the smoke test.
+            internal string Showing
+            {
+                get
+                {
+                    System.Text.StringBuilder bits = new System.Text.StringBuilder();
+                    foreach (Toggle box in toggles) bits.Append(box.Checked ? '1' : '0');
+                    return presetName.Text + " | " + Security.Presets[presets.Value] + " | " + bits + " | " + presetLine.Text;
+                }
+            }
+
+            // A click on a toggle, the slider dragged to a preset and a click on the slider, as they'd do them.
+            internal void Flip(int toggle) { toggles[toggle].Checked = !toggles[toggle].Checked; }
+
+            internal void Slide(int preset) { presets.Slide(preset); }
+
+            internal void Tap(int preset)
+            {
+                presets.Slide(preset);
+                typeof(Control).GetMethod("OnMouseUp", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(presets, new object[] { new MouseEventArgs(MouseButtons.Left, 1, 0, 0, 0) });
+            }
+
+            // Anything that overlaps, pokes out of the window or doesn't fit its own text, or null.
+            internal string Crowded()
+            {
+                float s = ScaleOf(this);
+                for (int i = 0; i < Controls.Count; i++)
+                {
+                    Control a = Controls[i];
+                    if (!a.Visible || (a is Label && a.Text.Length == 0)) continue;
+                    if (!ClientRectangle.Contains(a.Bounds) || a.Right > ClientSize.Width - (int)(16 * s)) return "pokes out: " + (a.Text.Length > 0 ? a.Text : a.AccessibleName) + " " + a.Bounds + " in " + ClientSize;
+                    Toggle box = a as Toggle;
+                    if (box != null && TextRenderer.MeasureText(box.Text, box.Font).Width + (int)Math.Ceiling(22 * s) > box.Width) return "doesn't fit: " + box.Text + " " + TextRenderer.MeasureText(box.Text, box.Font).Width + " in " + box.Width;
+                    for (int j = i + 1; j < Controls.Count; j++)
+                    {
+                        Control b = Controls[j];
+                        if (!b.Visible || (b is Label && b.Text.Length == 0)) continue;
+                        if (a.Bounds.IntersectsWith(b.Bounds)) return "overlap: " + (a.Text.Length > 0 ? a.Text : a.AccessibleName) + " / " + (b.Text.Length > 0 ? b.Text : b.AccessibleName);
+                    }
+                }
+                return null;
+            }
+
+            internal void Picture(string path)
+            {
+                using (Bitmap shot = new Bitmap(Width, Height))
+                {
+                    DrawToBitmap(shot, new Rectangle(Point.Empty, Size));
+                    shot.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+
+            // Over the Mainframe, like their voice server's panel, and on the screen.
+            protected override void OnLoad(EventArgs e)
+            {
+                base.OnLoad(e);
+                Rectangle area = Screen.FromControl(owner).WorkingArea;
+                int x = owner.Left + (owner.Width - Width) / 2, y = owner.Top + (int)(48 * ScaleOf(this));
+                Location = new Point(Math.Max(area.Left, Math.Min(area.Right - Width, x)), Math.Max(area.Top, Math.Min(area.Bottom - Height, y)));
+            }
+
+            protected override void OnSizeChanged(EventArgs e)
+            {
+                base.OnSizeChanged(e);
+                float s = ScaleOf(this);
+                Region old = Region;
+                using (GraphicsPath plate = Look.Plate(new RectangleF(0, 0, Width, Height), 12 * s, -1, Height / 2f, 0, true)) Region = new Region(plate);
+                if (old != null) old.Dispose();
+                Invalidate(true);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                float s = ScaleOf(this);
+                Graphics graphics = e.Graphics;
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Backdrop(graphics, this, s);
+                using (Brush red = new SolidBrush(Look.Red)) graphics.FillRectangle(red, 13 * s, 22 * s, 3 * s, Height - 46 * s);
+                using (GraphicsPath edge = Look.Plate(new RectangleF(s, s, Width - 2 * s - 1, Height - 2 * s - 1), 12 * s, -1, Height / 2f, 0, true))
+                using (Pen cyan = new Pen(Look.Cyan, 2 * s))
+                    graphics.DrawPath(cyan, edge);
+            }
+
+            // Esc closes it.
+            protected override void OnKeyDown(KeyEventArgs e)
+            {
+                if (e.KeyCode == Keys.Escape) { e.Handled = true; Close(); return; }
+                base.OnKeyDown(e);
+            }
+
+            // Dragged by any spot that isn't a control, like the Mainframe.
+            protected override void WndProc(ref Message message)
+            {
+                base.WndProc(ref message);
+                if (message.Msg == 0x0084 && message.Result == new IntPtr(1)) message.Result = new IntPtr(2);
+            }
+        }
+
         private sealed class Slider : Control
         {
             private readonly string[] labels;
@@ -2596,7 +2854,7 @@ namespace CapriDesktop
 
             internal void Slide(int next) { Pick(next); Settle(); }
 
-            private float Unit() { return ((Mainframe)Parent).DeviceScale(); }
+            private float Unit() { return ScaleOf(this); }
 
             private int At(int x)
             {
@@ -2716,7 +2974,7 @@ namespace CapriDesktop
 
             protected override void OnPaint(PaintEventArgs e)
             {
-                float s = ((Mainframe)Parent).DeviceScale();
+                float s = ScaleOf(this);
                 Graphics graphics = e.Graphics;
                 Backdrop(graphics, this, s);
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
