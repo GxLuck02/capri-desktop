@@ -348,6 +348,11 @@ namespace CapriDesktop
         private MenuItem screenItem;
         // Their mouse, which "teleport here" goes to. The smoke test hands in its own.
         internal Func<PixelPoint?> MouseAt;
+        // Getting to know them, like on Windows: on a new install it starts once she's said hello, and Settings > Get to know me
+        // starts it again.
+        private readonly Meeting meeting = new Meeting();
+        private double meetAt = -1;
+        private readonly bool fresh;
         // Ticks the tray's Quiet item when her own menu changes it.
         internal Action ShushChanged;
         // Settings > Start at login. Off until they tick it; the file is the setting.
@@ -414,6 +419,7 @@ namespace CapriDesktop
         {
             this.desktop = desktop;
             folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Capri");
+            fresh = Program.Smoke == null && !File.Exists(Path.Combine(folder, "cross.json"));
             Saved = Program.Smoke != null ? new Settings() : Load();
             LoginFile = Program.Smoke != null ? Path.Combine(Program.Smoke, OperatingSystem.IsMacOS() ? "capri.plist" : "capri.desktop") : Limbs.LoginFile();
             // A copy that moved since they ticked it takes the login entry over, so it doesn't point at the old place.
@@ -511,6 +517,7 @@ namespace CapriDesktop
                 {
                     int ticket = asking;
                     DispatcherTimer.RunOnce(() => Greet(ticket, DateTime.Now.Hour), TimeSpan.FromMilliseconds(1800));
+                    if (fresh) meetAt = Now + 4;
                 }
             };
         }
@@ -714,6 +721,7 @@ namespace CapriDesktop
                 CheckMusic(now);
                 CheckNap();
                 CheckHide();
+                CheckMeet(now);
                 if (Program.Smoke == null) CheckPopIn(now);
                 if (Program.Smoke == null) CheckHome(now);
                 if (Program.Smoke == null) CheckLag(now);
@@ -1396,6 +1404,9 @@ namespace CapriDesktop
             MenuItem nickname = new MenuItem { Header = "What should she call you?" };
             nickname.Click += delegate { AskNickname(); };
             settings.Items.Add(nickname);
+            MenuItem meet = new MenuItem { Header = "Get to know me" };
+            meet.Click += delegate { GetToKnow(); };
+            settings.Items.Add(meet);
             settings.Items.Add(language);
             settings.Items.Add(replies);
             settings.Items.Add(recall);
@@ -2139,6 +2150,42 @@ namespace CapriDesktop
             Saved.Nickname = Brain.Nickname;
             Save();
             Reply(++asking, NameHeard, Brain.Renamed(name));
+        }
+
+        // Get to know me, like on Windows: she asks what to call them, their pronouns and what they're into in her typing box, and
+        // writes the answers to me.md. Their name is what she calls them too.
+        internal void GetToKnow()
+        {
+            meetAt = -1;
+            ComeBack();
+            hideAsked = false;
+            ++asking;
+            Talk.AskFor("(get to know me)", meeting.Start(), Met);
+        }
+
+        internal bool GettingToKnow { get { return meeting.Asking; } }
+
+        private void Met(string said)
+        {
+            string called;
+            string next = meeting.Take(said, out called);
+            if (next == null) { Hear(said); return; }
+            if (called != null)
+            {
+                Brain.Nickname = called.Length == 0 ? null : called;
+                Saved.Nickname = Brain.Nickname;
+                Save();
+            }
+            if (meeting.Asking) { ++asking; Talk.AskFor(said, next, Met); }
+            else Reply(++asking, said, next);
+        }
+
+        // On a new install, once she's said hello and her bubble's gone, she gets to know them.
+        private void CheckMeet(double now)
+        {
+            if (meetAt < 0 || now < meetAt || away || dragging || pressed || outro != null || quitting || napAsked || napping || !Talk.Quiet) return;
+            meetAt = -1;
+            GetToKnow();
         }
 
         internal void SetLanguage(string language)
@@ -2993,6 +3040,7 @@ namespace CapriDesktop
             text = (text ?? "").Trim();
             if (text.Length == 0) return;
             if (text.Length > 240) text = text.Substring(0, 240);
+            if (meeting.Asking) { Met(text); return; }
             int ticket = ++asking;
             Brain.Cancel();
             voice.Stop();

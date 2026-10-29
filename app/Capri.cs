@@ -133,6 +133,8 @@ namespace CapriDesktop
         [DataMember] public long UpdateCheckedAt;
         [DataMember] public string Model;
         [DataMember] public bool Welcomed;
+        // She's asked to get to know them, after setup or from Settings, so setting up a new brain doesn't ask again.
+        [DataMember] public bool Met;
         [DataMember] public bool NoSitting;
         [DataMember] public bool NvidiaGlm;
         [DataMember] public string VoiceKey;
@@ -925,6 +927,10 @@ namespace CapriDesktop
         private readonly ToolStripMenuItem screenItem;
         // Their mouse, which "teleport here" goes to. Her smoke test points it somewhere of its own.
         internal static Func<Point> MouseAt = delegate { return Cursor.Position; };
+        // Getting to know them: after setup it starts once she's said hi with her new brain, and Get to know me in Settings starts
+        // it again.
+        private readonly Meeting meeting = new Meeting();
+        private double meetAt = -1;
         private const int BlinkFrom = 9;
         private const int PerchBlinkFrom = 34;
         // Her perch fps choices. The art is 30 fps: slower holds each frame longer, faster mixes in-betweens of neighbouring frames.
@@ -1592,6 +1598,14 @@ namespace CapriDesktop
                 StopChat();
                 Play(sleep);
                 frames.Start();
+                return;
+            }
+            // After setup, once she's said hi and her bubble's gone, she gets to know them.
+            if (meetAt >= 0 && clock.Elapsed.TotalSeconds >= meetAt && !hidden && !dragging && !pressed && !chatting && !typer.Visible && clip != sleep && !napAsked && !napping
+                && speech == null && talkState == TalkState.Off && clock.Elapsed.TotalSeconds >= voiceUntil && !speaker.Busy)
+            {
+                meetAt = -1;
+                GetToKnow();
                 return;
             }
             if (clip == sleep) { if (quiet < 1000 && !napping) Play(wake); return; }
@@ -2845,6 +2859,29 @@ namespace CapriDesktop
             Action save = delegate { preferences.Nickname = kept; SavePreferences(); mainframe.Sync(); };
             if (InvokeRequired) Post(save); else save();
             return Brain.Renamed(name);
+        }
+
+        // Get to know me, after setup or from Settings: she asks what to call them, their pronouns and what they're into in chat,
+        // with her typing box open, and writes the answers to me.md. Their name is what she calls them too.
+        internal void GetToKnow()
+        {
+            meetAt = -1;
+            if (!preferences.Met)
+            {
+                preferences.Met = true;
+                SavePreferences();
+            }
+            if (hidden) SetHidden(false);
+            hideAsked = false;
+            heard = "get to know me";
+            box.Prompt = "> sys: ";
+            MeetLine(++asking, meeting.Start());
+        }
+
+        private void MeetLine(int ticket, string line)
+        {
+            Answer(ticket, line, TalkState.Talking);
+            if (meeting.Asking && !typer.Visible && !chatting && !hidden) OpenTyper();
         }
 
         internal int Wordiness { get { return Brain.Wordiness; } }
@@ -4333,6 +4370,8 @@ namespace CapriDesktop
         private void Greet()
         {
             if (hidden) SetHidden(false);
+            // After setup, once she's said hi with her new brain, she gets to know them. Only the first time.
+            if (!preferences.Met && !testing) meetAt = clock.Elapsed.TotalSeconds + 1;
             Hear("(You just woke up on this PC with a brand new brain. Say hi to the user in one short line.)", "brain online", "> sys: ");
         }
 
@@ -6166,6 +6205,18 @@ namespace CapriDesktop
             int ticket = ++asking;
             heard = shown;
             box.Prompt = prompt;
+            // Their answer while she's getting to know them goes to me.md, with or without a brain. Anything else ends it and goes on.
+            if (meeting.Asking && prompt == "> you: ")
+            {
+                string called;
+                string next = meeting.Take(text, out called);
+                if (next != null)
+                {
+                    if (called != null) CallThem(called);
+                    MeetLine(ticket, next);
+                    return;
+                }
+            }
             bool askPlease;
             text = Hands.Manners(text, out askPlease);
             if (askPlease) { Answer(ticket, Hands.SayPlease, TalkState.Talking); return; }
@@ -14928,6 +14979,54 @@ namespace CapriDesktop
                             Animate("stop_dancing");
                             if (!brainlessDance) throw new Exception("Dancing needed a brain: " + talkState + " / " + reply + " / asked " + danceAsked);
                             checks.Add("PASS her own moves without a brain: with no brain set up, \"dance for me\" starts her dance and says so, the way her nap, \"teleport here\" and her other moves work");
+                            Func<string, string> meetSaid = delegate(string said)
+                            {
+                                if (said != null) Hear(said);
+                                Stopwatch waited = Stopwatch.StartNew();
+                                while ((talkState == TalkState.Thinking || reply == null) && waited.ElapsedMilliseconds < 5000) { Application.DoEvents(); Thread.Sleep(5); }
+                                return reply;
+                            };
+                            string meetNickWas = Brain.Nickname;
+                            string meetPrefWas = preferences.Nickname;
+                            Brain.Unnote("everything");
+                            GetToKnow();
+                            string meetFirst = meetSaid(null);
+                            bool meetTyping = typer.Visible && meeting.Asking && preferences.Met;
+                            string meetNudge = meetSaid("hey");
+                            string meetNamed = meetSaid("call me Lachy!!");
+                            string meetPronouns = meetSaid("she");
+                            string meetInto = meetSaid("I'm into Cyberpunk, Roblox and drawing");
+                            string meetNotes = Brain.Notes();
+                            bool meetNicked = !meeting.Asking && Nickname == "Lachy" && preferences.Nickname == "Lachy" && mainframe.NicknameShown == "Lachy" && Brain.Remembered().IndexOf("match words like girl, boy or choom", StringComparison.Ordinal) >= 0;
+                            GetToKnow();
+                            meetSaid(null);
+                            string meetSkip = meetSaid("skip");
+                            meetSaid("they/them");
+                            string meetStop = meetSaid("stop");
+                            string meetAgain = Brain.Notes();
+                            GetToKnow();
+                            meetSaid(null);
+                            string meetElsewhere = meetSaid("what can you do?");
+                            bool meetLeft = !meeting.Asking && talkState == TalkState.Dormant;
+                            typer.Hide();
+                            CloseTalk();
+                            preferences.Met = false;
+                            meetAt = clock.Elapsed.TotalSeconds - 1;
+                            CheckIdle(0);
+                            bool meetAfterSetup = meeting.Asking && meetAt < 0 && preferences.Met && reply == Meeting.AskName;
+                            string meetStopped = meetSaid("not now");
+                            typer.Hide();
+                            Brain.Unnote("everything");
+                            Brain.Nickname = meetNickWas;
+                            preferences.Nickname = meetPrefWas;
+                            SavePreferences();
+                            mainframe.Sync();
+                            if (meetFirst != Meeting.AskName || !meetTyping || meetNudge != Meeting.AskCalled || meetNamed != "Nice to meet you, Lachy. " + Meeting.AskPronouns || meetPronouns != "Got it. " + Meeting.AskInto
+                                || meetInto != "Love that, Lachy. It's all in my notes now, me.md. " + Meeting.Again || meetNotes != "- Name: Lachy\n- Pronouns: she/her\n- Into: Cyberpunk, Roblox and drawing" || !meetNicked
+                                || meetSkip != Meeting.AskPronouns || meetStop != "No worries. What you told me is in my notes, me.md. " + Meeting.Again || meetAgain != "- Name: Lachy\n- Pronouns: they/them\n- Into: Cyberpunk, Roblox and drawing"
+                                || meetElsewhere != Brain.Offline || !meetLeft || !meetAfterSetup || meetStopped != "No worries, choom. " + Meeting.Again)
+                                throw new Exception("Getting to know them went wrong: " + meetFirst + " / typing " + meetTyping + " / " + meetNudge + " / " + meetNamed + " / " + meetPronouns + " / " + meetInto + " / " + meetNotes.Replace("\n", " | ") + " / nicked " + meetNicked + " / " + meetSkip + " / " + meetStop + " / " + meetAgain.Replace("\n", " | ") + " / " + meetElsewhere + " / left " + meetLeft + " / after setup " + meetAfterSetup + " / " + meetStopped);
+                            checks.Add("PASS getting to know you: after setup, or from Settings > Get to know me, she asks what to call them, their pronouns and what they're into in chat with her typing box open and no brain needed, writes the answers to me.md and calls them by their name; skip, stop and asking again work, and a question or a job ends it and is heard as usual");
                             Hear("hello");
                             if (talkState != TalkState.Dormant || reply != Brain.Offline) throw new Exception("Missing brain did not go DORMANT.");
                             replyStart -= 10;
