@@ -128,7 +128,8 @@ namespace CapriDesktop
         internal const string Offline = "My brain's offline. Install Ollama from ollama.com, then run: ollama pull gemma4:e2b, or open Capri Mainframe for a free NVIDIA key.";
         internal const string OllamaPage = "https://ollama.com/download";
         internal const string FreeKeyPage = "https://build.nvidia.com/settings/api-keys";
-        internal const string KeychainLocked = "Couldn't read your key from Keychain.";
+        private static readonly string Vault = OperatingSystem.IsMacOS() ? "Keychain" : "its file";
+        internal static readonly string KeychainLocked = "Couldn't read your key from " + Vault + ".";
         private const string BrainHeard = "(brain key)";
         internal const string DiscordPage = "https://discord.gg/F4fDHfGtFk";
         internal static readonly double[] Sizes = { 140, 170, 240, 320, 440, 560 };
@@ -174,6 +175,7 @@ namespace CapriDesktop
         private MenuItem musicItem;
         private MenuItem brainMenu;
         private string[] ollamaModels;
+        private int linking;
         private Mainframe mainframe;
         private List<string> cloudModels;
         internal string BrainProblem;
@@ -252,7 +254,7 @@ namespace CapriDesktop
             Keys.Folder = Program.Smoke ?? folder;
             if (Program.Smoke != null) Keys.Service = "capri-smoke";
             try { Keys.Migrate(); }
-            catch (Exception error) { Brain.Log(Path.Combine(Keys.Folder, "voice-key"), -1, "Couldn't move the voice key into Keychain: " + error.Message); }
+            catch (Exception error) { Brain.Log("keys", -1, "Couldn't move the voice key into Keychain: " + error.Message); }
             voice.Key = Keys.Read("voice");
             Saved.Tier = Math.Max(0, Math.Min(2, Saved.Tier));
             Brain.Remote = TierCloud();
@@ -1323,6 +1325,7 @@ namespace CapriDesktop
             if (tier == Saved.Tier) return;
             Brain.Cancel();
             ++asking;
+            ++linking;
             Saved.Tier = tier;
             Save();
             BrainProblem = null;
@@ -1331,6 +1334,7 @@ namespace CapriDesktop
             Brain.Model = Brain.Remote == null ? null : Brain.Remote.Model;
             Brain.Forget();
             FindBrain();
+            if (Brain.Remote == null) RefreshBrains();
             ShowState();
         }
 
@@ -1345,9 +1349,10 @@ namespace CapriDesktop
         {
             string name = Saved.Tier == 1 ? "nvidia" : "paid";
             try { Keys.Forget(name); }
-            catch (Exception error) { Brain.Log(Keys.Folder, -1, "Couldn't forget the " + name + " key: " + error.Message); ShowProblem("Couldn't remove your key from Keychain."); return; }
+            catch (Exception error) { Brain.Log("keys", -1, "Couldn't forget the " + name + " key: " + error.Message); ShowProblem("Couldn't remove your key from " + Vault + "."); return; }
             Brain.Cancel();
             ++asking;
+            ++linking;
             if (Saved.Tier == 1) Saved.NvidiaModel = null;
             else Saved.PaidModel = null;
             Brain.Remote = null;
@@ -1358,6 +1363,7 @@ namespace CapriDesktop
             Saved.Tier = 0;
             Save();
             FindBrain();
+            RefreshBrains();
             ShowState();
         }
 
@@ -1385,6 +1391,8 @@ namespace CapriDesktop
         private void ListCloud(string key, bool connecting)
         {
             Cloud probe = new Cloud(key, null);
+            // A newer Connect, tier change or Forget wins over this one's late answer.
+            int ticket = connecting ? ++linking : linking;
             if (connecting) ShowProblem("Checking key...");
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -1400,6 +1408,7 @@ namespace CapriDesktop
                 }
                 Dispatcher.UIThread.Post(delegate
                 {
+                    if (ticket != linking) return;
                     if (problem != null)
                     {
                         if (connecting || Brain.Remote != null) ShowProblem(Brain.Brief(problem) ?? (problem.Length > 60 ? problem.Substring(0, 57) + "..." : problem));
@@ -1410,7 +1419,7 @@ namespace CapriDesktop
                         Cloud remote = new Cloud(key, Brain.DefaultCloudModel(probe.Kind, found));
                         if (remote.Model == null) { ShowProblem("That key can't use any chat models."); return; }
                         try { Keys.Save(remote.Kind == "nvidia" ? "nvidia" : "paid", key); }
-                        catch (Exception error) { Brain.Log(Keys.Folder, -1, "Couldn't save the brain key: " + error.Message); ShowProblem("Couldn't save your key in Keychain."); return; }
+                        catch (Exception error) { Brain.Log("keys", -1, "Couldn't save the brain key: " + error.Message); ShowProblem("Couldn't save your key in " + Vault + "."); return; }
                         Brain.Cancel();
                         ++asking;
                         Brain.Remote = remote;
@@ -1472,6 +1481,7 @@ namespace CapriDesktop
                     Brain.Model = model;
                     Saved.Model = model;
                     Save();
+                    ShowState();
                 });
             });
         }
@@ -1563,7 +1573,7 @@ namespace CapriDesktop
                 if (key == null) Keys.Forget("voice");
                 else Keys.Save("voice", key);
             }
-            catch (Exception error) { Brain.Log(Keys.Folder, -1, "Couldn't save the voice key: " + error.Message); }
+            catch (Exception error) { Brain.Log("keys", -1, "Couldn't save the voice key: " + error.Message); }
         }
 
         internal void AskVoiceKey()

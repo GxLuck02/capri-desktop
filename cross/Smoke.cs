@@ -655,10 +655,9 @@ namespace CapriDesktop
                 if (!frame.TextStatus.EndsWith("NVIDIA key saved, ends 1234 | Forget", StringComparison.Ordinal) || frame.Choices != "nvidia/nemotron-3.5-super-vl-120b-a12b | openai/gpt-oss-20b") throw new Exception("The Mainframe didn't show the saved NVIDIA key and its models: " + frame.TextStatus + " | " + frame.Choices);
                 if (!frame.TiersFit) return false;
                 Snap(frame.Content as Control, "mainframe-nvidia.png");
+                Brain.Ollama = "http://127.0.0.1:1";
                 frame.PressConnect();
                 if (pet.Saved.Tier != 0 || Keys.Read("nvidia") != null || !frame.TextStatus.StartsWith("tier 0 |", StringComparison.Ordinal) || !frame.TextStatus.EndsWith("no key row", StringComparison.Ordinal)) throw new Exception("Forget in the Mainframe didn't go back to NORMAL: " + frame.TextStatus);
-                Brain.Ollama = "http://127.0.0.1:1";
-                pet.RefreshBrains();
                 return true;
             }
             if (step == 28)
