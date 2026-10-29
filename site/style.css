@@ -153,11 +153,13 @@ h1 em { font-weight: 600; }
 .credit + .support { margin-top: 18px; padding-top: 0; border-top: 0; }
 .support-head { margin: 0 0 12px; color: #8a8e93; font: 12px "Share Tech Mono", Consolas, monospace; letter-spacing: 1.5px; text-transform: uppercase; }
 .support-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0; }
-.support-links a { display: inline-flex; align-items: baseline; gap: 7px; padding: 8px 14px; border: 1px solid #d5d8dd; border-radius: 100px; font-size: 13px; }
+.support-links a { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid #d5d8dd; border-radius: 100px; font-size: 13px; }
+/* Each Ko-fi picture tucks into the pill's padding, so the pills stay as tall as with text alone. */
+.support-links img { width: 24px; height: 24px; margin: -4px 0 -4px -7px; border-radius: 50%; object-fit: cover; background: #eceef0; }
 .support-links a:hover { border-color: #202225; background: #f3f4f6; }
 .support-links b { font-weight: 600; }
 .support-links small { color: #6b6f74; font-size: 12px; }
-/* On narrower screens the third link wraps under the first two, so it never sits under the help chat's Capri. */
+/* On narrower screens the links wrap into a narrow centred column, so none sits under the help chat's Capri. */
 @media (max-width: 820px) { .support-links { max-width: 380px; margin: 0 auto; } }
 @media (max-width: 600px) {
   .links { gap: 12px; }
