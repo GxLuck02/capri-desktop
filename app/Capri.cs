@@ -252,6 +252,13 @@ namespace CapriDesktop
         // glitch as HdGlitch, so the new name starts it at Off.
         [DataMember] public int HdRobot = VoiceFx.HdRobotDefault;
         [DataMember] public int HdVoiceGlitch;
+        // Her voice layers (Lachy, 29 Oct): two copies of her voice under her, each with its own pitch (semitones off hers, in
+        // half steps) and delay (ms). Off out of the box and in settings from before them, which get the layers' defaults.
+        [DataMember] public bool VoiceLayers;
+        [DataMember] public double LayerPitch1 = VoiceFx.Layering.HigherPitch;
+        [DataMember] public int LayerDelay1 = VoiceFx.Layering.Behind;
+        [DataMember] public double LayerPitch2 = VoiceFx.Layering.LowerPitch;
+        [DataMember] public int LayerDelay2 = VoiceFx.Layering.Behind;
         // Their own voice model under CUSTOM LOCAL, or Fish Audio or OpenAI under CLOUD VOICE. Its key is sealed like her other
         // keys. Its robot and glitch are its own and start at Off. ServerApi is "fish" for Fish Audio's API, and null for OpenAI's.
         [DataMember] public bool ServerVoice;
@@ -282,6 +289,10 @@ namespace CapriDesktop
         {
             VoiceSpeed = 100;
             HdRobot = VoiceFx.HdRobotDefault;
+            LayerPitch1 = VoiceFx.Layering.HigherPitch;
+            LayerDelay1 = VoiceFx.Layering.Behind;
+            LayerPitch2 = VoiceFx.Layering.LowerPitch;
+            LayerDelay2 = VoiceFx.Layering.Behind;
             Size = 240;
             Motion = true;
             OnTop = true;
@@ -1087,6 +1098,7 @@ namespace CapriDesktop
             VoiceFx.HdGlitch = Math.Max(0, Math.Min(100, preferences.HdVoiceGlitch));
             VoiceFx.ServerRobot = Math.Max(0, Math.Min(100, preferences.ServerRobot));
             VoiceFx.ServerGlitch = Math.Max(0, Math.Min(100, preferences.ServerGlitch));
+            VoiceFx.Layers = LayersOf(preferences);
             LoadServer();
             Sfx.Level = Math.Max(0, Math.Min(100, preferences.Sounds));
             Sfx.Out = delegate(short[] sound) { Post(delegate { Effect(sound); }); };
@@ -2892,6 +2904,137 @@ namespace CapriDesktop
             checks.Add("PASS SECURITY window: Settings > HABITS opens it on Trusted; a toggle click makes it Custom and saves, a click on the slider puts Trusted back, sliding to Lockdown or Blackwall sets every toggle (and \"Hey Capri\") and Settings follows; at 100%, 150% and 200% nothing overlaps, pokes out or gets cut off (security-100.png, security-150.png, security-200.png)");
         }
 
+        // The smoke test's voice layer checks (Lachy, 29 Oct): the shared ones of the sound itself, her ElevenLabs replies and
+        // voice chat getting them, the settings saving and loading, and her VOICE LAYERS window from Settings > VOICE.
+        private void LayersChecks(System.Collections.Generic.List<string> checks, string output, short[] tone, Action<string> snap)
+        {
+            string found, wrong = VoiceFx.LayersCheck(out found);
+            if (wrong != null) throw new Exception("Her voice layers went wrong: " + wrong + " (" + found + ")");
+            checks.Add("PASS voice layers' sound: off leaves every voice byte for byte as it was, whatever the layers are set to; on, Layer 1 and Layer 2 are copies of her pitched without changing their length, each mixed in 8 dB under her at its own delay: " + found + "; streamed in chunks of any size they come out the same as whole, the delayed tails ring out past her last word and her mouth moves with them, and the limiter holds a 1.8x full-scale stack under clipping");
+
+            // ElevenLabs replies and voice chat: the copies go on, and voice chat's tails come out once the stream goes quiet.
+            VoiceFx.Layering was = VoiceFx.Layers, layers = VoiceFx.Layering.Off.Turned(true);
+            byte[] toneWav = Voice.Wave(tone, 24000);
+            Func<string, byte[]> eleven = delegate(string words) { return toneWav; };
+            string problem;
+            int rate;
+            short[] replied;
+            System.Collections.Generic.List<short> chatHeard = new System.Collections.Generic.List<short>();
+            int rateWas = chatRate;
+            short[] chatSaid = new short[16000 * 2];
+            for (int i = 0; i < chatSaid.Length; i++) chatSaid[i] = (short)(7000 * Math.Sin(2 * Math.PI * 190 * i / 16000.0));
+            bool chatArmed;
+            try
+            {
+                VoiceFx.Layers = layers;
+                replied = Voice.Samples(Voiced(eleven, null, "Hey choom.", out problem), out rate);
+                chatRate = 16000;
+                for (int at = 0; at < chatSaid.Length; at += 320)
+                {
+                    short[] piece = new short[320];
+                    Array.Copy(chatSaid, at, piece, 0, 320);
+                    chatHeard.AddRange(ChatVoice(piece));
+                }
+                chatArmed = chatTail.Enabled && chatFx != null && chatFx.Layers.Same(layers);
+                chatHeard.AddRange(chatFx.Flush());
+                Hush();
+            }
+            finally
+            {
+                VoiceFx.Layers = was;
+                chatRate = rateWas;
+            }
+            short[] chatWhole = new VoiceFx.Live(16000, 0, 100, 0, 0, 1, true, layers).All(chatSaid);
+            bool chatSame = chatHeard.Count == chatWhole.Length;
+            for (int i = 0; chatSame && i < chatWhole.Length; i++) chatSame = chatHeard[i] == chatWhole[i];
+            if (problem != null || rate != 24000 || replied.Length != tone.Length + 600 || !chatArmed || !chatSame || chatHeard.Count != chatSaid.Length + 400 || chatFx != null || chatTail.Enabled)
+                throw new Exception("Her layers didn't go on ElevenLabs: reply " + replied.Length + " samples from " + tone.Length + " (" + problem + "), voice chat armed " + chatArmed + ", " + chatHeard.Count + " samples from " + chatSaid.Length + ", same as whole " + chatSame);
+            checks.Add("PASS voice layers on ElevenLabs: a reply gets both copies and comes back 25 ms longer for their tails, and voice chat layers her a chunk at a time, the same as layering the whole line, with the tails let out once the stream goes quiet");
+
+            // The settings: off out of the box and in settings from before them, which get the defaults; each layer saves and loads
+            // as set, and out-of-range values come back in range.
+            DataContractJsonSerializer json = new DataContractJsonSerializer(typeof(Preferences));
+            Preferences old = (Preferences)json.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"Volume\":80,\"VoicePitch\":2}")));
+            SetVoiceLayers(new VoiceFx.Layering(true, 3.5, 40, -4.5, 90));
+            Preferences loaded;
+            using (MemoryStream saved = new MemoryStream())
+            {
+                json.WriteObject(saved, preferences);
+                saved.Position = 0;
+                loaded = (Preferences)json.ReadObject(saved);
+            }
+            SetVoiceLayers(was);
+            string loadedShown = LayersOf(loaded).Shown, oldShown = LayersOf(old).Shown, freshShown = LayersOf(new Preferences()).Shown, clamped = new VoiceFx.Layering(true, 40, 900, -0.26, -5).Shown;
+            const string plain = "Off | +1.5, 25 ms | -2.5, 25 ms";
+            if (loadedShown != "On | +3.5, 40 ms | -4.5, 90 ms" || oldShown != plain || freshShown != plain || VoiceFx.Layering.Off.Shown != plain || clamped != "On | +12, 250 ms | -0.5, 0 ms" || VoiceFx.Layers.Shown != was.Shown)
+                throw new Exception("Her layers' settings went wrong: saved " + loadedShown + ", from before them " + oldShown + ", new " + freshShown + ", clamped " + clamped);
+            checks.Add("PASS voice layers' settings: off out of the box and in settings from before them, with Layer 1 at +1.5 and Layer 2 at -2.5 semitones, both 25 ms behind her; each layer's pitch and delay save and load as set, in half steps from -12 to +12 semitones and 0 to 250 ms");
+
+            // Her VOICE LAYERS window from Settings > VOICE: the switch, a slider each, MAIN's pitch and Settings' moving together,
+            // Defaults, and the layout at 100%, 150% and 200%.
+            int pitchWas = VoiceFx.Pitch;
+            string keyOff, opened, flipped, keyOn, slid, mainSlid, fromSettings, defaulted, closedOff, crowded, page, said;
+            mainframe.ShowSettings(true);
+            try
+            {
+                keyOff = mainframe.LayersKeyShown;
+                mainframe.ShowLayersWindow();
+                opened = mainframe.LayersShown;
+                int asked = asking;
+                mainframe.FlipLayers();
+                said = asking > asked ? "switch" : "";
+                flipped = mainframe.LayersShown;
+                keyOn = mainframe.LayersKeyShown;
+                asked = asking;
+                mainframe.SlideLayers(1, 30);
+                said += asking > asked ? " layer" : "";
+                mainframe.SlideLayers(2, 8);
+                mainframe.SlideLayers(3, 15);
+                mainframe.SlideLayers(4, 18);
+                slid = mainframe.LayersShown + " / " + VoiceFx.Layers.Shown + " / " + preferences.LayerPitch1.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + preferences.LayerDelay1 + " " + preferences.LayerPitch2.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + preferences.LayerDelay2;
+                asked = asking;
+                mainframe.SlideLayers(0, 9);
+                said += asking > asked ? " main" : "";
+                mainSlid = mainframe.LayersShown + " / " + mainframe.VoiceStyleStatus + " / " + VoiceFx.Pitch + " " + preferences.VoicePitch;
+                mainframe.SlideVoice(0, 4);
+                fromSettings = mainframe.LayersShown;
+                page = mainframe.Overlap() ?? mainframe.Outside() ?? mainframe.VoiceHeadingFits();
+                snap("mainframe-settings-layers.png");
+                crowded = mainframe.LayersCrowded;
+                mainframe.LayersDefaults();
+                defaulted = mainframe.LayersShown;
+                mainframe.FlipLayers();
+                closedOff = mainframe.LayersShown + " / " + mainframe.LayersKeyShown + " / " + preferences.VoiceLayers;
+                asking++;
+                CloseTalk();
+            }
+            finally
+            {
+                mainframe.CloseLayers();
+                mainframe.ShowSettings(false);
+                SetVoicePitch(pitchWas);
+                SetVoiceLayers(was);
+                mainframe.Sync();
+            }
+            // Drawn with the layers on at their defaults, as they'd see it after turning them on.
+            float machine = mainframe.Px(1000) / 1000f;
+            string at100, at150, at200;
+            SetVoiceLayers(VoiceFx.Layering.Off.Turned(true));
+            try
+            {
+                at100 = mainframe.LayersAt(1f / machine, Path.Combine(output, "layers-100.png"));
+                at150 = mainframe.LayersAt(1.5f / machine, Path.Combine(output, "layers-150.png"));
+                at200 = mainframe.LayersAt(2f / machine, Path.Combine(output, "layers-200.png"));
+            }
+            finally { SetVoiceLayers(was); }
+            if (keyOff != "Layers" || opened != "Off | Normal | +1.5, 25 ms | -2.5, 25 ms" || flipped != "On | Normal | +1.5, 25 ms | -2.5, 25 ms" || keyOn != "Layers (lit)"
+                || slid != "On | Normal | +3, 40 ms | -4.5, 90 ms / On | +3, 40 ms | -4.5, 90 ms / 3 40 -4.5 90" || mainSlid != "On | +3 | +3, 40 ms | -4.5, 90 ms / +3 | Normal | Off | Off / 3 3"
+                || fromSettings != "On | -2 | +3, 40 ms | -4.5, 90 ms" || defaulted != "On | -2 | +1.5, 25 ms | -2.5, 25 ms" || closedOff != "Off | -2 | +1.5, 25 ms | -2.5, 25 ms / Layers / False" || said != "switch layer main")
+                throw new Exception("The VOICE LAYERS window went wrong: " + keyOff + " // " + opened + " // " + flipped + " // " + keyOn + " // " + slid + " // " + mainSlid + " // " + fromSettings + " // " + defaulted + " // " + closedOff + " // she spoke for: " + said);
+            if (page != null || crowded != null || at100 != null || at150 != null || at200 != null) throw new Exception("The VOICE LAYERS window's layout doesn't fit: Settings " + page + " / open " + crowded + " / 100% " + at100 + " / 150% " + at150 + " / 200% " + at200);
+            checks.Add("PASS VOICE LAYERS window: the Layers button in Settings > VOICE's heading opens it; its switch turns them on and lights the button, each layer's pitch and delay slider sets and saves it, MAIN's pitch and Settings' Pitch move together both ways, Defaults puts both layers back, and the switch and letting go of a slider have her say a line; Settings still fits, with VOICE's note and Layers button fitting their text at 100%, 125%, 150%, 175% and 200% (mainframe-settings-layers.png), and at 100%, 150% and 200% nothing in the window overlaps, pokes out or gets cut off (layers-100.png, layers-150.png, layers-200.png)");
+        }
+
         // Her wake word listens for HeyCapriChanged, so whatever flips the setting starts or stops it.
         internal event Action HeyCapriChanged;
 
@@ -3400,6 +3543,25 @@ namespace CapriDesktop
             if (SpeaksHd) preferences.HdVoiceGlitch = VoiceFx.HdGlitch = glitch;
             else if (SpeaksServer) preferences.ServerGlitch = VoiceFx.ServerGlitch = glitch;
             else preferences.VoiceGlitch = VoiceFx.Glitch = glitch;
+            SavePreferences();
+        }
+
+        // Her VOICE LAYERS window: the switch, and each layer's pitch and delay. Every voice she has gets them.
+        internal VoiceFx.Layering VoiceLayers { get { return VoiceFx.Layers; } }
+
+        internal static VoiceFx.Layering LayersOf(Preferences saved)
+        {
+            return new VoiceFx.Layering(saved.VoiceLayers, saved.LayerPitch1, saved.LayerDelay1, saved.LayerPitch2, saved.LayerDelay2);
+        }
+
+        internal void SetVoiceLayers(VoiceFx.Layering layers)
+        {
+            VoiceFx.Layers = layers ?? VoiceFx.Layering.Off;
+            preferences.VoiceLayers = VoiceFx.Layers.On;
+            preferences.LayerPitch1 = VoiceFx.Layers.Pitch1;
+            preferences.LayerDelay1 = VoiceFx.Layers.Delay1;
+            preferences.LayerPitch2 = VoiceFx.Layers.Pitch2;
+            preferences.LayerDelay2 = VoiceFx.Layers.Delay2;
             SavePreferences();
         }
 
@@ -6658,17 +6820,18 @@ namespace CapriDesktop
             opened.Start(url, voiceId);
         }
 
-        // ElevenLabs voice chat streams its audio in, so her pitch, speed, robot and glitch go on a chunk at a time.
-        // What the styling still holds back comes out once the stream has been quiet for a moment.
+        // ElevenLabs voice chat streams its audio in, so her pitch, speed, robot, glitch and layers go on a chunk at a time.
+        // What the styling still holds back, her layers' delayed tails too, comes out once the stream has been quiet for a moment.
         private short[] ChatVoice(short[] samples)
         {
             int pitch = VoiceFx.Pitch, speed = VoiceFx.Speed, robot = VoiceFx.Robot, glitch = VoiceFx.Glitch;
-            if (chatFx != null && (chatFx.Pitch != pitch || chatFx.Speed != speed || chatFx.Robot != robot || chatFx.Glitch != glitch || chatFx.Rate != chatRate))
+            VoiceFx.Layering layers = VoiceFx.Layers;
+            if (chatFx != null && (chatFx.Pitch != pitch || chatFx.Speed != speed || chatFx.Robot != robot || chatFx.Glitch != glitch || chatFx.Rate != chatRate || !chatFx.Layers.Same(layers)))
             {
                 speaker.Play(chatFx.Flush());
                 chatFx = null;
             }
-            if (chatFx == null && (pitch != 0 || speed != 100 || robot > 0 || glitch > 0)) chatFx = new VoiceFx.Live(chatRate, pitch, speed, robot, glitch, Environment.TickCount, true);
+            if (chatFx == null && !VoiceFx.Plain(pitch, speed, robot, glitch, layers)) chatFx = new VoiceFx.Live(chatRate, pitch, speed, robot, glitch, Environment.TickCount, true, layers);
             if (chatFx == null) return samples;
             chatTail.Stop();
             chatTail.Start();
@@ -14389,6 +14552,7 @@ namespace CapriDesktop
                             if (!fxPlain || !fxPitched || !fxGlitches || !fxRobots || !fxKept || !fxClamped || !fxPerVoice || !fxPreviewed || !fxElevenStyled || !fxStreams || !fxChatStyled || mainframe.VoiceStyleStatus != "Normal | Normal | Off | Off")
                                 throw new Exception("Her voice's sliders went wrong: plain " + fxPlain + ", pitched " + fxPitched + " (" + fxBase.ToString("0") + " / " + Fundamental(fxUp, 24000).ToString("0") + " / " + Fundamental(fxDown, 24000).ToString("0") + " / " + Fundamental(fxHd, 24000).ToString("0") + " Hz, " + fxUp.Length + " / " + fxDown.Length + " / " + fxHd.Length + " / " + fxFast.Length + " / " + fxSlow.Length + "), glitches " + fxGlitches + " (" + fxLight + " / " + fxHeavy + "), robot " + fxRobots + " (" + fxSung.ToString("0") + " Hz, " + fxUnder.ToString("0.0") + " dB under her, peak " + fxRobotPeak + "), kept " + fxKept + " (" + fxShown + "), clamped " + fxClamped + ", HD robot and glitch " + fxPerVoice + " (" + fxOwnShown + " / " + fxOwnWidest + " / " + fxOwnMoved + " / " + fxOwnPage + " / " + fxOwnRobot + " / " + fxOwnGlitch + " / " + fxOwnSharedRobot + " / " + fxOwnShared + "), previewed " + fxPreviewed +" (" + fxFreeHeard + " / " + fxFreePaid + " / " + fxPaid + "), ElevenLabs " + fxElevenStyled + ", streams " + fxStreams + ", voice chat " + fxChatStyled + " (" + Fundamental(fxChatOut, 16000).ToString("0") + " Hz, " + fxChatOut.Length + " samples)");
                             checks.Add("PASS voice sliders: Pitch (-6 to +6 semitones), Speed (0.7x to 1.5x), Robot (Off to 100%) and Glitch (Off to 100%) leave her free and ElevenLabs voices byte for byte the same at their defaults; her HD voice keeps its own robot and its own glitch, both Off out of the box so it sounds as dry as the clip it copies, which the sliders show as Off · HD, and moves them without touching her other voices; pitch moves her fundamental (200 Hz to 283 and 141 Hz) while Kokoro's own speed keeps her pace, and her HD and ElevenLabs voices keep their length through a time-stretch; robot puts a synth on the nearest note under her, singing 200 Hz on G (" + fxSung.ToString("0") + " Hz) at full and sitting " + fxUnder.ToString("0") + " dB under her at 10%, the same way every time; glitch adds stutters, crushed bits and skips that grow with the slider and repeat the same way for the same line; ElevenLabs voice chat is styled as it streams, the same as styling it whole, and its tail comes out once the stream goes quiet; the values save, load and clamp; and letting go of a slider has her say a line in the voice she's using");
+                            LayersChecks(checks, output, fxTone, snap);
                             checks.Add("PASS settings page: language, notes, volume, sounds, bubble time, wander, sleep delay, startup glitch-in, dancing, reply length and chat memory save, reach her prompt and voice, and nothing overlaps or pokes out of the page");
                             preferences.Watch = false;
                             mainframe.Sync();
@@ -15244,6 +15408,13 @@ namespace CapriDesktop
                             finally { VoiceFx.Pitch = hdPitchWas; }
                             double hdPlain = Fundamental(hdSamples, 24000), hdLifted = Fundamental(hdPitched, 24000);
                             if (hdTrouble != null || hdPlain < 250 || hdPlain > 285 || Math.Abs(hdLifted - hdPlain * Math.Sqrt(2)) > hdPlain * Math.Sqrt(2) * 0.03 || Math.Abs(hdPitched.Length - hdWave.Length) > hdWave.Length / 50) throw new Exception("Her HD voice didn't follow the pitch slider: " + hdPlain.ToString("0") + " Hz to " + hdLifted.ToString("0") + " Hz, " + hdSamples.Length + " to " + hdPitched.Length + " samples / " + hdTrouble);
+                            // Her voice layers go on her HD voice too, their delayed tails ringing out 40 ms past her.
+                            VoiceFx.Layering hdLayersWas = VoiceFx.Layers;
+                            short[] hdLayered;
+                            VoiceFx.Layers = new VoiceFx.Layering(true, 3, 40, -4, 40);
+                            try { hdLayered = Voice.Samples(hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)("Hey choom."), out hdRate); }
+                            finally { VoiceFx.Layers = hdLayersWas; }
+                            if (hdTrouble != null || hdLayered.Length != hdSamples.Length + (int)Math.Round(40 * hdRate / 1000.0)) throw new Exception("Her HD voice didn't get her layers: " + hdSamples.Length + " to " + hdLayered.Length + " samples at " + hdRate + " Hz / " + hdTrouble);
                             short[] hdRobotic, hdGlitched;
                             VoiceFx.HdRobot = 100;
                             try { hdRobotic = Voice.Samples(hdVoice.Or(delegate(string words) { return hdTone; }, hdNoted)(hdLong), out hdRate); }
@@ -15570,7 +15741,8 @@ namespace CapriDesktop
                                 throw new Exception("Odd voice model names weren't handled safely: " + vsOddOne + " / " + vsOddTwo + " / " + string.Join(", ", Directory.GetDirectories(vsShelf)) + " / " + ModelFile.Name("a<b|c") + " / " + VoiceServer.Label("\"C:\\x\\y\"", VoiceServer.Files));
                             // Her pitch lifts it without changing its length; its own robot and glitch change it, and her other voices' robot doesn't.
                             int vsPitchWas = VoiceFx.Pitch, vsRobotWas = VoiceFx.Robot;
-                            short[] vsPitched, vsShared, vsRoboted, vsGlitched;
+                            VoiceFx.Layering vsLayersWas = VoiceFx.Layers;
+                            short[] vsPitched, vsShared, vsRoboted, vsGlitched, vsLayered;
                             try
                             {
                                 VoiceFx.Pitch = 6;
@@ -15584,6 +15756,10 @@ namespace CapriDesktop
                                 VoiceFx.ServerRobot = 0;
                                 VoiceFx.ServerGlitch = 100;
                                 vsGlitched = Voice.Samples(vsOff(vsVoice.Or(vsFree, vsNoted), vsLine), out vsRate);
+                                VoiceFx.ServerGlitch = 0;
+                                // Her voice layers go on it too, their delayed tails ringing out 40 ms past her.
+                                VoiceFx.Layers = new VoiceFx.Layering(true, 3, 40, -4, 40);
+                                vsLayered = Voice.Samples(vsOff(vsVoice.Or(vsFree, vsNoted), vsLine), out vsRate);
                             }
                             finally
                             {
@@ -15591,7 +15767,9 @@ namespace CapriDesktop
                                 VoiceFx.Robot = vsRobotWas;
                                 VoiceFx.ServerRobot = 0;
                                 VoiceFx.ServerGlitch = 0;
+                                VoiceFx.Layers = vsLayersWas;
                             }
+                            if (vsLayered.Length != vsSamples.Length + (int)Math.Round(40 * vsRate / 1000.0)) throw new Exception("Her voice server didn't get her layers: " + vsSamples.Length + " to " + vsLayered.Length + " samples at " + vsRate + " Hz");
                             bool vsSame = vsShared.Length == vsSamples.Length, vsRobotic = false, vsGlitchy = vsGlitched.Length != vsSamples.Length;
                             for (int i = 0; vsSame && i < vsShared.Length; i++) vsSame = vsShared[i] == vsSamples[i];
                             for (int i = 0; !vsRobotic && i < vsRoboted.Length && i < vsSamples.Length; i++) vsRobotic = vsRoboted[i] != vsSamples[i];
