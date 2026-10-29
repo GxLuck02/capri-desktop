@@ -55,7 +55,8 @@ namespace CapriDesktop
                     Directory.Move(staging, folder);
                 }
             }
-            catch (Exception)
+            // A bad archive is dropped; a full disk or a hiccup keeps the 316 MB download for the next try.
+            catch (IOException error) when (error.Message == Unsafe || error.Message.StartsWith("The voice", StringComparison.Ordinal))
             {
                 File.Delete(zip);
                 File.Delete(libs);

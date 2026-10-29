@@ -1718,13 +1718,15 @@ namespace CapriDesktop
                     if (now - Interlocked.Read(ref shownAt) < 200 && done < total) return;
                     Interlocked.Exchange(ref shownAt, now);
                     string label = text + (total > 0 && done < total ? " · " + Engine.Amount(done) + " / " + Engine.Amount(total) : "");
-                    Dispatcher.UIThread.Post(delegate { if (SettingUpVoice) { VoiceSetupText = label; ShowState(); } });
+                    // Cancel only stops downloads, so it hides once unpacking starts.
+                    bool unpacking = text.StartsWith("Unpacking", StringComparison.Ordinal);
+                    Dispatcher.UIThread.Post(delegate { if (SettingUpVoice) { if (unpacking) VoiceLoading = true; VoiceSetupText = label; ShowState(); } });
                 };
                 try
                 {
                     kokoro.Install(progress);
                     Dispatcher.UIThread.Post(delegate { VoiceLoading = true; VoiceSetupText = "Loading her free voice"; ShowState(); });
-                    if (FreeSpeak == null) kokoro.Warm();
+                    if (FreeSpeak == null) { kokoro.Warm(); freeUsed = Now; }
                     Dispatcher.UIThread.Post(delegate
                     {
                         SettingUpVoice = false;

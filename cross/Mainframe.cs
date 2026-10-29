@@ -216,7 +216,8 @@ namespace CapriDesktop
                 pick.Click += delegate { pet.ChooseFreeStyle(name); };
                 styleMenu.Items.Add(pick);
             }
-            voiceSetupRow.IsVisible = free && LocalVoice.Supported && (pet.SettingUpVoice || !installed);
+            // Also after a problem, so a voice that won't start can be fetched again.
+            voiceSetupRow.IsVisible = free && LocalVoice.Supported && (pet.SettingUpVoice || !installed || pet.FreeProblem != null);
             getVoice.IsVisible = !pet.SettingUpVoice;
             cancelVoice.IsVisible = pet.SettingUpVoice && !pet.VoiceLoading;
             string note = "";
