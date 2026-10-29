@@ -67,6 +67,7 @@ namespace CapriDesktop
             Brain.MakePersonality();
             foreach (string name in new[] { "nvidia", "paid", "smoke" }) Keys.Forget(name);
             pet.ForgetVoice();
+            foreach (string old in new[] { "brain", "voice", "t", "tv" }) if (Directory.Exists(Path.Combine(folder, old))) Directory.Delete(Path.Combine(folder, old), true);
         }
 
         internal void Tick(double now)
@@ -74,7 +75,7 @@ namespace CapriDesktop
             if (finished) return;
             if (started < 0) started = now;
             if (stepStart < 0) stepStart = now;
-            if (now - started > 240) { Finish("Timed out at step " + step + "."); return; }
+            if (now - started > 300) { Finish("Timed out at step " + step + "."); return; }
             if (now - stepStart > 15) { checks.Add("INFO " + Seen()); Finish("Step " + step + " took longer than 15 seconds."); return; }
             try
             {
@@ -814,6 +815,59 @@ namespace CapriDesktop
                 if (pet.Brain.Model != "qwen3:4b" || pet.BuiltIn.Running) throw new Exception("With Ollama models, she didn't move off her built-in brain: " + pet.Brain.Model);
                 checks.Add("PASS brain choice: HIGHER stops her built-in brain, and Ollama models come first like on Windows");
                 fakeBrain.Stop();
+                return true;
+            }
+            if (step == 34)
+            {
+                byte[] model = new byte[9 << 20];
+                new Random(11).NextBytes(model);
+                string[] names = { "model.onnx", "voices.bin", "tokens.txt", "lexicon-us-en.txt", "lexicon-gb-en.txt", "espeak-ng-data/phontab", "onnxruntime.dll", "sherpa-onnx-c-api.dll", "licenses/README.txt" };
+                byte[][] bodies = new byte[names.Length][];
+                bodies[0] = model;
+                for (int i = 1; i < names.Length; i++) bodies[i] = Encoding.UTF8.GetBytes(names[i]);
+                byte[] pack = Zipped(names, bodies);
+                byte[] evilPack = Zipped(new[] { "../evil" }, new[] { Encoding.UTF8.GetBytes("x") });
+                string top = "sherpa-onnx-v1.13.8-osx-arm64-shared-lib/";
+                byte[] libs = Bzipped("libs-good", new[] { "dir", top, "" }, new[] { "dir", top + "lib/", "" }, new[] { "file", top + "lib/libsherpa-onnx-c-api.dylib", "c" }, new[] { "file", top + "lib/libsherpa-onnx-cxx-api.dylib", "cxx" }, new[] { "file", top + "lib/libonnxruntime.dylib", "ort" });
+                byte[] linkLibs = Bzipped("libs-link", new[] { "file", top + "lib/libsherpa-onnx-c-api.dylib", "c" }, new[] { "file", top + "lib/libonnxruntime.dylib", "ort" }, new[] { "link", top + "lib/escape", "/etc/passwd" });
+                byte[] dotLibs = Bzipped("libs-dot", new[] { "file", "../evil", "x" }, new[] { "file", top + "lib/libsherpa-onnx-c-api.dylib", "c" }, new[] { "file", top + "lib/libonnxruntime.dylib", "ort" });
+                string packName = Path.GetFileName(LocalVoice.PackUrl);
+                string libsName = Path.GetFileName(LocalVoice.LibsUrl);
+                string voiceRoot = Path.Combine(folder, "tv", "voice");
+                string installed = Path.Combine(voiceRoot, LocalVoice.Pack);
+                LocalVoice trial = new LocalVoice(Path.Combine(folder, "tv"));
+                Action<byte[], byte[]> serve = delegate(byte[] p, byte[] l)
+                {
+                    lock (hubFiles) { hubFiles[packName] = p; hubFiles[libsName] = l; }
+                    LocalVoice.PackSha = Sha(p);
+                    LocalVoice.PackSize = p.Length;
+                    LocalVoice.LibsSha = Sha(l);
+                    LocalVoice.LibsSize = l.Length;
+                };
+                foreach (byte[][] bad in new[] { new[] { evilPack, libs }, new[] { pack, linkLibs }, new[] { pack, dotLibs } })
+                {
+                    serve(bad[0], bad[1]);
+                    bool refused = false;
+                    try { trial.Install(delegate { }); }
+                    catch (IOException) { refused = true; }
+                    if (!refused || trial.Installed || Directory.Exists(installed) || File.Exists(Path.Combine(voiceRoot, "evil")) || File.Exists(Path.Combine(folder, "tv", "evil"))) throw new Exception("A voice download reaching outside its folder wasn't refused.");
+                }
+                serve(pack, libs);
+                bool cancelled = false;
+                try { trial.Install(delegate(string text, long done, long total) { if (done < total) trial.Cancel = true; }); }
+                catch (OperationCanceledException) { cancelled = true; }
+                string part = Path.Combine(voiceRoot, LocalVoice.Pack + ".zip.part");
+                long kept = File.Exists(part) ? new FileInfo(part).Length : 0;
+                if (!cancelled || kept < (4L << 20) || kept >= pack.Length) throw new Exception("Cancel didn't stop her voice download and keep what came down: " + cancelled + " | " + kept);
+                trial.Cancel = false;
+                trial.Install(delegate { });
+                bool resumed = false;
+                lock (hubAsked) foreach (string asked in hubAsked) if (asked.StartsWith(packName + " from ", StringComparison.Ordinal)) resumed = true;
+                string lib = Path.Combine(installed, "lib");
+                bool clean = Directory.GetFiles(installed, "*.dll", SearchOption.AllDirectories).Length == 0 && Directory.GetFiles(lib).Length == 2 && File.Exists(Path.Combine(lib, "libsherpa-onnx-c-api.dylib")) && File.Exists(Path.Combine(lib, "libonnxruntime.dylib")) && File.Exists(Path.Combine(installed, "licenses", "README.txt"));
+                bool tidy = !File.Exists(installed + ".zip") && !File.Exists(installed + "-libs.tar.bz2") && !Directory.Exists(installed + ".new") && !Directory.Exists(installed + ".libs");
+                if (!trial.Installed || !resumed || !clean || !tidy) throw new Exception("Her free voice didn't install cleanly: " + trial.Installed + " | " + resumed + " | " + clean + " | " + tidy);
+                checks.Add("PASS free voice install: Windows' voice pack and sherpa-onnx's Mac libraries download, pass their checksums and unpack without the Windows DLLs, archives reaching outside their folder or carrying links are refused, and Cancel picks up where it left off");
                 pet.Frame.Close();
                 hub.Stop();
                 Send(shelf, "quit");
@@ -947,14 +1001,47 @@ namespace CapriDesktop
             {
                 using (GZipStream zip = new GZipStream(raw, CompressionLevel.Fastest, true))
                 using (TarWriter tar = new TarWriter(zip, TarEntryFormat.Pax, false))
-                    foreach (string[] entry in entries)
-                    {
-                        PaxTarEntry item = new PaxTarEntry(entry[0] == "dir" ? TarEntryType.Directory : entry[0] == "link" ? TarEntryType.SymbolicLink : TarEntryType.RegularFile, entry[1]);
-                        item.Mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
-                        if (entry[0] == "link") item.LinkName = entry[2];
-                        if (entry[0] == "file") item.DataStream = new MemoryStream(Encoding.UTF8.GetBytes(entry[2]));
-                        tar.WriteEntry(item);
-                    }
+                    Write(tar, entries);
+                return raw.ToArray();
+            }
+        }
+
+        // Same entries, bzip2-compressed the way sherpa-onnx ships its libraries.
+        private byte[] Bzipped(string name, params string[][] entries)
+        {
+            string path = Path.Combine(folder, name + ".tar");
+            using (FileStream file = File.Create(path))
+            using (TarWriter tar = new TarWriter(file, TarEntryFormat.Pax, false))
+                Write(tar, entries);
+            ProcessStartInfo info = new ProcessStartInfo("/usr/bin/bzip2");
+            info.UseShellExecute = false;
+            info.ArgumentList.Add("-f");
+            info.ArgumentList.Add(path);
+            using (Process zip = Process.Start(info)) zip.WaitForExit();
+            byte[] made = File.ReadAllBytes(path + ".bz2");
+            File.Delete(path + ".bz2");
+            return made;
+        }
+
+        private static void Write(TarWriter tar, string[][] entries)
+        {
+            foreach (string[] entry in entries)
+            {
+                PaxTarEntry item = new PaxTarEntry(entry[0] == "dir" ? TarEntryType.Directory : entry[0] == "link" ? TarEntryType.SymbolicLink : TarEntryType.RegularFile, entry[1]);
+                item.Mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+                if (entry[0] == "link") item.LinkName = entry[2];
+                if (entry[0] == "file") item.DataStream = new MemoryStream(Encoding.UTF8.GetBytes(entry[2]));
+                tar.WriteEntry(item);
+            }
+        }
+
+        private static byte[] Zipped(string[] names, byte[][] bodies)
+        {
+            using (MemoryStream raw = new MemoryStream())
+            {
+                using (ZipArchive zip = new ZipArchive(raw, ZipArchiveMode.Create, true))
+                    for (int i = 0; i < names.Length; i++)
+                        using (Stream entry = zip.CreateEntry(names[i]).Open()) entry.Write(bodies[i], 0, bodies[i].Length);
                 return raw.ToArray();
             }
         }

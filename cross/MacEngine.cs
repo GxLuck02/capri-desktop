@@ -42,7 +42,7 @@ namespace CapriDesktop
 
         internal bool HasServer { get { return File.Exists(Server); } }
 
-        private static string Mirrored(string url) { return Mirror == null ? url : Mirror + url.Substring(url.LastIndexOf('/') + 1); }
+        internal static string Mirrored(string url) { return Mirror == null ? url : Mirror + url.Substring(url.LastIndexOf('/') + 1); }
 
         private void InstallMac(Pick pick, Action<string, long, long> progress)
         {

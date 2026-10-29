@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-#if !CROSS
 using System.IO.Compression;
+#if !CROSS
 using System.Media;
 #endif
 using System.Net;
@@ -511,7 +511,6 @@ namespace CapriDesktop
         }
     }
 
-#if !CROSS
     internal sealed class FreeStyle
     {
         internal readonly string Name;
@@ -528,7 +527,7 @@ namespace CapriDesktop
         }
     }
 
-    internal sealed class LocalVoice : IDisposable
+    internal sealed partial class LocalVoice : IDisposable
     {
         internal const string Pack = VoicePack.Name;
         internal static string PackUrl = VoicePack.Url;
@@ -563,10 +562,17 @@ namespace CapriDesktop
 
         internal bool Installed { get { return Complete(folder); } }
 
+#if CROSS
+        private static bool Complete(string where) { return OperatingSystem.IsWindows() ? VoicePack.Complete(where) : CompleteMac(where); }
+#else
         private static bool Complete(string where) { return VoicePack.Complete(where); }
+#endif
 
         internal void Install(Action<string, long, long> progress)
         {
+#if CROSS
+            if (!OperatingSystem.IsWindows()) { InstallMac(progress); return; }
+#endif
             if (IntPtr.Size != 8) throw new IOException("Her free voice needs 64-bit Windows.");
             string root = Path.GetDirectoryName(folder);
             Directory.CreateDirectory(root);
@@ -653,6 +659,9 @@ namespace CapriDesktop
         // Her ears run on the same sherpa-onnx, so they load it from here too.
         internal static void Load(string where)
         {
+#if CROSS
+            if (!OperatingSystem.IsWindows()) { LoadMac(where); return; }
+#endif
             lock (loading)
             {
                 if (loaded) return;
@@ -734,5 +743,4 @@ namespace CapriDesktop
         [StructLayout(LayoutKind.Sequential)]
         private struct Generated { internal IntPtr Samples; internal int Count, Rate; }
     }
-#endif
 }
