@@ -206,8 +206,8 @@ namespace CapriDesktop
         // glitch as HdGlitch, so the new name starts it at Off.
         [DataMember] public int HdRobot = VoiceFx.HdRobotDefault;
         [DataMember] public int HdVoiceGlitch;
-        // Their own voice server, or Fish Audio or OpenAI, picked from the free voice menu. Its key is sealed like her other keys.
-        // Its robot and glitch are its own and start at Off. ServerApi is "fish" for Fish Audio's API, and null for OpenAI's.
+        // Their own voice model under CUSTOM LOCAL, or Fish Audio or OpenAI under CLOUD VOICE. Its key is sealed like her other
+        // keys. Its robot and glitch are its own and start at Off. ServerApi is "fish" for Fish Audio's API, and null for OpenAI's.
         [DataMember] public bool ServerVoice;
         [DataMember] public string ServerUrl;
         [DataMember] public string ServerApi;
@@ -216,6 +216,12 @@ namespace CapriDesktop
         [DataMember] public string ServerKey;
         [DataMember] public int ServerRobot;
         [DataMember] public int ServerGlitch;
+        // The other kind they set up, local or cloud, kept aside while the one above is in use, so each row keeps its own.
+        [DataMember] public string AsideUrl;
+        [DataMember] public string AsideApi;
+        [DataMember] public string AsideModel;
+        [DataMember] public string AsideSpeaker;
+        [DataMember] public string AsideKey;
 
         [OnDeserializing]
         private void Defaults(StreamingContext context)
@@ -714,7 +720,7 @@ namespace CapriDesktop
         private const string FreeOnLine = "ElevenLabs off. Free voice it is.";
         private const string VoiceOffLine = "Voice off. I'll type instead.";
         private const string VoiceOnLine = "Voice back on.";
-        private const string ElevenOffChat = "FREE VOICE is picked, so voice chat is off. Pick ELEVENLABS in the Mainframe to talk to me.";
+        private const string ElevenOffChat = "ElevenLabs isn't picked, so voice chat is off. Pick it under CLOUD VOICE in the Mainframe to talk to me.";
         private static readonly RectangleF BodyRight = RectangleF.FromLTRB(0.25f, 0f, 0.76f, 1f);
         private static readonly RectangleF PerchedRight = RectangleF.FromLTRB(0.21f, 0.17f, 0.69f, 0.98f);
         private bool facingLeft;
@@ -963,11 +969,7 @@ namespace CapriDesktop
             VoiceFx.HdGlitch = Math.Max(0, Math.Min(100, preferences.HdVoiceGlitch));
             VoiceFx.ServerRobot = Math.Max(0, Math.Min(100, preferences.ServerRobot));
             VoiceFx.ServerGlitch = Math.Max(0, Math.Min(100, preferences.ServerGlitch));
-            server.Url = preferences.ServerUrl ?? VoiceServer.Address;
-            server.Api = VoiceServer.Known(preferences.ServerApi);
-            server.Model = preferences.ServerModel;
-            server.Speaker = preferences.ServerSpeaker;
-            server.Key = Voice.Unprotect(preferences.ServerKey);
+            LoadServer();
             Sfx.Level = Math.Max(0, Math.Min(100, preferences.Sounds));
             Sfx.Out = delegate(short[] sound) { Post(delegate { Effect(sound); }); };
             Sfx.TypeOut = delegate(short[] sound) { if (IsDisposed) return; try { typist.Open(Sfx.Rate); typist.Play(sound); } catch (Exception) { } };
@@ -3227,7 +3229,8 @@ namespace CapriDesktop
             Answer(++asking, VoiceOffLine, TalkState.Talking, true);
         }
 
-        // The VOICE rows. Without a key she uses her free voice either way, so ELEVENLABS only clears Quiet for the key that comes next.
+        // PREBUILT LOCAL (paid false) or ElevenLabs under CLOUD VOICE. Without a key she uses her free voice either way, so ElevenLabs
+        // only clears Quiet for the key that comes next.
         internal void ChooseVoiceTier(bool paid)
         {
             bool wasSilent = preferences.Silent;
@@ -4526,10 +4529,11 @@ namespace CapriDesktop
         }
 
         internal const string TestLine = "Voice link online. Miss me, choom?";
+        internal const string SilentNote = "Her voice is OFF. Pick another row under VOICE to hear her.";
 
         internal void TestVoice()
         {
-            if (preferences.Silent) { mainframe.VoiceNote("Her voice is OFF. Pick FREE VOICE or ELEVENLABS to hear her.", true); return; }
+            if (preferences.Silent) { mainframe.VoiceNote(SilentNote, true); return; }
             if (voice.Key == null && Speak == null && !kokoro.Installed && !preferences.ServerVoice) { mainframe.VoiceNote("Get her free voice, or paste an ElevenLabs key.", true); return; }
             if (voice.Key != null && voice.VoiceId == null && Speak == null) { mainframe.VoiceNote("Paste your Voice ID first.", true); return; }
             if (hidden) SetHidden(false);
@@ -4555,12 +4559,13 @@ namespace CapriDesktop
         // A model file's folder loses any quotes it was pasted with.
         private static string ServerAddress(string url, string api) { return api == VoiceServer.Files ? ModelFile.Clean(url) : Typed(url) ?? (api == VoiceServer.Fish ? VoiceServer.FishCloud : VoiceServer.Address); }
 
-        // Their own voice server, a voice model file, or Fish Audio or OpenAI, picked from the free voice menu: HD steps aside, and
-        // she says her check line through it.
+        // Their own voice server or voice model file under CUSTOM LOCAL, or Fish Audio or OpenAI under CLOUD VOICE: what was kept
+        // for that row comes back, HD and ElevenLabs step aside, and she says her check line through it.
         internal void UseVoiceServer(string url, string model, string speaker, string key, string api)
         {
             api = VoiceServer.Known(api);
             string address = ServerAddress(url, api);
+            Bring(Cloudy(address, api));
             // A blank key box keeps the key that's saved, for the server it was saved for. A key never goes to another server,
             // and a model file takes none.
             string typed = api == VoiceServer.Files ? null : Typed(Regex.Replace(key ?? "", @"\s+", ""));
@@ -4590,16 +4595,126 @@ namespace CapriDesktop
                 qwen.Stop();
             }
             preferences.ServerVoice = true;
+            bool wasSilent = preferences.Silent;
+            preferences.Silent = false;
+            if (wasSilent || (voice.Key != null && !preferences.Quiet))
+            {
+                preferences.Quiet = true;
+                voice.Stop();
+            }
             SavePreferences();
+            // A model file runs on her free voice's engine, and her free voice fills in for a server that's down.
+            if (wasSilent || api == VoiceServer.Files) GetFreeVoice();
+            mainframe.Sync();
             ShowVoice();
             TestVoice();
         }
 
-        internal void ForgetServerKey()
+        // Forget in its panel drops the key saved for that server, in use or kept aside.
+        internal void ForgetServerKey(string url, string api)
         {
-            server.Key = null;
-            preferences.ServerKey = null;
+            if (VoiceServer.Same(server.Url, server.Api, url, VoiceServer.Known(api)))
+            {
+                server.Key = null;
+                preferences.ServerKey = null;
+            }
+            else if (preferences.AsideUrl != null && VoiceServer.Same(preferences.AsideUrl, VoiceServer.Known(preferences.AsideApi), url, VoiceServer.Known(api))) preferences.AsideKey = null;
             SavePreferences();
+        }
+
+        // The key saved for this server, in use or kept aside.
+        private string SavedKey(string url, string api)
+        {
+            if (VoiceServer.Same(server.Url, server.Api, url, api)) return server.Key;
+            if (preferences.AsideUrl != null && VoiceServer.Same(preferences.AsideUrl, VoiceServer.Known(preferences.AsideApi), url, api)) return Voice.Unprotect(preferences.AsideKey);
+            return null;
+        }
+
+        private void LoadServer()
+        {
+            lock (server.Changing)
+            {
+                server.Url = preferences.ServerUrl ?? VoiceServer.Address;
+                server.Api = VoiceServer.Known(preferences.ServerApi);
+                server.Model = preferences.ServerModel;
+                server.Speaker = preferences.ServerSpeaker;
+                server.Key = Voice.Unprotect(preferences.ServerKey);
+            }
+        }
+
+        private static bool Cloudy(string url, string api) { return url != null && VoiceServer.InCloud(url, api); }
+
+        internal bool ServerPicked { get { return preferences.ServerVoice; } }
+
+        internal bool ServerInCloud { get { return Cloudy(preferences.ServerUrl, preferences.ServerApi); } }
+
+        internal string ServerCloudName { get { return VoiceServer.CloudName(preferences.ServerApi); } }
+
+        // Whether they've set up a voice model of this kind, in use or kept aside; for the cloud, from this API when it's given.
+        internal bool HasServer(bool cloud, string api)
+        {
+            return Fits(preferences.ServerUrl, preferences.ServerApi, cloud, api) || Fits(preferences.AsideUrl, preferences.AsideApi, cloud, api);
+        }
+
+        private static bool Fits(string url, string api, bool cloud, string wanted)
+        {
+            return url != null && Cloudy(url, api) == cloud && (wanted == null || VoiceServer.Known(api) == wanted);
+        }
+
+        // The voice model of this kind they set up, for its panel.
+        internal bool SavedServer(bool cloud, out string api, out string url, out string model, out string speaker, out string tail)
+        {
+            bool inUse = Fits(preferences.ServerUrl, preferences.ServerApi, cloud, null);
+            bool aside = !inUse && Fits(preferences.AsideUrl, preferences.AsideApi, cloud, null);
+            api = VoiceServer.Known(inUse ? preferences.ServerApi : preferences.AsideApi);
+            url = inUse ? preferences.ServerUrl : aside ? preferences.AsideUrl : null;
+            model = inUse ? preferences.ServerModel : aside ? preferences.AsideModel : null;
+            speaker = inUse ? preferences.ServerSpeaker : aside ? preferences.AsideSpeaker : null;
+            string key = inUse ? server.Key : aside ? Voice.Unprotect(preferences.AsideKey) : null;
+            tail = key == null ? null : Voice.Tail(key);
+            return inUse || aside;
+        }
+
+        // Puts their voice model of this kind in use, swapping it with the other kind kept aside. With none of this kind, the
+        // one in use goes aside.
+        private void Bring(bool cloud)
+        {
+            bool held = preferences.ServerUrl != null;
+            if (held ? Cloudy(preferences.ServerUrl, preferences.ServerApi) == cloud : !Fits(preferences.AsideUrl, preferences.AsideApi, cloud, null)) return;
+            string url = preferences.ServerUrl, api = preferences.ServerApi, model = preferences.ServerModel, speaker = preferences.ServerSpeaker, key = preferences.ServerKey;
+            preferences.ServerUrl = preferences.AsideUrl;
+            preferences.ServerApi = preferences.AsideApi;
+            preferences.ServerModel = preferences.AsideModel;
+            preferences.ServerSpeaker = preferences.AsideSpeaker;
+            preferences.ServerKey = preferences.AsideKey;
+            preferences.AsideUrl = url;
+            preferences.AsideApi = api;
+            preferences.AsideModel = model;
+            preferences.AsideSpeaker = speaker;
+            preferences.AsideKey = key;
+            LoadServer();
+        }
+
+        // CUSTOM LOCAL or CLOUD VOICE with one already set up: back to it, with her check line through it.
+        internal void UseSavedServer(bool cloud)
+        {
+            Bring(cloud);
+            if (preferences.ServerUrl == null) return;
+            UseVoiceServer(preferences.ServerUrl, preferences.ServerModel, preferences.ServerSpeaker, null, preferences.ServerApi);
+        }
+
+        // PREBUILT LOCAL: her own voices. Their voice models stay saved for the other rows.
+        internal void UsePrebuilt()
+        {
+            bool served = preferences.ServerVoice;
+            if (served)
+            {
+                preferences.ServerVoice = false;
+                SavePreferences();
+            }
+            bool wasOn = !preferences.Silent && (voice.Key == null || preferences.Quiet);
+            ChooseVoiceTier(false);
+            if (served && wasOn && (kokoro.Installed || (preferences.HdVoice && qwen.Installed))) TestVoice();
         }
 
         private static string Typed(string text)
@@ -4612,7 +4727,7 @@ namespace CapriDesktop
         internal void MakeFishVoice(string url, string key, string clip, Action<string, string> done)
         {
             string address = ServerAddress(url, VoiceServer.Fish);
-            string sent = Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? (VoiceServer.Same(server.Url, server.Api, address, VoiceServer.Fish) ? server.Key : null);
+            string sent = Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? SavedKey(address, VoiceServer.Fish);
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string id = null, problem = null;
@@ -4627,7 +4742,7 @@ namespace CapriDesktop
         internal void FishVoices(string url, string key, Action<System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, string>>, string> done)
         {
             string address = ServerAddress(url, VoiceServer.Fish);
-            string sent = Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? (VoiceServer.Same(server.Url, server.Api, address, VoiceServer.Fish) ? server.Key : null);
+            string sent = Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? SavedKey(address, VoiceServer.Fish);
             ThreadPool.QueueUserWorkItem(delegate
             {
                 System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, string>> found = null;
@@ -4647,7 +4762,7 @@ namespace CapriDesktop
             trial.Url = ServerAddress(url, trial.Api);
             trial.Model = Typed(model);
             trial.Speaker = Typed(speaker);
-            trial.Key = trial.Api == VoiceServer.Files ? null : Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? (VoiceServer.Same(server.Url, server.Api, trial.Url, trial.Api) ? server.Key : null);
+            trial.Key = trial.Api == VoiceServer.Files ? null : Typed(Regex.Replace(key ?? "", @"\s+", "")) ?? SavedKey(trial.Url, trial.Api);
             string label = VoiceServer.Label(trial.Url, trial.Api);
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -4686,7 +4801,7 @@ namespace CapriDesktop
         }
 
         internal const string StyleLine = "How do I sound now, choom?";
-        internal const string StyleSilent = "My voice is OFF, choom. Pick FREE VOICE to hear that.";
+        internal const string StyleSilent = "My voice is OFF, choom. Pick PREBUILT LOCAL to hear that.";
         internal const string StyleMissing = "Get my free voice under VOICE to hear that, choom.";
 
         // Letting go of her pitch, speed, robot or glitch slider: she says a line in the voice she's using, so they hear it.
@@ -4811,7 +4926,7 @@ namespace CapriDesktop
             if (!note) return;
             string name = "custom voice";
             if (voices != null) foreach (VoiceEntry entry in voices.Voices) if (entry.Id == voice.VoiceId && entry.Name != null) name = entry.Name;
-            mainframe.VoiceNote(voice.Key == null ? (served ? (server.Api == VoiceServer.Files ? "Voice model " + VoiceServer.Label(server.Url, server.Api) + ", on your PC." : VoiceServer.Name(server.Url, server.Api) + " at " + VoiceServer.Where(server.Url, server.Api) + ".") + (ready ? " Her free voice fills in if it's down." : "") : hd && settingUpHd ? "Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop." : hd && qwen.Installed ? (yours ? "HD voice from your clip, on your graphics card. Games get her free voice." : "HD voice on your graphics card. Games get her free voice.") : ready ? (yours ? "Free voice, runs on your PC. Your voice only works with HD." : "Free voice, runs on your PC.") : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
+            mainframe.VoiceNote(voice.Key == null || (served && preferences.Quiet) ? (served ? (server.Api == VoiceServer.Files ? "Voice model " + VoiceServer.Label(server.Url, server.Api) + ", on your PC." : VoiceServer.Name(server.Url, server.Api) + " at " + VoiceServer.Where(server.Url, server.Api) + ".") + (ready ? " Her free voice fills in if it's down." : "") : hd && settingUpHd ? "Getting her HD voice (" + Engine.Amount(QwenVoice.PackSize) + "), one time. Pick another free voice to stop." : hd && qwen.Installed ? (yours ? "HD voice from your clip, on your graphics card. Games get her free voice." : "HD voice on your graphics card. Games get her free voice.") : ready ? (yours ? "Free voice, runs on your PC. Your voice only works with HD." : "Free voice, runs on your PC.") : SettingUpVoice ? "This may take some time. For a better sounding, faster voice, get an API key." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick CLOUD VOICE.") : voice.VoiceId == null ? "Needs your Voice ID." : "ElevenLabs · " + name, false);
         }
 
         private float TalkScale()
@@ -4913,7 +5028,7 @@ namespace CapriDesktop
         private void ToggleChat()
         {
             if (chatting) { StopChat(); return; }
-            // Voice chat follows the VOICE pick: FREE VOICE, or no key, is free voice chat.
+            // Voice chat follows the VOICE pick: anything but ElevenLabs, or no key, is free voice chat.
             if (FreeChatOn && (preferences.Quiet || preferences.Silent || voice.Key == null)) { StartLocal(); return; }
             if ((preferences.Quiet || preferences.Silent) && voice.Key != null)
             {
@@ -5818,7 +5933,7 @@ namespace CapriDesktop
                 if (speak == free || !Broke(error.Message)) return null;
                 voiceBroke = true;
                 if (free == null && FreeChatOn && !testing) { Post(delegate { GetFreeVoice(); }); problem = "Out of ElevenLabs credits, so she's getting her free voice."; return null; }
-                if (free == null) { problem = "Out of ElevenLabs credits. Pick FREE VOICE in Capri Mainframe and get her free voice."; return null; }
+                if (free == null) { problem = "Out of ElevenLabs credits. Pick PREBUILT LOCAL in Capri Mainframe and get her free voice."; return null; }
                 try
                 {
                     byte[] wav = free(words);
@@ -12195,7 +12310,7 @@ namespace CapriDesktop
                             string fxFreeHeard, fxFreePaid;
                             try
                             {
-                                // FREE VOICE picked: the line comes from her free voice.
+                                // PREBUILT LOCAL picked: the line comes from her free voice.
                                 preferences.Quiet = true;
                                 mainframe.SlideVoice(0, 9);
                                 for (int fxTry = 0; fxTry < 150 && fxHeard == null; fxTry++) Thread.Sleep(20);
@@ -12204,7 +12319,7 @@ namespace CapriDesktop
                                 fxAsked = asking;
                                 mainframe.SlideVoice(0, 9);
                                 fxStill = asking;
-                                // ELEVENLABS picked: the line comes from ElevenLabs, with the sliders on its audio.
+                                // ElevenLabs picked under CLOUD VOICE: the line comes from ElevenLabs, with the sliders on its audio.
                                 fxHeard = null;
                                 preferences.Quiet = false;
                                 mainframe.SlideVoice(1, 5);
@@ -12313,7 +12428,7 @@ namespace CapriDesktop
                             string sealedKey = Voice.Protect("sk_test_capri_1234");
                             if (Voice.Unprotect(sealedKey) != "sk_test_capri_1234" || sealedKey.Contains("sk_test") || Voice.Unprotect("not a key") != null || Voice.Tail("sk_test_capri_1234") != "1234") throw new Exception("Key storage failed.");
                             if (Voice.Spoken("[GLITCH] Hey *choom*, [static] ready?") != "Hey choom, ready?" || Voice.Spoken("[STATIC]") != "") throw new Exception("Spoken text kept her tags: " + Voice.Spoken("[GLITCH] Hey *choom*, [static] ready?"));
-                            if (Voice.Explain(401, "") != "ElevenLabs rejected the key. Press Forget, paste a new one." || Voice.Explain(401, "{\"detail\":{\"status\":\"quota_exceeded\"}}") != "Out of ElevenLabs credits. Pick FREE VOICE in the Mainframe." || Voice.Explain(400, "{\"detail\":{\"status\":\"invalid\",\"message\":\"Text is \\\"too\\\" long\"}}") != "Text is \"too\" long" + Voice.RestrictHint || Voice.Explain(500, "oops") != "ElevenLabs error 500." + Voice.RestrictHint
+                            if (Voice.Explain(401, "") != "ElevenLabs rejected the key. Press Forget, paste a new one." || Voice.Explain(401, "{\"detail\":{\"status\":\"quota_exceeded\"}}") != "Out of ElevenLabs credits. Pick PREBUILT LOCAL in the Mainframe." || Voice.Explain(400, "{\"detail\":{\"status\":\"invalid\",\"message\":\"Text is \\\"too\\\" long\"}}") != "Text is \"too\" long" + Voice.RestrictHint || Voice.Explain(500, "oops") != "ElevenLabs error 500." + Voice.RestrictHint
                                 || Voice.Explain(400, "{\"detail\":{\"message\":\"Input at position 0 has empty text. All inputs must include non-empty text.\"}}") != Voice.Silent || Voice.Explain(403, "{\"detail\":{\"message\":\"nope\"}}").IndexOf("Restrict key turned off", StringComparison.Ordinal) < 0 || Voice.Spoken("...") != "" || Voice.Spoken("[sighs] ...") != "") throw new Exception("ElevenLabs errors read wrong.");
                             if (Voice.Explain(402, "{\"detail\":{\"status\":\"free_users_not_allowed\",\"message\":\"Free users cannot use library voices via the API. Please upgrade your subscription to use this voice.\"}}") != Voice.LibraryVoice || Voice.Explain(400, "{\"detail\":{\"status\":\"voice_not_fine_tuned\",\"message\":\"Voice is still being fine-tuned\"}}").IndexOf("still training", StringComparison.Ordinal) < 0
                                 || Voice.Explain(400, "{\"detail\":{\"message\":\"This voice is not available for model eleven_v3\"}}").IndexOf("Restrict key", StringComparison.Ordinal) >= 0 || Voice.Explain(402, "{\"detail\":{\"message\":\"Payment required\"}}") != "Payment required") throw new Exception("Custom and library voice errors read wrong or blamed the key.");
@@ -12680,9 +12795,9 @@ namespace CapriDesktop
                             CloseTalk();
                             preferences.VoiceKey = sealedKey;
                             ForgetVoice();
-                            string keylessNote = kokoro.Installed ? "Free voice, runs on your PC." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick ELEVENLABS.";
+                            string keylessNote = kokoro.Installed ? "Free voice, runs on your PC." : "Get her free voice (" + Engine.Amount(LocalVoice.PackSize) + "), or pick CLOUD VOICE.";
                             if (voice.Key != null || voices != null || preferences.VoiceKey != null || mainframe.VoiceStatus != keylessNote + " |  | Default model | Connect") throw new Exception("Forget did not clear the key: " + mainframe.VoiceStatus);
-                            if (mainframe.VoiceTierStatus != "FREE VOICE | - | free voice | fold 36") throw new Exception("Forget left the VOICE rows laid out for a key: " + mainframe.VoiceTierStatus);
+                            if (mainframe.VoiceTierStatus != "PREBUILT LOCAL | - | free voice | fold 36") throw new Exception("Forget left the VOICE rows laid out for a key: " + mainframe.VoiceTierStatus);
                             snap("mainframe-voice-empty.png");
                             if (!mainframe.MicStatus.EndsWith("| help | keys | mute", StringComparison.Ordinal)) throw new Exception("Without a key the Mainframe should offer the Setup guide and still show the voice chat shortcut, since free voice chat needs no key: " + mainframe.MicStatus);
                             mainframe.ShowShortcut(false, false);
@@ -13532,8 +13647,10 @@ namespace CapriDesktop
                             Func<int> vsCount = delegate { lock (vsAsked) return vsAsked.Count; };
                             // Her check line is up with its sound handed to her speaker. Still playing would be too narrow: one slow DoEvents can outlast it.
                             Func<bool> vsTalking = delegate { return reply == TestLine && voiceUntil > 0; };
-                            string vsMenu, vsOpened, vsKokoro, vsTyped, vsTested, vsUsedNote, vsUsedStatus, vsUsedMenu, vsSliders, vsPage, vsFellNote, vsFellState, vsOnceNote, vsKept, vsForgot, vsSly, vsTestBody, vsUseBody;
-                            string vsHostBody, vsFishStatus, vsFishNote, vsFishMenu, vsFileShown, vsFileTaken, vsFishList, vsListBody, vsFishPicked, vsCloned, vsClonedBody, vsFileClip, vsHostTest = null;
+                            string vsMenu, vsOpened, vsKokoro, vsTyped, vsTested, vsUsedNote, vsUsedMenu, vsSliders, vsPage, vsFellNote, vsFellState, vsOnceNote, vsKept, vsForgot, vsSly, vsTestBody, vsUseBody;
+                            string vsCloudChoices, vsCloudSwitch, vsCustomChoices, vsCustomRows, vsCloudRows, vsCloudKept, vsAsideTail = null, vsAsideUrl = null, vsBackRows;
+                            bool vsHasBoth, vsSwapped, vsSwappedBack, vsRowBack;
+                            string vsHostBody, vsFishNote, vsFileShown, vsFileTaken, vsFishList, vsListBody, vsFishPicked, vsCloned, vsClonedBody, vsFileClip, vsHostTest = null;
                             bool vsTestSpoke, vsTestUnsaved, vsUseSpoke, vsFellSpoke, vsOnceSpoke, vsSealed, vsRound, vsOldRound, vsSlyOff, vsHdOff, vsHostDropped;
                             int vsAskedBefore;
                             test.Stop();
@@ -13556,11 +13673,13 @@ namespace CapriDesktop
                                             vsDraw.DrawImageUnscaled(vsPanel, 0, 0);
                                             vsDraw.DrawImageUnscaled(vsDrop, vsAt.X, vsAt.Y);
                                         }
-                                        vsBoth.Save(Path.Combine(output, "mainframe-voice-server-menu.png"), ImageFormat.Png);
+                                        vsBoth.Save(Path.Combine(output, "mainframe-voice-prebuilt-menu.png"), ImageFormat.Png);
                                     }
                                 }
-                                mainframe.PickFree(Mainframe.ServerChoice);
+                                // Fish Audio under CLOUD VOICE, with nothing set up in the cloud yet, opens the panel with only the cloud's choices.
+                                mainframe.PickCloudVoice("Fish Audio");
                                 vsOpened = mainframe.ServerShown;
+                                vsCloudChoices = mainframe.ServerChoices;
                                 Form vsFresh = mainframe.ServerPanel;
                                 using (Bitmap vsPicture = new Bitmap(vsFresh.Width, vsFresh.Height))
                                 {
@@ -13587,8 +13706,15 @@ namespace CapriDesktop
                                 vsCloned = mainframe.ServerShown;
                                 lock (vsAsked) vsClonedBody = vsAsked.Count > vsAskedBefore ? vsAsked[vsAsked.Count - 1] : "";
                                 vsMode = "wav";
-                                // A voice model file asks for its folder, language and speaker instead, with Browse in place of a key.
-                                mainframe.PickService("Voice model file · on your PC");
+                                // A key typed for Fish Audio never goes to OpenAI.
+                                mainframe.PickService("OpenAI · cloud");
+                                vsCloudSwitch = mainframe.ServerShown;
+                                mainframe.PressServer("Cancel");
+                                // CUSTOM LOCAL's Set up opens it with only the choices on their PC, starting on a voice model file, which asks for its
+                                // folder, language and speaker instead, with Browse in place of a key.
+                                mainframe.SetUpCustom();
+                                vsCustomChoices = mainframe.ServerChoices;
+                                vsFresh = mainframe.ServerPanel;
                                 vsFileShown = mainframe.ServerShown + " / " + mainframe.ServerFields;
                                 mainframe.TakeModel(Path.Combine(vsKitten, "model.fp16.onnx"));
                                 vsFileTaken = mainframe.ServerShown;
@@ -13625,8 +13751,9 @@ namespace CapriDesktop
                                 vsUseSpoke = vsTalking() && vsFreeHeard == null && vsCount() == vsAskedBefore + 1 && mainframe.ServerShown == "-";
                                 lock (vsAsked) vsUseBody = vsAsked[vsAsked.Count - 1];
                                 vsUsedNote = mainframe.VoiceNoteText;
-                                vsUsedStatus = mainframe.FreeStatus;
                                 vsUsedMenu = mainframe.FreeMenuShown;
+                                vsCustomRows = mainframe.VoiceTierStatus + " / " + mainframe.CloudShown;
+                                snap("mainframe-voice-custom.png");
                                 vsSealed = preferences.ServerVoice && !preferences.HdVoice && preferences.ServerUrl == vsUrl && preferences.ServerApi == null && preferences.ServerModel == "kokoro" && preferences.ServerSpeaker == "af_heart"
                                     && preferences.ServerKey != null && preferences.ServerKey.IndexOf("sk-panel-test-9876", StringComparison.Ordinal) < 0 && Voice.Unprotect(preferences.ServerKey) == "sk-panel-test-9876" && server.Key == "sk-panel-test-9876";
                                 asking++;
@@ -13684,7 +13811,7 @@ namespace CapriDesktop
                                 UseVoiceServer(vsUrl, "kokoro", "af_heart", " ", VoiceServer.OpenAi);
                                 asking++;
                                 CloseTalk();
-                                mainframe.PickFree(Mainframe.ServerChoice);
+                                mainframe.SetUpCustom();
                                 vsKept = mainframe.ServerShown + " / " + (Voice.Unprotect(preferences.ServerKey) == "sk-panel-test-9876");
                                 mainframe.PressServer("Forget");
                                 vsForgot = mainframe.ServerShown + " / " + (preferences.ServerKey == null && server.Key == null && ServerKeyTail == null);
@@ -13702,6 +13829,14 @@ namespace CapriDesktop
                                 ChooseVoiceStyle(LocalVoice.Styles[0].Name);
                                 asking++;
                                 CloseTalk();
+                                // CUSTOM LOCAL brings the one they set up straight back, and she says her check line through it.
+                                vsAskedBefore = vsCount();
+                                mainframe.PickVoiceRow(2);
+                                vsPump(delegate { return vsTalking() && vsCount() > vsAskedBefore; });
+                                vsRowBack = vsTalking() && preferences.ServerVoice && preferences.ServerUrl == vsUrl && vsCount() == vsAskedBefore + 1;
+                                vsBackRows = mainframe.VoiceTierStatus;
+                                asking++;
+                                CloseTalk();
                                 // A key saved for one server never goes to another: Test there sends none, and Use there drops it.
                                 UseVoiceServer(vsUrl, "kokoro", "af_heart", "sk-host-test-5555", VoiceServer.OpenAi);
                                 asking++;
@@ -13717,13 +13852,30 @@ namespace CapriDesktop
                                 vsHostDropped = preferences.ServerKey == null && server.Key == null && ServerKeyTail == null && preferences.ServerUrl == vsElsewhere;
                                 asking++;
                                 CloseTalk();
-                                // Fish Audio, picked, shows by name on her free voice button and under VOICE.
-                                server.Url = VoiceServer.FishCloud;
-                                server.Api = VoiceServer.Fish;
+                                // Each row keeps its own. With a Fish Audio voice kept aside for CLOUD VOICE, bringing it in puts the local one
+                                // aside; it shows by name under CLOUD VOICE, and its panel shows its own key, never the local one's.
+                                preferences.AsideUrl = VoiceServer.FishCloud;
+                                preferences.AsideApi = VoiceServer.Fish;
+                                preferences.AsideModel = VoiceServer.FishFree;
+                                preferences.AsideSpeaker = "0123456789abcdef0123456789abcdef";
+                                preferences.AsideKey = Voice.Protect("fish-aside-4321");
+                                string vsAsideApi, vsAsideModel, vsAsideSpeaker;
+                                vsHasBoth = HasServer(true, VoiceServer.Fish) && !HasServer(true, VoiceServer.OpenAi) && HasServer(false, null) && SavedServer(true, out vsAsideApi, out vsAsideUrl, out vsAsideModel, out vsAsideSpeaker, out vsAsideTail)
+                                    && vsAsideApi == VoiceServer.Fish && vsAsideModel == VoiceServer.FishFree;
+                                Bring(true);
+                                vsSwapped = preferences.ServerUrl == VoiceServer.FishCloud && preferences.ServerApi == VoiceServer.Fish && server.Url == VoiceServer.FishCloud && server.Key == "fish-aside-4321"
+                                    && preferences.AsideUrl == vsElsewhere && preferences.AsideKey == null && preferences.ServerVoice;
                                 ShowVoice();
-                                vsFishStatus = mainframe.FreeStatus;
+                                vsCloudRows = mainframe.VoiceTierStatus + " / " + mainframe.CloudShown;
                                 vsFishNote = mainframe.VoiceNoteText;
-                                vsFishMenu = mainframe.FreeMenuShown;
+                                snap("mainframe-voice-cloud.png");
+                                mainframe.SetUpCloud();
+                                vsCloudKept = mainframe.ServerShown + " / " + mainframe.ServerChoices;
+                                mainframe.PressServer("Cancel");
+                                Bring(false);
+                                vsSwappedBack = preferences.ServerUrl == vsElsewhere && server.Url == vsElsewhere && server.Key == null && preferences.AsideUrl == VoiceServer.FishCloud
+                                    && Voice.Unprotect(preferences.AsideKey) == "fish-aside-4321" && preferences.AsideSpeaker == "0123456789abcdef0123456789abcdef";
+                                ShowVoice();
                             }
                             finally
                             {
@@ -13736,6 +13888,7 @@ namespace CapriDesktop
                                 preferences.Quiet = vsQuietWas;
                                 preferences.ServerVoice = false;
                                 preferences.ServerUrl = preferences.ServerApi = preferences.ServerModel = preferences.ServerSpeaker = preferences.ServerKey = null;
+                                preferences.AsideUrl = preferences.AsideApi = preferences.AsideModel = preferences.AsideSpeaker = preferences.AsideKey = null;
                                 preferences.ServerRobot = VoiceFx.ServerRobot = 0;
                                 preferences.ServerGlitch = VoiceFx.ServerGlitch = 0;
                                 server.Url = VoiceServer.Address;
@@ -13746,11 +13899,13 @@ namespace CapriDesktop
                                 mainframe.ShowSettings(vsPagedWas);
                                 mainframe.Sync();
                             }
-                            string vsMenuEnd = ", -, " + Mainframe.ServerChoice;
                             string vsPanelUsual = "Fish Audio · cloud | " + VoiceServer.FishCloud + " | " + VoiceServer.FishFree + " |  | Paste your Fish Audio key | - | ";
-                            if (!vsMenu.EndsWith(vsMenuEnd, StringComparison.Ordinal) || !vsMenu.StartsWith("Her own (picked), Bright, Sly, Sharp, -, HD ", StringComparison.Ordinal) || vsOpened != vsPanelUsual
+                            string vsCloudOnly = "CLOUD VOICE > | Fish Audio · cloud, OpenAI · cloud";
+                            if (vsMenu.IndexOf(VoiceServer.Menu, StringComparison.Ordinal) >= 0 || !vsMenu.StartsWith("Her own (picked), Bright, Sly, Sharp, -, HD ", StringComparison.Ordinal) || vsOpened != vsPanelUsual
+                                || vsCloudChoices != vsCloudOnly || vsCustomChoices != "CUSTOM LOCAL > | Voice model file · on your PC, Fish Speech · on your PC, Kokoro · on your PC, Any OpenAI-style server"
+                                || vsCloudSwitch != "OpenAI · cloud | " + VoiceServer.OpenAiCloud + " | gpt-4o-mini-tts | marin | Paste your OpenAI key | - | Key cleared: paste the key for OpenAI · cloud."
                                 || vsKokoro != "Kokoro · on your PC | " + VoiceServer.Address + " | kokoro | af_heart | Optional | - |  / Address | Model | Voice | Key | -"
-                                || vsFileShown != "Voice model file · on your PC |  |  |  | Optional | - | Key cleared: a model file needs none. / Model folder | Language | Speaker or clip | no key | Browse..."
+                                || vsFileShown != "Voice model file · on your PC |  |  |  | Optional | - |  / Model folder | Language | Speaker or clip | no key | Browse..."
                                 || vsFileTaken != "Voice model file · on your PC | " + vsKitten + " |  |  | Optional | - | "
                                 || vsFileClip != "Voice model file · on your PC | " + vsKitten + " |  | " + Path.Combine(vsModels, "clip.wav") + " | Optional | - | Pocket TTS models copy this clip's voice. Press Test to hear it."
                                 || vsFishList != "Capri (Nox), Night City, -, " + "New voice from a clip..." || vsListBody.IndexOf("GET /model?self=true&page_size=100&page_number=1 HTTP/1.1\r\n", StringComparison.Ordinal) != 0
@@ -13763,10 +13918,10 @@ namespace CapriDesktop
                                 || vsFishPicked != "Fish Audio · cloud | " + vsUrl + " | " + VoiceServer.FishFree + " | 0123456789abcdef0123456789abcdef | Paste your Fish Audio key | - | "
                                 || vsTyped != "Kokoro · on your PC | " + vsUrl + " |  kokoro  | af_heart | Optional | - | " || !vsTested.StartsWith("Kokoro · on your PC | " + vsUrl + " |  kokoro  | af_heart | Optional | - | It works. Your server said that in ", StringComparison.Ordinal) || !vsTestSpoke || !vsTestUnsaved
                                 || vsTestBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || !vsTestBody.EndsWith("{\"model\":\"kokoro\",\"input\":\"Voice link online. Miss me, chewm?\",\"voice\":\"af_heart\",\"response_format\":\"wav\"}", StringComparison.Ordinal))
-                                throw new Exception("Their voice server's panel didn't open or test right: " + vsMenu + " / " + vsOpened + " / " + vsFishList + " / " + vsFishPicked + " / " + vsCloned + " / " + vsFileClip + " / " + (vsClonedBody.Length > 600 ? vsClonedBody.Substring(0, 600) : vsClonedBody) + " / " + vsListBody + " / " + vsFileShown + " / " + vsFileTaken + " / " + vsKokoro + " / " + vsTyped + " / " + vsTested + " / spoke " + vsTestSpoke + ", unsaved " + vsTestUnsaved);
+                                throw new Exception("Their voice server's panel didn't open or test right: " + vsMenu + " / " + vsOpened + " / " + vsCloudChoices + " / " + vsCustomChoices + " / " + vsCloudSwitch + " / " + vsFishList + " / " + vsFishPicked + " / " + vsCloned + " / " + vsFileClip + " / " + (vsClonedBody.Length > 600 ? vsClonedBody.Substring(0, 600) : vsClonedBody) + " / " + vsListBody + " / " + vsFileShown + " / " + vsFileTaken + " / " + vsKokoro + " / " + vsTyped + " / " + vsTested + " / spoke " + vsTestSpoke + ", unsaved " + vsTestUnsaved);
                             if (!vsUseSpoke || !vsSealed || vsUseBody.IndexOf("\r\nAuthorization: Bearer sk-panel-test-9876\r\n", StringComparison.Ordinal) < 0 || vsUsedNote != "Your voice server at " + vsWhere + "." + (kokoro.Installed ? " Her free voice fills in if it's down." : "")
-                                || !vsUsedStatus.StartsWith("Free voice: " + VoiceServer.Style + " | ", StringComparison.Ordinal) || !vsUsedMenu.EndsWith(vsMenuEnd + " (picked)", StringComparison.Ordinal) || vsUsedMenu.IndexOf("Her own (picked)", StringComparison.Ordinal) >= 0)
-                                throw new Exception("Use this server didn't keep it and speak through it: spoke " + vsUseSpoke + ", sealed " + vsSealed + " / " + vsUsedNote + " / " + vsUsedStatus + " / " + vsUsedMenu);
+                                || vsCustomRows != "CUSTOM LOCAL | - | voice model | fold 36 / - | - | Voice model: " + VoiceServer.Style || vsUsedMenu.IndexOf("(picked)", StringComparison.Ordinal) >= 0)
+                                throw new Exception("Use this server didn't keep it under CUSTOM LOCAL and speak through it: spoke " + vsUseSpoke + ", sealed " + vsSealed + " / " + vsUsedNote + " / " + vsCustomRows + " / " + vsUsedMenu);
                             if (vsSliders != "Normal | Normal | 30% · server | 20% · server" || vsPage != null || !vsRound || !vsOldRound)
                                 throw new Exception("Their voice server's own robot and glitch didn't stick apart from her other voices: " + vsSliders + " / " + vsPage + " / round trip " + vsRound + ", old settings " + vsOldRound);
                             if (!vsFellSpoke || vsFellNote != "Your voice server said HTTP 500: Model is still loading." + VoiceServer.Filling || !vsOnceSpoke || vsOnceNote != "still the same")
@@ -13777,9 +13932,11 @@ namespace CapriDesktop
                             if (vsHostTest == null || !vsHostTest.StartsWith("It works. Your server said that in ", StringComparison.Ordinal) || vsHostBody.IndexOf("POST /v1/audio/speech ", StringComparison.Ordinal) != 0
                                 || vsHostBody.IndexOf("Authorization", StringComparison.OrdinalIgnoreCase) >= 0 || !vsHostDropped)
                                 throw new Exception("A key saved for one voice server went to another: " + vsHostTest + " / dropped " + vsHostDropped + " / " + vsHostBody);
-                            if (!vsFishStatus.StartsWith("Free voice: Fish Audio | ", StringComparison.Ordinal) || vsFishNote != "Fish Audio at api.fish.audio." + (kokoro.Installed ? " Her free voice fills in if it's down." : "")
-                                || !vsFishMenu.EndsWith(vsMenuEnd + " (picked)", StringComparison.Ordinal))
-                                throw new Exception("Fish Audio didn't show by name once picked: " + vsFishStatus + " / " + vsFishNote + " / " + vsFishMenu);
+                            if (!vsHasBoth || vsAsideUrl != VoiceServer.FishCloud || vsAsideTail != "4321" || !vsSwapped || !vsSwappedBack
+                                || vsCloudRows != "CLOUD VOICE | Fish Audio | - | fold 36 / Fish Audio | Voice, key and model... | -" || vsFishNote != "Fish Audio at api.fish.audio." + (kokoro.Installed ? " Her free voice fills in if it's down." : "")
+                                || vsCloudKept != "Fish Audio · cloud | " + VoiceServer.FishCloud + " | " + VoiceServer.FishFree + " | 0123456789abcdef0123456789abcdef | Key saved, ends 4321 | Forget |  / " + vsCloudOnly
+                                || !vsRowBack || vsBackRows != "CUSTOM LOCAL | - | voice model | fold 36")
+                                throw new Exception("CUSTOM LOCAL and CLOUD VOICE didn't each keep their own: " + vsHasBoth + " / " + vsAsideUrl + " / " + vsAsideTail + " / swapped " + vsSwapped + ", back " + vsSwappedBack + " / " + vsCloudRows + " / " + vsFishNote + " / " + vsCloudKept + " / row back " + vsRowBack + " / " + vsBackRows);
                             // A server that isn't running.
                             vsServer.Stop();
                             byte[] vsGone = vsOff(vsVoice.Or(vsFree, vsNoted), "Hello?");
@@ -13789,7 +13946,7 @@ namespace CapriDesktop
                             catch (VoiceException vsError) { vsAlone = vsError.Message; }
                             if (vsGone != vsStandIn || vsGoneNote != "Can't reach your voice server at " + vsWhere + ". Is it running?" + VoiceServer.Filling || vsAlone != "Can't reach your voice server at " + vsWhere + ". Is it running?" || vsNotes.Count != 5)
                                 throw new Exception("A voice server that isn't running didn't say so: " + vsGoneNote + " / " + vsAlone + " / " + vsNotes.Count + " notes");
-                            checks.Add("PASS any voice model: Any voice model... in the free voice menu opens a panel that starts on Fish Audio's cloud with its free tier's model, and fills in a voice model file, Fish Speech on your PC, Kokoro, OpenAI or any OpenAI-style server; a voice model file (Piper, Kokoro or Kitten for sherpa-onnx, told apart by its files) asks for its folder, language and speaker with Browse in place of a key, and a .tar.bz2 or .zip of one is unpacked into her models folder (one with no model is refused in plain words); Test speaks through it before anything's saved and Use this server keeps it, the key sealed like her other keys (a blank box keeps it for that server only, Forget drops it); she POSTs only the words to /v1/audio/speech with a Bearer key when there is one, and to Fish Audio's /v1/tts with the voice's ID from its fish.audio link and its model in a header; a picked Fish Audio shows by name; a 16-bit 22 kHz WAV, a float WAV streamed in chunks" + (vsMp3 != null ? " and an MP3" : "") + " become her 24 kHz voice; her pitch moves it and its own robot and glitch (saved apart, shown as · server) change it; a 404, a 500, a refused key, no answer within its 20 s (0.8 s here) or no server at all hand the line to her free voice and say why once; picking one of her own styles or HD turns it off and keeps it saved");
+                            checks.Add("PASS voice models: Fish Audio or OpenAI under CLOUD VOICE opens a panel with only those two, starting on Fish Audio's cloud with its free tier's model, and CUSTOM LOCAL's Set up opens one with only a voice model file, Fish Speech on your PC, Kokoro or any OpenAI-style server, which her own voices' menu no longer lists; each row keeps its own setup and key (one waits aside while the other is in use, and its panel shows only its own key), and picking the row brings it back and says her check line through it; a voice model file (Piper, Kokoro or Kitten for sherpa-onnx, told apart by its files) asks for its folder, language and speaker with Browse in place of a key, and a .tar.bz2 or .zip of one is unpacked into her models folder (one with no model is refused in plain words); Test speaks through it before anything's saved and Use this server keeps it, the key sealed like her other keys (a blank box keeps it for that server only, Forget drops it); she POSTs only the words to /v1/audio/speech with a Bearer key when there is one, and to Fish Audio's /v1/tts with the voice's ID from its fish.audio link and its model in a header; a picked Fish Audio shows by name; a 16-bit 22 kHz WAV, a float WAV streamed in chunks" + (vsMp3 != null ? " and an MP3" : "") + " become her 24 kHz voice; her pitch moves it and its own robot and glitch (saved apart, shown as · server) change it; a 404, a 500, a refused key, no answer within its 20 s (0.8 s here) or no server at all hand the line to her free voice and say why once; picking one of her own styles or HD turns it off and keeps it saved");
                             string earsRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "ears-test");
                             if (Directory.Exists(earsRoot)) Directory.Delete(earsRoot, true);
                             string earsSource = Path.Combine(earsRoot, "source");
@@ -14137,13 +14294,13 @@ namespace CapriDesktop
                             if (MouthCell(now, idle) != -1 || speech != null) throw new Exception("Mouth kept going after the audio ended.");
                             Begin(++asking, line, TalkState.Talking, tone);
                             if (Math.Abs(pace - Math.Max(8, line.Length / Voice.Seconds(tone))) > 0.01 || mouths == null) throw new Exception("Audio that came back in time did not pace her typing.");
-                            Speak = delegate(string words) { throw new VoiceException("Out of ElevenLabs credits. Pick FREE VOICE in the Mainframe."); };
+                            Speak = delegate(string words) { throw new VoiceException("Out of ElevenLabs credits. Pick PREBUILT LOCAL in the Mainframe."); };
                             Answer(++asking, "Still here.", TalkState.Talking);
                         }
                         else if (step == 4)
                         {
-                            if ((talkState != TalkState.Talking && talkState != TalkState.Online) || reply != "Still here." || mouths != null || pace != LettersPerSecond || mainframe.VoiceStatus.IndexOf("Out of ElevenLabs credits. Pick FREE VOICE in Capri Mainframe and get her free voice.", StringComparison.Ordinal) != 0 || !voiceBroke) throw new Exception("Voice failure did not fall back to text: " + mainframe.VoiceStatus);
-                            Func<string, byte[]> broke = delegate(string words) { throw new VoiceException("Out of ElevenLabs credits. Pick FREE VOICE in the Mainframe."); };
+                            if ((talkState != TalkState.Talking && talkState != TalkState.Online) || reply != "Still here." || mouths != null || pace != LettersPerSecond || mainframe.VoiceStatus.IndexOf("Out of ElevenLabs credits. Pick PREBUILT LOCAL in Capri Mainframe and get her free voice.", StringComparison.Ordinal) != 0 || !voiceBroke) throw new Exception("Voice failure did not fall back to text: " + mainframe.VoiceStatus);
+                            Func<string, byte[]> broke = delegate(string words) { throw new VoiceException("Out of ElevenLabs credits. Pick PREBUILT LOCAL in the Mainframe."); };
                             string freeHeard = null;
                             Func<string, byte[]> freeVoice = delegate(string words) { freeHeard = words; return tone; };
                             string voiceProblem;
@@ -14180,7 +14337,7 @@ namespace CapriDesktop
                             string paidRows = mainframe.VoiceTierStatus;
                             int paidCapri = mainframe.CapriRowTop;
                             talked = false;
-                            mainframe.PickVoice(false);
+                            mainframe.PickVoiceRow(1);
                             bool elevenOff = preferences.Quiet && reply == ElevenOffLine && !VoiceWorking && !mainframe.ElevenShown;
                             string freeRows = mainframe.VoiceTierStatus;
                             int freeCapri = mainframe.CapriRowTop;
@@ -14190,7 +14347,7 @@ namespace CapriDesktop
                             ToggleChat();
                             bool chatFree = chatting && local;
                             StopChat();
-                            mainframe.PickVoice(true);
+                            mainframe.PickCloudVoice("ElevenLabs");
                             bool elevenOn = !preferences.Quiet && reply == ElevenOnLine && mainframe.ElevenShown && mainframe.VoiceTierStatus == paidRows && mainframe.CapriRowTop == paidCapri;
                             voice.Key = keyWas;
                             Answer(++asking, "Talking again.", TalkState.Talking);
@@ -14199,30 +14356,30 @@ namespace CapriDesktop
                             asking++;
                             CloseTalk();
                             if (!elevenOff || !elevenSilent || !chatFree || !elevenOn || !spokeAgain) throw new Exception("The ElevenLabs switch went wrong: off " + elevenOff + ", silent " + elevenSilent + ", free chat " + chatFree + ", on " + elevenOn + ", spoke again " + spokeAgain);
-                            if (paidRows != "ELEVENLABS | key | voice id | fold 0" || freeRows != "FREE VOICE | - | free voice | fold 36" || freeCapri >= paidCapri || freeOverlap != null) throw new Exception("The VOICE rows didn't follow the pick: " + paidRows + " / " + freeRows + " / CAPRI row " + freeCapri + " vs " + paidCapri + " / " + freeOverlap);
-                            checks.Add("PASS ElevenLabs switch: picking FREE VOICE in the Mainframe stops ElevenLabs replies, and voice chat goes free, so no credits are used, she says so, the key and Voice ID rows fold away for her free voice row, and picking ELEVENLABS brings them back");
+                            if (paidRows != "CLOUD VOICE | key | voice id | fold 0" || freeRows != "PREBUILT LOCAL | - | free voice | fold 36" || freeCapri >= paidCapri || freeOverlap != null) throw new Exception("The VOICE rows didn't follow the pick: " + paidRows + " / " + freeRows + " / CAPRI row " + freeCapri + " vs " + paidCapri + " / " + freeOverlap);
+                            checks.Add("PASS ElevenLabs switch: picking PREBUILT LOCAL in the Mainframe stops ElevenLabs replies, and voice chat goes free, so no credits are used, she says so, the key and Voice ID rows fold away for her free voice row, and picking ElevenLabs under CLOUD VOICE brings them back");
                             voice.Key = null;
                             ShowVoice(false);
-                            mainframe.PickVoice(false);
+                            mainframe.PickVoiceRow(1);
                             string keylessRows = mainframe.VoiceTierStatus;
-                            mainframe.PickVoice(true);
+                            mainframe.PickCloudVoice("ElevenLabs");
                             string pendingRows = mainframe.VoiceTierStatus;
                             string pendingNote = mainframe.VoiceNoteText;
                             bool pendingQuiet = preferences.Quiet;
                             string pendingOverlap = mainframe.Overlap();
-                            mainframe.PickVoice(false);
+                            mainframe.PickVoiceRow(1);
                             voice.Key = keyWas;
                             ShowVoice(false);
-                            if (keylessRows != "FREE VOICE | - | free voice | fold 36" || pendingRows != "ELEVENLABS | key | - | fold 36" || pendingNote != "Paste your ElevenLabs key, then press Connect." || pendingQuiet || pendingOverlap != null) throw new Exception("ELEVENLABS without a key didn't open the key box: " + keylessRows + " / " + pendingRows + " / " + pendingNote + " / " + pendingOverlap);
-                            checks.Add("PASS VOICE rows without a key: FREE VOICE shows her free voice picker, and ELEVENLABS opens the key box and says to paste a key");
+                            if (keylessRows != "PREBUILT LOCAL | - | free voice | fold 36" || pendingRows != "CLOUD VOICE | key | - | fold 36" || pendingNote != "Paste your ElevenLabs key, then press Connect." || pendingQuiet || pendingOverlap != null) throw new Exception("ElevenLabs without a key didn't open the key box: " + keylessRows + " / " + pendingRows + " / " + pendingNote + " / " + pendingOverlap);
+                            checks.Add("PASS VOICE rows without a key: PREBUILT LOCAL shows her free voice picker, and ElevenLabs under CLOUD VOICE opens the key box and says to paste a key");
                             voice.Key = keyWas ?? "test-key";
                             ShowVoice(false);
                             bool offQuietWas = preferences.Quiet;
-                            mainframe.PickVoice(false);
+                            mainframe.PickVoiceRow(1);
                             string offFreeSaid = null;
                             FreeSpeak = delegate(string words) { offFreeSaid = words; return tone; };
                             talked = false;
-                            mainframe.PickSilent();
+                            mainframe.PickVoiceRow(0);
                             bool offSaid = preferences.Silent && reply == VoiceOffLine;
                             string offRows = mainframe.VoiceTierStatus;
                             int offCapri = mainframe.CapriRowTop;
@@ -14234,22 +14391,22 @@ namespace CapriDesktop
                             ToggleChat();
                             bool offChat = chatting && local;
                             StopChat();
-                            mainframe.PickVoice(true);
-                            bool backPaid = !preferences.Silent && !preferences.Quiet && mainframe.VoiceTierStatus == "ELEVENLABS | key | voice id | fold 0";
+                            mainframe.PickCloudVoice("ElevenLabs");
+                            bool backPaid = !preferences.Silent && !preferences.Quiet && mainframe.VoiceTierStatus == "CLOUD VOICE | key | voice id | fold 0";
                             asking++;
                             CloseTalk();
-                            mainframe.PickSilent();
-                            mainframe.PickVoice(false);
-                            bool backFree = !preferences.Silent && preferences.Quiet && mainframe.VoiceTierStatus == "FREE VOICE | - | free voice | fold 36";
+                            mainframe.PickVoiceRow(0);
+                            mainframe.PickVoiceRow(1);
+                            bool backFree = !preferences.Silent && preferences.Quiet && mainframe.VoiceTierStatus == "PREBUILT LOCAL | - | free voice | fold 36";
                             asking++;
                             CloseTalk();
                             FreeSpeak = null;
                             preferences.Quiet = offQuietWas;
                             voice.Key = keyWas;
                             ShowVoice(false);
-                            if (!offSaid || offRows != "OFF | - | - | fold 72" || offCapri >= freeCapri || offOverlap != null || !offQuiet || offTest != "Her voice is OFF. Pick FREE VOICE or ELEVENLABS to hear her." || !offChat || !backFree || !backPaid)
+                            if (!offSaid || offRows != "OFF | - | - | fold 72" || offCapri >= freeCapri || offOverlap != null || !offQuiet || offTest != SilentNote || !offChat || !backFree || !backPaid)
                                 throw new Exception("Turning her voice off went wrong: said " + offSaid + ", rows " + offRows + ", CAPRI row " + offCapri + " vs " + freeCapri + ", overlap " + offOverlap + ", quiet " + offQuiet + ", test " + offTest + ", chat " + offChat + ", back " + backFree + "/" + backPaid);
-                            checks.Add("PASS voice OFF: OFF under VOICE stops her talking out loud (no free voice, no ElevenLabs), folds the rows under it, voice chat stays free and she types back, Test says her voice is off, and FREE VOICE or ELEVENLABS bring her voice back");
+                            checks.Add("PASS voice OFF: OFF under VOICE stops her talking out loud (no free voice, no ElevenLabs), folds the rows under it, voice chat stays free and she types back, Test says her voice is off, and PREBUILT LOCAL or CLOUD VOICE bring her voice back");
                             if (FreeChatOn)
                             {
                                 string freeSaid = null;
@@ -14262,8 +14419,8 @@ namespace CapriDesktop
                                 FreeSpeak = null;
                                 asking++;
                                 CloseTalk();
-                                if (freeSaid != "Free voice still on.") throw new Exception("Picking FREE VOICE silenced her free voice.");
-                                checks.Add("PASS free voice with ElevenLabs off: in the tester build, picking FREE VOICE still lets her free voice talk");
+                                if (freeSaid != "Free voice still on.") throw new Exception("Picking PREBUILT LOCAL silenced her free voice.");
+                                checks.Add("PASS free voice with ElevenLabs off: in the tester build, picking PREBUILT LOCAL still lets her free voice talk");
                             }
                             if (!preferences.OnTop) ToggleOnTop();
                             ToggleOnTop();
@@ -14478,7 +14635,7 @@ namespace CapriDesktop
                             bool quietBeforeCredits = preferences.Quiet;
                             preferences.Quiet = false;
                             ChatFailed("run out of credits");
-                            if (!preferences.Quiet || mainframe.ElevenShown || !local || !earsReady || reply != "Out of ElevenLabs credits. Free voice chat is on; talk and I'll type back.") throw new Exception("The credit fallback did not switch to FREE VOICE and explain free chat: " + reply);
+                            if (!preferences.Quiet || mainframe.ElevenShown || !local || !earsReady || reply != "Out of ElevenLabs credits. Free voice chat is on; talk and I'll type back.") throw new Exception("The credit fallback did not switch to PREBUILT LOCAL and explain free chat: " + reply);
                             StopChat();
                             preferences.Quiet = quietBeforeCredits;
                             mainframe.Sync();
@@ -14982,13 +15139,13 @@ namespace CapriDesktop
                             pill.Press(2);
                             voice.Key = keyHeld;
                             preferences.Quiet = quietHeld;
-                            if (!freeRouted || chatting) throw new Exception("With a key saved and FREE VOICE picked, the wave didn't start free voice chat.");
-                            checks.Add("PASS voice chat follows the VOICE pick: with a key saved and FREE VOICE picked, the wave starts free voice chat");
+                            if (!freeRouted || chatting) throw new Exception("With a key saved and PREBUILT LOCAL picked, the wave didn't start free voice chat.");
+                            checks.Add("PASS voice chat follows the VOICE pick: with a key saved and PREBUILT LOCAL picked, the wave starts free voice chat");
                             Hearing.Run = realHearing;
                             Dictation.Make = realMake;
                             Think = realThink;
                             Speak = null;
-                            checks.Add("PASS free voice chat: with no ElevenLabs key (or FREE VOICE picked) the wave and Ctrl + Alt + V listen through Windows speech recognition, its words go to her picked brain and she answers out loud in her free voice; offline hearing ignores a blip, sends a finished line and ignores the mic while still hearing; wave ends it");
+                            checks.Add("PASS free voice chat: with no ElevenLabs key (or PREBUILT LOCAL picked) the wave and Ctrl + Alt + V listen through Windows speech recognition, its words go to her picked brain and she answers out loud in her free voice; offline hearing ignores a blip, sends a finished line and ignores the mic while still hearing; wave ends it");
                             if (realEars[0] == null) checks.Add("PASS Windows online dictation loads in this build and its dictation grammar compiles on this PC");
                             else checks.Add("LIMIT Windows online dictation did not load on this PC: " + realEars[0]);
                             if (realEars[1].StartsWith("heard ", StringComparison.Ordinal) && realEars[1].IndexOf("game", StringComparison.OrdinalIgnoreCase) >= 0) checks.Add("PASS offline Windows hearing turned a spoken test line into \"" + realEars[1].Substring(6) + "\"");

@@ -14,7 +14,7 @@ namespace CapriDesktop
         private static readonly Color Edge = Color.FromArgb(52, 60, 74);
         private static readonly Color Track = Color.FromArgb(30, 36, 46);
         private const int Wide = 380;
-        private const int Tall = 618;
+        private const int Tall = 642;
         private static readonly int[] Gaps = { 10, 15, 30, 60, 90, 120, 180, 300, 600 };
         private static readonly string[] GapNames = { "10 s", "15 s", "30 s", "1 min", "1.5 min", "2 min", "3 min", "5 min", "10 min" };
         private const int SetupHeight = 118;
@@ -43,12 +43,13 @@ namespace CapriDesktop
         private static readonly string[] WanderNames = { "Off", "Rarely", "Sometimes", "Often", "Restless" };
         private static readonly string[] Lengths = { "Short", "Medium", "Long" };
         private static readonly int[] Recalls = { 8, 16, 32 };
-        private const int VoiceHeight = 276;
+        private const int VoiceHeight = 300;
         // While her free voice or ears download, a row with the brain setup's dotted bar opens here and pushes the rest down.
-        private const int InstallAt = 419;
+        private const int InstallAt = 443;
         private const int InstallRow = 40;
-        // The ElevenLabs key row. Unless ELEVENLABS is picked with a key saved, one row under it folds away and the rest moves up.
-        private const int KeyAt = 286;
+        // CLOUD VOICE's row: its service, then ElevenLabs' key or the other service's panel. Unless ElevenLabs is picked with a
+        // key saved, one row under it folds away and the rest moves up; under the other rows, this one folds away instead.
+        private const int KeyAt = 310;
         private const int KeyFold = 36;
         private float voiceFilled = -1;
         private readonly Label installNote;
@@ -93,10 +94,20 @@ namespace CapriDesktop
         private readonly Toggle stayOnModel;
         private readonly Toggle remembering;
         private readonly Label voiceHead;
-        private readonly Rung[] voiceRungs = new Rung[3];
+        // OFF, PREBUILT LOCAL (her own voices), CUSTOM LOCAL (a voice model they set up on their PC) and CLOUD VOICE.
+        private readonly Rung[] voiceRungs = new Rung[4];
+        private int voiceRow = 1;
         private bool off;
         private bool eleven;
         private bool wantEleven;
+        private const string Eleven = "ElevenLabs";
+        private static readonly string[] Clouds = { Eleven, "Fish Audio", "OpenAI" };
+        private string cloudName = Eleven;
+        private readonly Key cloudPick;
+        private readonly ContextMenuStrip cloudMenu;
+        private readonly Key cloudVoice;
+        private readonly Key customVoice;
+        private readonly Key setUpModel;
         private int arrangedFold = -1;
         private readonly Key freeVoices;
         private readonly ContextMenuStrip freeMenu;
@@ -104,7 +115,6 @@ namespace CapriDesktop
         private readonly Key herVoice;
         private bool freeReady;
         private bool yoursShown;
-        internal const string ServerChoice = VoiceServer.Menu + "...";
         private ServerSheet sheet;
         private readonly Slider gap;
         private readonly Label gapName;
@@ -279,13 +289,12 @@ namespace CapriDesktop
             // Keys are picked in Settings, where Confirm and Cancel sit beside them.
             shortcut.Click += delegate { ShowSettings(true); PickKeys(0); };
             Lower(shortcut);
-            string[,] voiceTiers = { { "OFF", "Silent · text only" }, { "FREE VOICE", "Free · runs on your PC" }, { "ELEVENLABS", "Sounds amazing · paid" } };
+            string[,] voiceTiers = { { "OFF", "Silent · text only" }, { "PREBUILT LOCAL", "Her voices · free" }, { "CUSTOM LOCAL", "Your own model" }, { "CLOUD VOICE", "Needs a key" } };
             for (int i = 0; i < voiceRungs.Length; i++)
             {
-                bool silent = i == 0;
-                bool paid = i == 2;
+                int row = i;
                 Rung rung = new Rung();
-                // A pair of its own: a self-checking radio button would untick the BRAIN tiers too.
+                // A set of its own: a self-checking radio button would untick the BRAIN tiers too.
                 rung.AutoCheck = false;
                 rung.TabStop = true;
                 rung.Text = voiceTiers[i, 0];
@@ -293,20 +302,33 @@ namespace CapriDesktop
                 rung.Font = Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point);
                 rung.HintFont = Font;
                 rung.AccessibleName = voiceTiers[i, 0] + ", " + voiceTiers[i, 1];
-                rung.Bounds = new Rectangle(28, 208 + 24 * i, paid ? 246 : 328, 24);
-                rung.Click += delegate { if (syncing) return; if (silent) PickSilent(); else PickVoice(paid); };
+                rung.Bounds = new Rectangle(28, 208 + 24 * i, i >= 2 ? 246 : 328, 24);
+                rung.Click += delegate { if (syncing) return; PickRow(row); };
                 Controls.Add(rung);
                 voiceRungs[i] = Lower(rung);
             }
-            keyHelp = Lower(Make("Setup guide", 276, 257, 80, 22, delegate { capri.OpenKeyPage(); }));
-            keyEntry = Lower(Input(28, KeyAt, 244));
+            setUpModel = Lower(Make("Set up", 276, 257, 80, 22, delegate { OpenServer(false, null); }));
+            setUpModel.AccessibleName = "Set up your own voice model";
+            keyHelp = Lower(Make("Setup guide", 276, 281, 80, 22, delegate { CloudGuide(); }));
+            cloudMenu = Dropdown();
+            foreach (string name in Clouds)
+            {
+                string each = name;
+                cloudMenu.Items.Add(Choice(each, false, delegate { PickCloud(each); }));
+            }
+            cloudPick = Lower(Make(Eleven, 28, KeyAt, 100, 28, delegate { cloudMenu.Show(cloudPick, new Point(0, cloudPick.Height)); }));
+            cloudPick.Chevron = true;
+            cloudPick.AccessibleName = "Cloud voice service";
+            keyEntry = Lower(Input(136, KeyAt, 136));
             keyEntry.Box.UseSystemPasswordChar = true;
             keyEntry.Box.AccessibleName = "ElevenLabs API key";
             connect = Lower(Make("Connect", 280, KeyAt, 76, 28, delegate { Connect(); }));
             keyEntry.Box.TextChanged += delegate { Relabel(); };
             keyEntry.Box.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Connect(); } };
+            // Fish Audio and OpenAI keep their key, voice and model in the voice model panel.
+            cloudVoice = Lower(Make("", 136, KeyAt, 220, 28, delegate { OpenServer(true, CloudApi(cloudName)); }));
             voiceMenu = Dropdown();
-            voiceEntry = Lower(Input(28, 322, 196));
+            voiceEntry = Lower(Input(28, 346, 196));
             voiceEntry.Chevron = true;
             voiceEntry.Cue = "Voice ID";
             voiceEntry.Box.AccessibleName = "ElevenLabs voice ID";
@@ -314,26 +336,31 @@ namespace CapriDesktop
             voiceEntry.Box.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; capri.ChooseVoice(voiceEntry.Box.Text); } };
             voiceEntry.Box.Leave += delegate { capri.ChooseVoice(voiceEntry.Box.Text); };
             speechModelMenu = Dropdown();
-            speechModels = Lower(Make("Default model", 232, 322, 124, 28, delegate { speechModelMenu.Show(speechModels, new Point(0, speechModels.Height)); }));
+            speechModels = Lower(Make("Default model", 232, 346, 124, 28, delegate { speechModelMenu.Show(speechModels, new Point(0, speechModels.Height)); }));
             speechModels.Chevron = true;
             freeMenu = Dropdown();
-            freeVoices = Lower(Make("Free voice: Her own", 28, 322, 196, 28, delegate { freeMenu.Show(freeVoices, new Point(0, freeVoices.Height)); }));
+            freeVoices = Lower(Make("Free voice: Her own", 28, 346, 196, 28, delegate { freeMenu.Show(freeVoices, new Point(0, freeVoices.Height)); }));
             freeVoices.Chevron = true;
             freeVoices.Visible = false;
-            freeSetup = Lower(Make("Get free voice", 232, 322, 124, 28, delegate { if (capri.SettingUpVoice) capri.CancelFreeVoice(); else capri.SetUpFreeVoice(); }));
+            // CUSTOM LOCAL's model in use. Its panel offers only what runs on their PC.
+            customVoice = Lower(Make("Voice model", 28, 346, 328, 28, delegate { OpenServer(false, null); }));
+            customVoice.Chevron = true;
+            customVoice.AccessibleName = "Your voice model";
+            customVoice.Visible = false;
+            freeSetup = Lower(Make("Get free voice", 232, 346, 124, 28, delegate { if (capri.SettingUpVoice) capri.CancelFreeVoice(); else capri.SetUpFreeVoice(); }));
             freeSetup.Accent = Look.Cyan;
             freeSetup.Loud = true;
             freeSetup.Visible = false;
             // One click from their voice back to hers, in the same spot as Get free voice, which only shows before her free voice is in.
-            herVoice = Lower(Make("Her voice", 232, 322, 124, 28, delegate { capri.UseHerVoice(); }));
+            herVoice = Lower(Make("Her voice", 232, 346, 124, 28, delegate { capri.UseHerVoice(); }));
             herVoice.AccessibleName = "Back to her own HD voice";
             herVoice.Visible = false;
             micMenu = Dropdown();
-            mics = Lower(Make("Mic: default", 28, 358, 244, 28, delegate { ShowMics(); }));
+            mics = Lower(Make("Mic: default", 28, 382, 244, 28, delegate { ShowMics(); }));
             mics.Chevron = true;
             mics.AccessibleName = "Microphone";
-            Lower(Make("Test", 280, 358, 76, 28, delegate { capri.TestVoice(); }));
-            muteShortcut = Lower(Caption("Ctrl + Alt + N mutes mic", 28, 393, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim));
+            Lower(Make("Test", 280, 382, 76, 28, delegate { capri.TestVoice(); }));
+            muteShortcut = Lower(Caption("Ctrl + Alt + N mutes mic", 28, 417, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim));
             muteShortcut.Cursor = Cursors.Hand;
             muteShortcut.Click += delegate { ShowSettings(true); PickKeys(1); };
             Deactivate += delegate { CancelKeys(); };
@@ -967,9 +994,18 @@ namespace CapriDesktop
 
         internal void FlipRemembering() { remembering.Checked = !remembering.Checked; }
 
-        internal bool ElevenShown { get { return voiceRungs[2].Checked && !voiceRungs[1].Checked && !voiceRungs[0].Checked; } }
+        internal bool ElevenShown { get { return voiceRow == 3 && cloudName == Eleven && voiceRungs[3].Checked && !voiceRungs[0].Checked && !voiceRungs[1].Checked && !voiceRungs[2].Checked; } }
 
-        internal string VoiceTierStatus { get { return (off ? "OFF" : ElevenShown ? "ELEVENLABS" : "FREE VOICE") + " | " + (eleven && !off ? "key" : "-") + " | " + (off ? "-" : !eleven ? "free voice" : keySaved ? "voice id" : "-") + " | fold " + arrangedFold; } }
+        // The VOICE row picked, what its two rows show and how far the rest folds up, for the smoke test.
+        internal string VoiceTierStatus
+        {
+            get
+            {
+                string[] names = { "OFF", "PREBUILT LOCAL", "CUSTOM LOCAL", "CLOUD VOICE" };
+                bool elevenLabs = voiceRow == 3 && cloudName == Eleven;
+                return names[voiceRow] + " | " + (voiceRow != 3 ? "-" : elevenLabs ? "key" : cloudName) + " | " + (voiceRow == 1 ? "free voice" : voiceRow == 2 ? "voice model" : elevenLabs && keySaved ? "voice id" : "-") + " | fold " + arrangedFold;
+            }
+        }
 
         internal string Overlap()
         {
@@ -1218,25 +1254,79 @@ namespace CapriDesktop
 
         internal int CapriRowTop { get { return showHide.Top; } }
 
-        // OFF folds both rows under the VOICE rows away. FREE VOICE shows her free voice picker. ELEVENLABS shows the key box, then the Voice ID and model once a key is saved.
-        private int Fold { get { return off ? 2 * KeyFold : eleven && keySaved ? 0 : KeyFold; } }
+        // OFF folds both rows under the VOICE rows away. PREBUILT LOCAL shows her voice picker and CUSTOM LOCAL their model, in the
+        // second row. CLOUD VOICE shows its service in the first, with ElevenLabs' key box, then its Voice ID and model once a key is saved.
+        private int Fold { get { return off ? 2 * KeyFold : voiceRow == 3 && cloudName == Eleven && keySaved ? 0 : KeyFold; } }
 
         private void VoiceTier()
         {
             off = capri.Silent;
             eleven = keySaved ? capri.Speaking : wantEleven;
-            voiceRungs[0].Checked = off;
-            voiceRungs[1].Checked = !off && !eleven;
-            voiceRungs[2].Checked = !off && eleven;
-            keyEntry.Visible = eleven && !off;
-            connect.Visible = eleven && !off;
-            voiceEntry.Visible = eleven && keySaved && !off;
-            speechModels.Visible = eleven && keySaved && !off;
-            freeVoices.Visible = !eleven && !off;
-            freeSetup.Visible = !eleven && !off && !freeReady;
-            herVoice.Visible = !eleven && !off && freeReady && yoursShown;
+            bool served = !off && !eleven && capri.ServerPicked, inCloud = served && capri.ServerInCloud;
+            if (eleven) cloudName = Eleven;
+            else if (inCloud) cloudName = capri.ServerCloudName;
+            voiceRow = off ? 0 : eleven || inCloud ? 3 : served ? 2 : 1;
+            for (int i = 0; i < voiceRungs.Length; i++) voiceRungs[i].Checked = i == voiceRow;
+            bool cloud = voiceRow == 3, elevenLabs = cloud && cloudName == Eleven;
+            cloudPick.Visible = cloud;
+            cloudPick.Text = cloudName;
+            foreach (ToolStripMenuItem item in cloudMenu.Items) item.Checked = item.Text == cloudName;
+            keyEntry.Visible = elevenLabs;
+            connect.Visible = elevenLabs;
+            cloudVoice.Visible = cloud && !elevenLabs;
+            cloudVoice.Text = inCloud ? "Voice, key and model..." : "Set up " + cloudName + "...";
+            voiceEntry.Visible = elevenLabs && keySaved;
+            speechModels.Visible = elevenLabs && keySaved;
+            freeVoices.Visible = voiceRow == 1;
+            customVoice.Visible = voiceRow == 2;
+            // A model file runs on her free voice's engine, and her free voice fills in for a server that's down.
+            freeSetup.Visible = (voiceRow == 1 || voiceRow == 2) && !freeReady;
+            customVoice.Width = Scaled(freeReady ? 328 : 196);
+            herVoice.Visible = voiceRow == 1 && freeReady && yoursShown;
+            cloudPick.Invalidate();
+            cloudVoice.Invalidate();
             if (Fold != arrangedFold) Arrange(expanded);
             ShowEffects();
+        }
+
+        private void PickRow(int row)
+        {
+            if (row == 0) PickSilent();
+            else if (row == 1) { wantEleven = false; capri.UsePrebuilt(); }
+            else if (row == 2) PickModel(false, null);
+            else PickCloud(cloudName);
+        }
+
+        // ElevenLabs keeps its key, Voice ID and model in the Mainframe; Fish Audio and OpenAI open the voice model panel.
+        private void PickCloud(string name)
+        {
+            cloudName = name;
+            if (name == Eleven) PickVoice(true);
+            else PickModel(true, CloudApi(name));
+        }
+
+        // One they set up before comes back at once. Otherwise the voice model panel opens with this row's choices.
+        private void PickModel(bool cloud, string api)
+        {
+            if (capri.HasServer(cloud, api))
+            {
+                wantEleven = false;
+                capri.UseSavedServer(cloud);
+            }
+            else
+            {
+                OpenServer(cloud, api);
+                VoiceTier();
+            }
+        }
+
+        private static string CloudApi(string name) { return name == Clouds[1] ? VoiceServer.Fish : name == Clouds[2] ? VoiceServer.OpenAi : null; }
+
+        // ElevenLabs' setup guide, or the voice model panel, whose note says where Fish Audio's and OpenAI's keys come from.
+        private void CloudGuide()
+        {
+            if (cloudName == Eleven) capri.OpenKeyPage();
+            else OpenServer(true, CloudApi(cloudName));
         }
 
         // Her HD voice and their voice server keep their own robot and glitch, so those sliders show the ones for the voice she speaks with.
@@ -1275,7 +1365,8 @@ namespace CapriDesktop
         internal void ShowVoice(string tail, string voiceId, string model, VoiceListing listing)
         {
             keySaved = tail != null;
-            keyEntry.Cue = keySaved ? "Key saved, ends " + tail : "Paste ElevenLabs API key";
+            // Short, to fit beside CLOUD VOICE's menu, which already says ElevenLabs.
+            keyEntry.Cue = keySaved ? "Saved, ends " + tail : "Paste API key";
             Relabel();
             VoiceTier();
             if (!voiceEntry.Box.Focused || voiceEntry.Box.Text.Trim().Length == 0) voiceEntry.Box.Text = voiceId;
@@ -1310,10 +1401,12 @@ namespace CapriDesktop
             freeReady = ready;
             yoursShown = hd && yours;
             freeVoices.Text = "Free voice: " + (yoursShown ? "Your voice" : served ?? chosen);
+            customVoice.Text = served != null ? "Voice model: " + served : "Pick a voice model...";
             freeSetup.Text = busy ? "Cancel" : "Get free voice";
-            freeSetup.Visible = !eleven && !off && !ready;
-            herVoice.Visible = !eleven && !off && ready && yoursShown;
+            freeSetup.Visible = (voiceRow == 1 || voiceRow == 2) && !ready;
+            herVoice.Visible = voiceRow == 1 && ready && yoursShown;
             freeVoices.Width = Scaled(ready && !yoursShown ? 328 : 196);
+            customVoice.Width = Scaled(ready ? 328 : 196);
             freeMenu.Items.Clear();
             foreach (FreeStyle style in LocalVoice.Styles)
             {
@@ -1334,10 +1427,8 @@ namespace CapriDesktop
             ToolStripMenuItem pick = Choice(yours || kept ? "Pick a new clip of you..." : "Your voice (HD) · pick a clip of you...", false, delegate { PickYourVoice(); });
             pick.Enabled = hdFits;
             freeMenu.Items.Add(pick);
-            // Any other voice model: Fish Audio, OpenAI, or one they run themselves behind a server.
-            freeMenu.Items.Add(new ToolStripSeparator());
-            freeMenu.Items.Add(Choice(ServerChoice, chosen == VoiceServer.Style, delegate { OpenServer(); }));
             freeVoices.Invalidate();
+            customVoice.Invalidate();
             freeSetup.Invalidate();
             herVoice.Invalidate();
             ShowEffects();
@@ -1362,7 +1453,7 @@ namespace CapriDesktop
                 foreach (ToolStripItem item in freeMenu.Items)
                 {
                     ToolStripMenuItem choice = item as ToolStripMenuItem;
-                    if (choice != null && choice.Text != ServerChoice && (choice.Text.StartsWith("HD ", StringComparison.Ordinal) || choice.Text.IndexOf("you", StringComparison.OrdinalIgnoreCase) >= 0)) items.Add(choice.Text + (choice.Checked ? " (picked)" : ""));
+                    if (choice != null && (choice.Text.StartsWith("HD ", StringComparison.Ordinal) || choice.Text.IndexOf("you", StringComparison.OrdinalIgnoreCase) >= 0)) items.Add(choice.Text + (choice.Checked ? " (picked)" : ""));
                 }
                 return freeVoices.Text + " | " + (herVoice.Visible ? herVoice.Text : "-") + " | " + string.Join(", ", items.ToArray());
             }
@@ -1393,15 +1484,28 @@ namespace CapriDesktop
             }
         }
 
-        // Any voice model: a ready-made choice or their own server, its address, model, voice and key, in a panel of its own over
-        // the Mainframe.
-        private void OpenServer()
+        // CUSTOM LOCAL's voice model, or CLOUD VOICE's Fish Audio or OpenAI: its address, model, voice and key, in a panel of its own
+        // over the Mainframe with only that row's choices.
+        private void OpenServer(bool cloud, string api)
         {
             if (sheet == null || sheet.IsDisposed) sheet = new ServerSheet(this);
-            sheet.Fill(capri.ServerSaved, capri.ServerApi, capri.ServerUrl, capri.ServerModel, capri.ServerSpeaker, capri.ServerKeyTail);
+            sheet.Fill(cloud, api);
             if (!sheet.Visible) sheet.Show(this);
             sheet.Activate();
         }
+
+        // The VOICE rows and CLOUD VOICE's service menu as they'd click them, and CUSTOM LOCAL's Set up, for the smoke test.
+        internal void PickVoiceRow(int row) { PickRow(row); }
+
+        internal void PickCloudVoice(string name) { PickCloud(name); }
+
+        internal void SetUpCustom() { OpenServer(false, null); }
+
+        internal void SetUpCloud() { OpenServer(true, CloudApi(cloudName)); }
+
+        internal string ServerChoices { get { return sheet.Choices; } }
+
+        internal string CloudShown { get { return (cloudPick.Visible ? cloudPick.Text : "-") + " | " + (cloudVoice.Visible ? cloudVoice.Text : "-") + " | " + (customVoice.Visible ? customVoice.Text : "-"); } }
 
         // Their voice server's panel for the smoke test: what it shows, typing into it, its choices and buttons, and a picture of it.
         internal string ServerShown { get { return sheet == null || sheet.IsDisposed || !sheet.Visible ? "-" : sheet.Showing; } }
@@ -1926,11 +2030,12 @@ namespace CapriDesktop
             }
         }
 
-        // Any voice model: a ready-made choice like Fish Audio, or their own server. Its address, an optional model, voice and key,
-        // Test, and Use this server.
+        // A voice model for CUSTOM LOCAL or CLOUD VOICE: a ready-made choice like Fish Audio, or their own server. Its address, an
+        // optional model, voice and key, Test, and Use this server.
         private sealed class ServerSheet : Form
         {
             private readonly Mainframe owner;
+            private readonly Label title;
             private readonly Label hint;
             private readonly Key service;
             private readonly ContextMenuStrip services;
@@ -1968,18 +2073,13 @@ namespace CapriDesktop
                 ForeColor = Look.Ink;
                 DoubleBuffered = true;
                 ClientSize = new Size(Wide, 420);
-                Caption(VoiceServer.Menu.ToUpperInvariant() + " >", 28, 22, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
+                title = Caption("", 28, 22, Look.Mono(9f, FontStyle.Bold, GraphicsUnit.Point), Look.Yellow);
                 Key shut = Make("", 330, 20, 26, 22, delegate { Close(); });
                 shut.Glyph = 2;
                 shut.AccessibleName = "Close";
                 hint = Caption("", 28, 48, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
                 Caption("Voice from", 28, 112, Font, Look.Dim);
                 services = owner.Dropdown();
-                foreach (VoiceServer.Service choice in VoiceServer.Services)
-                {
-                    VoiceServer.Service each = choice;
-                    services.Items.Add(Choice(each.Name, false, delegate { Pick(each, true); }));
-                }
                 service = Make(picked.Name, 28, 132, 328, 28, delegate { services.Show(service, new Point(0, service.Height)); });
                 service.Chevron = true;
                 service.AccessibleName = "Voice from";
@@ -1996,7 +2096,7 @@ namespace CapriDesktop
                 keyName = Caption("Key", 28, 280, Font, Look.Dim);
                 key = Input(28, 300, 244, "Optional", "Key. It goes only to this server, as a Bearer key");
                 key.Box.UseSystemPasswordChar = true;
-                forget = Make("Forget", 280, 300, 76, 28, delegate { owner.capri.ForgetServerKey(); savedTail = null; Kept(); Say("Key forgotten.", false); });
+                forget = Make("Forget", 280, 300, 76, 28, delegate { owner.capri.ForgetServerKey(savedUrl, savedApi); savedTail = null; Kept(); Say("Key forgotten.", false); });
                 forget.Accent = Look.Red;
                 // A model file has no key; Browse takes its place.
                 browse = Make("Browse...", 28, 300, 150, 28, delegate { Browse(); });
@@ -2010,22 +2110,43 @@ namespace CapriDesktop
                 note = Caption("", 28, 384, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
             }
 
-            // What's saved, or Fish Audio ready to go. A saved key shows only its last four characters.
-            internal void Fill(bool saved, string api, string address, string name, string voice, string tail)
+            // CUSTOM LOCAL's choices or CLOUD VOICE's, with what they set up for that row, or else the service asked for ready to go.
+            // A saved key shows only its last four characters.
+            internal void Fill(bool cloud, string wanted)
             {
+                string api, address, name, voice, tail;
+                bool saved = owner.capri.SavedServer(cloud, out api, out address, out name, out voice, out tail);
+                Text = cloud ? "Cloud voice" : "Custom local voice";
+                title.Text = (cloud ? "CLOUD VOICE" : "CUSTOM LOCAL") + " >";
+                for (int i = services.Items.Count - 1; i >= 0; i--) services.Items[i].Dispose();
+                foreach (VoiceServer.Service choice in VoiceServer.Services)
+                {
+                    VoiceServer.Service each = choice;
+                    if (Cloudy(each) == cloud) services.Items.Add(Choice(each.Name, false, delegate { Pick(each, true); }));
+                }
                 savedUrl = saved ? address : null;
                 savedApi = api;
                 savedTail = tail;
                 key.Box.Text = "";
-                if (saved)
+                if (saved && (wanted == null || api == wanted))
                 {
                     url.Box.Text = address ?? "";
                     model.Box.Text = name ?? "";
                     speaker.Box.Text = voice ?? "";
                     Pick(VoiceServer.Find(api, address), false);
                 }
-                else Pick(VoiceServer.Services[0], true);
+                else Pick(First(cloud, wanted), true);
                 Say("", false);
+            }
+
+            private static bool Cloudy(VoiceServer.Service choice) { return choice.Url != null && VoiceServer.InCloud(choice.Url, choice.Api); }
+
+            // The row's first choice, or in the cloud the one with that API.
+            private static VoiceServer.Service First(bool cloud, string wanted)
+            {
+                foreach (VoiceServer.Service choice in VoiceServer.Services)
+                    if (Cloudy(choice) == cloud && (wanted == null || choice.Api == wanted)) return choice;
+                return VoiceServer.Services[0];
             }
 
             // A ready-made choice fills in its address, model and voice. The last one, any server, keeps what's typed. A model file
@@ -2214,6 +2335,7 @@ namespace CapriDesktop
 
             private void Use()
             {
+                owner.wantEleven = false;
                 owner.capri.UseVoiceServer(url.Box.Text, model.Box.Text, speaker.Box.Text, key.Box.Text, picked.Api);
                 Close();
             }
@@ -2221,6 +2343,17 @@ namespace CapriDesktop
             internal string Showing { get { return picked.Name + " | " + url.Box.Text + " | " + model.Box.Text + " | " + speaker.Box.Text + " | " + key.Cue + " | " + (forget.Visible ? "Forget" : "-") + " | " + note.Text; } }
 
             internal string Fields { get { return place.Text + " | " + modelName.Text + " | " + voiceName.Text + " | " + (key.Visible ? "Key" : "no key") + " | " + (browse.Visible ? browse.Text : "-"); } }
+
+            // Its title and the choices in its Voice from menu, for the smoke test.
+            internal string Choices
+            {
+                get
+                {
+                    List<string> names = new List<string>();
+                    foreach (ToolStripItem item in services.Items) names.Add(item.Text);
+                    return title.Text + " | " + string.Join(", ", names.ToArray());
+                }
+            }
 
             internal void Type(string address, string name, string voice, string secret)
             {

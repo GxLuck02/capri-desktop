@@ -196,7 +196,7 @@ namespace CapriDesktop
         internal const string Rejected = "ElevenLabs rejected the key. Press Forget, paste a new one.";
         internal const string RejectedNew = "ElevenLabs rejected that key. Copy it again from ElevenLabs and paste it.";
 
-        internal const string Restricted = "ElevenLabs has restricted your account, so her voice can't connect. Sign in at elevenlabs.io to see why, or pick FREE VOICE in the Mainframe.";
+        internal const string Restricted = "ElevenLabs has restricted your account, so her voice can't connect. Sign in at elevenlabs.io to see why, or pick PREBUILT LOCAL in the Mainframe.";
 
         internal static string Unsaved(string problem) { return problem == Rejected ? RejectedNew : problem; }
 
@@ -209,7 +209,7 @@ namespace CapriDesktop
         internal static string Explain(int status, string detail)
         {
             detail = detail ?? "";
-            if (detail.Contains("quota_exceeded")) return "Out of ElevenLabs credits. Pick FREE VOICE in the Mainframe.";
+            if (detail.Contains("quota_exceeded")) return "Out of ElevenLabs credits. Pick PREBUILT LOCAL in the Mainframe.";
             if (detail.Contains("account_restricted")) return Restricted;
             if (detail.Contains("missing_permissions")) return "Key is missing permissions. Make a new ElevenLabs key with Restrict key turned off.";
             if (detail.Contains("voice_not_found")) return "Voice not found. Add it to your ElevenLabs voices.";
@@ -2608,6 +2608,7 @@ namespace CapriDesktop
         internal const string Files = "file";
         internal const string FishCloud = "https://api.fish.audio";
         internal const string FishFree = "s2.1-pro-free";
+        internal const string OpenAiCloud = "https://api.openai.com/v1";
         internal const string Theirs = "Your voice server";
         // How long a server has to start answering a line, in milliseconds, before her free voice says it.
         internal static int Patience = 20000;
@@ -2633,7 +2634,7 @@ namespace CapriDesktop
                 "Fish Speech running on your PC with tools/api_server.py. Voice is a reference ID you added to it, or blank."),
             new Service("Kokoro · on your PC", OpenAi, Address, "kokoro", "af_heart", "Optional", "Optional",
                 "Kokoro-FastAPI running on your PC, with voices like af_heart, af_bella and am_adam."),
-            new Service("OpenAI · cloud", OpenAi, "https://api.openai.com/v1", "gpt-4o-mini-tts", "marin", "Optional", "Paste your OpenAI key",
+            new Service("OpenAI · cloud", OpenAi, OpenAiCloud, "gpt-4o-mini-tts", "marin", "Optional", "Paste your OpenAI key",
                 "OpenAI's voices with your OpenAI key: marin, cedar, coral, alloy and more."),
             new Service("Any OpenAI-style server", OpenAi, null, null, null, "Optional", "Optional",
                 "Any speech model you run whose server speaks OpenAI's speech API, like Qwen3-TTS through vLLM-Omni, AllTalk or LocalAI.")
@@ -2641,6 +2642,15 @@ namespace CapriDesktop
 
         // The APIs she knows; anything else is OpenAI's.
         internal static string Known(string api) { return api == Fish || api == Files ? api : OpenAi; }
+
+        // Fish Audio's and OpenAI's own servers go under CLOUD VOICE. A model file and any server they run go under CUSTOM LOCAL.
+        internal static bool InCloud(string url, string api)
+        {
+            api = Known(api);
+            return api == Fish ? Same(url, Fish, FishCloud, Fish) : api == OpenAi && Same(url, OpenAi, OpenAiCloud, OpenAi);
+        }
+
+        internal static string CloudName(string api) { return Known(api) == Fish ? "Fish Audio" : "OpenAI"; }
 
         internal sealed class Service
         {
@@ -2977,7 +2987,7 @@ namespace CapriDesktop
                 if (status == 404 && name == "Fish Audio") throw new VoiceException("Fish Audio can't find that voice (HTTP 404). Check its ID or link on fish.audio.");
                 if (status == 404) throw new VoiceException(name + " has no " + endpoint.AbsolutePath + " (HTTP 404). Check its address.");
                 if (status == 429) throw new VoiceException(name + " is busy (HTTP 429). Try again in a moment.");
-                if (status == 401 || status == 403) throw new VoiceException(string.IsNullOrEmpty(key) ? name + " wants a key (HTTP " + status + "). Add it under " + Menu + "." : name + " turned down its key (HTTP " + status + ").");
+                if (status == 401 || status == 403) throw new VoiceException(string.IsNullOrEmpty(key) ? name + " wants a key (HTTP " + status + "). Add it under " + (theirs ? "CUSTOM LOCAL > Set up" : "CLOUD VOICE") + "." : name + " turned down its key (HTTP " + status + ").");
                 // Fish Audio's paid models answer 402 on an account with no credit. Its free tier is a model of its own.
                 if (status == 402 && name == "Fish Audio" && model != FishFree) throw new VoiceException("Fish Audio wants credit for " + (string.IsNullOrEmpty(model) ? "its usual model" : model) + " (HTTP 402). For its free tier, set Model to " + FishFree + ".");
                 throw new VoiceException(name + " said HTTP " + status + (detail.Length > 0 ? ": " + Voice.Short(detail) : "."));
