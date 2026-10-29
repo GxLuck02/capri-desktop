@@ -45,6 +45,10 @@ namespace CapriDesktop
         private bool blinked;
         private bool slept;
         private int napStage;
+        private int moveStage;
+        private PixelPoint moveTo;
+        private Screen moveFrom;
+        private readonly List<string> moveLines = new List<string>();
         private double noticedBefore = -1;
         private bool poppedAgain;
         private bool hushGlance;
@@ -642,6 +646,32 @@ namespace CapriDesktop
                 string notesPath = pet.OpenNotes();
                 if (saved != "Saved to my notes: They love Hollow Knight." || kept != "- They love Hollow Knight" || forgot != "Forgot my note about hollow knight." || Brain.Notes() != "" || notesPath == null || !File.ReadAllText(notesPath).StartsWith("# What Capri remembers", StringComparison.Ordinal)) throw new Exception("Her notes didn't work: " + saved + " / " + kept + " / " + forgot);
                 checks.Add("PASS notes: remember and forget save to me.md here too, and Open her notes makes the file");
+                pet.GetToKnow();
+                bool meetAsked = pet.GettingToKnow && pet.Talk.Typing && pet.Talk.Reply == Meeting.AskName;
+                pet.Talk.Submit("hey");
+                bool meetNudged = pet.Talk.Typing && pet.Talk.Reply == Meeting.AskCalled;
+                pet.Talk.Submit("call me Lachy!!");
+                bool meetNamed = Brain.Nickname == "Lachy" && pet.Saved.Nickname == "Lachy" && pet.Talk.Typing && pet.Talk.Reply == "Nice to meet you, Lachy. " + Meeting.AskPronouns;
+                pet.Talk.Submit("she");
+                bool meetPronouns = pet.Talk.Typing && pet.Talk.Reply == "Got it. " + Meeting.AskInto;
+                pet.Talk.Submit("I'm into Cyberpunk, Roblox and drawing");
+                string meetNotes = Brain.Notes();
+                bool meetKept = !pet.GettingToKnow && meetNotes == "- Name: Lachy\n- Pronouns: she/her\n- Into: Cyberpunk, Roblox and drawing" && pet.Talk.Reply == "Love that, Lachy. It's all in my notes now, me.md. " + Meeting.Again && Brain.Remembered().IndexOf("match words like girl, boy or choom", StringComparison.Ordinal) >= 0;
+                pet.GetToKnow();
+                pet.Talk.Submit("skip");
+                bool meetSkipped = pet.Talk.Reply == Meeting.AskPronouns;
+                pet.Talk.Submit("they/them");
+                pet.Talk.Submit("stop");
+                bool meetStopped = !pet.GettingToKnow && Brain.Notes() == "- Name: Lachy\n- Pronouns: they/them\n- Into: Cyberpunk, Roblox and drawing" && Brain.Nickname == "Lachy" && pet.Talk.Reply == "No worries. What you told me is in my notes, me.md. " + Meeting.Again;
+                pet.GetToKnow();
+                pet.Talk.Submit("remember I'm learning guitar");
+                bool meetHandedOn = !pet.GettingToKnow && pet.Talk.Reply == "Saved to my notes: They're learning guitar.";
+                Brain.Unnote("everything");
+                pet.SetNickname("choom");
+                pet.Talk.Dismiss();
+                if (!meetAsked || !meetNudged || !meetNamed || !meetPronouns || !meetKept || !meetSkipped || !meetStopped || !meetHandedOn)
+                    throw new Exception("Getting to know them went wrong: asked " + meetAsked + ", nudged " + meetNudged + ", named " + meetNamed + ", pronouns " + meetPronouns + ", kept " + meetKept + " (" + meetNotes.Replace("\n", " | ") + "), skipped " + meetSkipped + ", stopped " + meetStopped + ", handed on " + meetHandedOn);
+                checks.Add("PASS getting to know you: Settings > Get to know me asks what to call them, their pronouns and what they're into in her typing box, writes them to me.md and calls them by their name; skip, stop and asking again work, and something for her to do ends it and is heard as usual");
                 string today = Path.Combine(Brain.TranscriptPath, DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) + ".md");
                 Brain.Transcribe("You", "we finally beat the smoke boss");
                 bool transcribed = File.Exists(today) && File.ReadAllText(today).Contains("You:** we finally beat the smoke boss");
@@ -693,6 +723,14 @@ namespace CapriDesktop
                 if (pet.Talk.Reply != Pet.Offline) throw new Exception("No brain didn't explain how to get one: " + pet.Talk.Reply);
                 checks.Add("PASS no brain: she says to install Ollama and pull a model");
                 pet.Talk.Dismiss();
+                pet.Hear("dance for me");
+                bool brainlessDance = pet.Dancing && pet.Talk.Reply == "Dancing. Tell me to stop when you've had enough.";
+                pet.Talk.Dismiss();
+                pet.Hear("stop dancing");
+                bool brainlessStop = !pet.Dancing && pet.Talk.Reply == "Stopped dancing.";
+                pet.Talk.Dismiss();
+                if (!brainlessDance || !brainlessStop) throw new Exception("Her dance needed a brain: " + brainlessDance + ", " + brainlessStop + ", " + pet.Talk.Reply);
+                checks.Add("PASS her own moves without a brain: \"dance for me\" and \"stop dancing\" work with no brain set up, like her nap and \"teleport here\"");
                 pet.Think = delegate(string words) { return words == "hey" ? "Just vibing, choom." : "wrong words"; };
                 pet.Talk.Pill.Press(1);
                 if (!pet.Talk.Typing) throw new Exception("The pencil didn't open the typing box.");
@@ -833,6 +871,7 @@ namespace CapriDesktop
                     slept = true;
                 }
                 if (!Napped()) return false;
+                if (!Moved()) return false;
                 if (!cover.HasExited) return false;
                 shelfSpot = Near(new PixelRect(shelfAsked.X + dx, shelfAsked.Y + dy, shelfAsked.Width, shelfAsked.Height), true);
                 if (shelfSpot == null) return false;
@@ -1310,6 +1349,104 @@ namespace CapriDesktop
             if (!talkWoke) throw new Exception("Talking to her didn't wake her from a nap.");
             checks.Add("PASS nap on demand: \"go to sleep\" waits for her line, then she sleeps through the mouse and keyboard, Asleep on Discord, until a click, her menu's Wake up, \"wake up\" or talking to her");
             napStage = 4;
+            return true;
+        }
+
+        private string Self(string tool, string what, string which = null)
+        {
+            string line = Hands.Do(tool, tool == "animate" ? new ToolArguments { Name = what } : new ToolArguments { Action = what, Screen = which });
+            moveLines.Add(line);
+            return line;
+        }
+
+        // Her own moves and animations, in stages so her glitches can play out: "teleport here" puts her hip on the mouse, she
+        // sits, stands, hangs and lets go where she is, goes to another screen when there is one, a hide waits for her line, and
+        // her animations play by name.
+        private bool Moved()
+        {
+            if (moveStage >= 5) return true;
+            if (moveStage == 0)
+            {
+                if (!pet.Upright) return false;
+                PixelRect work = Work();
+                moveTo = new PixelPoint(work.X + work.Width / 2, work.Y + work.Height / 2);
+                pet.MouseAt = delegate { return moveTo; };
+                if (Self("move_yourself", "come_here") != "Teleporting to your mouse." || !pet.Leaving) throw new Exception("\"Teleport here\" didn't glitch her out.");
+                moveStage = 1;
+                return false;
+            }
+            if (moveStage == 1)
+            {
+                if (pet.Leaving) return false;
+                if (pet.Hip != moveTo || !pet.Arriving) throw new Exception("\"Teleport here\" didn't glitch her in on the mouse: " + pet.Hip + " for " + moveTo);
+                Self("move_yourself", "sit");
+                bool sat = pet.Seat != null && pet.Seat.Free && pet.Hip == moveTo;
+                Self("move_yourself", "sit");
+                Self("move_yourself", "stand_up");
+                bool stood = pet.Seat == null && pet.Playing == "glitch";
+                Self("move_yourself", "hang");
+                bool hung = pet.Hanging && pet.Playing == "dangle" && pet.HangChoice == "Let go";
+                Self("move_yourself", "stand_up");
+                bool letGo = !pet.Hanging;
+                Self("move_yourself", "ride_cursor");
+                Self("move_yourself", "move_mainframe", "other");
+                Self("animate", "glitch");
+                bool glitched = pet.Playing == "glitch";
+                Self("animate", "grin");
+                bool grinned = pet.Playing == "grin";
+                Self("animate", "blink");
+                bool blinked = pet.Playing == "idle" && pet.Blinking;
+                Self("animate", "dance");
+                bool danced = pet.Dancing && pet.Doing != "Dancing to music";
+                Self("animate", "stop_dancing");
+                Self("animate", "stop_dancing");
+                bool stopped = !pet.Dancing;
+                Self("animate", "idle");
+                if (!sat || !stood || !hung || !letGo || !glitched || !grinned || !blinked || !danced || !stopped || pet.Playing != "idle")
+                    throw new Exception("Her moves or animations went wrong: sat " + sat + ", stood " + stood + ", hung " + hung + ", let go " + letGo + ", glitched " + glitched + ", grinned " + grinned + ", blinked " + blinked + ", danced " + danced + ", stopped " + stopped + " / " + string.Join(" / ", moveLines));
+                moveFrom = pet.ScreenHere();
+                string other = Self("move_yourself", "other_screen");
+                if (pet.Screens.All.Count < 2)
+                {
+                    if (other != "There's no other screen to go to.") throw new Exception("With one screen, going to another said: " + other);
+                    moveStage = 3;
+                    return false;
+                }
+                if (!other.StartsWith("Moving to ", StringComparison.Ordinal) || !pet.Leaving) throw new Exception("Going to another screen didn't glitch her out: " + other);
+                moveStage = 2;
+                return false;
+            }
+            if (moveStage == 2)
+            {
+                if (pet.Leaving) return false;
+                if (pet.ScreenHere().Bounds == moveFrom.Bounds) throw new Exception("She didn't land on another screen.");
+                moveStage = 3;
+                return false;
+            }
+            if (moveStage == 3)
+            {
+                Self("move_yourself", "hide");
+                pet.Talk.Answer("(hide)", "Hiding.");
+                pet.CheckHide();
+                bool waited = !pet.Away;
+                pet.Talk.Dismiss();
+                pet.CheckHide();
+                bool hid = pet.Away;
+                Self("move_yourself", "show");
+                bool back = !pet.Away;
+                Self("move_yourself", "show");
+                if (!waited || !hid || !back) throw new Exception("Her hide went wrong: waited " + waited + ", hid " + hid + ", back " + back);
+                moveStage = 4;
+                return false;
+            }
+            if (pet.Leaving || pet.Arriving || pet.Falling) return false;
+            pet.MouseAt = null;
+            string said = string.Join(" / ", moveLines);
+            string wanted = "Teleporting to your mouse. / Sitting right here. / Already sitting. / Standing up. / Hanging right here. / Let go. / Riding your cursor is only on Windows so far. / My Mainframe is only on Windows so far. Here my settings are in my right-click menu."
+                + " / Glitched. / Grinning. / Blinked. / Dancing. Tell me to stop when you've had enough. / Stopped dancing. / I wasn't dancing. / Back to my idle. / " + moveLines[15] + " / Hiding. Pick Show her in my tray menu to bring me back. / Back. / I'm right here.";
+            if (said != wanted) throw new Exception("Her moves said the wrong things: " + said);
+            checks.Add("PASS she moves herself: \"teleport here\" glitches her hip onto the mouse, she sits, stands, hangs and lets go where she is, goes to another screen " + (pet.Screens.All.Count > 1 ? "and lands there" : "only when there is one (one here)") + ", a hide waits for her line and \"show yourself\" brings her back, riding the cursor and the Mainframe say they're Windows-only so far, and glitch, grin, blink, idle and a dance until \"stop dancing\" play by name");
+            moveStage = 5;
             return true;
         }
 

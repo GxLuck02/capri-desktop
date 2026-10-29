@@ -343,6 +343,18 @@ namespace CapriDesktop
         // asleep through the mouse and keyboard until a click, a drag, talking to her or "wake up". Quiet meanwhile.
         private bool napAsked, napping;
         private MenuItem napItem;
+        // Hang here, like on Windows: she dangles where she is until a click, a drag or "let go". A stop to her dance while music
+        // plays holds her still until the music ends, and a hide they asked for waits for her line.
+        private bool hanging, danceHeld, hideAsked;
+        private MenuItem hangItem;
+        private MenuItem screenItem;
+        // Their mouse, which "teleport here" goes to. The smoke test hands in its own.
+        internal Func<PixelPoint?> MouseAt;
+        // Getting to know them, like on Windows: on a new install it starts once she's said hello, and Settings > Get to know me
+        // starts it again.
+        private readonly Meeting meeting = new Meeting();
+        private double meetAt = -1;
+        private readonly bool fresh;
         // Ticks the tray's Quiet item when her own menu changes it.
         internal Action ShushChanged;
         // Settings > Start at login. Off until they tick it; the file is the setting.
@@ -409,6 +421,7 @@ namespace CapriDesktop
         {
             this.desktop = desktop;
             folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Capri");
+            fresh = Program.Smoke == null && !File.Exists(Path.Combine(folder, "cross.json"));
             Saved = Program.Smoke != null ? new Settings() : Load();
             LoginFile = Program.Smoke != null ? Path.Combine(Program.Smoke, OperatingSystem.IsMacOS() ? "capri.plist" : "capri.desktop") : Limbs.LoginFile();
             // A copy that moved since they ticked it takes the login entry over, so it doesn't point at the old place.
@@ -442,6 +455,8 @@ namespace CapriDesktop
             Limbs.Attach(Brain);
             Hands.Look = LookAt;
             Hands.Nap = NapTool;
+            Hands.MoveSelf = MoveTool;
+            Hands.Animate = AnimateTool;
             if (Program.Smoke == null) presence = new Presence(System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
             // A cloud key they saved thinks for her instead of Ollama, on the model they picked.
             string brainKey = ReadSecret(BrainKeyFile);
@@ -504,6 +519,7 @@ namespace CapriDesktop
                 {
                     int ticket = asking;
                     DispatcherTimer.RunOnce(() => Greet(ticket, DateTime.Now.Hour), TimeSpan.FromMilliseconds(1800));
+                    if (fresh) meetAt = Now + 4;
                 }
             };
         }
@@ -626,6 +642,7 @@ namespace CapriDesktop
             walking = false;
             seat = null;
             falling = false;
+            hanging = false;
             PixelRect area = screen.WorkingArea;
             Move(new PixelPoint(area.X + area.Width / 2 - Px(body.Size / 2), area.Y));
             Arrive();
@@ -662,6 +679,7 @@ namespace CapriDesktop
             walking = false;
             seat = null;
             falling = false;
+            hanging = false;
             Arrive();
             Raise(Now + 6);
         }
@@ -704,6 +722,8 @@ namespace CapriDesktop
                 CheckWander(now);
                 CheckMusic(now);
                 CheckNap();
+                CheckHide();
+                CheckMeet(now);
                 if (Program.Smoke == null) CheckPopIn(now);
                 if (Program.Smoke == null) CheckHome(now);
                 if (Program.Smoke == null) CheckLag(now);
@@ -724,7 +744,7 @@ namespace CapriDesktop
             {
                 if (away) return "Taking a break";
                 if (!Talk.Quiet) return "Chatting";
-                if (clip == dance || clip == perchDance) return "Dancing to music";
+                if (clip == dance || clip == perchDance) return musicOn ? "Dancing to music" : "Dancing";
                 if (clip == sleep) return "Asleep";
                 return "Hanging out";
             }
@@ -859,7 +879,7 @@ namespace CapriDesktop
             bool seated = clip == perch || clip == perchGlitch || clip == perchDance || clip == perchArrive || clip == perchLeave;
             bool perched = seat != null;
             if (perched && !seated && !walking) Play(perch);
-            if ((!perched && seated) || (clip == dangle && !dragging && !falling)) Play(idle);
+            if ((!perched && seated) || (clip == dangle && !dragging && !falling && !hanging)) Play(idle);
             int index = (int)((now - clipStart) * clip.Fps);
             if (clip == leave || clip == perchLeave) index = Math.Min(index, clip.Count - 1);
             if ((clip == glitch && index >= glitch.Count) || (clip == wake && index >= wake.Count) || (clip == grin && index >= grin.Count * 2)) { Play(idle); index = 0; }
@@ -877,8 +897,8 @@ namespace CapriDesktop
                 dropAfter = false;
                 if (seat == null && !dragging && !falling) Fall();
             }
-            bool still = !walking && !dragging && !falling && outro == null && Talk.Quiet && !napAsked && !napping;
-            bool grooving = dancing || (musicOn && !Saved.NoDance);
+            bool still = !walking && !dragging && !falling && !hanging && outro == null && Talk.Quiet && !napAsked && !napping;
+            bool grooving = dancing || (musicOn && !Saved.NoDance && !danceHeld);
             if (grooving && still && (clip == idle || clip == perch)) { Play(clip == perch ? perchDance : dance); index = 0; }
             if ((!grooving || !still) && (clip == dance || clip == perchDance)) { Play(clip == perchDance ? perch : idle); index = 0; }
             if (clip == idle || clip == perch)
@@ -968,6 +988,7 @@ namespace CapriDesktop
         {
             walking = false;
             seat = null;
+            hanging = false;
             fallTo = null;
             falling = true;
             fallSpeed = 0;
@@ -1047,6 +1068,7 @@ namespace CapriDesktop
             Halt();
             walking = false;
             seat = null;
+            hanging = false;
             coveredSince = -1;
             seatLost = -1;
             falling = false;
@@ -1058,9 +1080,35 @@ namespace CapriDesktop
         {
             Halt();
             EndWalk();
+            hanging = false;
             PixelPoint hip = Hip;
             Land(new Ledge { Left = hip.X - Px(8), Right = hip.X + Px(8), Y = hip.Y, Floor = true, Free = true });
         }
+
+        // Hang here, like on Windows: she dangles where she is until a click, a drag, "let go" or "stand up".
+        private void HangHere()
+        {
+            Halt();
+            EndWalk();
+            dropAfter = false;
+            seat = null;
+            falling = false;
+            fallTo = null;
+            hanging = true;
+            Play(dangle);
+            Save();
+        }
+
+        private void LetGo()
+        {
+            hanging = false;
+            Play(glitch);
+            Drop();
+        }
+
+        internal bool Hanging { get { return hanging; } }
+
+        internal string HangChoice { get { return hanging ? "Let go" : "Hang here"; } }
 
         private bool Opaque(Point at)
         {
@@ -1202,6 +1250,7 @@ namespace CapriDesktop
         internal void React()
         {
             napAsked = false;
+            if (hanging) { LetGo(); return; }
             // A click wakes her the gentle way, from a nap they asked for or her own doze.
             if (clip == sleep) { napping = false; Wake(); return; }
             Play(seat != null ? perchGlitch : glitch);
@@ -1224,6 +1273,7 @@ namespace CapriDesktop
             Halt();
             walking = false;
             dropAfter = false;
+            hanging = false;
             seat = null;
             fallTo = null;
             falling = false;
@@ -1267,6 +1317,8 @@ namespace CapriDesktop
             quietItem.Click += delegate { ToggleShush(); };
             sitItem = new MenuItem { Header = "Sit here" };
             sitItem.Click += delegate { if (seat != null && seat.Free) StandUp(); else SitHere(); };
+            hangItem = new MenuItem { Header = "Hang here" };
+            hangItem.Click += delegate { if (hanging) LetGo(); else HangHere(); };
             napItem = new MenuItem { Header = "Go to sleep" };
             napItem.Click += delegate { Nap(!napAsked && clip != sleep); };
             MenuItem move = new MenuItem { Header = "Move" };
@@ -1283,8 +1335,11 @@ namespace CapriDesktop
             musicItem.Click += delegate { SetDanceToMusic(Saved.NoDance); };
             move.Items.Add(musicItem);
             danceItem = new MenuItem { Header = "Dance", ToggleType = MenuItemToggleType.CheckBox };
-            danceItem.Click += delegate { Dancing = !dancing; };
+            danceItem.Click += delegate { Animate(dancing ? "stop_dancing" : "dance"); };
             move.Items.Add(danceItem);
+            screenItem = new MenuItem { Header = "Go to the next screen" };
+            screenItem.Click += delegate { MoveSelf("other_screen", null); };
+            move.Items.Add(screenItem);
             move.Items.Add(new Separator());
             MenuItem sleeps = new MenuItem { Header = "Fall asleep after" };
             for (int i = 0; i < Sleeps.Length; i++)
@@ -1351,6 +1406,9 @@ namespace CapriDesktop
             MenuItem nickname = new MenuItem { Header = "What should she call you?" };
             nickname.Click += delegate { AskNickname(); };
             settings.Items.Add(nickname);
+            MenuItem meet = new MenuItem { Header = "Get to know me" };
+            meet.Click += delegate { GetToKnow(); };
+            settings.Items.Add(meet);
             settings.Items.Add(language);
             settings.Items.Add(replies);
             settings.Items.Add(recall);
@@ -1480,6 +1538,7 @@ namespace CapriDesktop
             menu.Items.Add(talk);
             menu.Items.Add(quietItem);
             menu.Items.Add(sitItem);
+            menu.Items.Add(hangItem);
             menu.Items.Add(napItem);
             menu.Items.Add(move);
             menu.Items.Add(sizes);
@@ -1518,6 +1577,8 @@ namespace CapriDesktop
             quietItem.IsChecked = shushed;
             for (int i = 0; i < sleepPicks.Count; i++) sleepPicks[i].IsChecked = Sleeps[i] == SleepAfter;
             sitItem.Header = SitChoice;
+            hangItem.Header = HangChoice;
+            screenItem.IsVisible = Screens.All.Count > 1;
             napItem.Header = NapChoice;
             for (int i = 0; i < bubblePicks.Count; i++) bubblePicks[i].IsChecked = i == BubbleTime;
             for (int i = 0; i < volumePicks.Count; i++) volumePicks[i].IsChecked = Volumes[i] == Voice.Loudness;
@@ -1733,8 +1794,9 @@ namespace CapriDesktop
                 return resting ? "Woke up." : "Already awake.";
             }
             ComeBack();
-            if (seat != null) StandUp();
+            if (seat != null || hanging) StandUp();
             EndWalk();
+            dancing = false;
             napAsked = true;
             Sync();
             return "Going to sleep. A click on me wakes me up.";
@@ -1755,6 +1817,196 @@ namespace CapriDesktop
         }
 
         internal bool Napping { get { return napping; } }
+
+        // Her own moves, like on Windows: "teleport here" glitches her over to their mouse, "go to my other monitor" to the same
+        // spot on another screen, and she sits, stands, hangs, hides and comes back. Riding the cursor and the Mainframe are
+        // Windows-only so far.
+        internal string MoveSelf(string action, string screen)
+        {
+            if (action == "move_mainframe") return "My Mainframe is only on Windows so far. Here my settings are in my right-click menu.";
+            if (action == "ride_cursor" || action == "hop_off") return "Riding your cursor is only on Windows so far.";
+            if (action == "hide")
+            {
+                if (away) return "Already hidden.";
+                hideAsked = true;
+                return "Hiding. Pick Show her in my tray menu to bring me back.";
+            }
+            hideAsked = false;
+            if (action == "show")
+            {
+                if (!away) return "I'm right here.";
+                ComeBack();
+                return "Back.";
+            }
+            napAsked = false;
+            napping = false;
+            if (action == "come_here")
+            {
+                PixelPoint? mouse = MouseAt != null ? MouseAt() : Mouse();
+                if (mouse == null) return "Couldn't find your mouse on this desktop.";
+                Teleport(mouse.Value);
+                return "Teleporting to your mouse.";
+            }
+            if (action == "other_screen")
+            {
+                IReadOnlyList<Screen> all = Screens.All;
+                Screen from = ScreenHere();
+                int to = PickScreen(all, from, screen);
+                if (to < 0) return all.Count < 2 ? "There's no other screen to go to." : "There's no screen like that to go to.";
+                if (from != null && all[to].Bounds == from.Bounds) return "I'm already on " + ScreenName(all, to) + ".";
+                Teleport(Across(Hip, from != null ? from.WorkingArea : Area, all[to].WorkingArea));
+                return "Moving to " + ScreenName(all, to) + ".";
+            }
+            ComeBack();
+            if (action == "sit")
+            {
+                if (seat != null && seat.Free) return "Already sitting.";
+                SitHere();
+                return "Sitting right here.";
+            }
+            if (action == "stand_up")
+            {
+                if (hanging) { LetGo(); return "Let go."; }
+                if (seat == null) return "Already standing.";
+                StandUp();
+                return "Standing up.";
+            }
+            if (action == "hang")
+            {
+                if (hanging) return "Already hanging.";
+                HangHere();
+                return "Hanging right here.";
+            }
+            return "Couldn't move like that.";
+        }
+
+        private string MoveTool(string action, string screen) { return Dispatcher.UIThread.CheckAccess() ? MoveSelf(action, screen) : Dispatcher.UIThread.Invoke(new Func<string>(delegate { return MoveSelf(action, screen); })); }
+
+        // She glitches out and back in with her hip on the point, kept on its screen, then falls onto what's under her.
+        internal void Teleport(PixelPoint to)
+        {
+            PixelRect area = WorkAt(to);
+            Action arrive = delegate
+            {
+                if (quitting) return;
+                if (away) SetAway(false);
+                if (!IsVisible) { Show(); Look.OnTopAgain(this); }
+                walking = false;
+                seat = null;
+                falling = false;
+                hanging = false;
+                PixelPoint spot = Seated(to.X, to.Y);
+                int wide = Px(body.Size);
+                Move(new PixelPoint(Math.Max(area.X, Math.Min(spot.X, area.Right - wide)), Math.Max(area.Y, Math.Min(spot.Y, area.Bottom - wide))));
+                Arrive();
+                Raise(Now + 6);
+            };
+            if (away) arrive();
+            else GlitchOut(arrive, true);
+        }
+
+        // Which of their screens "next", "left", "main", "here" or "2" means, from the given one, or -1. Screens count from the left.
+        private int PickScreen(IReadOnlyList<Screen> all, Screen from, string which)
+        {
+            int[] x = new int[all.Count], y = new int[all.Count];
+            int primary = 0, current = -1, pointed = -1;
+            PixelPoint? mouse = MouseAt != null ? MouseAt() : Mouse();
+            for (int i = 0; i < all.Count; i++)
+            {
+                PixelRect bounds = all[i].Bounds;
+                x[i] = bounds.X + bounds.Width / 2;
+                y[i] = bounds.Y + bounds.Height / 2;
+                if (all[i].IsPrimary) primary = i;
+                if (from != null && bounds == from.Bounds) current = i;
+                if (mouse != null && bounds.Contains(mouse.Value)) pointed = i;
+            }
+            return Hands.PickScreen(x, y, null, primary, current, pointed, which);
+        }
+
+        private static string ScreenName(IReadOnlyList<Screen> all, int index)
+        {
+            if (all[index].IsPrimary) return "your main screen";
+            if (all.Count == 2) return "your other screen";
+            int place = 1;
+            foreach (Screen other in all) if (other.Bounds.X < all[index].Bounds.X || (other.Bounds.X == all[index].Bounds.X && other.Bounds.Y < all[index].Bounds.Y)) place++;
+            return "screen " + place;
+        }
+
+        // The same spot on another screen: as far across and down its working area as it was on the first.
+        internal static PixelPoint Across(PixelPoint at, PixelRect from, PixelRect to)
+        {
+            double across = from.Width > 0 ? Math.Max(0, Math.Min(1, (at.X - from.X) / (double)from.Width)) : 0.5;
+            double down = from.Height > 0 ? Math.Max(0, Math.Min(1, (at.Y - from.Y) / (double)from.Height)) : 0.5;
+            return new PixelPoint(to.X + (int)Math.Round(across * to.Width), to.Y + (int)Math.Round(down * to.Height));
+        }
+
+        // A hide they asked for waits until she's said her line.
+        internal void CheckHide()
+        {
+            if (!hideAsked || away || dragging || pressed || quitting || !Talk.Quiet) return;
+            hideAsked = false;
+            HideAway();
+        }
+
+        // Her animations by name, like on Windows. Her dance is her Move menu's Dance, on until "stop dancing".
+        internal string Animate(string name)
+        {
+            if (name == "stop_dancing")
+            {
+                bool was = dancing || clip == dance || clip == perchDance;
+                danceHeld = musicOn;
+                Dancing = false;
+                if (clip == dance || clip == perchDance) Play(clip == perchDance ? perch : idle);
+                return was ? "Stopped dancing." : "I wasn't dancing.";
+            }
+            napAsked = false;
+            napping = false;
+            ComeBack();
+            if (hanging) LetGo();
+            if (name == "dance")
+            {
+                danceHeld = false;
+                Dancing = true;
+                return "Dancing. Tell me to stop when you've had enough.";
+            }
+            bool perched = seat != null;
+            if (name == "idle")
+            {
+                danceHeld = musicOn;
+                Dancing = false;
+                Play(perched ? perch : idle);
+            }
+            else if (name == "glitch") Play(perched ? perchGlitch : glitch);
+            else if (name == "grin")
+            {
+                // Her grin is a standing one, so she gets up for it.
+                if (perched) StandUp();
+                Play(grin);
+            }
+            else if (name == "blink")
+            {
+                Play(perched ? perch : idle);
+                blinkWith = perched ? perchBlink : blink;
+            }
+            else return "I don't have an animation called " + name + ".";
+            return name == "idle" ? "Back to my idle." : name == "glitch" ? "Glitched." : name == "grin" ? "Grinning." : "Blinked.";
+        }
+
+        private string AnimateTool(string name) { return Dispatcher.UIThread.CheckAccess() ? Animate(name) : Dispatcher.UIThread.Invoke(new Func<string>(delegate { return Animate(name); })); }
+
+        // Which of her animations is showing, by name, for the smoke test.
+        internal string Playing
+        {
+            get
+            {
+                Clip[] named = { idle, glitch, grin, dance, perchDance, dangle, perch, perchGlitch, arrive, leave, sleep, wake };
+                string[] names = { "idle", "glitch", "grin", "dance", "perch_music", "dangle", "perch", "perch_glitch", "arrive", "leave", "sleep", "wake" };
+                int at = Array.IndexOf(named, clip);
+                return at < 0 ? "other" : names[at];
+            }
+        }
+
+        internal bool Blinking { get { return blinkWith != null; } }
 
         private bool Drowsy { get { return clip == idle && seat == null && !walking && !dragging && !pressed && !falling && outro == null && !away && !quitting && Talk.Quiet && (ContextMenu == null || !ContextMenu.IsOpen); } }
 
@@ -1873,7 +2125,11 @@ namespace CapriDesktop
             });
         }
 
-        internal void HearMusic(bool on) { musicOn = on; }
+        internal void HearMusic(bool on)
+        {
+            musicOn = on;
+            if (!on) danceHeld = false;
+        }
 
         internal void SetWander(int level)
         {
@@ -1896,6 +2152,42 @@ namespace CapriDesktop
             Saved.Nickname = Brain.Nickname;
             Save();
             Reply(++asking, NameHeard, Brain.Renamed(name));
+        }
+
+        // Get to know me, like on Windows: she asks what to call them, their pronouns and what they're into in her typing box, and
+        // writes the answers to me.md. Their name is what she calls them too.
+        internal void GetToKnow()
+        {
+            meetAt = -1;
+            ComeBack();
+            hideAsked = false;
+            ++asking;
+            Talk.AskFor("(get to know me)", meeting.Start(), Met);
+        }
+
+        internal bool GettingToKnow { get { return meeting.Asking; } }
+
+        private void Met(string said)
+        {
+            string called;
+            string next = meeting.Take(said, out called);
+            if (next == null) { Hear(said); return; }
+            if (called != null)
+            {
+                Brain.Nickname = called.Length == 0 ? null : called;
+                Saved.Nickname = Brain.Nickname;
+                Save();
+            }
+            if (meeting.Asking) { ++asking; Talk.AskFor(said, next, Met); }
+            else Reply(++asking, said, next);
+        }
+
+        // On a new install, once she's said hello and her bubble's gone, she gets to know them.
+        private void CheckMeet(double now)
+        {
+            if (meetAt < 0 || now < meetAt || away || dragging || pressed || outro != null || quitting || napAsked || napping || !Talk.Quiet) return;
+            meetAt = -1;
+            GetToKnow();
         }
 
         internal void SetLanguage(string language)
@@ -2256,6 +2548,7 @@ namespace CapriDesktop
         {
             EndWalk();
             falling = false;
+            hanging = false;
             fallTo = null;
             dropAfter = false;
             Play(seat != null ? perchLeave : leave);
@@ -2749,6 +3042,7 @@ namespace CapriDesktop
             text = (text ?? "").Trim();
             if (text.Length == 0) return;
             if (text.Length > 240) text = text.Substring(0, 240);
+            if (meeting.Asking) { Met(text); return; }
             int ticket = ++asking;
             Brain.Cancel();
             voice.Stop();
@@ -2768,6 +3062,8 @@ namespace CapriDesktop
                 Reply(ticket, text, done);
                 return;
             }
+            // Her nap, her own moves and her animations work before she has a brain, like on Windows.
+            if (Think == null && Brain.Model == null && (tool == "nap" || tool == "move_yourself" || tool == "animate")) { Reply(ticket, text, Hands.Do(tool, args)); return; }
             if (Think == null && Brain.Model == null) { Reply(ticket, text, Offline); FindBrain(); return; }
             Talk.Thinking(text);
             Ask(ticket, text, 0);

@@ -520,6 +520,7 @@ namespace CapriDesktop
         internal static string Remembered()
         {
             string notes = Notes();
+            if (notes.Length > 0 && Regex.IsMatch(notes, @"^- Pronouns:", RegexOptions.Multiline | RegexOptions.IgnoreCase)) notes += "\nGo by the pronouns in your notes, and match words like girl, boy or choom to them.";
             return (notes.Length == 0 ? "" : "\nYour notes about them, from me.md (they can read and edit it). Use them when they fit, and don't recite them:\n" + notes) + Memories() + Seen();
         }
 
@@ -594,6 +595,37 @@ namespace CapriDesktop
             }
             if (dropped == 0) return "Nothing about " + text + " in my notes.";
             return all ? "Wiped my notes about you." : "Forgot " + (dropped == 1 ? "my note" : dropped + " notes") + " about " + text + ".";
+        }
+
+        // One line per label in me.md, like "- Pronouns: she/her", put back in its place when they answer again. Getting to know
+        // you writes these. Null once it's saved, otherwise what went wrong.
+        internal static string Jot(string label, string value)
+        {
+            string text = Regex.Replace((value ?? "").Trim(), @"\s+", " ").Trim(' ', '-', ',', '"');
+            if (text.Length > 200) text = text.Substring(0, 200).TrimEnd();
+            string path = MemoryPath;
+            if (path == null) return "I can't keep notes on this computer yet.";
+            string line = "- " + label + ": " + text;
+            lock (noting)
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    string current = File.Exists(path) ? File.ReadAllText(path) : NotesHead;
+                    Regex old = new Regex(@"^[ \t]*- " + Regex.Escape(label) + @":[^\r\n]*", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+                    if (old.IsMatch(current)) current = old.Replace(current, line.Replace("$", "$$"), 1);
+                    else
+                    {
+                        if (current.Length > 8000) return "My notes are full. Clear some out in me.md first.";
+                        if (current.Length > 0 && !current.EndsWith("\n", StringComparison.Ordinal)) current += "\n";
+                        current += line + "\n";
+                    }
+                    File.WriteAllText(path, current);
+                }
+                catch (IOException) { return "Couldn't save that to my notes."; }
+                catch (UnauthorizedAccessException) { return "Couldn't save that to my notes."; }
+            }
+            return null;
         }
 
         // What she really saw on their screen, glances she kept quiet about included, so "what did you see?" gets the truth instead of "I guessed".
@@ -1922,6 +1954,129 @@ namespace CapriDesktop
             request.Timeout = timeout;
             request.ReadWriteTimeout = timeout;
             return request;
+        }
+    }
+
+    // Getting to know them, after setup or from Get to know me in her Settings: she asks what to call them, their pronouns and
+    // what they're into, one at a time in chat, and writes each answer to me.md. "Skip" passes on one and "stop" ends it. Anything
+    // that isn't an answer, like a question or something for her to do, ends it too and is heard as usual, so nothing waits on it.
+    // Shared by Windows, Mac and Linux.
+    internal sealed class Meeting
+    {
+        internal const string AskName = "Let's get to know each other, choom. What should I call you? Say skip to skip one, or stop to stop.";
+        internal const string AskCalled = "What should I call you?";
+        internal const string AskPronouns = "What are your pronouns? Like she/her, he/him or they/them.";
+        internal const string AskInto = "What are you into? Games, music, shows, anything.";
+        internal const string Again = "Get to know me in my Settings asks again any time.";
+        // A hello or an okay before they answer: she asks again.
+        private static readonly Regex Nudge = new Regex(@"^(hi|hey|hello|heya|hiya|yo|sup|wassup|what'?s up|howdy|gm|good (morning|afternoon|evening)|ok|okay|k|kk|sure|yes|yeah|yep|alright|cool|go on|go ahead|ready|let'?s go|let'?s do (it|this))(\s+(there|capri|choom))?\W*$", RegexOptions.IgnoreCase);
+        private static readonly Regex Pass = new Regex(@"^(skip|pass|next|no|nah|nope|none|nothing|not much|not really|idk|i don'?t know|dunno|not sure|rather not|i'?d rather not|prefer not to say|no thanks|no thank you|not telling)(\s+(it|this|that|one|this one|that one|please|pls|thanks|really|much|tbh|honestly|lol))*\W*$", RegexOptions.IgnoreCase);
+        private static readonly Regex Halt = new Regex(@"^(stop|quit|cancel|enough|end|done|not now|later|maybe later|another time|skip (all|everything|it all|them all|the rest)|no more( questions)?|that'?s enough|stop asking( me)?( questions)?)(\s+(please|pls|thanks))?\W*$", RegexOptions.IgnoreCase);
+        private static readonly Regex Called = new Regex(@"^(?:(?:you can |u can |just |please |pls |my friends |friends |people |everyone |most people )?call me|my (?:first |nick)?name(?:'s| is)|(?:the )?name'?s|i'?m|i am|it'?s|it is|they call me|i go by|people call me|everyone calls me)\s+(?<n>.+)$", RegexOptions.IgnoreCase);
+        private static readonly Regex Into = new Regex(@"^(?:i'?m (?:really |mostly |super )?into|i am (?:really |mostly )?into|into|i (?:really )?(?:like|love|enjoy)|mostly|probably|honestly|um+|uh+)[\s,:]+", RegexOptions.IgnoreCase);
+        private static readonly Regex Asked = new Regex(@"^\W*(what|who|how|why|when|where|which|can|could|would|will|should|do|does|did|is|are|r u|have you)\b.*\?\W*$", RegexOptions.IgnoreCase);
+        private int step = -1;
+        private bool kept, loved;
+        private string trouble;
+        private string name;
+
+        internal bool Asking { get { return step >= 0; } }
+
+        internal string Start()
+        {
+            step = 0;
+            kept = loved = false;
+            trouble = null;
+            name = null;
+            return AskName;
+        }
+
+        internal void Stop() { step = -1; }
+
+        // Her next line for what they said, or null when it isn't an answer: the meeting's over and it's heard as usual. called is
+        // what to call them when they gave a name, "" for choom.
+        internal string Take(string said, out string called)
+        {
+            called = null;
+            if (step < 0) return null;
+            string text = Regex.Replace((said ?? "").Trim(), @"\s+", " ");
+            if (text.Length == 0 || Nudge.IsMatch(text)) return Ask();
+            if (Halt.IsMatch(text)) { step = -1; return Wrap(true); }
+            // "Skip" and "next" are her music words too, so a pass is looked for first.
+            bool passed = Pass.IsMatch(text);
+            if (!passed && Elsewhere(text)) { step = -1; return null; }
+            string lead = "";
+            if (!passed)
+            {
+                if (step == 0)
+                {
+                    Match named = Called.Match(text);
+                    string typed = Regex.Replace(named.Success ? named.Groups["n"].Value : text, @"[\s,]+(please|pls|thanks|thank you|thx|lol|haha|lmao)\W*$", "", RegexOptions.IgnoreCase);
+                    if (!named.Success && Regex.Matches(typed, @"\S+").Count > 4) { step = -1; return null; }
+                    called = Brain.Nick(typed);
+                    name = called.Length == 0 ? null : called;
+                    if (name != null) Keep("Name", name);
+                    lead = name == null ? "Choom it is. " : "Nice to meet you, " + name + ". ";
+                }
+                else if (step == 1)
+                {
+                    if (Regex.Matches(text, @"\S+").Count > 6) { step = -1; return null; }
+                    Keep("Pronouns", Pronouns(text));
+                    lead = "Got it. ";
+                }
+                else
+                {
+                    string into = Regex.Replace(Into.Replace(text, ""), @"[\s,]+(lol|haha|lmao|tbh)\W*$|[?!.]+$", "", RegexOptions.IgnoreCase).Trim();
+                    loved = Keep("Into", into.Length == 0 ? text : into);
+                }
+            }
+            step++;
+            if (step < 3) return lead + Ask();
+            step = -1;
+            return Wrap(false);
+        }
+
+        private string Ask() { return step == 0 ? AskCalled : step == 1 ? AskPronouns : AskInto; }
+
+        // A question, or something for her to do, isn't an answer. What they're into can run long, so there only a real question
+        // or a quick job counts.
+        private bool Elsewhere(string text)
+        {
+            string tool;
+            ToolArguments args;
+            bool job;
+            try { job = Hands.Heard(text, out tool, out args); }
+            catch (Exception) { job = false; }
+            if (job) return true;
+            if (step == 2) return Asked.IsMatch(text);
+            return text.IndexOf('?') >= 0 || Hands.Wants(text);
+        }
+
+        private bool Keep(string label, string value)
+        {
+            if (Regex.Replace(value ?? "", @"\W", "").Length == 0) return false;
+            string problem = Brain.Jot(label, value);
+            if (problem != null) { trouble = problem; return false; }
+            kept = true;
+            return true;
+        }
+
+        private string Wrap(bool stopped)
+        {
+            string end = kept ? (stopped ? "No worries. What you told me is in my notes, me.md. " : (loved ? "Love that" : "Thanks") + (name != null ? ", " + name : "") + ". It's all in my notes now, me.md. ") : stopped ? "No worries, choom. " : "All good, choom. ";
+            return (trouble != null ? trouble + " " : "") + end + Again;
+        }
+
+        // She/her, he/him and they/them however they're typed; anything else as they wrote it.
+        internal static string Pronouns(string said)
+        {
+            string text = Regex.Replace((said ?? "").Trim().ToLowerInvariant(), @"^(my pronouns are|my pronouns|pronouns are|pronouns|i use|i go by|i'?m|i am|it'?s|use)[\s:]+", "");
+            text = Regex.Replace(Regex.Replace(text, @"^an? ", ""), @"\s*/\s*", "/").Trim(' ', '.', '!', ',');
+            if (Regex.IsMatch(text, @"^(she|her|she/her|she/hers|she/her/hers|girl|woman|female|f|fem|feminine)$")) return "she/her";
+            if (Regex.IsMatch(text, @"^(he|him|he/him|he/his|he/him/his|boy|man|guy|dude|male|m|masc|masculine)$")) return "he/him";
+            if (Regex.IsMatch(text, @"^(they|them|they/them|they/theirs|they/them/theirs|non-?binary|enby|nb)$")) return "they/them";
+            if (Regex.IsMatch(text, @"^(any|any pronouns|anything|whatever|all|any/all|all/any|don'?t (care|mind)|no preference|whatever works)$")) return "any pronouns";
+            return text.Length > 40 ? text.Substring(0, 40).TrimEnd() : text;
         }
     }
 

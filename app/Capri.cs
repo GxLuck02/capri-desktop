@@ -169,6 +169,8 @@ namespace CapriDesktop
         [DataMember] public long UpdateCheckedAt;
         [DataMember] public string Model;
         [DataMember] public bool Welcomed;
+        // She's asked to get to know them, after setup or from Settings, so setting up a new brain doesn't ask again.
+        [DataMember] public bool Met;
         [DataMember] public bool NoSitting;
         [DataMember] public bool NvidiaGlm;
         [DataMember] public string VoiceKey;
@@ -958,6 +960,17 @@ namespace CapriDesktop
         // A nap they asked for: asked until she's said her line and is free to doze off, then napping, asleep through their
         // mouse and keyboard until a click, a drag, talking to her or "wake up". Quiet the same way as her quiet key.
         private bool napAsked, napping;
+        // A dance they asked for goes on with or without music until they say stop; a stop while music plays holds her still
+        // until the music stops. A hide they asked for waits for her line, like a nap.
+        private bool danceAsked, danceHeld, hideAsked;
+        private readonly ToolStripMenuItem danceNowItem;
+        private readonly ToolStripMenuItem screenItem;
+        // Their mouse, which "teleport here" goes to. Her smoke test points it somewhere of its own.
+        internal static Func<Point> MouseAt = delegate { return Cursor.Position; };
+        // Getting to know them: after setup it starts once she's said hi with her new brain, and Get to know me in Settings starts
+        // it again.
+        private readonly Meeting meeting = new Meeting();
+        private double meetAt = -1;
         private const int BlinkFrom = 9;
         // Her perch blinks where her artist drew it: loop frames 29 to 36 (index 28 on).
         private const int PerchBlinkFrom = 28;
@@ -1066,6 +1079,8 @@ namespace CapriDesktop
             danceItem = new ToolStripMenuItem("Dance to music", null, delegate { ToggleDance(); });
             danceItem.Checked = !preferences.NoDance;
             moves.DropDownItems.Add(danceItem);
+            danceNowItem = new ToolStripMenuItem("Dance", null, delegate { Animate(danceAsked ? "stop_dancing" : "dance"); });
+            moves.DropDownItems.Add(danceNowItem);
             rideItem =new ToolStripMenuItem("Ride cursor", null, delegate { if (riding) StopRide(); else StartRide(); });
             moves.DropDownItems.Add(rideItem);
             sitItem = new ToolStripMenuItem("Sit on windows", null, delegate { ToggleSitting(); });
@@ -1078,8 +1093,10 @@ namespace CapriDesktop
             sleepItem = new ToolStripMenuItem("Go to sleep", null, delegate { Nap(!napAsked && clip != sleep); });
             moves.DropDownItems.Add(sleepItem);
             moves.DropDownItems.Add(new ToolStripMenuItem("Bring to this screen", null, delegate { RestoreAtCursor(); }));
+            screenItem = new ToolStripMenuItem("Go to the next screen", null, delegate { MoveSelf("other_screen", null); });
+            moves.DropDownItems.Add(screenItem);
             menu.Items.Add(moves);
-            menu.Opening += delegate { sitHereItem.Text = seat != null && seat.Free ? "Stand up" : "Sit here"; hangHereItem.Text = hanging ? "Let go" : "Hang here"; sleepItem.Text = napAsked || clip == sleep ? "Wake up" : "Go to sleep"; };
+            menu.Opening += delegate { sitHereItem.Text = seat != null && seat.Free ? "Stand up" : "Sit here"; hangHereItem.Text = hanging ? "Let go" : "Hang here"; sleepItem.Text = napAsked || clip == sleep ? "Wake up" : "Go to sleep"; danceNowItem.Checked = danceAsked; screenItem.Visible = Screen.AllScreens.Length > 1; };
             clickDelay = new System.Windows.Forms.Timer();
             clickDelay.Interval = Math.Max(100, SystemInformation.DoubleClickTime);
             clickDelay.Tick += delegate { OnClickDelay(); };
@@ -1121,6 +1138,8 @@ namespace CapriDesktop
             Hands.Resume = ResumeJob;
             Hands.Rename = CallThem;
             Hands.Nap = NapTool;
+            Hands.MoveSelf = MoveTool;
+            Hands.Animate = AnimateTool;
             Hands.Hush = Computer.Mask;
             Computer.Grab = HandsGrab;
             string textKey = Voice.Unprotect(preferences.TextKey);
@@ -1608,6 +1627,8 @@ namespace CapriDesktop
 
         private void CheckIdle(long quiet)
         {
+            // A hide they asked for waits until she's said her line.
+            if (hideAsked && !hidden && !dragging && !pressed && speech == null && talkState != TalkState.Thinking && talkState != TalkState.Talking && clock.Elapsed.TotalSeconds >= voiceUntil && !speaker.Busy) { hideAsked = false; SetHidden(true); return; }
             // A click, a drag or talking to her took her out of the nap they asked for.
             if (napping && clip != sleep) napping = false;
             if (napAsked && clip == idle && !dragging && !pressed && !riding && !walking && !falling && !hanging && seat == null && !onPanel
@@ -1618,6 +1639,14 @@ namespace CapriDesktop
                 StopChat();
                 Play(sleep);
                 frames.Start();
+                return;
+            }
+            // After setup, once she's said hi and her bubble's gone, she gets to know them.
+            if (meetAt >= 0 && clock.Elapsed.TotalSeconds >= meetAt && !hidden && !dragging && !pressed && !chatting && !typer.Visible && clip != sleep && !napAsked && !napping
+                && speech == null && talkState == TalkState.Off && clock.Elapsed.TotalSeconds >= voiceUntil && !speaker.Busy)
+            {
+                meetAt = -1;
+                GetToKnow();
                 return;
             }
             if (clip == sleep) { if (quiet < 1000 && !napping) Play(wake); return; }
@@ -1640,6 +1669,7 @@ namespace CapriDesktop
             if (riding) StopRide();
             if (seat != null || hanging) StandUp();
             EndWalk();
+            danceAsked = false;
             if (clip == dance || clip == perchDance) Play(idle);
             napAsked = true;
             return "Going to sleep. A click on me wakes me up.";
@@ -1647,6 +1677,249 @@ namespace CapriDesktop
 
         // Her nap tool, which her brain calls from its own thread.
         private string NapTool(bool sleeping) { return InvokeRequired ? (string)Invoke(new Func<bool, string>(Nap), sleeping) : Nap(sleeping); }
+
+        // Her own moves, from her brain, plain words or her Move menu: "teleport here" glitches her over to their mouse, "go to my
+        // other monitor" to the same spot on another screen, and she sits, stands, hangs, rides their cursor, hides and comes
+        // back. move_mainframe takes her Mainframe to another screen, or over to their mouse.
+        internal string MoveSelf(string action, string screen)
+        {
+            if (action == "move_mainframe") return MoveMainframe(screen);
+            if (action == "hide")
+            {
+                if (hidden) return "Already hidden.";
+                hideAsked = true;
+                return "Hiding. " + (hideKey ? HideKeyName + " or a double-click" : "A double-click") + " on my tray icon brings me back.";
+            }
+            hideAsked = false;
+            if (action == "show")
+            {
+                if (!hidden) return "I'm right here.";
+                ShowHidden(false);
+                DropSoon();
+                return "Back.";
+            }
+            napAsked = false;
+            napping = false;
+            if (action == "come_here")
+            {
+                Teleport(MouseAt());
+                return "Teleporting to your mouse.";
+            }
+            if (action == "other_screen")
+            {
+                Screen[] screens = Screen.AllScreens;
+                Screen from = Screen.FromPoint(Hip());
+                int to = PickScreen(screens, from, screen);
+                if (to < 0) return screens.Length < 2 ? "There's no other screen to go to." : "There's no screen like that to go to.";
+                if (screens[to].DeviceName == from.DeviceName) return "I'm already on " + ScreenName(screens, to) + ".";
+                Teleport(Across(Hip(), from.WorkingArea, screens[to].WorkingArea));
+                return "Moving to " + ScreenName(screens, to) + ".";
+            }
+            if (hidden) ShowHidden(false);
+            if (action == "sit")
+            {
+                if (seat != null && seat.Free) return "Already sitting.";
+                StopRide();
+                LeavePanel(false);
+                SitHere();
+                return "Sitting right here.";
+            }
+            if (action == "stand_up")
+            {
+                if (riding) { StopRide(); return "Hopped off your cursor."; }
+                if (hanging) { LetGo(); return "Let go."; }
+                if (seat == null) return "Already standing.";
+                StandUp();
+                return "Standing up.";
+            }
+            if (action == "hang")
+            {
+                if (hanging) return "Already hanging.";
+                StopRide();
+                LeavePanel(false);
+                HangHere();
+                return "Hanging right here.";
+            }
+            if (action == "ride_cursor")
+            {
+                if (riding) return "Already riding your cursor.";
+                StartRide(true);
+                if (!riding) return "Couldn't get on your cursor just now.";
+                return "Riding your cursor. " + (hotkey ? hopName + " or \"hop off my cursor\" gets" : "\"Hop off my cursor\" gets") + " me off.";
+            }
+            if (action == "hop_off")
+            {
+                if (!riding) return "I'm not riding your cursor.";
+                StopRide();
+                return "Hopped off your cursor.";
+            }
+            return "Couldn't move like that.";
+        }
+
+        private string MoveTool(string action, string screen) { return InvokeRequired ? (string)Invoke(new Func<string, string, string>(MoveSelf), action, screen) : MoveSelf(action, screen); }
+
+        // She glitches out and back in with her hip on the point, kept on its screen, then drops onto a window close under her.
+        private void Teleport(Point to)
+        {
+            Rectangle area = Screen.FromPoint(to).WorkingArea;
+            Action arrive = delegate
+            {
+                StopRide();
+                LeavePanel(false);
+                seat = null;
+                hanging = false;
+                falling = false;
+                walking = false;
+                anchor = Within(Seated(to.X, to.Y), area, Body);
+                ShowHidden(false);
+                DropSoon();
+            };
+            if (hidden) arrive();
+            else GlitchOut(arrive, false);
+        }
+
+        // Which of their screens "next", "left", "main", "here" or "2" means, from the given one, or -1.
+        private static int PickScreen(Screen[] screens, Screen from, string which)
+        {
+            int[] x = new int[screens.Length], y = new int[screens.Length], numbers = new int[screens.Length];
+            int primary = 0, current = -1, pointed = -1;
+            Screen mouse = Screen.FromPoint(MouseAt());
+            for (int i = 0; i < screens.Length; i++)
+            {
+                Rectangle bounds = screens[i].Bounds;
+                x[i] = bounds.Left + bounds.Width / 2;
+                y[i] = bounds.Top + bounds.Height / 2;
+                Match digits = Regex.Match(screens[i].DeviceName ?? "", @"(\d+)$");
+                numbers[i] = digits.Success && digits.Length < 3 ? int.Parse(digits.Value) : 0;
+                if (screens[i].Primary) primary = i;
+                if (screens[i].DeviceName == from.DeviceName) current = i;
+                if (screens[i].DeviceName == mouse.DeviceName) pointed = i;
+            }
+            return Hands.PickScreen(x, y, numbers, primary, current, pointed, which);
+        }
+
+        private static string ScreenName(Screen[] screens, int index)
+        {
+            if (screens[index].Primary) return "your main screen";
+            Match digits = Regex.Match(screens[index].DeviceName ?? "", @"(\d+)$");
+            return screens.Length == 2 || !digits.Success ? "your other screen" : "screen " + digits.Value;
+        }
+
+        // The same spot on another screen: as far across and down its working area as it was on the first.
+        internal static Point Across(Point at, Rectangle from, Rectangle to)
+        {
+            double across = from.Width > 0 ? Math.Max(0, Math.Min(1, (at.X - from.Left) / (double)from.Width)) : 0.5;
+            double down = from.Height > 0 ? Math.Max(0, Math.Min(1, (at.Y - from.Top) / (double)from.Height)) : 0.5;
+            return new Point(to.Left + (int)Math.Round(across * to.Width), to.Top + (int)Math.Round(down * to.Height));
+        }
+
+        // A window as far across and down another working area as it was on its own, kept inside it where it fits.
+        internal static Rectangle Shifted(Rectangle window, Rectangle from, Rectangle to)
+        {
+            double across = from.Width > window.Width ? Math.Max(0, Math.Min(1, (window.Left - from.Left) / (double)(from.Width - window.Width))) : 0.5;
+            double down = from.Height > window.Height ? Math.Max(0, Math.Min(1, (window.Top - from.Top) / (double)(from.Height - window.Height))) : 0.5;
+            return Placed(new Rectangle(to.Left + (int)Math.Round(across * (to.Width - window.Width)), to.Top + (int)Math.Round(down * (to.Height - window.Height)), window.Width, window.Height), to);
+        }
+
+        // A window moved inside a working area, its top left corner first when it's bigger.
+        internal static Rectangle Placed(Rectangle window, Rectangle area)
+        {
+            return new Rectangle(Math.Max(area.Left, Math.Min(window.Left, area.Right - window.Width)), Math.Max(area.Top, Math.Min(window.Top, area.Bottom - window.Height)), window.Width, window.Height);
+        }
+
+        // "Move the Mainframe to my other monitor": the same part of another screen, or centred on their mouse for "bring it
+        // here". It comes up from the taskbar too, since moving it somewhere unseen would do nothing for them.
+        private string MoveMainframe(string which)
+        {
+            Screen[] screens = Screen.AllScreens;
+            bool normal = mainframe.WindowState == FormWindowState.Normal;
+            Rectangle bounds = normal ? mainframe.Bounds : mainframe.RestoreBounds;
+            Screen from = Screen.FromRectangle(bounds);
+            bool here = Regex.IsMatch(which ?? "", @"^\s*(here|this|mouse|cursor|pointer)\s*$", RegexOptions.IgnoreCase);
+            int to = PickScreen(screens, from, which);
+            if (to < 0) return screens.Length < 2 ? "There's no other screen for the Mainframe." : "There's no screen like that for the Mainframe.";
+            Rectangle moved;
+            if (here)
+            {
+                Point mouse = MouseAt();
+                moved = Placed(new Rectangle(mouse.X - bounds.Width / 2, mouse.Y - bounds.Height / 2, bounds.Width, bounds.Height), screens[to].WorkingArea);
+            }
+            else if (screens[to].DeviceName == from.DeviceName)
+            {
+                if (!testing) mainframe.Restore();
+                return "The Mainframe's already on " + ScreenName(screens, to) + ".";
+            }
+            else moved = Shifted(bounds, from.WorkingArea, screens[to].WorkingArea);
+            bool maximized = mainframe.WindowState == FormWindowState.Maximized;
+            if (!normal) mainframe.WindowState = FormWindowState.Normal;
+            mainframe.Bounds = moved;
+            if (maximized) mainframe.WindowState = FormWindowState.Maximized;
+            if (!testing) mainframe.Restore();
+            return here ? "Brought the Mainframe over to your mouse." : "Moved the Mainframe to " + ScreenName(screens, to) + ".";
+        }
+
+        // Her animations by name, from her brain, plain words or her Move menu's Dance. A dance goes on, with or without music,
+        // until they say stop.
+        internal string Animate(string name)
+        {
+            if (name == "stop_dancing")
+            {
+                bool was = danceAsked || clip == dance || clip == perchDance;
+                danceAsked = false;
+                danceHeld = musicOn;
+                if (clip == dance || clip == perchDance) { Play(seat != null || onPanel ? perch : idle); UpdateAnimation(); }
+                return was ? "Stopped dancing." : "I wasn't dancing.";
+            }
+            napAsked = false;
+            napping = false;
+            if (hidden) ShowHidden(false);
+            if (name == "dance")
+            {
+                StopRide();
+                if (hanging) LetGo();
+                danceAsked = true;
+                danceHeld = false;
+                frames.Start();
+                return "Dancing. Tell me to stop when you've had enough.";
+            }
+            bool perched = seat != null || onPanel || riding;
+            if (name == "idle")
+            {
+                danceAsked = false;
+                danceHeld = musicOn;
+                if (hanging) LetGo();
+                Play(perched ? perch : idle);
+            }
+            else if (name == "glitch")
+            {
+                if (hanging) LetGo();
+                else Play(perched ? perchGlitch : glitch);
+            }
+            else if (name == "grin")
+            {
+                // Her grin is a standing one, so she gets up for it.
+                if (riding) StopRide();
+                else
+                {
+                    LeavePanel(false);
+                    if (hanging) LetGo();
+                    else if (seat != null) StandUp();
+                    Play(grin);
+                }
+            }
+            else if (name == "blink")
+            {
+                if (hanging) LetGo();
+                Play(perched ? perch : idle);
+                blinkWith = perched ? perchBlink : blink;
+            }
+            else return "I don't have an animation called " + name + ".";
+            frames.Start();
+            RenderFrame();
+            return name == "idle" ? "Back to my idle." : name == "glitch" ? "Glitched." : name == "grin" ? "Grinning." : "Blinked.";
+        }
+
+        private string AnimateTool(string name) { return InvokeRequired ? (string)Invoke(new Func<string, string>(Animate), name) : Animate(name); }
 
         private static Size CanvasSize(int size) { return new Size(size + PaddingSize * 2, size + PaddingSize * 2); }
 
@@ -2596,7 +2869,7 @@ namespace CapriDesktop
                 if (chatting) return "Voice chatting";
                 if (hidden) return "Taking a break";
                 if (typer.Visible || speech != null) return "Chatting";
-                if (clip == dance || clip == perchDance) return "Dancing to music";
+                if (clip == dance || clip == perchDance) return musicOn ? "Dancing to music" : "Dancing";
                 if (clip == sleep) return "Asleep";
                 return "Hanging out";
             }
@@ -2639,6 +2912,29 @@ namespace CapriDesktop
             Action save = delegate { preferences.Nickname = kept; SavePreferences(); mainframe.Sync(); };
             if (InvokeRequired) Post(save); else save();
             return Brain.Renamed(name);
+        }
+
+        // Get to know me, after setup or from Settings: she asks what to call them, their pronouns and what they're into in chat,
+        // with her typing box open, and writes the answers to me.md. Their name is what she calls them too.
+        internal void GetToKnow()
+        {
+            meetAt = -1;
+            if (!preferences.Met)
+            {
+                preferences.Met = true;
+                SavePreferences();
+            }
+            if (hidden) SetHidden(false);
+            hideAsked = false;
+            heard = "get to know me";
+            box.Prompt = "> sys: ";
+            MeetLine(++asking, meeting.Start());
+        }
+
+        private void MeetLine(int ticket, string line)
+        {
+            Answer(ticket, line, TalkState.Talking);
+            if (meeting.Asking && !typer.Visible && !chatting && !hidden) OpenTyper();
         }
 
         internal int Wordiness { get { return Brain.Wordiness; } }
@@ -2973,7 +3269,9 @@ namespace CapriDesktop
                 });
             }
             bool dancing = clip == dance || clip == perchDance;
-            bool free = musicOn && !preferences.NoDance && preferences.Motion && !hidden && !dragging && !pressed && !riding && !falling && !hanging && !walking && outro == null && speech == null && talkState == TalkState.Off && !chatting && !napAsked && !napping;
+            if (!musicOn) danceHeld = false;
+            bool wanted = danceAsked || (musicOn && !preferences.NoDance && preferences.Motion && !danceHeld);
+            bool free = wanted && !hidden && !dragging && !pressed && !riding && !falling && !hanging && !walking && outro == null && speech == null && talkState == TalkState.Off && !chatting && !napAsked && !napping;
             if (dancing && !free) { Play(seat != null || onPanel ? perch : idle); UpdateAnimation(); }
             else if (!dancing && free && (clip == idle || clip == perch)) { Play(seat != null || onPanel ? perchDance : dance); frames.Start(); }
             groove.Want(!testing && musicOn && !preferences.NoDance && preferences.Motion && !hidden);
@@ -4125,6 +4423,8 @@ namespace CapriDesktop
         private void Greet()
         {
             if (hidden) SetHidden(false);
+            // After setup, once she's said hi with her new brain, she gets to know them. Only the first time.
+            if (!preferences.Met && !testing) meetAt = clock.Elapsed.TotalSeconds + 1;
             Hear("(You just woke up on this PC with a brand new brain. Say hi to the user in one short line.)", "brain online", "> sys: ");
         }
 
@@ -5960,19 +6260,32 @@ namespace CapriDesktop
             if (text.Length > 240) text = text.Substring(0, 240);
             if (local) { talkState = TalkState.Thinking; CheckEars(clock.Elapsed.TotalSeconds); }
             if (hidden) SetHidden(false);
+            hideAsked = false;
             brain.Cancel();
             voice.Stop();
             int ticket = ++asking;
             heard = shown;
             box.Prompt = prompt;
+            // Their answer while she's getting to know them goes to me.md, with or without a brain. Anything else ends it and goes on.
+            if (meeting.Asking && prompt == "> you: ")
+            {
+                string called;
+                string next = meeting.Take(text, out called);
+                if (next != null)
+                {
+                    if (called != null) CallThem(called);
+                    MeetLine(ticket, next);
+                    return;
+                }
+            }
             bool askPlease;
             text = Hands.Manners(text, out askPlease);
             if (askPlease) { Answer(ticket, Hands.SayPlease, TalkState.Talking); return; }
             Func<string, string> think = Think;
             string quick;
             ToolArguments quickArgs;
-            // Volume, mute and music work before she has a brain.
-            if (think == null && brain.Model == null && Hands.Heard(text, out quick, out quickArgs) && quick == "media") think = delegate { return DoTool(quick, quickArgs); };
+            // Volume, mute and music work before she has a brain, and so do her nap, her own moves and her animations.
+            if (think == null && brain.Model == null && Hands.Heard(text, out quick, out quickArgs) && (quick == "media" || quick == "nap" || quick == "move_yourself" || quick == "animate")) think = delegate { return DoTool(quick, quickArgs); };
             if (think == null)
             {
                 if (brain.Model == null) { Answer(ticket, Brain.Offline, TalkState.Dormant); FindBrain(); mainframe.Restore(); return; }
@@ -7819,6 +8132,159 @@ namespace CapriDesktop
                                 throw new Exception("Her nap went wrong: " + napStopped + " " + napWaited + " " + napHeld + " " + menuWoke + " " + menuSlept + " " + clickWoke + " " + toldWoke + " " + already + " " + talkWoke);
                             Play(idle);
                             checks.Add("PASS nap on demand: \"go to sleep\" stops her dance and waits for her line, then she sleeps through mouse and keyboard use, Asleep on Discord with her pop-ins and glances resting, until her menu's Wake up, a click, \"wake up\" or talking to her");
+                            // Her own moves: "teleport here" wakes her and puts her hip on their mouse, she sits, stands, hangs, lets go, rides
+                            // their cursor and hops off where she is, a hide waits for her line, and she goes to another screen when there is one.
+                            Func<Point> mouseWas = MouseAt;
+                            Point selfHome = anchor;
+                            Ledge selfSeat = seat;
+                            bool selfFalling = falling;
+                            Rectangle selfArea = Screen.PrimaryScreen.WorkingArea;
+                            Point selfMouse = new Point(selfArea.Left + selfArea.Width / 2, selfArea.Top + selfArea.Height / 2);
+                            Rectangle mainframeWas = mainframe.WindowState == FormWindowState.Normal ? mainframe.Bounds : mainframe.RestoreBounds;
+                            FormWindowState mainframeStateWas = mainframe.WindowState;
+                            System.Collections.Generic.List<string> moveLines = new System.Collections.Generic.List<string>();
+                            System.Collections.Generic.List<bool> moveFacts = new System.Collections.Generic.List<bool>();
+                            Func<string, string, string> moveSelf = delegate(string action, string which) { string line = Hands.Do("move_yourself", new ToolArguments { Action = action, Screen = which }); moveLines.Add(line); return line; };
+                            try
+                            {
+                                MouseAt = delegate { return selfMouse; };
+                                Play(sleep);
+                                napping = true;
+                                moveSelf("come_here", null);
+                                moveFacts.Add(Hip() == selfMouse && seat == null && !hanging && !riding && !napping && !hidden && Visible);
+                                falling = false;
+                                fallTo = null;
+                                moveSelf("sit", null);
+                                moveFacts.Add(seat != null && seat.Free && Hip() == selfMouse && clip == perchGlitch);
+                                moveSelf("sit", null);
+                                moveSelf("stand_up", null);
+                                moveFacts.Add(seat == null && clip == glitch);
+                                moveSelf("hang", null);
+                                moveFacts.Add(hanging && clip == dangle);
+                                moveSelf("stand_up", null);
+                                moveFacts.Add(!hanging);
+                                falling = false;
+                                fallTo = null;
+                                moveSelf("ride_cursor", null);
+                                moveFacts.Add(riding);
+                                moveSelf("hop_off", null);
+                                moveFacts.Add(!riding && clip == grin);
+                                moveSelf("hop_off", null);
+                                moveSelf("hide", null);
+                                Say("Hiding.");
+                                CheckIdle(0);
+                                moveFacts.Add(!hidden && hideAsked);
+                                Say(null);
+                                CheckIdle(0);
+                                moveFacts.Add(hidden && !hideAsked && !Visible);
+                                moveSelf("show", null);
+                                moveFacts.Add(!hidden && Visible);
+                                falling = false;
+                                fallTo = null;
+                                moveSelf("show", null);
+                                bool screens = Screen.AllScreens.Length > 1;
+                                string otherLine = moveSelf("other_screen", null);
+                                moveFacts.Add(screens ? otherLine.StartsWith("Moving to ", StringComparison.Ordinal) && Screen.FromPoint(Hip()).DeviceName != Screen.PrimaryScreen.DeviceName : otherLine == "There's no other screen to go to.");
+                                moveSelf("come_here", null);
+                                falling = false;
+                                fallTo = null;
+                                string mainframeOther = moveSelf("move_mainframe", "other");
+                                moveFacts.Add(screens ? mainframeOther.StartsWith("Moved the Mainframe to ", StringComparison.Ordinal) && Screen.FromRectangle(mainframe.Bounds).DeviceName != Screen.FromRectangle(mainframeWas).DeviceName : mainframeOther == "There's no other screen for the Mainframe.");
+                                moveSelf("move_mainframe", "here");
+                                Rectangle mainframeAt = mainframe.Bounds;
+                                // A screen with another scale can resize the Mainframe as it lands, so only one that kept its size is held to the exact spot.
+                                moveFacts.Add(mainframe.WindowState == FormWindowState.Normal && Screen.FromRectangle(mainframeAt).DeviceName == Screen.FromPoint(selfMouse).DeviceName
+                                    && (mainframeAt.Size != mainframeWas.Size || mainframeAt == Placed(new Rectangle(selfMouse.X - mainframeAt.Width / 2, selfMouse.Y - mainframeAt.Height / 2, mainframeAt.Width, mainframeAt.Height), selfArea)));
+                            }
+                            finally
+                            {
+                                MouseAt = mouseWas;
+                                StopRide();
+                                hanging = false;
+                                hideAsked = false;
+                                if (hidden) ShowHidden(false);
+                                seat = selfSeat;
+                                falling = selfFalling;
+                                fallTo = null;
+                                anchor = selfHome;
+                                Location = anchor;
+                                mainframe.WindowState = FormWindowState.Normal;
+                                mainframe.Bounds = mainframeWas;
+                                mainframe.WindowState = mainframeStateWas;
+                                Play(idle);
+                            }
+                            string movesSaid = string.Join(" / ", moveLines.ToArray());
+                            if (!moveFacts.TrueForAll(delegate(bool fact) { return fact; }) || moveLines.Count != 16
+                                || movesSaid != "Teleporting to your mouse. / Sitting right here. / Already sitting. / Standing up. / Hanging right here. / Let go. / " + moveLines[6] + " / Hopped off your cursor. / I'm not riding your cursor. / " + moveLines[9] + " / Back. / I'm right here. / " + moveLines[12] + " / Teleporting to your mouse. / " + moveLines[14] + " / Brought the Mainframe over to your mouse."
+                                || !moveLines[6].StartsWith("Riding your cursor. ", StringComparison.Ordinal) || !moveLines[9].StartsWith("Hiding. ", StringComparison.Ordinal) || !moveLines[9].EndsWith(" on my tray icon brings me back.", StringComparison.Ordinal))
+                                throw new Exception("Her own moves went wrong: " + string.Join(",", moveFacts.ConvertAll(delegate(bool fact) { return fact ? "1" : "0"; }).ToArray()) + " / " + movesSaid);
+                            checks.Add("PASS she moves herself: \"teleport here\" wakes her and glitches her hip onto the mouse, she sits, stands, hangs, lets go, rides the cursor and hops off where she is and says when she already is, a hide waits for her line, \"show yourself\" brings her back, she goes to another screen " + (Screen.AllScreens.Length > 1 ? "and back" : "only when there is one (one here)") + ", and her Mainframe moves to the other screen or over to the mouse");
+                            // Her animations by name: glitch, grin and blink play where she is, a dance goes on with no music until "stop
+                            // dancing" or her menu, and a stop while music plays holds her still until it ends.
+                            System.Collections.Generic.List<string> playLines = new System.Collections.Generic.List<string>();
+                            System.Collections.Generic.List<bool> playFacts = new System.Collections.Generic.List<bool>();
+                            Func<string, string> animate = delegate(string name) { string line = Hands.Do("animate", new ToolArguments { Name = name }); playLines.Add(line); return line; };
+                            bool musicBefore = musicOn;
+                            Ledge playSeat = seat;
+                            bool playFalling = falling;
+                            musicAt = clock.Elapsed.TotalSeconds + 1000;
+                            try
+                            {
+                                musicOn = false;
+                                seat = null;
+                                falling = false;
+                                animate("glitch");
+                                playFacts.Add(clip == glitch);
+                                animate("grin");
+                                playFacts.Add(clip == grin);
+                                animate("blink");
+                                playFacts.Add(clip == idle && blinkWith == blink);
+                                animate("dance");
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                playFacts.Add(danceAsked && clip == dance && Doing == "Dancing");
+                                Say("Dancing.");
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                playFacts.Add(clip == idle);
+                                Say(null);
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                playFacts.Add(clip == dance);
+                                danceNowItem.PerformClick();
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                playFacts.Add(!danceAsked && clip == idle);
+                                danceNowItem.PerformClick();
+                                playFacts.Add(danceAsked);
+                                animate("stop_dancing");
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                playFacts.Add(!danceAsked && clip == idle);
+                                animate("stop_dancing");
+                                musicOn = true;
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                bool musicDanced = clip == dance;
+                                animate("stop_dancing");
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                playFacts.Add(clip == idle && danceHeld);
+                                musicOn = false;
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                playFacts.Add(!danceHeld && (musicDanced || preferences.NoDance || !preferences.Motion));
+                                animate("dance");
+                                animate("idle");
+                                CheckMusic(clock.Elapsed.TotalSeconds);
+                                playFacts.Add(!danceAsked && clip == idle);
+                            }
+                            finally
+                            {
+                                musicOn = musicBefore;
+                                danceAsked = false;
+                                danceHeld = false;
+                                seat = playSeat;
+                                falling = playFalling;
+                                Say(null);
+                                Play(idle);
+                            }
+                            string playsSaid = string.Join(" / ", playLines.ToArray());
+                            if (!playFacts.TrueForAll(delegate(bool fact) { return fact; }) || playsSaid != "Glitched. / Grinning. / Blinked. / Dancing. Tell me to stop when you've had enough. / Stopped dancing. / I wasn't dancing. / Stopped dancing. / Dancing. Tell me to stop when you've had enough. / Back to my idle.")
+                                throw new Exception("Her animations went wrong: " + string.Join(",", playFacts.ConvertAll(delegate(bool fact) { return fact ? "1" : "0"; }).ToArray()) + " / " + playsSaid);
+                            checks.Add("PASS her animations by name: glitch, grin, blink and idle play when asked, \"dance\" goes on with no music (Dancing on Discord) and stops to talk, her menu's Dance and \"stop dancing\" end it, and a stop while music plays holds her still until the music ends");
                             if (MouthFor('a', 0) != 3 || MouthFor('O', 0) != 4 || MouthFor('i', 0) != 2 || MouthFor('m', 0) != 0 || MouthFor(' ', 0) != 0 || MouthFor('!', 0) != 0 || MouthFor('k', 1) != 1 || MouthFor('k', 2) != 2) throw new Exception("Mouth shapes picked the wrong letters.");
                             const string spoken = "Hey OK, bye!";
                             int mouthPixels = 0;
@@ -8521,7 +8987,12 @@ namespace CapriDesktop
                                 clip = idle;
                                 string discordIdle = Doing;
                                 clip = dance;
+                                bool discordMusicWas = musicOn;
+                                musicOn = true;
                                 string discordDance = Doing;
+                                musicOn = false;
+                                string discordAskedDance = Doing;
+                                musicOn = discordMusicWas;
                                 clip = sleep;
                                 string discordAsleep = Doing;
                                 chatting = true;
@@ -8531,7 +9002,7 @@ namespace CapriDesktop
                                 speech = discordSpeechWas;
                                 chatting = discordChattingWas;
                                 hidden = discordHiddenWas;
-                                if (discordIdle != "Hanging out" || discordDance != "Dancing to music" || discordAsleep != "Asleep" || discordCall != "Voice chatting") throw new Exception("Her Discord states were wrong: " + discordIdle + ", " + discordDance + ", " + discordAsleep + ", " + discordCall);
+                                if (discordIdle != "Hanging out" || discordDance != "Dancing to music" || discordAskedDance != "Dancing" || discordAsleep != "Asleep" || discordCall != "Voice chatting") throw new Exception("Her Discord states were wrong: " + discordIdle + ", " + discordDance + ", " + discordAskedDance + ", " + discordAsleep + ", " + discordCall);
                                 bool discordOffWas = preferences.NoDiscord;
                                 preferences.NoDiscord = false;
                                 mainframe.Sync();
@@ -8543,7 +9014,7 @@ namespace CapriDesktop
                                 preferences.NoDiscord = discordOffWas;
                                 mainframe.Sync();
                                 if (new Preferences().NoDiscord || !discordShownOn || !discordTurnedOff || !discordBackOn) throw new Exception("The Show on Discord switch went wrong: shown " + discordShownOn + ", off " + discordTurnedOff + ", back on " + discordBackOn);
-                                checks.Add("PASS Discord status: on by default, a pretend Discord hears her hello with the app's id and 'Dancing to music' with her picture, start time and Get Capri button, she hangs up when it's turned off, her states read Hanging out, Dancing to music, Asleep and Voice chatting, and the Mainframe switch turns it off and back on");
+                                checks.Add("PASS Discord status: on by default, a pretend Discord hears her hello with the app's id and 'Dancing to music' with her picture, start time and Get Capri button, she hangs up when it's turned off, her states read Hanging out, Dancing to music, Dancing (asked, with no music), Asleep and Voice chatting, and the Mainframe switch turns it off and back on");
                             }
                             Clip[] strips = { idle, blink, blinkGlitch, grin, glitch, dangle, sleep, wake, perch, perchBlink, perchBlinkGlitch, perchGlitch, idle };
                             int[] cells = { 0, 1, 1, 0, 1, 3, 0, 4, 8, 1, 1, 1, 0 };
@@ -9077,6 +9548,46 @@ namespace CapriDesktop
                                     if (Hands.Heard(chat, out shortTool, out shortArgs) && shortTool == "nap") throw new Exception("Chat was taken as a nap: " + chat);
                                 if (!Hands.Valid("nap", new ToolArguments { Action = "sleep" }) || !Hands.Valid("nap", new ToolArguments { Action = "wake" }) || Hands.Valid("nap", new ToolArguments { Action = "dance" })) throw new Exception("Her nap's arguments were checked wrong.");
                                 checks.Add("PASS nap words: \"go to sleep\", \"take a nap\", \"go to bed\" and \"wake up\" said to her are her own nap without a brain, and talk about their own sleep or the PC's isn't");
+                                // Her own moves and animations said to her, with the screen they named, and chat that only sounds like one.
+                                string[,] selfCases =
+                                {
+                                    { "capri, teleport here", "move_yourself|come_here|" }, { "teleport to my mouse", "move_yourself|come_here|" }, { "come here", "move_yourself|come_here|" },
+                                    { "get over here capri", "move_yourself|come_here|" }, { "come back", "move_yourself|come_here|" }, { "tp to me", "move_yourself|come_here|" },
+                                    { "can you teleport to where my mouse is please", "move_yourself|come_here|" }, { "go to my other monitor", "move_yourself|other_screen|other" },
+                                    { "move to the left screen", "move_yourself|other_screen|left" }, { "hop over to monitor 2", "move_yourself|other_screen|2" }, { "switch screens", "move_yourself|other_screen|" },
+                                    { "move the Mainframe to my other monitor", "move_yourself|move_mainframe|other" }, { "bring the mainframe here", "move_yourself|move_mainframe|here" },
+                                    { "put capri mainframe on screen two", "move_yourself|move_mainframe|two" }, { "sit down", "move_yourself|sit|" }, { "stand up", "move_yourself|stand_up|" },
+                                    { "hang here", "move_yourself|hang|" }, { "ride my cursor", "move_yourself|ride_cursor|" }, { "hop off my cursor", "move_yourself|hop_off|" },
+                                    { "stop riding", "move_yourself|hop_off|" }, { "hide", "move_yourself|hide|" }, { "show yourself", "move_yourself|show|" },
+                                    { "play your idle animation", "animate|idle|" }, { "do your glitch", "animate|glitch|" }, { "dance", "animate|dance|" }, { "dance for me capri!", "animate|dance|" },
+                                    { "stop dancing", "animate|stop_dancing|" }, { "smile for me", "animate|grin|" }, { "blink", "animate|blink|" }, { "show me your dance moves", "animate|dance|" }
+                                };
+                                for (int i = 0; i < selfCases.GetLength(0); i++)
+                                {
+                                    string selfGot = Hands.Heard(selfCases[i, 0], out shortTool, out shortArgs) ? shortTool + "|" + (shortTool == "animate" ? shortArgs.Name : shortArgs.Action) + "|" + shortArgs.Screen : "";
+                                    if (selfGot != selfCases[i, 1]) throw new Exception("Her own move was heard wrong: " + selfCases[i, 0] + " -> " + selfGot);
+                                }
+                                foreach (string chat in new[] { "hang on", "hang up", "hop off", "sit with me im bored af", "i love to dance", "do you dance?", "hide and seek?", "my other monitor is broken", "the mainframe looks cool", "come here often?", "i can't stand it", "go away" })
+                                    if (Hands.Heard(chat, out shortTool, out shortArgs) && (shortTool == "move_yourself" || shortTool == "animate")) throw new Exception("Chat was taken as her own move: " + chat + " -> " + shortTool);
+                                string moveTool;
+                                ToolArguments writtenMove;
+                                if (!Hands.Valid("move_yourself", new ToolArguments { Action = "come_here" }) || !Hands.Valid("move_yourself", new ToolArguments { Action = "move_mainframe", Screen = "2" }) || Hands.Valid("move_yourself", new ToolArguments { Action = "fly" })
+                                    || !Hands.Valid("animate", new ToolArguments { Name = "dance" }) || Hands.Valid("animate", new ToolArguments { Name = "moonwalk" })
+                                    || !Hands.Typed("move_yourself{\"action\": \"other_screen\", \"screen\": \"left\"}", out moveTool, out writtenMove) || moveTool != "move_yourself" || writtenMove.Screen != "left"
+                                    || !Hands.Typed("Sure! animate{\"name\": \"dance\"}", out moveTool, out writtenMove, true) || moveTool != "animate" || writtenMove.Name != "dance") throw new Exception("Her own moves' arguments were checked or read wrong.");
+                                // Three screens: one left of the main one, numbered 2, and one above it, numbered 3.
+                                int[] pickX = { -960, 960, 960 }, pickY = { 540, 540, -540 }, pickNumbers = { 2, 1, 3 };
+                                Func<int, string, int> pickFrom = delegate(int current, string which) { return Hands.PickScreen(pickX, pickY, pickNumbers, 1, current, 2, which); };
+                                if (pickFrom(1, "next") != 0 || pickFrom(1, "other") != 0 || pickFrom(1, null) != 0 || pickFrom(1, "previous") != 2 || pickFrom(1, "left") != 0 || pickFrom(1, "right") != -1
+                                    || pickFrom(1, "top") != 2 || pickFrom(2, "bottom") != 1 || pickFrom(0, "main") != 1 || pickFrom(1, "here") != 2 || pickFrom(1, "monitor 2") != 0 || pickFrom(1, "third") != 2
+                                    || pickFrom(1, "5") != -1 || pickFrom(1, "the other one") != 0 || Hands.PickScreen(pickX, pickY, null, 1, 1, 2, "2") != 2
+                                    || Hands.PickScreen(new[] { 960 }, new[] { 540 }, new[] { 1 }, 0, 0, 0, "next") != -1 || Hands.PickScreen(new[] { 960 }, new[] { 540 }, new[] { 1 }, 0, 0, 0, "here") != 0)
+                                    throw new Exception("Her screen picks went wrong.");
+                                if (Across(new Point(480, 270), new Rectangle(0, 0, 1920, 1080), new Rectangle(1920, 0, 2560, 1440)) != new Point(2560, 360)
+                                    || Shifted(new Rectangle(1520, 80, 400, 600), new Rectangle(0, 0, 1920, 1040), new Rectangle(-1280, 0, 1280, 984)) != new Rectangle(-400, 70, 400, 600)
+                                    || Placed(new Rectangle(1800, 900, 400, 600), new Rectangle(0, 0, 1920, 1040)) != new Rectangle(1520, 440, 400, 600) || Placed(new Rectangle(50, 50, 3000, 2000), new Rectangle(0, 0, 1920, 1040)) != new Rectangle(0, 0, 3000, 2000))
+                                    throw new Exception("Moving her or her Mainframe to another screen landed in the wrong place.");
+                                checks.Add("PASS her own moves in words: \"teleport here\", \"come here\", \"go to my other monitor\", \"move the Mainframe to my other monitor\", \"sit down\", \"stand up\", \"hang here\", \"ride my cursor\", \"hide\", \"play your idle animation\", \"do your glitch\", \"dance\" and \"stop dancing\" need no brain, \"hang on\", \"hang up\", a bare \"hop off\", \"do you dance?\" and \"go away\" stay chat, \"next\", \"left\", \"main\", \"here\" and \"monitor 2\" pick the right screen, and she and the Mainframe land in the same part of the new one");
                                 Func<Sight> oldLook = Computer.Look;
                                 Func<string, ToolArguments, Sight, string> oldAct = Computer.Act;
                                 Func<IntPtr> oldFront = Computer.Front;
@@ -14567,6 +15078,61 @@ namespace CapriDesktop
                             finally { Hands.Press = brainlessWas; }
                             if (talkState == TalkState.Dormant || reply != "Turned the volume up." || brainlessKeys.Count != 5 || brainlessKeys[0] != 0xAF) throw new Exception("Volume needed a brain: " + talkState + " / " + reply + " / " + brainlessKeys.Count + " / heard " + heard + " / ticket " + asking + " / model " + (brain.Model ?? "none") + " / speech " + speech);
                             checks.Add("PASS volume without a brain: with no brain set up, \"can you turn the volume up?\" still presses the volume keys and says so");
+                            Hear("dance for me");
+                            Stopwatch danceless = Stopwatch.StartNew();
+                            while ((talkState == TalkState.Thinking || reply == null) && danceless.ElapsedMilliseconds < 5000) { Application.DoEvents(); Thread.Sleep(5); }
+                            bool brainlessDance = danceAsked && talkState != TalkState.Dormant && reply == "Dancing. Tell me to stop when you've had enough.";
+                            Animate("stop_dancing");
+                            if (!brainlessDance) throw new Exception("Dancing needed a brain: " + talkState + " / " + reply + " / asked " + danceAsked);
+                            checks.Add("PASS her own moves without a brain: with no brain set up, \"dance for me\" starts her dance and says so, the way her nap, \"teleport here\" and her other moves work");
+                            Func<string, string> meetSaid = delegate(string said)
+                            {
+                                if (said != null) Hear(said);
+                                Stopwatch waited = Stopwatch.StartNew();
+                                while ((talkState == TalkState.Thinking || reply == null) && waited.ElapsedMilliseconds < 5000) { Application.DoEvents(); Thread.Sleep(5); }
+                                return reply;
+                            };
+                            string meetNickWas = Brain.Nickname;
+                            string meetPrefWas = preferences.Nickname;
+                            Brain.Unnote("everything");
+                            GetToKnow();
+                            string meetFirst = meetSaid(null);
+                            bool meetTyping = typer.Visible && meeting.Asking && preferences.Met;
+                            string meetNudge = meetSaid("hey");
+                            string meetNamed = meetSaid("call me Lachy!!");
+                            string meetPronouns = meetSaid("she");
+                            string meetInto = meetSaid("I'm into Cyberpunk, Roblox and drawing");
+                            string meetNotes = Brain.Notes();
+                            bool meetNicked = !meeting.Asking && Nickname == "Lachy" && preferences.Nickname == "Lachy" && mainframe.NicknameShown == "Lachy" && Brain.Remembered().IndexOf("match words like girl, boy or choom", StringComparison.Ordinal) >= 0;
+                            GetToKnow();
+                            meetSaid(null);
+                            string meetSkip = meetSaid("skip");
+                            meetSaid("they/them");
+                            string meetStop = meetSaid("stop");
+                            string meetAgain = Brain.Notes();
+                            GetToKnow();
+                            meetSaid(null);
+                            string meetElsewhere = meetSaid("what can you do?");
+                            bool meetLeft = !meeting.Asking && talkState == TalkState.Dormant;
+                            typer.Hide();
+                            CloseTalk();
+                            preferences.Met = false;
+                            meetAt = clock.Elapsed.TotalSeconds - 1;
+                            CheckIdle(0);
+                            bool meetAfterSetup = meeting.Asking && meetAt < 0 && preferences.Met && reply == Meeting.AskName;
+                            string meetStopped = meetSaid("not now");
+                            typer.Hide();
+                            Brain.Unnote("everything");
+                            Brain.Nickname = meetNickWas;
+                            preferences.Nickname = meetPrefWas;
+                            SavePreferences();
+                            mainframe.Sync();
+                            if (meetFirst != Meeting.AskName || !meetTyping || meetNudge != Meeting.AskCalled || meetNamed != "Nice to meet you, Lachy. " + Meeting.AskPronouns || meetPronouns != "Got it. " + Meeting.AskInto
+                                || meetInto != "Love that, Lachy. It's all in my notes now, me.md. " + Meeting.Again || meetNotes != "- Name: Lachy\n- Pronouns: she/her\n- Into: Cyberpunk, Roblox and drawing" || !meetNicked
+                                || meetSkip != Meeting.AskPronouns || meetStop != "No worries. What you told me is in my notes, me.md. " + Meeting.Again || meetAgain != "- Name: Lachy\n- Pronouns: they/them\n- Into: Cyberpunk, Roblox and drawing"
+                                || meetElsewhere != Brain.Offline || !meetLeft || !meetAfterSetup || meetStopped != "No worries, choom. " + Meeting.Again)
+                                throw new Exception("Getting to know them went wrong: " + meetFirst + " / typing " + meetTyping + " / " + meetNudge + " / " + meetNamed + " / " + meetPronouns + " / " + meetInto + " / " + meetNotes.Replace("\n", " | ") + " / nicked " + meetNicked + " / " + meetSkip + " / " + meetStop + " / " + meetAgain.Replace("\n", " | ") + " / " + meetElsewhere + " / left " + meetLeft + " / after setup " + meetAfterSetup + " / " + meetStopped);
+                            checks.Add("PASS getting to know you: after setup, or from Settings > Get to know me, she asks what to call them, their pronouns and what they're into in chat with her typing box open and no brain needed, writes the answers to me.md and calls them by their name; skip, stop and asking again work, and a question or a job ends it and is heard as usual");
                             Hear("hello");
                             if (talkState != TalkState.Dormant || reply != Brain.Offline) throw new Exception("Missing brain did not go DORMANT.");
                             replyStart -= 10;
@@ -15179,7 +15745,7 @@ namespace CapriDesktop
                             if (heard != "hi" || reply != "Loud and clear, choom." || (talkState != TalkState.Talking && talkState != TalkState.Online) || !speaker.Busy) throw new Exception("Voice chat did not hear and answer: " + heard + " / " + reply + " / " + talkState + " / " + log);
                             Play(idle);
                             if (MouthCell(clock.Elapsed.TotalSeconds, idle) < 0) throw new Exception("Her mouth did not follow the agent's audio.");
-                            string[] wanted = { "http POST /v1/convai/agents/create sk_test_capri_1234 {\"name\":\"Capri\"", "\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45}", "http PATCH /v1/convai/agents/agent_old sk_test_capri_1234 {\"conversation_config\":{\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45},\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "\"tool_ids\":[\"tool_kept\",\"tool_1\",\"tool_2\",\"tool_3\",\"tool_4\",\"tool_5\",\"tool_6\",\"tool_7\",\"tool_8\",\"tool_9\",\"tool_10\"]", "\"tool_ids\":[\"tool_kept\",\"tool_11\",\"tool_12\",\"tool_13\",\"tool_14\",\"tool_15\",\"tool_16\",\"tool_17\",\"tool_18\",\"tool_19\",\"tool_20\"]}}}}", "\"name\":\"play_music\"", "\"name\":\"app_window\"", "\"name\":\"look_at_screen\"", "http GET /v1/convai/tools sk_test_capri_1234", "http POST /v1/convai/tools sk_test_capri_1234 {\"tool_config\":{\"type\":\"client\",\"name\":\"open_website\"", "\"name\":\"media\",\"description\":\"Control the music", "\"expects_response\":true,\"response_timeout_secs\":20}}", "You have tools for their PC", "tool {\"type\":\"client_tool_result\",\"tool_call_id\":\"call_1\",\"result\":\"Opened Spotify.\",\"is_error\":false}", "ran SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", "Never check in", "beg them to talk or say they left you hanging", "\"prompt\":{\"prompt\":\"You are Capri", "\"llm\":\"gemini-2.5-flash\"", "\"tts\":{\"voice_id\":\"abc\"}", "\"overrides\":{\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":true}},\"tts\":{\"voice_id\":true}}}", "http GET /v1/convai/conversation/get-signed-url?agent_id=agent_old sk_test_capri_1234", "init {\"type\":\"conversation_initiation_client_data\",\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "pong {\"type\":\"pong\",\"event_id\":7}", "chunk silent | chunk loud | chunk loud" };
+                            string[] wanted = { "http POST /v1/convai/agents/create sk_test_capri_1234 {\"name\":\"Capri\"", "\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45}", "http PATCH /v1/convai/agents/agent_old sk_test_capri_1234 {\"conversation_config\":{\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45},\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "\"tool_ids\":[\"tool_kept\",\"tool_1\",\"tool_2\",\"tool_3\",\"tool_4\",\"tool_5\",\"tool_6\",\"tool_7\",\"tool_8\",\"tool_9\",\"tool_10\",\"tool_11\",\"tool_12\"]", "\"tool_ids\":[\"tool_kept\",\"tool_13\",\"tool_14\",\"tool_15\",\"tool_16\",\"tool_17\",\"tool_18\",\"tool_19\",\"tool_20\",\"tool_21\",\"tool_22\",\"tool_23\",\"tool_24\"]}}}}", "\"name\":\"move_yourself\"", "\"name\":\"animate\"", "\"name\":\"play_music\"", "\"name\":\"app_window\"", "\"name\":\"look_at_screen\"", "http GET /v1/convai/tools sk_test_capri_1234", "http POST /v1/convai/tools sk_test_capri_1234 {\"tool_config\":{\"type\":\"client\",\"name\":\"open_website\"", "\"name\":\"media\",\"description\":\"Control the music", "\"expects_response\":true,\"response_timeout_secs\":20}}", "You have tools for their PC", "tool {\"type\":\"client_tool_result\",\"tool_call_id\":\"call_1\",\"result\":\"Opened Spotify.\",\"is_error\":false}", "ran SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", "Never check in", "beg them to talk or say they left you hanging", "\"prompt\":{\"prompt\":\"You are Capri", "\"llm\":\"gemini-2.5-flash\"", "\"tts\":{\"voice_id\":\"abc\"}", "\"overrides\":{\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":true}},\"tts\":{\"voice_id\":true}}}", "http GET /v1/convai/conversation/get-signed-url?agent_id=agent_old sk_test_capri_1234", "init {\"type\":\"conversation_initiation_client_data\",\"conversation_config_override\":{\"agent\":{\"prompt\":{\"prompt\":\"You are Capri", "pong {\"type\":\"pong\",\"event_id\":7}", "chunk silent | chunk loud | chunk loud" };
                             foreach (string piece in wanted) if (log.IndexOf(piece, StringComparison.Ordinal) < 0) throw new Exception("Agent traffic was missing " + piece + ": " + log);
                             bool sawInVoice = false;
                             lock (asked) foreach (string entry in asked) if (entry.StartsWith("init ", StringComparison.Ordinal) && entry.IndexOf("a pixel art farm with a red barn. You said: \\\"Cute barn.\\\"", StringComparison.Ordinal) >= 0) sawInVoice = true;
@@ -15190,7 +15756,7 @@ namespace CapriDesktop
                             File.Delete(Brain.MemoriesPath);
                             string voiceDay = File.ReadAllText(Path.Combine(Brain.TranscriptPath, DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) + ".md"));
                             if (!memoriesInVoice || !System.Text.RegularExpressions.Regex.IsMatch(voiceDay, @"\*\*\d\d:\d\d You \(voice\):\*\* hi\n") || !System.Text.RegularExpressions.Regex.IsMatch(voiceDay, @"\*\*\d\d:\d\d Capri \(voice\):\*\* Loud and clear, choom\.\n") || !System.Text.RegularExpressions.Regex.IsMatch(voiceDay, @"\*\d\d:\d\d Job: Opened Spotify\.\*\n")) throw new Exception("Voice chat didn't start with her memories, or its lines and jobs missed her transcript: " + voiceDay);
-                            if (log.IndexOf("tool_stale", StringComparison.Ordinal) >= 0 || System.Text.RegularExpressions.Regex.Matches(log, "http POST /v1/convai/tools").Count != 20) throw new Exception("Voice chat reused a stale tool or remade a kept one: " + log);
+                            if (log.IndexOf("tool_stale", StringComparison.Ordinal) >= 0 || System.Text.RegularExpressions.Regex.Matches(log, "http POST /v1/convai/tools").Count != 24) throw new Exception("Voice chat reused a stale tool or remade a kept one: " + log);
                             Hands.Run = handsRun;
                             Hands.Catalog = handsCatalog;
                             Hands.Forget();

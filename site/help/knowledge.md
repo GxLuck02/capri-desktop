@@ -335,6 +335,7 @@ YOU
 - Next to YOU: which personality she's using. "personality.md · her default" or "personality.md · your edit". In yellow: "personality.md · long, slows small brains". In red, when she's gone back to her default: "personality.md missing · her default", "personality.md is empty · her default" or "can't read personality.md · her default".
 - Language: the language she replies in. 80 to pick from: English, Español, Français, Deutsch, Italiano, Português, Català, Galego, Euskara, Nederlands, Afrikaans, Svenska, Dansk, Norsk, Íslenska, Suomi, Eesti, Latviešu, Lietuvių, Polski, Čeština, Slovenčina, Magyar, Slovenščina, Hrvatski, Bosanski, Srpski, Shqip, Română, Gaeilge, Cymraeg, Malti, Türkçe, Azərbaycanca, ქართული (Georgian), Հայերեն (Armenian), Oʻzbekcha, Русский, Українська, Беларуская, Български, Македонски, Қазақша, Монгол, Ελληνικά, Tiếng Việt, Bahasa Indonesia, Bahasa Melayu, Basa Jawa, Filipino, Kiswahili, Hausa, Yorùbá, Igbo, isiZulu, isiXhosa, Soomaali, አማርኛ (Amharic), ไทย (Thai), ລາວ (Lao), ខ្មែរ (Khmer), မြန်မာ (Burmese), 简体中文 (Simplified Chinese), 繁體中文 (Traditional Chinese), 日本語 (Japanese), 한국어 (Korean), हिन्दी (Hindi), नेपाली (Nepali), বাংলা (Bengali), मराठी (Marathi), ગુજરાતી (Gujarati), ਪੰਜਾਬੀ (Punjabi), தமிழ் (Tamil), తెలుగు (Telugu), ಕನ್ನಡ (Kannada), മലയാളം (Malayalam), العربية (Arabic), اردو (Urdu), فارسی (Persian) and עברית (Hebrew). Her own ears hear 25 of them in free voice chat: English, Español, Français, Deutsch, Italiano, Português, Nederlands, Svenska, Dansk, Suomi, Eesti, Latviešu, Lietuvių, Polski, Čeština, Slovenčina, Magyar, Slovenščina, Hrvatski, Română, Malti, Русский, Українська, Български and Ελληνικά. The rest use Windows speech when Windows has it for that language. Indian scripts, Amharic, Georgian, Armenian, Lao, Khmer and Burmese are measured as they're drawn, so their lines fit her bubble too. Arabic, Urdu, Persian and Hebrew lines sit against the right of her bubble. Her HD voice and ElevenLabs speak Chinese, Japanese and Korean, and ElevenLabs speaks Hindi and Arabic; her free voice only has English pronunciation for now. Thai, Lao, Khmer and Burmese have no spaces between words, so her bubble breaks their lines between words (on Mac and Linux, between letters). Her own font has no Burmese, so Burmese draws in Windows' Myanmar Text font.
 - "What should she call you?": type a nickname, press Save.
+- Get to know me: she asks what to call you, your pronouns and what you're into in chat, and keeps the answers in me.md. See "Getting to know you" in section 13.
 - Open her notes: opens me.md, her notes about you, in Notepad.
 - Edit personality: opens personality.md, who she is and how she talks. See "Make her yours" in section 13.
 - Reset: puts her default personality back straight away. Yours is kept as personality.backup.md.
@@ -427,12 +428,14 @@ Right-click her, or right-click her tray icon. Both show the same menu:
 - Move:
   - Wander around
   - Dance to music
+  - Dance (ticked while she dances because you asked)
   - Ride cursor / Hop off
   - Sit on windows
   - Sit here / Stand up
   - Hang here / Let go
   - Go to sleep / Wake up
   - Bring to this screen
+  - Go to the next screen (only with more than one screen)
 - Help:
   - Help page (opens this help on the website)
   - Join the Discord
@@ -751,7 +754,7 @@ She keeps a notes file about you and reads it every chat, in text and voice chat
 
 To read or edit them: Mainframe > Settings > Open her notes. It opens me.md in Notepad. Edit or delete anything, then save.
 
-She won't save personal things like names, addresses, schools, passwords, phone numbers, emails, birthdays or bank details: "I don't keep personal stuff like names, addresses, schools or passwords in my notes."
+She won't save personal things like full names, addresses, schools, passwords, phone numbers, emails, birthdays or bank details when you ask her to remember them: "I keep addresses, schools, numbers and passwords out of my notes, choom." What you tell her in Get to know me goes in as you typed it.
 
 "My notes are full. Clear some out in me.md first." means the file is too long. Open it and delete some lines.
 
@@ -793,6 +796,18 @@ Turn Remember our chats off and she stops writing transcripts, stops folding and
 
 She uses it now and then. To go back to "choom", type choom or clear the box and press Save ("Back to choom, then.").
 
+### Getting to know you (0.7.6 and newer)
+After setup, once she's said hi with her new brain, she asks three things in chat, one at a time, with her typing box open:
+1. What should she call you? It becomes your nickname too, the same as "What should she call you?" in Settings.
+2. Your pronouns, like she/her, he/him or they/them. She goes by them, so things like "good girl" or "good boy" come out right.
+3. What you're into: games, music, shows, anything.
+
+She writes the answers to her notes, me.md, as "Name: ...", "Pronouns: ..." and "Into: ...". Asking again replaces those lines instead of adding more.
+- Say "skip" to pass on a question, or "stop" (or "not now") to end it. What you answered so far is kept.
+- Ask her something or tell her to do something instead, and she ends it and does that.
+- It works before she has a brain, and in free voice chat.
+- She only asks by herself the first time. Mainframe > Settings > Get to know me (next to "What should she call you?") asks again any time. On Mac and Linux it's right-click her > Settings > Get to know me, and a new install asks once she's said hello.
+
 ### Language
 Mainframe > Settings > Language. She replies in that language. Changing it starts a fresh chat.
 
@@ -822,6 +837,18 @@ Right-click her > Move > Wander around, or Mainframe > Settings > Wander (Off, R
 ### More than one screen
 - Move > Bring to this screen, or Bring here in the Mainframe: she comes to your mouse pointer.
 - Double-click her tray icon: same.
+- Move > Go to the next screen: she glitches to the same spot on your next screen. It only shows with more than one screen.
+
+### Telling her to move (0.7.6 and newer)
+Tell her, typed or in voice chat. Typed, these work even before she has a brain:
+- "Capri, teleport here", "come here" or "get over here": she glitches over to your mouse pointer.
+- "Go to my other monitor", "move to the left screen", "hop over to monitor 2" or "go to my main screen": she glitches to the same spot on that screen. Screen numbers are Windows' own, usually the ones in Settings > Display.
+- "Move the Mainframe to my other monitor" or "bring the Mainframe here": she moves her Capri Mainframe window to that screen, or to your mouse.
+- "Sit down", "stand up", "hang here", "let go", "ride my cursor" and "hop off my cursor" do what they say, right where she is.
+- "Hide": she finishes what she's saying, then hides in the tray. "Show yourself" or "come out" brings her back.
+
+### Her animations (0.7.6 and newer)
+Ask for one by name: "do your glitch", "smile" or "grin", "blink", "play your idle animation", or "dance". Her dance goes on, with or without music, until you say "stop dancing" or untick Move > Dance. Telling her to stop while a song plays keeps her still until the song ends.
 
 ### Size
 - Mainframe > Settings > CAPRI > Size: Tiny to Giant.
@@ -1136,6 +1163,8 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Watch my screen: right-click her > Settings > Watch my screen. She glances now and then and comments when something's worth a line, like on Windows. Glance every sets how often (10 s to 10 min, default 2 min), and Keep her caught up keeps the glances she stays quiet about. Mac asks once for Screen Recording; until you allow it and open her again, she says so once instead of watching your wallpaper. Linux only watches with tools that don't flash: grim, Spectacle on KDE, ImageMagick's import, scrot or maim. GNOME on Wayland flashes every screenshot, so there she says so and only looks when you ask.
 - Sleep: standing, she falls asleep after 2 minutes without the mouse or keyboard, and wakes when you're back. Right-click her > Move > Fall asleep after sets the time, or Never. She needs to know how long you've been away: Mac always does, Linux through GNOME or, on other X11 desktops, xprintidle.
 - Sleep on demand (0.7.6 and newer): right-click her > Go to sleep, or tell her "go to sleep" or "take a nap". She sleeps until you click her, talk to her or say "wake up", whatever the mouse and keyboard do.
+- Her own moves (0.7.6 and newer): "capri, teleport here", "go to my other monitor", "sit down", "stand up", "hang here", "let go", "hide" and "show yourself", and her animations by name ("dance", "stop dancing", "do your glitch", "smile", "blink", "play your idle animation"), even before she has a brain. Screens count from the left. Riding your cursor and moving the Mainframe are Windows-only, and she says so.
+- Getting to know you (0.7.6 and newer): on a new install, once she's said hello, she asks what to call you, your pronouns and what you're into in her typing box and writes the answers to me.md, like on Windows. Right-click her > Settings > Get to know me asks again.
 - Quiet: right-click her, or the tray or menu bar icon, > Quiet. It's the same as Windows' quiet key (Ctrl + Alt + P): she stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her.
 - Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings)
 
@@ -1150,11 +1179,12 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Talk to her
 - Quiet: for when you focus or game. She stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her. It's in the tray or menu bar menu too. Starting her again ends it.
 - Sit here: she sits right where she is. While she sits like that it says Stand up. Holding Shift as you drop her does Sit here too, like on Windows.
+- Hang here: she hangs on right where she is. While she hangs it says Let go.
 - Go to sleep: she sleeps until you click her, talk to her or say "wake up". While she sleeps it says Wake up.
-- Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance, Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min), Glitch in at startup
+- Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance (on until you untick it or say "stop dancing"), Go to the next screen (only with more than one screen), Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min), Glitch in at startup
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
-- Settings: What should she call you?, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Voice style (Pitch, Speed, Robot, Glitch), Check in on me, Pop-ins (Rarely, Sometimes, Often), Always on top, Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
+- Settings: What should she call you?, Get to know me, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Voice style (Pitch, Speed, Robot, Glitch), Check in on me, Pop-ins (Rarely, Sometimes, Often), Always on top, Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
 - Help: Help page, Copy error details
 - Join the Discord
 - Get Capri X, only when a new version is out
@@ -1374,7 +1404,7 @@ If she closes twice in a row while she's starting (a crash, but also Task Manage
 - She doesn't dance: Dance to music must be on, and the app must show up as music in Windows.
 - She dances but her head isn't on the beat yet: give it a few seconds. Quiet songs, talking and very slow songs are harder for her to follow.
 - She's asleep: move the mouse. If you put her to sleep (Go to sleep, or "go to sleep"), click her or say "wake up" instead. Change how soon she dozes off in Settings > Sleep.
-- She's on the wrong monitor: right-click her > Move > Bring to this screen.
+- She's on the wrong monitor: right-click her > Move > Bring to this screen, or tell her "come here".
 
 ### Doing things on the PC
 - She only plays one song, or the wrong one: name the song and the artist. "Play something" picks from the Cyberpunk soundtracks.

@@ -401,6 +401,7 @@ namespace CapriDesktop
             languages.AccessibleName = "Her language";
             // A label of its own, so the question still shows once a name is saved in the box.
             Caption("What should she call you?", 28, 118, Font, Look.Dim);
+            Make("Get to know me", 236, 113, 120, 22, delegate { capri.GetToKnow(); }).AccessibleName = "Get to know me: she asks what to call you, your pronouns and what you're into, and keeps them in me.md";
             nickname = Input(28, 140, 244);
             nickname.Cue = "Your name or a nickname";
             nickname.Box.AccessibleName = "What should she call you?";
