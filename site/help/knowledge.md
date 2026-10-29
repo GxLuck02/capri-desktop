@@ -426,12 +426,14 @@ Right-click her, or right-click her tray icon. Both show the same menu:
 - Move:
   - Wander around
   - Dance to music
+  - Dance (ticked while she dances because you asked)
   - Ride cursor / Hop off
   - Sit on windows
   - Sit here / Stand up
   - Hang here / Let go
   - Go to sleep / Wake up
   - Bring to this screen
+  - Go to the next screen (only with more than one screen)
 - Help:
   - Help page (opens this help on the website)
   - Join the Discord
@@ -813,6 +815,18 @@ Right-click her > Move > Wander around, or Mainframe > Settings > Wander (Off, R
 ### More than one screen
 - Move > Bring to this screen, or Bring here in the Mainframe: she comes to your mouse pointer.
 - Double-click her tray icon: same.
+- Move > Go to the next screen: she glitches to the same spot on your next screen. It only shows with more than one screen.
+
+### Telling her to move (0.7.6 and newer)
+Tell her, typed or in voice chat. Typed, these work even before she has a brain:
+- "Capri, teleport here", "come here" or "get over here": she glitches over to your mouse pointer.
+- "Go to my other monitor", "move to the left screen", "hop over to monitor 2" or "go to my main screen": she glitches to the same spot on that screen. Screen numbers are Windows' own, usually the ones in Settings > Display.
+- "Move the Mainframe to my other monitor" or "bring the Mainframe here": she moves her Capri Mainframe window to that screen, or to your mouse.
+- "Sit down", "stand up", "hang here", "let go", "ride my cursor" and "hop off my cursor" do what they say, right where she is.
+- "Hide": she finishes what she's saying, then hides in the tray. "Show yourself" or "come out" brings her back.
+
+### Her animations (0.7.6 and newer)
+Ask for one by name: "do your glitch", "smile" or "grin", "blink", "play your idle animation", or "dance". Her dance goes on, with or without music, until you say "stop dancing" or untick Move > Dance. Telling her to stop while a song plays keeps her still until the song ends.
 
 ### Size
 - Mainframe > Settings > CAPRI > Size: Tiny to Giant.
@@ -1127,6 +1141,7 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Watch my screen: right-click her > Settings > Watch my screen. She glances now and then and comments when something's worth a line, like on Windows. Glance every sets how often (10 s to 10 min, default 2 min), and Keep her caught up keeps the glances she stays quiet about. Mac asks once for Screen Recording; until you allow it and open her again, she says so once instead of watching your wallpaper. Linux only watches with tools that don't flash: grim, Spectacle on KDE, ImageMagick's import, scrot or maim. GNOME on Wayland flashes every screenshot, so there she says so and only looks when you ask.
 - Sleep: standing, she falls asleep after 2 minutes without the mouse or keyboard, and wakes when you're back. Right-click her > Move > Fall asleep after sets the time, or Never. She needs to know how long you've been away: Mac always does, Linux through GNOME or, on other X11 desktops, xprintidle.
 - Sleep on demand (0.7.6 and newer): right-click her > Go to sleep, or tell her "go to sleep" or "take a nap". She sleeps until you click her, talk to her or say "wake up", whatever the mouse and keyboard do.
+- Her own moves (0.7.6 and newer): "capri, teleport here", "go to my other monitor", "sit down", "stand up", "hang here", "let go", "hide" and "show yourself", and her animations by name ("dance", "stop dancing", "do your glitch", "smile", "blink", "play your idle animation"), even before she has a brain. Screens count from the left. Riding your cursor and moving the Mainframe are Windows-only, and she says so.
 - Quiet: right-click her, or the tray or menu bar icon, > Quiet. It's the same as Windows' quiet key (Ctrl + Alt + P): she stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her.
 - Remember our chats: a daily transcript and memories.md, like on Windows (right-click her > Settings)
 
@@ -1141,8 +1156,9 @@ On Mac and Linux, her error log is errors.txt in ~/.config/Capri.
 - Talk to her
 - Quiet: for when you focus or game. She stops pop-ins, asking for attention, cheers, the lag joke and Watch my screen until you untick it, and still answers when you talk to her. It's in the tray or menu bar menu too. Starting her again ends it.
 - Sit here: she sits right where she is. While she sits like that it says Stand up. Holding Shift as you drop her does Sit here too, like on Windows.
+- Hang here: she hangs on right where she is. While she hangs it says Let go.
 - Go to sleep: she sleeps until you click her, talk to her or say "wake up". While she sleeps it says Wake up.
-- Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance, Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min), Glitch in at startup
+- Move: Stay put, Wander: Rarely, Wander: Sometimes, Wander: Often, Wander: Restless, Dance to music, Dance (on until you untick it or say "stop dancing"), Go to the next screen (only with more than one screen), Fall asleep after (Never, 1 min, 2 min, 5 min, 10 min, 30 min), Glitch in at startup
 - Size: Tiny, Small, Medium, Large, Huge, Giant
 - Brain: your Ollama models. With Ollama open but no models yet: "Download gemma4:e4b, her brain (a few GB)". With Ollama closed or not installed: "Ollama isn't running. Install it from ollama.com and open it." Below them: Get a free NVIDIA key, and Use an API key... On a key it shows "NVIDIA key ending XXXX" (or ChatGPT, Claude, DeepSeek), that key's models to pick from, Stay on my model (NVIDIA keys only), and Forget the key and use Ollama.
 - Settings: What should she call you?, Language, Reply length, Chat memory, Bubble (Quick, Normal, Long), Sounds (Off, Quiet, Normal, Loud, Typing sound), Voice, Volume (Mute, 10% to 100%, 125%, 150%), Voice style (Pitch, Speed, Robot, Glitch), Check in on me, Pop-ins (Rarely, Sometimes, Often), Always on top, Watch my screen, Glance every (10 s to 10 min), Keep her caught up, Start at login, Show on Discord, Open her notes (me.md), Remember our chats, Open her memories (memories.md), Edit her personality (personality.md), Reset her personality to default
@@ -1362,7 +1378,7 @@ Then check the exact message, your Capri version (top of the Mainframe), and the
 - She doesn't dance: Dance to music must be on, and the app must show up as music in Windows.
 - She dances but her head isn't on the beat yet: give it a few seconds. Quiet songs, talking and very slow songs are harder for her to follow.
 - She's asleep: move the mouse. If you put her to sleep (Go to sleep, or "go to sleep"), click her or say "wake up" instead. Change how soon she dozes off in Settings > Sleep.
-- She's on the wrong monitor: right-click her > Move > Bring to this screen.
+- She's on the wrong monitor: right-click her > Move > Bring to this screen, or tell her "come here".
 
 ### Doing things on the PC
 - She only plays one song, or the wrong one: name the song and the artist. "Play something" picks from the Cyberpunk soundtracks.
