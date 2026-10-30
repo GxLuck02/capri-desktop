@@ -13038,6 +13038,10 @@ namespace CapriDesktop
                                         string installTool;
                                         ToolArguments installArgs;
                                         if (!Hands.Direct("open spotify", out installTool, out installArgs) || installTool != "open_app" || !Hands.Direct("play spotify", out installTool, out installArgs) || installTool != "open_app") throw new Exception("An installed Spotify was not routed to the app.");
+                                        // A tester, 30 Oct: "when i tell her to play it she js goes to spotify and literally searches wasd minigame".
+                                        bool gameSkipped = !Hands.Direct("play wasd minigame", out installTool, out installArgs) && !Hands.Direct("play the obby", out installTool, out installArgs) && !Hands.Direct("play cs", out installTool, out installArgs) && !Hands.Direct("play deathmatch", out installTool, out installArgs);
+                                        if (!gameSkipped || !Hands.Direct("play bohemian rhapsody", out installTool, out installArgs) || installTool != "play_music") throw new Exception("\"Play\" a game still went to music: " + installTool);
+                                        if (!checks.Exists(playLine => playLine.StartsWith("PASS play a game:", StringComparison.Ordinal))) checks.Add("PASS play a game: \"play wasd minigame\", an obby, cs or deathmatch go to her brain and hands instead of a Spotify search, and \"play bohemian rhapsody\" still plays the song");
                                         int opening = ran.Count;
                                         if (Hands.Do("open_app", new ToolArguments { Name = "spotify" }) != "Opened Spotify." || ran.Count != opening + 1 || ran[opening] != (install == null ? spotifyPath : install.Id)) throw new Exception("A Spotify install was not opened.");
                                         if (Hands.NowPlaying() != "") throw new Exception("Spotify was reported running before launch.");
