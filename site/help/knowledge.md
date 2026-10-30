@@ -735,6 +735,8 @@ Say "Hey Capri" and she starts voice chat, the same as Ctrl + Alt + V. If she's 
 - Windows shows its microphone-in-use icon in the taskbar the whole time it's on, because her mic is open. Turn it off and the icon goes away (unless another app is using your mic).
 - It pauses during voice chat, while your mic is muted (her mute key, or muted in Windows) and in Quiet (Ctrl + Alt + P), and closes the mic meanwhile. It doesn't hear her own voice: while she talks it hears nothing.
 - It uses the mic picked under VOICE > Mic, or Windows' default mic. Pick another mic, or unplug one, and it switches by itself.
+- Bluetooth headsets (0.7.7 and newer): it doesn't listen on a Bluetooth headset's mic, picked or default. While that mic is open the headset is on a call, and everything you hear through it drops to phone-call quality. She says once: "I'm not listening for "Hey Capri" on your Bluetooth headset: while its mic is open, everything you hear drops to phone-call quality. Pick another mic under VOICE, or use my talk key." Voice chat still uses the headset's mic. On 0.7.6 it does open the headset's mic, so YouTube and every other app sound muffled, distorted or low quality from a few seconds after she starts until you quit her. Fix on 0.7.6: turn off Listen for "Hey Capri" (the Blackwall preset turns it on), or pick a wired or USB mic under VOICE > Mic.
+- Other apps get quieter while it listens: Windows turns other sounds down while a mic is open on its call device (by 80% unless you've changed it), and it counts her open mic as a call. Fix: Settings > System > Sound > More sound settings > Communications > Do nothing. Or turn off Listen for "Hey Capri".
 - It's light: about 4% of one CPU core while there's sound around, close to nothing in a quiet room, and it runs on its own, without her brain.
 - It missed you? Say it clearly, at a normal pace, and nearer the mic. It's tuned to start only on "Hey Capri", so a mumbled or far-off one can be missed.
 - Mac and Linux: not yet.
@@ -1443,6 +1445,7 @@ If she closes twice in a row while she's starting (a crash, but also Task Manage
 - "Can't open your speakers: another app has them to itself.": close that app, or untick exclusive mode in your speaker's Sound settings (Settings > System > Sound > your speaker > Advanced).
 - "Can't open your speakers (Windows error N).": check Settings > System > Sound, then try again. On 0.6.2 the message is just "Can't open your speakers." Try the same fixes. Changing the mic doesn't help with this one. If it keeps happening, post your speaker's name, how it's plugged in (USB, Bluetooth, jack), your Windows and Capri versions and the line under VOICE in the Discord.
 - Her voice is too quiet or loud: Mainframe > Settings > Volume.
+- YouTube and every other app sound muffled, distorted, low quality or quieter while Capri runs, whatever voice is picked, until you quit her: that's Listen for "Hey Capri" keeping your mic open. A Bluetooth headset goes to call quality while its mic is open, and Windows turns other sounds down for calls. See "Hey Capri" above for the fixes.
 - Where's the voice prompt?: on the setup guide, under Her voice > Design her voice. Press Copy.
 
 ### Her free voice
