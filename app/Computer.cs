@@ -130,6 +130,7 @@ namespace CapriDesktop
             "To send a message, type it into the message box with enter yes.\n" +
             "If the job is clear enough, do it without asking which option they meant: mute means their mic, not deafen. Use shortcuts you know, like ctrl+shift+m to mute and ctrl+shift+d to deafen in Discord.\n" +
             "When they leave a choice to you, like which video or song, pick one yourself. On YouTube, type searches into its search bar yourself, then scroll down through the results and look at several before you click one.\n" +
+            "A video you open starts playing by itself, so once it's open don't click it or press space or k, which pause it: check its time is moving, and press k only if it still hasn't started a few seconds later.\n" +
             "To remember a code, number or name for later, call note, then write $name in later type text and it's filled in. To wait for something to show up, like an emailed code or a slow page, call wait_for.\n" +
             "If a cookie banner or popup covers the page, deal with it first: pick Reject all or Only necessary (never Accept all), or close the popup, then carry on.\n" +
             "To download a file, press the browser's own Save, Save as or Keep button; an OK or Got it on the page only closes the page's notice. The download is done when the browser shows it finished, so open it from there or with ctrl+j. If Windows says \"Windows protected your PC\" about something their job asked you to install, press More info, then Run anyway.\n" +
@@ -148,6 +149,7 @@ namespace CapriDesktop
             "To download a file, press the browser's own Save, Save as or Keep button; an OK or Got it on the page only closes the page's notice. The download is done when the browser shows it finished, so open it from there or with ctrl+j. If Windows says \"Windows protected your PC\" about something their job asked you to install, press More info, then Run anyway.\n" +
             "If the job is clear enough, do it without asking which option they meant: mute means their mic, not deafen. Use shortcuts you know, like ctrl+shift+m to mute and ctrl+shift+d to deafen in Discord.\n" +
             "When they leave a choice to you, like which video or song, pick one yourself. On YouTube, type searches into its search bar yourself, then scroll down through the results and look at several before you click one.\n" +
+            "A video you open starts playing by itself, so once it's open don't click it or press space or k, which pause it: check its time is moving, and press k only if it still hasn't started a few seconds later.\n" +
             "When the job is done, stop calling tools and say what you did in one plain sentence. If you're stuck, say what went wrong in one plain sentence.";
 
         // What a game job's brain gets after her hands' prompt (Lachy, 30 Oct, after her live stream).
@@ -781,13 +783,23 @@ namespace CapriDesktop
         // message that only talks about one.
         private static readonly Regex GameTitles = new Regex(@"\b(roblox|minecraft|fortnite|valorant|terraria|stardew valley|among us|geometry dash|rocket league|apex legends|overwatch|league of legends|genshin impact|counter-strike|osu!)(?!\w)", RegexOptions.IgnoreCase);
         private static readonly Regex GameWords = new Regex(@"\b(play|playing|plays|games?|gaming|gameplay|obby|obbies|bedwars|skywars|blox fruits|brookhaven|speedrun\w*|pvp)\b", RegexOptions.IgnoreCase);
-        private static readonly Regex Watching = new Regex(@"\b(songs?|music|tracks?|albums?|playlists?|artists?|videos?|podcasts?|radio|audiobooks?|episodes?|movies?|films?|series|trailers?|spotify|youtube|soundcloud|netflix|lofi|lo-fi|tunes)\b", RegexOptions.IgnoreCase);
+        private static readonly Regex Watching = new Regex(@"\b(songs?|music|tracks?|albums?|playlists?|artists?|videos?|podcasts?|radio|audiobooks?|episodes?|movies?|films?|series|trailers?|spotify|youtube|soundcloud|netflix|lofi|lo-fi|tunes|ins?trumentals?|remix(es)?|lyrics|soundtracks?|ost|karaoke|mixtapes?|beats)\b", RegexOptions.IgnoreCase);
         private static readonly Regex Messaging = new Regex(@"^\W*(send|message|text|dm|pm|tell|reply|respond|post|tweet|email|write)\b", RegexOptions.IgnoreCase);
 
         internal static bool Gaming(string job)
         {
             string text = job ?? "";
             return (GameTitles.IsMatch(text) || GameWords.IsMatch(text)) && !Watching.IsMatch(text) && !Messaging.IsMatch(text);
+        }
+
+        // A job about a song, video or show, whatever words they used to ask for it.
+        internal static bool Media(string job) { return Watching.IsMatch(job ?? ""); }
+
+        // A job that plays a song, video or stream: not a game, and not one to pause or stop what's on.
+        internal static bool PlaysMedia(string task, string words, bool game)
+        {
+            string text = (task ?? "") + " " + (words ?? "");
+            return !game && Regex.IsMatch(text, @"\b(play|put on|blast|queue|listen to|watch)\b", RegexOptions.IgnoreCase) && !Regex.IsMatch(text, @"\b(pause|stop|mute)\b", RegexOptions.IgnoreCase);
         }
 
         // A game's window in front makes it a game job too, like the Roblox window she opened herself. A video of one doesn't.
@@ -1795,7 +1807,8 @@ namespace CapriDesktop
             bool theirs = !string.IsNullOrWhiteSpace(asked) && !string.Equals(asked.Trim(), task.Trim(), StringComparison.OrdinalIgnoreCase);
             Task = theirs ? task + Computer.Exact + Voice.Quote(asked.Trim()) : task;
             Words = theirs ? asked.Trim() : task.Trim();
-            Playing = Computer.Gaming(task) || (theirs && Computer.Gaming(asked));
+            // Their "play the real slim shady" doesn't make a job for a YouTube video a game (a tester, 30 Oct).
+            Playing = Computer.Gaming(task) || (theirs && Computer.Gaming(asked) && !Computer.Media(task));
             Computer.KeysOk = false;
             told.UnionWith(Computer.Allowed(task));
             buys = Computer.Buys(task);

@@ -5447,7 +5447,15 @@ namespace CapriDesktop
             Computer.PlacePointer(PointerHome());
             Post(delegate { JobOn(running); });
             string result = null;
-            try { result = running.Run(); return result; }
+            // A job that plays a song or video notes what Windows had on first, so one it leaves paused can be started after.
+            bool media = !testing && Computer.PlaysMedia(running.Task, running.Words, running.Playing);
+            Tune before = media ? Tunes.Current() : null;
+            try
+            {
+                result = running.Run();
+                if (media && !running.Playing) KeepPlaying(running.Outcome, before, 800);
+                return result;
+            }
             finally
             {
                 // However it ended, a held button is let go and their mouse handed back.
@@ -5456,6 +5464,23 @@ namespace CapriDesktop
                 string outcome = running.Outcome ?? "failed";
                 Post(delegate { JobOff(running, outcome, result); });
             }
+        }
+
+        // YouTube starts a video by itself, and her hands sometimes clicked it to play it, which paused it (a tester, 30 Oct). After
+        // a job that played something, what Windows has on gets play pressed once if it's paused, unless it was already paused
+        // before the job and the job left it alone. True when she pressed it.
+        internal static bool KeepPlaying(string outcome, Tune before, int settle)
+        {
+            if (outcome != "done") return false;
+            for (int look = 0; look < 2; look++)
+            {
+                Tune after = Tunes.Current();
+                if (after == null || after.Playing || (before != null && before.Key == after.Key && !before.Playing)) return false;
+                // A video that's still loading can read as paused for a moment.
+                if (look == 0) { Thread.Sleep(settle); continue; }
+                return Tunes.Send(after, "play");
+            }
+            return false;
         }
 
         private void JobOn(Job running)
@@ -12659,6 +12684,7 @@ namespace CapriDesktop
                                     if (!Computer.Gaming("play bedwars on roblox and answer chat") || !Computer.Gaming("go play minecraft") || !Computer.Gaming("hop on fortnite for a bit") || !Computer.Gaming("keep playing")
                                         || Computer.Gaming("play lofi on youtube") || Computer.Gaming("Play \"Resist and Disorder\" on Spotify: open Spotify, click its search box, type \"Resist and Disorder\" and press Enter, then press play on the best match.")
                                         || Computer.Gaming("watch a minecraft video") || Computer.Gaming("tell sam I'll play roblox later on discord") || Computer.Gaming("send hi in #general on discord") || Computer.Gaming(null)
+                                        || Computer.Gaming("capri,play the real slim shady intrumental version") || new Job("Open YouTube, search for the real slim shady and play the video", "capri, play the real slim shady").Playing || !new Job("play bedwars on roblox", "go play bedwars").Playing
                                         || !Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "Roblox", Program = "RobloxPlayerBeta" }) || !Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "Minecraft 1.21.4", Program = "javaw" })
                                         || Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "Minecraft Let's Play - YouTube - Google Chrome", Program = "chrome" }) || Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "#general - Discord", Program = "Discord" }) || Computer.GameWindow(null))
                                         throw new Exception("Game jobs were told apart wrong.");
@@ -12682,6 +12708,43 @@ namespace CapriDesktop
                                     if (Computer.Playing.IndexOf("read it but keep playing quietly", StringComparison.Ordinal) < 0 || Computer.Playing.IndexOf("answer each message once", StringComparison.Ordinal) < 0 || Computer.Playing.IndexOf("Never comment on the game to chat between messages.", StringComparison.Ordinal) < 0)
                                         throw new Exception("Her game lines lost the chat rules: " + Computer.Playing);
                                     checks.Add("PASS quiet in chat: playing a game she reads the chat but answers only messages worth answering, once each in one short line, and never comments on the game to chat between them; her glances wait while she plays");
+                                    // A video her hands left paused gets play pressed once after a job that played it (a tester, 30 Oct); what was
+                                    // already paused before the job and left alone stays paused, and so does one that's playing, or a job that stopped.
+                                    Func<Tune> currentWas = Tunes.Current;
+                                    Func<Tune, string, bool> keptSendWas = Tunes.Send;
+                                    System.Collections.Generic.List<string> keptSent = new System.Collections.Generic.List<string>();
+                                    Tune keptNow = null;
+                                    Tunes.Current = delegate { return keptNow; };
+                                    Tunes.Send = delegate(Tune keptTune, string keptWhat) { keptSent.Add(keptWhat + " " + keptTune.Title); return true; };
+                                    string keptWrong = null;
+                                    try
+                                    {
+                                        Tune slim = new Tune { Title = "The Real Slim Shady (Instrumental)", Artist = "Eminem - Topic", App = "Brave", Position = 2 };
+                                        Tune keptSong = new Tune { Title = "Resist and Disorder", Artist = "Rezodrone", App = "Spotify.exe", Position = 103 };
+                                        Tune slimPlaying = new Tune { Title = slim.Title, Artist = slim.Artist, App = slim.App, Playing = true };
+                                        keptNow = slim;
+                                        bool keptPressed = KeepPlaying("done", null, 0) && KeepPlaying("done", keptSong, 0) && KeepPlaying("done", slimPlaying, 0);
+                                        bool leftStopped = !KeepPlaying("stopped", null, 0) && !KeepPlaying("failed", null, 0) && !KeepPlaying("asked", null, 0);
+                                        keptNow = keptSong;
+                                        bool leftTheirs = !KeepPlaying("done", keptSong, 0);
+                                        keptNow = slimPlaying;
+                                        bool leftPlaying = !KeepPlaying("done", null, 0);
+                                        keptNow = null;
+                                        bool leftNothing = !KeepPlaying("done", null, 0);
+                                        if (!keptPressed || !leftStopped || !leftTheirs || !leftPlaying || !leftNothing || keptSent.Count != 3 || keptSent[0] != "play " + slim.Title)
+                                            keptWrong = "pressed " + keptPressed + ", stopped " + leftStopped + ", theirs " + leftTheirs + ", playing " + leftPlaying + ", nothing " + leftNothing + " / " + string.Join(" | ", keptSent.ToArray());
+                                    }
+                                    finally
+                                    {
+                                        Tunes.Current = currentWas;
+                                        Tunes.Send = keptSendWas;
+                                    }
+                                    bool playsSorted = Computer.PlaysMedia("Open YouTube, search for the real slim shady and play the video", "capri, play the real slim shady", false) && Computer.PlaysMedia("put on some lofi", null, false)
+                                        && !Computer.PlaysMedia("pause the video", null, false) && !Computer.PlaysMedia("play bedwars on roblox", null, true) && !Computer.PlaysMedia("send hi in #general on discord", null, false);
+                                    const string autoplays = "A video you open starts playing by itself, so once it's open don't click it or press space or k, which pause it";
+                                    if (keptWrong != null || !playsSorted || Computer.Prompt.IndexOf(autoplays, StringComparison.Ordinal) < 0 || Computer.Seeing.IndexOf(autoplays, StringComparison.Ordinal) < 0)
+                                        throw new Exception("Videos she played didn't keep playing: " + keptWrong + " / sorted " + playsSorted);
+                                    checks.Add("PASS videos keep playing: her hands know a YouTube video starts by itself, so they don't click it or press space or k; \"play the real slim shady instrumental version\" is a video job, not a game; and after a job that played something she presses play once on a video it left paused, leaving alone what was paused before the job, what's playing and jobs that stopped");
                                     // Esc while a turn is still thinking stops the job then, not when the turn would have ended.
                                     Func<bool> thinkEscapeWas = Computer.Escape;
                                     Stopwatch thinkClock = Stopwatch.StartNew();
