@@ -1680,6 +1680,8 @@ namespace CapriDesktop
 
         internal string ServerFields { get { return sheet.Fields; } }
 
+        internal string ServerHintPlace { get { return sheet.HintPlace; } }
+
         internal void DropFishVoices() { sheet.DropVoices(); }
 
         internal string FishVoicesShown { get { return sheet.Voices; } }
@@ -2199,6 +2201,7 @@ namespace CapriDesktop
             private readonly Mainframe owner;
             private readonly Label title;
             private readonly Label hint;
+            private readonly Label from;
             private readonly Key service;
             private readonly ContextMenuStrip services;
             private readonly ContextMenuStrip voices;
@@ -2241,7 +2244,7 @@ namespace CapriDesktop
                 shut.Glyph = 2;
                 shut.AccessibleName = "Close";
                 hint = Caption("", 28, 48, Look.Mono(8.5f, FontStyle.Regular, GraphicsUnit.Point), Look.Dim);
-                Caption("Voice from", 28, 112, Font, Look.Dim);
+                from = Caption("Voice from", 28, 112, Font, Look.Dim);
                 services = owner.Dropdown();
                 service = Make(picked.Name, 28, 132, 328, 28, delegate { services.Show(service, new Point(0, service.Height)); });
                 service.Chevron = true;
@@ -2318,6 +2321,38 @@ namespace CapriDesktop
                 ClientSize = new Size(ClientSize.Width, ClientSize.Height + step);
             }
 
+            // A hint longer than its four lines, like Fish Audio's with its consent line, moves Voice from and the rows under it
+            // down, keeping the gap a four-line hint leaves, instead of running under them, and a shorter one brings them back up.
+            // Hints only wrap once OnLoad has set their width, so before that it changes nothing.
+            private void FitHint()
+            {
+                int top = Math.Max(hint.Top + (int)Math.Round(64f * url.Height / 28), hint.Bottom + (int)Math.Round(8f * url.Height / 28));
+                int line = from.Top, step = top - line;
+                if (step == 0) return;
+                foreach (Control control in Controls) if (control.Top >= line) control.Top += step;
+                ClientSize = new Size(ClientSize.Width, ClientSize.Height + step);
+            }
+
+            // For the smoke test: "fits", or the first two shown controls that cross.
+            internal string HintPlace
+            {
+                get
+                {
+                    for (int i = 0; i < Controls.Count; i++)
+                    {
+                        Control a = Controls[i];
+                        if (!a.Visible || (a is Label && a.Text.Length == 0)) continue;
+                        for (int j = i + 1; j < Controls.Count; j++)
+                        {
+                            Control b = Controls[j];
+                            if (!b.Visible || (b is Label && b.Text.Length == 0)) continue;
+                            if (a.Bounds.IntersectsWith(b.Bounds)) return "overlap: " + (a.Text.Length > 0 ? a.Text : a.AccessibleName) + " / " + (b.Text.Length > 0 ? b.Text : b.AccessibleName);
+                        }
+                    }
+                    return "fits: hint " + hint.Top + " to " + hint.Bottom + ", Voice from at " + from.Top + ", its box at " + service.Top;
+                }
+            }
+
             // The row's first choice, or in the cloud the one with that API.
             private static VoiceServer.Service First(bool cloud, string wanted)
             {
@@ -2337,6 +2372,7 @@ namespace CapriDesktop
                 picked = choice;
                 service.Text = choice.Name;
                 hint.Text = choice.Hint;
+                FitHint();
                 place.Text = file ? "Model folder" : "Address";
                 url.Cue = file ? "Browse to a voice model" : VoiceServer.Address;
                 modelName.Text = file ? "Language" : "Model";
@@ -2571,6 +2607,7 @@ namespace CapriDesktop
                 base.OnLoad(e);
                 float s = ScaleOf(this);
                 foreach (Control control in Controls) if (control is Label) control.MaximumSize = new Size((int)Math.Round(328 * s), 0);
+                FitHint();
                 Rectangle area = Screen.FromControl(owner).WorkingArea;
                 int x = owner.Left + (owner.Width - Width) / 2, y = owner.Top + (int)(48 * s);
                 Location = new Point(Math.Max(area.Left, Math.Min(area.Right - Width, x)), Math.Max(area.Top, Math.Min(area.Bottom - Height, y)));
@@ -2593,7 +2630,8 @@ namespace CapriDesktop
                 Graphics graphics = e.Graphics;
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 Backdrop(graphics, this, s);
-                using (Brush red = new SolidBrush(Look.Red)) graphics.FillRectangle(red, 13 * s, 22 * s, 3 * s, 350 * s);
+                // Her red line runs on past a hint that grew.
+                using (Brush red = new SolidBrush(Look.Red)) graphics.FillRectangle(red, 13 * s, 22 * s, 3 * s, 350 * s + Math.Max(0, from.Top - hint.Top - 64 * s));
                 using (GraphicsPath edge = Look.Plate(new RectangleF(s, s, Width - 2 * s - 1, Height - 2 * s - 1), 12 * s, -1, Height / 2f, 0, true))
                 using (Pen cyan = new Pen(Look.Cyan, 2 * s))
                     graphics.DrawPath(cyan, edge);
