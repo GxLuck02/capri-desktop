@@ -227,6 +227,9 @@ namespace CapriDesktop
         [DataMember] public int PopPace = 1;
         // Frames a second of her perch: 10, 15, 20, 30, 40, 50 or 60. 30 shows the art as drawn.
         [DataMember] public int PerchFps = 30;
+        // Her Mainframe's size: 0 for Auto, which grows it on a screen whose desktop is bigger than its panel (Virtual Super
+        // Resolution, DSR), or 100 to 200 for that percent of the screen's own scale.
+        [DataMember] public int MainframeSize;
         [DataMember] public string AgentPolyglot;
         [DataMember] public string AgentPersonality;
         // Check in on me is on by default. Before 0.7.3 it was saved as PopIns, off by default, so the new name turns it on once for everyone.
@@ -315,6 +318,7 @@ namespace CapriDesktop
             WanderPace = 1;
             PopPace = 1;
             PerchFps = 30;
+            MainframeSize = 0;
             CheckIns = true;
             CaughtUp = true;
         }
@@ -3656,6 +3660,14 @@ namespace CapriDesktop
         {
             preferences.PopPace = Math.Max(0, Math.Min(2, pace));
             nextPopIn = -1;
+            SavePreferences();
+        }
+
+        internal int MainframeSize { get { return preferences.MainframeSize; } }
+
+        internal void SetMainframeSize(int size)
+        {
+            preferences.MainframeSize = size <= 0 ? 0 : Math.Max(100, Math.Min(200, size));
             SavePreferences();
         }
 
@@ -14612,6 +14624,20 @@ namespace CapriDesktop
                             mainframe.ShowSettings(true);
                             if (!shortOpened || !shortRow || !shortBottom || shortOverlap != null || !shortTop || shortTabs != null || !shortTabbed || shortPerch != "30 fps | -" || !shortLeft || mainframe.Scrolled != 0 || !mainframe.PerchFits) throw new Exception("Settings on a short screen went wrong: opened " + shortOpened + ", row " + shortRow + ", bottom " + shortBottom + ", overlap " + shortOverlap + ", top " + shortTop + ", tab " + shortTabs + "/" + shortTabbed + ", perch " + shortPerch + ", left " + shortLeft + ", now " + mainframe.ScrollStatus + " scrolled " + mainframe.Scrolled);
                             checks.Add("PASS short screens: Settings shrinks to fit a screen 480 px tall; a turn of the wheel over a slider scrolls the page and its header one row and leaves the slider alone; at the bottom the hide key shows, at the top Back is back where it was; Tab scrolls to every control it lands on; nothing overlaps; leaving Settings puts it all back");
+                            // Her Mainframe size (Zenni's Virtual Super Resolution ask): 150% grows Settings with nothing overlapping or poking
+                            // out and is saved, and Auto puts it back as it was.
+                            float sizedFrom = mainframe.Zoom;
+                            int sizedWide = mainframe.ClientSize.Width;
+                            mainframe.SizeMainframe(150);
+                            float sizedTo = mainframe.Zoom;
+                            int sizedBig = mainframe.ClientSize.Width;
+                            string sizedCrowd = mainframe.Overlap() ?? mainframe.Outside();
+                            bool sizedSaved = preferences.MainframeSize == 150 && LoadPreferences().MainframeSize == 150 && mainframe.FrameSizeShown == "150%";
+                            snap("mainframe-settings-150.png");
+                            mainframe.SizeMainframe(0);
+                            bool sizedBack = Math.Abs(mainframe.Zoom - sizedFrom) < 0.01f && mainframe.ClientSize.Width == sizedWide && preferences.MainframeSize == 0 && mainframe.FrameSizeShown.StartsWith("Auto", StringComparison.Ordinal);
+                            if (Math.Abs(sizedTo - 1.5f) > 0.01f || sizedBig <= sizedWide || sizedCrowd != null || !sizedSaved || !sizedBack) throw new Exception("The Mainframe size setting went wrong: zoom " + sizedFrom + " to " + sizedTo + ", " + sizedWide + " to " + sizedBig + " px wide, crowded " + sizedCrowd + ", saved " + sizedSaved + ", back " + sizedBack + " (" + mainframe.FrameSizeShown + ")");
+                            checks.Add("PASS her Mainframe size: 150% grows Settings with nothing overlapping or poking out and is saved, and Auto puts it back as it was (Auto is " + mainframe.FrameSizeShown + " here)");
                             SetVolume(50);
                             SetSoundLevel(30);
                             SetSleepAfter(600);

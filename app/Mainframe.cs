@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace CapriDesktop
@@ -239,6 +240,11 @@ namespace CapriDesktop
         private readonly Label customNote;
         private readonly Slider perchFps;
         private readonly Readout perchFpsName;
+        // Her Mainframe size: Auto, or 100% to 200% of the screen's own scale.
+        private static readonly int[] FrameSizes = { 0, 100, 125, 150, 175, 200 };
+        private static readonly string[] FrameSizeNames = { "Auto", "100%", "125%", "150%", "175%", "200%" };
+        private readonly Slider frameSize;
+        private readonly Readout frameSizeName;
         // Settings' rows: a setting's name from x 28 and its value's box from x 184 to 356, 22 px tall on a 28 px row.
         private const int Row = 28;
         private const int ValueAt = 184;
@@ -523,6 +529,12 @@ namespace CapriDesktop
             sizeSlider.Changed += delegate { if (syncing) return; sizeName.Text = SizeNames[sizeSlider.Value]; capri.SetCharacterSize(SizeSteps[sizeSlider.Value]); };
             checkIns = Switch("Check in on me", c, 110, delegate { if (!syncing) capri.ToggleCheckIns(); });
             onTop = Switch("Always on top", c, 138, delegate { if (!syncing) capri.ToggleOnTop(); });
+            // Zenni's ask (30 Oct): under Virtual Super Resolution her Mainframe came out tiny. Auto grows it by how much bigger
+            // the desktop is than the panel showing it; 100% to 200% sizes it by hand.
+            frameSize = Setting("Mainframe size", FrameSizeNames, c, 166, "Mainframe size. Auto makes it bigger when Virtual Super Resolution or DSR shrinks a big desktop onto a smaller screen");
+            frameSizeName = new Readout(frameSize);
+            frameSize.Changed += delegate { if (!syncing) ShowFrameSize(); };
+            frameSize.Released += delegate { if (!syncing) { capri.SetMainframeSize(FrameSizes[frameSize.Value]); Rezoom(Wanted()); ShowFrameSize(); } };
             Section("WATCH >", c, 208);
             watch = Switch("Watch my screen", c, 232, delegate { if (!syncing) capri.ToggleWatch(); });
             watch.AccessibleName = "Watch my screen. She comments now and then";
@@ -835,8 +847,55 @@ namespace CapriDesktop
         {
             base.OnLoad(e);
             loaded = true;
+            Rezoom(Wanted());
+            ShowFrameSize();
             Arrange(expanded);
         }
+
+        // Auto's size on the screen she's on, kept for Settings to show.
+        private float autoZoom = 1f;
+
+        // Her Mainframe size as picked, or for Auto what her screen needs: how much bigger its desktop is than the panel showing
+        // it, less what Windows' own scaling already makes up, to the nearest 5% from 100% to 200%. Zenni's Virtual Super
+        // Resolution, a 3840 x 2160 desktop on a 1920 x 1080 screen at 100%, gets 200%.
+        private float Wanted()
+        {
+            float shrunk = Panels.Shrink(Screen.FromControl(this));
+            autoZoom = Math.Max(1f, Math.Min(2f, (float)Math.Round(shrunk / DeviceScale() * 20) / 20));
+            int picked = capri.MainframeSize;
+            return picked > 0 ? picked / 100f : autoZoom;
+        }
+
+        private void ShowFrameSize()
+        {
+            int auto = (int)Math.Round(autoZoom * 100);
+            frameSizeName.Text = frameSize.Value == 0 && auto != 100 ? "Auto · " + auto + "%" : FrameSizeNames[frameSize.Value];
+        }
+
+        // Sizes everything on her Mainframe to a new zoom: every font, then every control's place and size, then each page where
+        // it belongs. Her SECURITY and layers windows pick it up the next time they open.
+        private void Rezoom(float next)
+        {
+            if (!loaded || Math.Abs(next - zoom) < 0.005f) return;
+            float factor = next / zoom;
+            ScrollPage(0);
+            SuspendLayout();
+            Grow(this, factor);
+            foreach (ContextMenuStrip menu in new[] { modelMenu, cloudMenu, voiceMenu, speechModelMenu, freeMenu, micMenu, languageMenu }) menu.Font = Font;
+            Scale(new SizeF(factor, factor));
+            zoom = next;
+            ResumeLayout(false);
+            Place();
+            Arrange(expanded);
+            Shape();
+        }
+
+        // Her Mainframe's zoom, and picking its size as they would, for the smoke test.
+        internal float Zoom { get { return zoom; } }
+
+        internal string FrameSizeShown { get { return frameSizeName.Text; } }
+
+        internal void SizeMainframe(int size) { frameSize.Slide(Math.Max(0, Array.IndexOf(FrameSizes, size))); }
 
         // Every control's own type grown or shrunk by this much, children first, so each reads its parent's before that changes.
         private static void Grow(Control control, float factor)
@@ -850,6 +909,78 @@ namespace CapriDesktop
         }
 
         private static Font Bigger(Font font, float factor) { return font == null ? null : new Font(font.FontFamily, font.SizeInPoints * factor, font.Style, GraphicsUnit.Point); }
+
+        // How much bigger a screen's desktop is than the panel showing it, from Windows' display paths: 2 for a 3840 x 2160
+        // desktop that AMD's Virtual Super Resolution or NVIDIA's DSR draws onto a 1920 x 1080 screen, 1 for an ordinary one.
+        // The panel's width is the smaller of the picture sent to it and the mode it prefers, which is its own.
+        private static class Panels
+        {
+            [StructLayout(LayoutKind.Sequential)] private struct Luid { internal uint Low; internal int High; }
+
+            [StructLayout(LayoutKind.Sequential)]
+            private struct PathInfo
+            {
+                internal Luid SourceAdapter;
+                internal uint SourceId, SourceMode, SourceFlags;
+                internal Luid TargetAdapter;
+                internal uint TargetId, TargetMode, Technology, Rotation, Scaling, RefreshNumerator, RefreshDenominator, ScanLines;
+                internal int Available;
+                internal uint TargetFlags, Flags;
+            }
+
+            // A source mode (Kind 1) is a desktop: its size and where it sits. A target mode (Kind 2) is the picture sent to a screen.
+            [StructLayout(LayoutKind.Explicit, Size = 64)]
+            private struct ModeInfo
+            {
+                [FieldOffset(0)] internal uint Kind;
+                [FieldOffset(16)] internal uint Width;
+                [FieldOffset(20)] internal uint Height;
+                [FieldOffset(28)] internal int X;
+                [FieldOffset(32)] internal int Y;
+                [FieldOffset(40)] internal uint ActiveWidth;
+            }
+
+            [StructLayout(LayoutKind.Explicit, Size = 80)]
+            private struct PreferredMode
+            {
+                [FieldOffset(0)] internal uint Type;
+                [FieldOffset(4)] internal uint Size;
+                [FieldOffset(8)] internal Luid Adapter;
+                [FieldOffset(16)] internal uint Id;
+                [FieldOffset(20)] internal uint Width;
+            }
+
+            [DllImport("user32.dll")] private static extern int GetDisplayConfigBufferSizes(uint flags, out uint paths, out uint modes);
+            [DllImport("user32.dll")] private static extern int QueryDisplayConfig(uint flags, ref uint pathCount, [Out] PathInfo[] paths, ref uint modeCount, [Out] ModeInfo[] modes, IntPtr topology);
+            [DllImport("user32.dll")] private static extern int DisplayConfigGetDeviceInfo(ref PreferredMode request);
+
+            internal static float Shrink(Screen screen)
+            {
+                try
+                {
+                    uint pathCount, modeCount;
+                    if (GetDisplayConfigBufferSizes(2, out pathCount, out modeCount) != 0) return 1f;
+                    PathInfo[] paths = new PathInfo[pathCount];
+                    ModeInfo[] modes = new ModeInfo[modeCount];
+                    if (QueryDisplayConfig(2, ref pathCount, paths, ref modeCount, modes, IntPtr.Zero) != 0) return 1f;
+                    for (int i = 0; i < pathCount; i++)
+                    {
+                        PathInfo path = paths[i];
+                        if (path.SourceMode >= modeCount || modes[path.SourceMode].Kind != 1) continue;
+                        ModeInfo source = modes[path.SourceMode];
+                        if (source.X != screen.Bounds.X || source.Y != screen.Bounds.Y) continue;
+                        uint panel = path.TargetMode < modeCount && modes[path.TargetMode].Kind == 2 ? modes[path.TargetMode].ActiveWidth : 0;
+                        PreferredMode preferred = new PreferredMode { Type = 3, Size = 80, Adapter = path.TargetAdapter, Id = path.TargetId };
+                        if (DisplayConfigGetDeviceInfo(ref preferred) == 0 && preferred.Width > 0) panel = panel == 0 ? preferred.Width : Math.Min(panel, preferred.Width);
+                        // A screen turned on its side has its desktop's height along the panel's width.
+                        uint across = path.Rotation == 2 || path.Rotation == 4 ? source.Height : source.Width;
+                        return panel == 0 ? 1f : Math.Max(1f, across / (float)panel);
+                    }
+                }
+                catch (Exception) { }
+                return 1f;
+            }
+        }
 
         protected override void OnSizeChanged(EventArgs e)
         {
@@ -1098,6 +1229,8 @@ namespace CapriDesktop
             caughtUp.Checked = capri.CaughtUp;
             stayOnModel.Checked = capri.StayOnModel;
             remembering.Checked = capri.Remembers;
+            frameSize.Value = Math.Max(0, Array.IndexOf(FrameSizes, capri.MainframeSize));
+            ShowFrameSize();
             VoiceTier();
             int chosen = Array.IndexOf(Gaps, capri.GlanceGap);
             gap.Value = chosen < 0 ? 5 : chosen;
