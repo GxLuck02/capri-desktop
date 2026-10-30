@@ -11698,6 +11698,40 @@ namespace CapriDesktop
                                     if (Computer.Scan(Computer.Code("space")) != 0x39 || Computer.Scan(Computer.Code("enter")) != 0x1C || Computer.Scan(Computer.Code("esc")) != 0x01 || Computer.Scan(Computer.Code("print")) != 0 || Computer.Scan(Computer.Code("xf86audioraisevolume")) != 0)
                                         throw new Exception("Her keys don't carry their scan codes: space " + Computer.Scan(Computer.Code("space")) + ", enter " + Computer.Scan(Computer.Code("enter")));
                                     checks.Add("PASS her keys in games: each press carries the key's real scan code, so games like Roblox and Minecraft feel it, and stays down a few frames; Print Screen and media keys stay virtual");
+                                    // Stuck under a block, she holds w and presses space (Lachy, 30 Oct). Real F24 and F23 stand in for w and space.
+                                    string holdTool;
+                                    ToolArguments holdArgs;
+                                    bool holdListed = Computer.Toolset.IndexOf("{\"name\":\"hold_and_press\",", StringComparison.Ordinal) > 0 && Computer.Tools.IndexOf("\"name\":\"hold_and_press\"", StringComparison.Ordinal) > 0 && Computer.ClaudeTools.IndexOf("\"name\":\"hold_and_press\"", StringComparison.Ordinal) > 0
+                                        && Computer.Listing.IndexOf("\n- hold_and_press{\"hold\": \"...\", \"press\": \"...\", \"times\": \"...\", \"seconds\": \"...\"}: Hold keys down in a game while pressing another key", StringComparison.Ordinal) > 0
+                                        && Computer.Written("hold_and_press{\"hold\": \"w\", \"press\": \"space\", \"times\": \"3\"}", out holdTool, out holdArgs) && holdTool == "hold_and_press" && holdArgs.Hold == "w" && holdArgs.Press == "space" && holdArgs.Times == "3"
+                                        && Computer.Status("hold_and_press", new ToolArguments { Hold = "w", Press = "space" }, null) == "Holding w and pressing space." && Computer.Did("hold_and_press", new ToolArguments { Hold = "w", Press = "space" }, null) == "Held w and pressed space"
+                                        && Computer.Playing.IndexOf("call hold_and_press with hold w and press space", StringComparison.Ordinal) > 0;
+                                    Func<bool> holdEscapeWas = Computer.Escape;
+                                    Stopwatch holdPressClock = Stopwatch.StartNew();
+                                    string holdPressed, holdStopped, holdBadKey, holdBadPress;
+                                    long holdPressedMs, holdStoppedMs;
+                                    try
+                                    {
+                                        Computer.Escape = delegate { return false; };
+                                        Computer.Arm();
+                                        holdPressed = Computer.HoldAndPress("f24", "f23", "3", "0.6");
+                                        holdPressedMs = holdPressClock.ElapsedMilliseconds;
+                                        holdBadKey = Computer.HoldAndPress("hyper", "space", null, null);
+                                        holdBadPress = Computer.HoldAndPress("w", "hyper", null, null);
+                                        Computer.Arm();
+                                        holdPressClock.Restart();
+                                        Computer.Escape = delegate { return holdPressClock.ElapsedMilliseconds > 400; };
+                                        holdStopped = Computer.HoldAndPress("f24", "f23", null, "60");
+                                        holdStoppedMs = holdPressClock.ElapsedMilliseconds;
+                                    }
+                                    finally
+                                    {
+                                        Computer.Escape = holdEscapeWas;
+                                        Computer.Arm();
+                                    }
+                                    if (!holdListed || holdPressed != "Held f24 and pressed f23 3 times." || holdPressedMs < 550 || holdBadKey != "There's no key called hyper." || holdBadPress != "There's no key called hyper." || !Computer.Failed(holdBadKey) || holdStopped != Computer.Escaped || holdStoppedMs > 3000)
+                                        throw new Exception("Holding w while pressing space went wrong: listed " + holdListed + " / " + holdPressed + " after " + holdPressedMs + " ms / " + holdBadKey + " / " + holdBadPress + " / " + holdStopped + " after " + holdStoppedMs + " ms");
+                                    checks.Add("PASS hold and press: her jobs can hold w and press space together (hold_and_press, beside Claude's computer tools and in her button tools), with presses spread over the hold; her game lines tell her to do it when she's stuck; bad keys are refused and Esc stops a long hold");
                                     // A brain error partway through a job, like a rate limit, used to leave their mouse borrowed.
                                     Func<Point> cursorAtWas = Computer.CursorAt;
                                     Action<Point> putCursorWas = Computer.PutCursor;

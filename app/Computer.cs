@@ -152,7 +152,8 @@ namespace CapriDesktop
 
         // What a game job's brain gets after her hands' prompt (Lachy, 30 Oct, after her live stream).
         internal const string Playing =
-            "\nThis job plays a game, so take your time on every turn: look closely at the screen, work out where you are, what's around you and what's in the way, and plan your next moves before you act. After each move, check what changed before the next one.";
+            "\nThis job plays a game, so take your time on every turn: look closely at the screen, work out where you are, what's around you and what's in the way, and plan your next moves before you act. After each move, check what changed before the next one." +
+            "\nMove by holding keys for a second or two at a time, like w to walk forward. If you're stuck, like under a block, against a wall or in a hole, hold w and press space together to jump forward out of it: call hold_and_press with hold w and press space. If that doesn't free you, back off or step sideways with s, a or d and try again.";
 
         private static readonly string[,] Specs =
         {
@@ -162,6 +163,9 @@ namespace CapriDesktop
               "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"What to type\"},\"target\":{\"type\":\"string\",\"description\":\"The box's number, if it isn't focused\"},\"enter\":{\"type\":\"string\",\"description\":\"Press Enter after\",\"enum\":[\"yes\",\"no\"]}},\"required\":[\"text\"]}" },
             { "press", "Press keys or a shortcut, like enter, tab, esc, ctrl+l, ctrl+t or alt+tab.",
               "{\"type\":\"object\",\"properties\":{\"keys\":{\"type\":\"string\",\"description\":\"The keys, joined with +\"}},\"required\":[\"keys\"]}" },
+            // Lachy, 30 Oct: "they wouldn't hold w and click space if they were stuck under a block".
+            { "hold_and_press", "Hold keys down in a game while pressing another key, like holding w and pressing space to walk forward and jump out from under a block or up a ledge. Without press it just holds the keys, like w to walk.",
+              "{\"type\":\"object\",\"properties\":{\"hold\":{\"type\":\"string\",\"description\":\"The key or keys to hold down, joined with +, like w or shift+w\"},\"press\":{\"type\":\"string\",\"description\":\"A key to press while they're held, like space\"},\"times\":{\"type\":\"string\",\"description\":\"How many times to press it, if not one every half second\"},\"seconds\":{\"type\":\"string\",\"description\":\"How long to hold, in seconds, if not 2\"}},\"required\":[\"hold\"]}" },
             { "scroll", "Scroll the window, or the numbered thing given.",
               "{\"type\":\"object\",\"properties\":{\"direction\":{\"type\":\"string\",\"description\":\"Which way\",\"enum\":[\"up\",\"down\"]},\"target\":{\"type\":\"string\",\"description\":\"The number of what to scroll, if any\"}},\"required\":[\"direction\"]}" },
             { "open_app", "Open an app or game installed on their PC by its name.",
@@ -214,9 +218,10 @@ namespace CapriDesktop
 
         internal static string Tools { get { return Rendering()[0]; } }
         internal static string ClaudeTools { get { return Rendering()[1]; } }
-        internal static readonly string Toolset = "[{\"type\":\"computer_toolset_20260801\"}," + Render("open_app") + "," + Render("open_website") + "]";
+        // Her own hold_and_press rides beside Claude's computer tools, so she can hold w while she presses space.
+        internal static readonly string Toolset = "[{\"type\":\"computer_toolset_20260801\"}," + Render("open_app") + "," + Render("open_website") + "," + Render("hold_and_press") + "]";
         internal static string Listing { get { return Rendering()[2]; } }
-        private static readonly Regex StepText = new Regex(@"\b(click|type|press|scroll|open_app|open_website|wait_for|wait|note|ask|done)\s*(\{[^{}]*\})", RegexOptions.Singleline);
+        private static readonly Regex StepText = new Regex(@"\b(click|type|press|hold_and_press|scroll|open_app|open_website|wait_for|wait|note|ask|done)\s*(\{[^{}]*\})", RegexOptions.Singleline);
         private static readonly Regex BareClick = new Regex(@"^\W*click\W*(\d{1,3})\W*$", RegexOptions.IgnoreCase);
         private static readonly Regex Risky = new Regex(@"\b(send|post|publish|tweet|reply|comment|buy|purchase|pay|checkout|check out|place order|order now|book now|book it|complete booking|reserve|reserve now|subscribe|donate|delete|remove|uninstall|install|format|transfer|confirm|sign out|log out|unfriend|block|report)\b", RegexOptions.IgnoreCase);
         private static readonly Regex Told = new Regex(@"\b(send|message|text|dm|tell|say|write|type|put|paste|share|answer|respond|ask|let|post|publish|tweet|reply|comment|delete|remove|erase|trash|uninstall|install|format|confirm|sign\s+out|log\s+out|unfriend|block|report)\b", RegexOptions.IgnoreCase);
@@ -590,6 +595,7 @@ namespace CapriDesktop
             if (tool == "click") return (args.Button == "double" ? "double-click" : args.Button == "right" ? "right-click" : "click") + at;
             if (tool == "type") return "type " + Voice.Quote(args.Text ?? "") + at + (args.Enter == "yes" ? " + enter" : "");
             if (tool == "press") return "press " + (args.Keys ?? "");
+            if (tool == "hold_and_press") return "hold " + (args.Hold ?? "") + (string.IsNullOrWhiteSpace(args.Press) ? "" : " and press " + args.Press);
             if (tool == "scroll") return "scroll " + (args.Direction ?? "") + at;
             if (tool == "open_app") return "open_app " + Voice.Quote(args.Name ?? "");
             if (tool == "open_website") return "open_website " + Voice.Quote(args.Site ?? "") + (string.IsNullOrEmpty(args.Search) ? "" : " search " + Voice.Quote(args.Search));
@@ -632,6 +638,7 @@ namespace CapriDesktop
             if (tool == "click") return name != null ? "Clicking " + name + "." : "Clicking.";
             if (tool == "type") return "Typing " + Voice.Quote((args.Text ?? "").Length > 24 ? args.Text.Substring(0, 21) + "..." : args.Text ?? "") + ".";
             if (tool == "press") return "Pressing " + (args.Keys ?? "") + ".";
+            if (tool == "hold_and_press") return "Holding " + (args.Hold ?? "keys") + (string.IsNullOrWhiteSpace(args.Press) ? "" : " and pressing " + args.Press) + ".";
             if (tool == "scroll") return "Scrolling " + (args.Direction ?? "down") + ".";
             if (tool == "open_app") return "Opening " + (args.Name ?? "it") + ".";
             if (tool == "open_website") return "Opening " + (args.Site ?? "it") + ".";
@@ -651,6 +658,7 @@ namespace CapriDesktop
             if (tool == "click") return (args.Button == "double" ? "Double-clicked" : args.Button == "right" ? "Right-clicked" : "Clicked") + (name != null ? " " + name : "");
             if (tool == "type") return "Typed " + Voice.Quote(text) + (args.Enter == "yes" ? " and pressed Enter" : "");
             if (tool == "press") return "Pressed " + (args.Keys ?? "");
+            if (tool == "hold_and_press") return "Held " + (args.Hold ?? "keys") + (string.IsNullOrWhiteSpace(args.Press) ? "" : " and pressed " + args.Press);
             if (tool == "scroll") return "Scrolled " + (args.Direction == "up" ? "up" : "down");
             if (tool == "open_app") return "Opened " + (args.Name ?? "the app");
             if (tool == "open_website") return "Opened " + (args.Site ?? "the site") + (string.IsNullOrEmpty(args.Search) ? "" : " and searched " + Voice.Quote(args.Search));
@@ -664,6 +672,7 @@ namespace CapriDesktop
         {
             // Win + R, Win + L, Ctrl + Alt + Del and the like ask first unless Things your request didn't mention is on.
             if (tool == "press" && Barred(Chorded(args.Keys))) return "keys";
+            if (tool == "hold_and_press" && HeldBarred(args) != null) return "keys";
             Target target = sight == null ? null : sight.Find(args.Target);
             if (tool == "click")
             {
@@ -804,6 +813,7 @@ namespace CapriDesktop
         {
             Target target = sight == null ? null : sight.Find(args.Target);
             if (tool == "press" && Barred(Chorded(args.Keys))) return "Should I press " + Chorded(args.Keys) + "?";
+            if (tool == "hold_and_press" && HeldBarred(args) != null) return "Should I press " + HeldBarred(args) + "?";
             if (tool == "click" && target != null) return "Should I press " + Voice.Quote(target.Name) + "?";
             if (tool == "type" && !string.IsNullOrEmpty(args.Text)) return "Should I send " + Voice.Quote(args.Text.Length > 60 ? args.Text.Substring(0, 57) + "..." : args.Text) + "?";
             return "Should I send that?";
@@ -1288,6 +1298,11 @@ namespace CapriDesktop
             if (sight == null || sight.Window == IntPtr.Zero || !IsWindow(sight.Window)) return "There's no app window to use. Open one first.";
             Target target = sight.Find(args.Target);
             if (!string.IsNullOrEmpty(args.Target) && target == null) return "There's no number " + args.Target + " on screen.";
+            if (tool == "hold_and_press")
+            {
+                if (!Hands.Front(sight.Window)) return "Couldn't bring " + sight.Program + " to the front.";
+                return HoldAndPress(args.Hold, args.Press, args.Times, args.Seconds);
+            }
             if (tool == "click")
             {
                 if (target == null) return "There's no number given to click.";
@@ -1354,6 +1369,63 @@ namespace CapriDesktop
                 if (mapped != null && Barred(mapped)) return mapped;
             }
             return null;
+        }
+
+        // The first barred key a hold_and_press would hold or press, or null.
+        internal static string HeldBarred(ToolArguments args) { return args == null ? null : BarredIn((args.Hold ?? "") + " " + (args.Press ?? "")); }
+
+        // Holds keys down while pressing another, like w and space to walk forward and jump out from under a block, then lets
+        // go. The presses are spread over the hold, each down for a few frames like a tap of a finger, and Esc stops it.
+        internal static string HoldAndPress(string hold, string press, string times, string seconds)
+        {
+            string chord = Combo(hold);
+            if (chord == null) return "There's no key called " + (hold ?? "").Trim() + ".";
+            bool tapping = !string.IsNullOrWhiteSpace(press);
+            string tap = tapping ? Combo(press) : null;
+            if (tapping && tap == null) return "There's no key called " + press.Trim() + ".";
+            string barred = Barred(chord) ? chord : tap != null && Barred(tap) ? tap : null;
+            if (barred != null) return "Won't press " + barred + ".";
+            double held = Amount(seconds, -1), count = tapping ? Amount(times, -1) : 0;
+            if (held < 0) held = count > 0 ? count * 0.5 : 2;
+            if (count < 0) count = Math.Max(1, Math.Round(held / 0.5));
+            int presses = (int)Math.Min(int.MaxValue, Math.Round(count));
+            int heldMs = (int)Math.Min(int.MaxValue, Math.Max(0.1, held) * 1000);
+            short[] codes, taps;
+            Modifiers(chord, out codes);
+            Modifiers(tap, out taps);
+            bool esc = Array.IndexOf(codes, (short)0x1B) >= 0 || Array.IndexOf(taps, (short)0x1B) >= 0;
+            bool tapped = false;
+            if (esc) escaping = true;
+            try
+            {
+                Hold(codes, true);
+                if (presses == 0) Pause(heldMs);
+                int each = presses == 0 ? 0 : Math.Max(100, heldMs / presses);
+                int down = Math.Min(350, each * 7 / 10);
+                for (int i = 0; i < presses && !interrupted; i++)
+                {
+                    Hold(taps, true);
+                    tapped = true;
+                    Pause(down);
+                    Hold(taps, false);
+                    tapped = false;
+                    Pause(each - down);
+                }
+            }
+            finally
+            {
+                if (tapped) Hold(taps, false);
+                Hold(codes, false);
+                Thread.Sleep(60);
+                if (esc) escaping = false;
+            }
+            return interrupted ? Why : "Held " + chord + (presses == 0 ? "" : " and pressed " + tap + (presses == 1 ? " once" : " " + presses + " times")) + ".";
+        }
+
+        private static double Amount(string text, double fallback)
+        {
+            double value;
+            return double.TryParse(Regex.Replace(text ?? "", @"[^\d.]", ""), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value) ? value : fallback;
         }
 
         private static bool FocusedSecret()
@@ -2067,10 +2139,10 @@ namespace CapriDesktop
         {
             target = null;
             question = null;
-            if (!member) return null;
-            // Win + R and the like ask first unless Things your request didn't mention is on.
-            string barred = name == "key" || name == "hold_key" ? Computer.BarredIn(args.Text) : null;
+            // Win + R and the like ask first unless Things your request didn't mention is on, in her own hold_and_press too.
+            string barred = member && (name == "key" || name == "hold_key") ? Computer.BarredIn(args.Text) : !member && name == "hold_and_press" ? Computer.HeldBarred(args) : null;
             if (barred != null) { question = "Should I press " + barred + "?"; return "keys"; }
+            if (!member) return null;
             Sight front = Computer.Glimpse();
             Sight gate = new Sight { Window = front.Window, Title = front.Title, Program = front.Program, Bounds = front.Bounds };
             if (name == "left_click" || name == "double_click" || name == "triple_click" || name == "right_click" || name == "middle_click")
