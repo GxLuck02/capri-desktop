@@ -152,4 +152,75 @@ namespace CapriDesktop
             }
         }
     }
+
+    // A button in her look: a dark box with a red rim and its bottom right corner clipped. A cyan one is the step to take, and
+    // a solid one is the window's main step; a red one ends something. Glyph 1 or 2 makes it a bare minimize or close mark.
+    internal sealed class Plate : Button
+    {
+        internal Color Accent = Neon.Rose;
+        internal bool Solid;
+        internal int Glyph;
+        private bool hot;
+        private bool down;
+
+        internal Plate()
+        {
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+            BackColor = Neon.Ground;
+            Cursor = Cursors.Hand;
+            UseMnemonic = false;
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
+
+        protected override void OnMouseLeave(EventArgs e) { hot = false; down = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) { down = true; Invalidate(); } base.OnMouseDown(e); }
+
+        protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            float s = DeviceDpi / 96f;
+            Graphics graphics = e.Graphics;
+            Neon.Behind(graphics, this, 210 * s);
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            float line = Math.Max(1f, s);
+            RectangleF box = new RectangleF(line / 2, line / 2, Width - line, Height - line);
+            float x = Width / 2f;
+            float y = Height / 2f;
+            if (Glyph != 0)
+            {
+                if (hot) using (GraphicsPath plate = Neon.Cut(box, 0, 0, 4 * s, 0)) using (Brush fill = new SolidBrush(down ? Neon.Pressed : Neon.Hover)) graphics.FillPath(fill, plate);
+                using (Pen pen = new Pen(hot || (Focused && ShowFocusCues) ? (Glyph == 2 ? Neon.Hot : Neon.Cyan) : Neon.Faint, 1.5f * s))
+                {
+                    if (Glyph == 1) graphics.DrawLine(pen, x - 5 * s, y, x + 5 * s, y);
+                    else
+                    {
+                        graphics.DrawLine(pen, x - 4.5f * s, y - 4.5f * s, x + 4.5f * s, y + 4.5f * s);
+                        graphics.DrawLine(pen, x - 4.5f * s, y + 4.5f * s, x + 4.5f * s, y - 4.5f * s);
+                    }
+                }
+                return;
+            }
+            bool lit = hot || (Focused && ShowFocusCues);
+            Color face, rim, ink;
+            if (!Enabled) { face = Neon.Field; rim = Color.FromArgb(52, 22, 32); ink = Color.FromArgb(112, 94, 104); }
+            else if (Solid) { face = down ? ControlPaint.Dark(Accent, 0.1f) : hot ? ControlPaint.Light(Accent, 0.35f) : Accent; rim = face; ink = Neon.OnInk; }
+            else if (Accent == Neon.Cyan) { face = down ? Color.FromArgb(18, 62, 67) : hot ? Color.FromArgb(13, 45, 49) : Neon.Deep; rim = lit ? Neon.Cyan : Neon.DeepEdge; ink = Neon.Cyan; }
+            else if (Accent == Neon.Hot) { face = down ? Color.FromArgb(72, 18, 30) : hot ? Color.FromArgb(54, 16, 28) : Color.FromArgb(34, 12, 22); rim = lit ? Color.FromArgb(255, 124, 122) : Neon.Hot; ink = Color.FromArgb(255, 166, 162); }
+            else { face = down ? Neon.Pressed : hot ? Neon.Hover : Neon.Field; rim = lit ? Neon.Hot : Neon.Edge; ink = Accent; }
+            using (GraphicsPath plate = Neon.Cut(box, 0, 0, 6 * s, 0))
+            {
+                using (Brush brush = new SolidBrush(face)) graphics.FillPath(brush, plate);
+                using (Pen pen = new Pen(rim, line)) graphics.DrawPath(pen, plate);
+            }
+            // A solid button shows keyboard focus as a dark line just inside its edge.
+            if (Solid && Enabled && Focused && ShowFocusCues)
+                using (GraphicsPath inner = Neon.Cut(RectangleF.Inflate(box, -3 * s, -3 * s), 0, 0, 4 * s, 0))
+                using (Pen pen = new Pen(Neon.OnInk, line))
+                    graphics.DrawPath(pen, inner);
+            TextRenderer.DrawText(graphics, Text, Font, ClientRectangle, ink, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+        }
+    }
 }

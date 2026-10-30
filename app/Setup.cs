@@ -161,12 +161,25 @@ namespace CapriSetup
             return unsaved ?? onDesktop;
         }
 
+        // A window drawn on a plain backdrop and cut to its own shape, the way the screen shows it.
         private static void Snap(Form form, string path)
         {
             using (Bitmap bitmap = new Bitmap(form.Width, form.Height))
+            using (Bitmap sheet = new Bitmap(form.Width + 48, form.Height + 48))
             {
                 form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
-                bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                using (Graphics graphics = Graphics.FromImage(sheet))
+                {
+                    graphics.Clear(Color.FromArgb(44, 47, 56));
+                    if (form.Region != null)
+                        using (Region shape = form.Region.Clone())
+                        {
+                            shape.Translate(24, 24);
+                            graphics.SetClip(shape, CombineMode.Replace);
+                        }
+                    graphics.DrawImageUnscaled(bitmap, 24, 24);
+                }
+                sheet.Save(path, System.Drawing.Imaging.ImageFormat.Png);
             }
         }
 
@@ -418,17 +431,22 @@ namespace CapriSetup
         }
     }
 
+    // Her installer in her Mainframe's look: a borderless window cut at the corners with a red rim and hot red strokes over her
+    // wine glow, INSTALL CAPRI in rose for its title, its options on a band, cyan tick boxes, and a solid cyan Install Capri
+    // (a red Remove Capri). It drags from anywhere that isn't a control and lays itself out for the screen's scale.
     internal sealed class SetupWindow : Form
     {
         private readonly bool removing;
+        private readonly float s;
         private readonly PictureBox chip;
-        private readonly Button primary;
-        private readonly CheckBox desktop;
-        private readonly CheckBox launch;
+        private readonly Plate primary;
+        private readonly Tick desktop;
+        private readonly Tick launch;
+        private readonly Label section;
         private readonly Label status;
         private readonly Label stage;
         private readonly Label note;
-        private readonly Button cancel;
+        private readonly Plate cancel;
         private long got, total;
         private string noShortcut;
         private bool fetching;
@@ -438,40 +456,59 @@ namespace CapriSetup
         {
             removing = uninstall;
             Text = removing ? "Remove Capri" : "Install Capri";
-            FormBorderStyle = FormBorderStyle.FixedSingle;
+            FormBorderStyle = FormBorderStyle.None;
             MaximizeBox = false;
             MinimizeBox = true;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(680, 470);
-            AutoScaleMode = AutoScaleMode.Dpi;
-            BackColor = Color.FromArgb(19, 20, 24);
-            ForeColor = Color.FromArgb(240, 241, 243);
-            Font = new Font("Segoe UI", 10);
+            AutoScaleMode = AutoScaleMode.None;
+            s = DeviceDpi / 96f;
+            ClientSize = new Size(Px(680), Px(470));
+            BackColor = Neon.Ground;
+            ForeColor = Neon.White;
+            DoubleBuffered = true;
+            Font = Neon.Type(10.5f);
             using (Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream("Capri.Chip.ico")) if (source != null) Icon = new Icon(source);
-            Label eyebrow = LabelAt("CAPRI  /  DESKTOP COMPANION", 34, 29, 590, 22, 9, Color.FromArgb(172, 248, 98));
-            Label heading = LabelAt(removing ? "See you around." : "A little company.\nZero noise.", 31, 69, 408, 116, 29, ForeColor);
-            heading.Font = new Font("Segoe UI Semibold", 29, FontStyle.Bold);
+            LabelAt(removing ? "REMOVE CAPRI" : "INSTALL CAPRI", 24, 14, 420, 32, Neon.Display(15f), Neon.Rose);
+            Glyph(1, 680 - 86, delegate { WindowState = FormWindowState.Minimized; });
+            Glyph(2, 680 - 54, delegate { Close(); });
+            LabelAt(removing ? "See you around." : "A little company.\nZero noise.", 32, 64, 420, 124, Neon.Display(30f), Neon.White);
             chip = new PictureBox();
-            chip.Bounds = new Rectangle(462, 80, 180, 112);
+            chip.Bounds = Box(462, 74, 180, 112);
             chip.SizeMode = PictureBoxSizeMode.Zoom;
+            chip.BackColor = Color.Transparent;
             using (Stream image = Assembly.GetExecutingAssembly().GetManifestResourceStream("Capri.Chip.png")) if (image != null) using (Bitmap loaded = new Bitmap(image)) chip.Image = new Bitmap(loaded);
             Controls.Add(chip);
-            LabelAt(removing ? "Remove the app and its shortcuts for this Windows user.\nQuit Capri from the tray before continuing." : "Right-click for her menu.", 34, 208, 610, 53, 11, Color.FromArgb(175, 179, 188));
-            desktop = new CheckBox { Text = "Add a desktop shortcut", Checked = false, AutoSize = true, Location = new Point(34, 280), Visible = !removing, ForeColor = ForeColor, BackColor = BackColor };
-            launch = new CheckBox { Text = "Open Capri when finished", Checked = true, AutoSize = true, Location = new Point(34, 310), Visible = !removing, ForeColor = ForeColor, BackColor = BackColor };
+            LabelAt(removing ? "Remove the app and its shortcuts for this Windows user.\nQuit Capri from the tray before continuing." : "Right-click for her menu.", 34, 198, 610, 50, Neon.Type(11f), Neon.Faint);
+            section = LabelAt("OPTIONS", 34, 254, 400, 20, Neon.Type(10f, true), Neon.White);
+            section.Visible = !removing;
+            desktop = new Tick();
+            desktop.Text = "Add a desktop shortcut";
+            desktop.Bounds = Box(34, 284, 340, 26);
+            desktop.Visible = !removing;
+            launch = new Tick();
+            launch.Text = "Open Capri when finished";
+            launch.Checked = true;
+            launch.Bounds = Box(34, 314, 340, 26);
+            launch.Visible = !removing;
             Controls.Add(desktop);
             Controls.Add(launch);
-            status = LabelAt(removing ? "Your saved position and size will be kept." : "", 34, 350, 604, 22, 9, Color.FromArgb(146, 151, 161));
-            stage = LabelAt("", 34, 278, 604, 28, 12.5f, ForeColor);
+            status = LabelAt(removing ? "Your saved position and size will be kept." : "", 34, 352, 604, 22, Neon.Type(9.5f), Neon.Faint);
+            stage = LabelAt("", 34, 282, 604, 28, Neon.Type(13f, true), Neon.White);
             stage.Visible = false;
-            note = LabelAt("", 34, 310, 604, 22, 9.5f, Color.FromArgb(175, 179, 188));
+            note = LabelAt("", 34, 314, 604, 22, Neon.Type(10f), Neon.Faint);
             note.Visible = false;
-            primary = new Button { Text = removing ? "Remove Capri" : "Install Capri", Bounds = new Rectangle(450, 399, 194, 43), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(239, 58, 78), ForeColor = Color.White, Cursor = Cursors.Hand };
-            primary.FlatAppearance.BorderSize = 0;
+            primary = new Plate();
+            primary.Text = removing ? "Remove Capri" : "Install Capri";
+            primary.Accent = removing ? Neon.Hot : Neon.Cyan;
+            primary.Solid = true;
+            primary.Font = Neon.Type(11.5f, true);
+            primary.Bounds = Box(450, 400, 194, 42);
             primary.Click += Perform;
             Controls.Add(primary);
-            cancel = new Button { Text = "Cancel", Bounds = new Rectangle(318, 399, 116, 43), FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(196, 199, 205), BackColor = BackColor };
-            cancel.FlatAppearance.BorderColor = Color.FromArgb(62, 65, 74);
+            cancel = new Plate();
+            cancel.Text = "Cancel";
+            cancel.Font = Neon.Type(11f, true);
+            cancel.Bounds = Box(318, 400, 116, 42);
             cancel.Click += delegate
             {
                 if (!fetching) { Close(); return; }
@@ -483,25 +520,80 @@ namespace CapriSetup
             Controls.Add(cancel);
             AcceptButton = primary;
             CancelButton = cancel;
+            Neon.Clip(this, 16 * s, 6 * s);
         }
 
-        private Label LabelAt(string text, int x, int y, int width, int height, float size, Color color)
+        // Without a title bar it keeps a taskbar button that minimizes and restores it, and Alt + Space's menu.
+        protected override CreateParams CreateParams
         {
-            Label label = new Label { Text = text, Bounds = new Rectangle(x, y, width, height), Font = new Font("Segoe UI", size), ForeColor = color, BackColor = Color.Transparent };
+            get
+            {
+                CreateParams value = base.CreateParams;
+                value.Style = (value.Style | 0x00020000 | 0x00080000) & ~0x00010000;
+                return value;
+            }
+        }
+
+        private int Px(float value) { return (int)Math.Round(value * s); }
+
+        private Rectangle Box(int x, int y, int width, int height) { return new Rectangle(Px(x), Px(y), Px(width), Px(height)); }
+
+        private Label LabelAt(string text, int x, int y, int width, int height, Font font, Color color)
+        {
+            Label label = new Neon.Caption();
+            label.Text = text;
+            label.Bounds = Box(x, y, width, height);
+            label.Font = font;
+            label.ForeColor = color;
             Controls.Add(label);
             return label;
         }
 
+        // Minimize and close, top right like the Mainframe's. They're for the mouse, so Enter still means the main button.
+        private void Glyph(int glyph, int x, EventHandler click)
+        {
+            Plate mark = new Plate();
+            mark.Glyph = glyph;
+            mark.TabStop = false;
+            mark.AccessibleName = glyph == 1 ? "Minimize" : "Close";
+            mark.Bounds = Box(x, 14, 30, 26);
+            mark.Click += click;
+            Controls.Add(mark);
+        }
+
+        // It drags from anywhere that isn't a control.
+        protected override void WndProc(ref Message message)
+        {
+            base.WndProc(ref message);
+            if (message.Msg == 0x0084 && message.Result == new IntPtr(1)) message.Result = new IntPtr(2);
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e) { Neon.Backdrop(e.Graphics, ClientSize, 210 * s); }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            using (Pen line = new Pen(Color.FromArgb(56, 58, 66))) e.Graphics.DrawLine(line, 34, 382, Width - 52, 382);
-            using (Pen line = new Pen(Color.FromArgb(239, 58, 78), 3)) e.Graphics.DrawLine(line, 0, 0, ClientSize.Width, 0);
+            Graphics graphics = e.Graphics;
+            if (section.Visible)
+            {
+                // Its options sit on a dark band under a teal rule with a red tick, like a Mainframe section.
+                RectangleF band = new RectangleF(section.Left - 14 * s, section.Top - 5 * s, ClientSize.Width - section.Left - 6 * s, 24 * s);
+                using (Brush fill = new SolidBrush(Neon.Band)) graphics.FillRectangle(fill, band);
+                using (Brush rule = new SolidBrush(Neon.Rule)) graphics.FillRectangle(rule, band.Left, band.Top, band.Width, Math.Max(1, (int)s));
+                using (Brush tick = new SolidBrush(Neon.Hot)) graphics.FillRectangle(tick, band.Left, band.Top + 7 * s, 2.5f * s, band.Height - 13 * s);
+            }
+            using (Brush line = new SolidBrush(Neon.Edge)) graphics.FillRectangle(line, Px(34), Px(384), ClientSize.Width - Px(68), Math.Max(1, (int)s));
+            Neon.Frame(graphics, ClientSize, s, 16 * s, 6 * s, 64 * s, 34 * s);
             if (!fetching || total <= 0) return;
-            int tall = Math.Max(4, status.Height / 5);
-            Rectangle bar = new Rectangle(status.Left, status.Top - tall - 6, status.Width, tall);
-            using (Brush track = new SolidBrush(Color.FromArgb(42, 44, 52))) e.Graphics.FillRectangle(track, bar);
-            using (Brush fill = new SolidBrush(Color.FromArgb(239, 58, 78))) e.Graphics.FillRectangle(fill, new Rectangle(bar.X, bar.Y, (int)(bar.Width * Math.Min(1.0, (double)got / total)), bar.Height));
+            // The download's progress: a dark well filling with cyan segments.
+            int tall = Px(7);
+            Rectangle bar = new Rectangle(status.Left, status.Top - tall - Px(8), status.Width, tall);
+            using (Brush track = new SolidBrush(Neon.Well)) graphics.FillRectangle(track, bar);
+            int filled = (int)(bar.Width * Math.Min(1.0, (double)got / total));
+            using (Brush fill = new SolidBrush(Neon.Cyan)) graphics.FillRectangle(fill, bar.X, bar.Y, filled, bar.Height);
+            using (Brush gap = new SolidBrush(Neon.Well))
+                for (int x = bar.X + Px(10); x < bar.X + filled; x += Px(10)) graphics.FillRectangle(gap, x, bar.Y, Math.Max(1, Px(2)), bar.Height);
+            using (Pen rim = new Pen(Neon.WellEdge, Math.Max(1, (int)s))) graphics.DrawRectangle(rim, bar.X, bar.Y, bar.Width - 1, bar.Height - 1);
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -571,6 +663,7 @@ namespace CapriSetup
             fetching = true;
             desktop.Visible = false;
             launch.Visible = false;
+            section.Text = "SPEECH MODEL";
             stage.Text = "Installing the local speech model";
             note.Text = "This may take some time. For a better sounding, faster voice, get an API key.";
             stage.Visible = true;
@@ -602,5 +695,47 @@ namespace CapriSetup
         }
 
         protected override void Dispose(bool disposing) { if (disposing && chip.Image != null) chip.Image.Dispose(); base.Dispose(disposing); }
+
+        // A tick box in her look: a small dark box with a red rim that fills cyan with a dark tick when it's on, its words in
+        // white beside it. The rim lights up under the mouse or with keyboard focus.
+        private sealed class Tick : CheckBox
+        {
+            private bool hot;
+
+            internal Tick()
+            {
+                SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+                Cursor = Cursors.Hand;
+                UseMnemonic = false;
+            }
+
+            protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
+
+            protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                float s = DeviceDpi / 96f;
+                Graphics graphics = e.Graphics;
+                Neon.Behind(graphics, this, 210 * s);
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                float side = 16 * s;
+                RectangleF box = new RectangleF(1.5f * s, (Height - side) / 2f, side, side);
+                bool lit = hot || (Focused && ShowFocusCues);
+                using (GraphicsPath plate = Neon.Cut(box, 0, 0, 4 * s, 0))
+                {
+                    using (Brush fill = new SolidBrush(Checked ? Neon.Cyan : Neon.Well)) graphics.FillPath(fill, plate);
+                    using (Pen rim = new Pen(Checked ? (lit ? Color.FromArgb(190, 252, 254) : Neon.Cyan) : lit ? Neon.Hot : Neon.WellEdge, Math.Max(1f, 1.2f * s))) graphics.DrawPath(rim, plate);
+                }
+                if (Checked)
+                    using (Pen tick = new Pen(Neon.OnInk, 1.8f * s))
+                    {
+                        tick.LineJoin = LineJoin.Miter;
+                        graphics.DrawLines(tick, new[] { new PointF(box.Left + side * 0.22f, box.Top + side * 0.52f), new PointF(box.Left + side * 0.42f, box.Top + side * 0.72f), new PointF(box.Left + side * 0.78f, box.Top + side * 0.3f) });
+                    }
+                int left = (int)(box.Right + 10 * s);
+                TextRenderer.DrawText(graphics, Text, Font, new Rectangle(left, 0, Width - left, Height), Neon.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+            }
+        }
     }
 }
