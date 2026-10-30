@@ -250,9 +250,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build her, test her and send a
 
 ## Licence
 
-**Fan work:** Capri is an unofficial fan work and is not approved or endorsed by CD PROJEKT RED.
+**Fan work:** Capri is an unofficial fan project and is not approved or endorsed by CD PROJEKT RED, the anime's rights holders or its voice actors.
 
-**Voices:** Capri's voice features are general-purpose tools: you pick your own service and voice, and Capri supplies, endorses and recommends none. Use only voices you have the rights and consent to use, and never use Capri to impersonate someone deceptively or imply their participation or endorsement. Capri prohibits cloning or impersonating a living person's voice without explicit, informed consent or other valid authorization. Capri ships no cloned voice: make your own with a voice design tool.
+**Voices:** Our project-provided synthetic voice is in Capri's Mainframe and runs on your PC. You may connect third-party text-to-speech services, but we don't provide guides for voice cloning tools. Our only voice-design help is a text prompt for making a synthetic voice. Only use voices you have the necessary rights and permissions to use, and follow the provider's terms. We do not endorse unauthorized cloning or impersonation of voice actors or other individuals. Capri prohibits cloning or impersonating a living person's voice without explicit, informed consent or other valid authorization.
 
 Free for anything non-commercial: use her, share her, change her. No selling her or putting her in paid products. Credit us when you use her: her artist for her art and animations, and Capri, with a link to this page, for her code and anything else. Full terms in [LICENSE.md](LICENSE.md) (PolyForm Noncommercial 1.0.0). The credits are its Required Notices, so anyone who passes on any part of her has to pass them on too.
 
