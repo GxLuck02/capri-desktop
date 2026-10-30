@@ -831,6 +831,9 @@ namespace CapriDesktop
         private bool lying;
         // When she next lies down, sitting quietly, or sits back up, lying.
         private double nextLie = -1;
+        // Told to lie down where she couldn't yet, like mid-air or on her way to a window they named: until then she lies down
+        // as soon as she's sitting on a ledge.
+        private double lieBy = -1;
         private readonly Random random = new Random();
         private readonly NotifyIcon tray;
         private readonly ContextMenuStrip menu;
@@ -1971,10 +1974,12 @@ namespace CapriDesktop
         private string NapTool(bool sleeping) { return InvokeRequired ? (string)Invoke(new Func<bool, string>(Nap), sleeping) : Nap(sleeping); }
 
         // Her own moves, from her brain, plain words or her Move menu: "teleport here" glitches her over to their mouse, "go to my
-        // other monitor" to the same spot on another screen, and she sits, stands, hangs, rides their cursor, hides and comes
-        // back. move_mainframe takes her Mainframe to another screen, or over to their mouse.
+        // other monitor" to the same spot on another screen, "sit on my Roblox window" onto its top edge, and she sits, lies down
+        // and sits up, stands, walks around, wanders off, hangs, rides their cursor, hides and comes back. move_mainframe takes
+        // her Mainframe to another screen, or over to their mouse. `screen` is the window they named for sit_on and lie_down.
         internal string MoveSelf(string action, string screen)
         {
+            lieBy = -1;
             if (action == "move_mainframe") return MoveMainframe(screen);
             if (action == "hide")
             {
@@ -2008,6 +2013,25 @@ namespace CapriDesktop
                 return "Moving to " + ScreenName(screens, to) + ".";
             }
             if (hidden) ShowHidden(false);
+            if (action == "sit_on") return SitOn(screen, false);
+            if (action == "lie_down") return string.IsNullOrWhiteSpace(screen) ? LieHere() : SitOn(screen, true);
+            if (action == "walk_around") return WalkAround();
+            if (action == "wander")
+            {
+                if (Spots().Count == 0) return "There's nowhere else to go right now.";
+                StopRide();
+                LeavePanel(false);
+                hanging = false;
+                danceAsked = false;
+                Wander();
+                return "Off somewhere else.";
+            }
+            if (action == "sit_up" || (action == "sit" && lying))
+            {
+                if (!lying) return seat != null && !seat.Free ? "Already sitting up." : "I'm not lying down.";
+                SitUp();
+                return "Sitting up.";
+            }
             if (action == "sit")
             {
                 if (seat != null && seat.Free) return "Already sitting.";
@@ -2049,6 +2073,114 @@ namespace CapriDesktop
         }
 
         private string MoveTool(string action, string screen) { return InvokeRequired ? (string)Invoke(new Func<string, string, string>(MoveSelf), action, screen) : MoveSelf(action, screen); }
+
+        // "Sit on my Roblox window": she glitches over onto the top edge of the window they named, the front one when several
+        // match, or onto the taskbar or her Mainframe. Told to lie down there, she lies along it once she's sitting. A window
+        // that's minimized, fills the screen or has its top edge covered has nowhere to sit, and she says so.
+        private string SitOn(string wanted, bool lie)
+        {
+            string name = Regex.Replace((wanted ?? "").Trim(), @"^(?:the|my|your|ur|our|that|this) | (?:window|app|application|game|tab)$", "", RegexOptions.IgnoreCase).Trim();
+            if (name.Length == 0) return "Which window, choom?";
+            System.Collections.Generic.List<Ledge> around = Around();
+            System.Collections.Generic.List<Ledge> spots;
+            string shown, why = null;
+            if (Hands.TaskbarWords.IsMatch(name))
+            {
+                Rectangle area = Screen.FromPoint(Hip()).WorkingArea;
+                spots = around.FindAll(ledge => ledge.Floor && ledge.Y == area.Bottom && ledge.Left == area.Left);
+                shown = "the taskbar";
+            }
+            else if (Hands.MainframeWords.IsMatch(name))
+            {
+                if (!mainframe.IsHandleCreated || !mainframe.Visible || mainframe.WindowState != FormWindowState.Normal) return "My Mainframe isn't open. Open it and I'll sit on it.";
+                IntPtr own = mainframe.Handle;
+                spots = around.FindAll(ledge => ledge.Window == own);
+                shown = "my Mainframe";
+                why = "There's no room for me on top of my Mainframe: something's covering it, or it's too close to the top of the screen.";
+            }
+            else
+            {
+                string called = char.ToUpperInvariant(name[0]) + name.Substring(1);
+                System.Collections.Generic.List<OpenWindow> found = Hands.WindowsNamed(name);
+                if (found.Count == 0) return Hands.Unlisted() ?? "I can't see " + called + " open.";
+                shown = "your " + called + " window";
+                spots = new System.Collections.Generic.List<Ledge>();
+                foreach (OpenWindow window in found)
+                {
+                    Rectangle bounds;
+                    IntPtr handle = window.Handle;
+                    if (!Ledges.Showing(handle, out bounds)) { why = why ?? called + " is minimized. Open it and I'll sit on it."; continue; }
+                    if (!Ledges.Seatable(handle, bounds)) { why = why ?? (bounds.Width < 120 || bounds.Height < 60 ? called + " is too small to sit on." : called + " fills the screen, so its top edge is off the top. Make it smaller and I'll sit on it."); continue; }
+                    spots = around.FindAll(ledge => ledge.Window == handle);
+                    if (spots.Count > 0) break;
+                    why = why ?? "Other windows are covering the top of " + shown + ".";
+                }
+            }
+            int room = Headroom();
+            spots.RemoveAll(ledge => !ledge.Icon.IsEmpty || ledge.Right - ledge.Left < 24 || ledge.Y - room < Screen.FromPoint(new Point(ledge.Left, ledge.Y)).Bounds.Top);
+            if (spots.Count == 0) return why ?? "There's no room for me on top of " + shown + ".";
+            Ledge spot = spots[0];
+            foreach (Ledge each in spots) if (each.Right - each.Left > spot.Right - spot.Left) spot = each;
+            bool there = seat != null && !seat.Free && seat.Icon.IsEmpty && !riding && !walking && !falling && (spot.Floor ? seat.Floor && seat.Y == spot.Y && seat.Left == spot.Left : seat.Window == spot.Window);
+            if (there) return lie ? LieHere(shown) : "Already sitting on " + shown + ".";
+            int margin = Math.Min(preferences.Size / 4, (spot.Right - spot.Left) / 3);
+            int x = spot.Left + margin + random.Next(Math.Max(1, spot.Right - spot.Left - 2 * margin));
+            StopRide();
+            LeavePanel(false);
+            hanging = false;
+            danceAsked = false;
+            GlitchOut(delegate { Hop(spot, x); }, false);
+            if (lie) lieBy = clock.Elapsed.TotalSeconds + 10;
+            return (lie ? "Lying down on " : "Sitting on ") + shown + ".";
+        }
+
+        // "Lie down": along the ledge she sits on, if it has room. Anywhere else, like mid-air, she drops onto whatever is under
+        // her and lies down there.
+        private string LieHere(string shown = null)
+        {
+            string done = shown == null ? "Lying down." : "Lying down on " + shown + ".";
+            if (lying) return "Already lying down.";
+            StopRide();
+            LeavePanel(false);
+            EndWalk();
+            danceAsked = false;
+            if (clip == perchDance) Play(perch);
+            if (seat != null && !seat.Free && seat.Icon.IsEmpty && !falling)
+            {
+                // Still glitching onto it: she lies down once she's sat.
+                if (clip != perch) { lieBy = clock.Elapsed.TotalSeconds + 10; return done; }
+                return LieDown() ? done : "There's no room to lie down here. Try \"lie down on the taskbar\".";
+            }
+            if (seat != null) StandUp();
+            hanging = false;
+            Ledge under = Ledges.Below(Around(), Hip(), 0, int.MaxValue, 0, Headroom());
+            if (under == null) return "There's nothing under me to lie on.";
+            lieBy = clock.Elapsed.TotalSeconds + 10;
+            falling = true;
+            fallTo = under;
+            fallSpeed = 0;
+            fallStep = clock.Elapsed.TotalSeconds;
+            frames.Start();
+            return done;
+        }
+
+        // "Walk around": a stroll along her window or the taskbar, or through the air where she floats. With no room for one she
+        // wanders off to another window instead.
+        private string WalkAround()
+        {
+            if (walking) return "Already walking.";
+            StopRide();
+            LeavePanel(false);
+            danceAsked = false;
+            SitUp(false);
+            if (hanging) { hanging = false; Play(idle); }
+            if (clip == perchDance) Play(perch);
+            else if (clip == dance) Play(idle);
+            if (Stroll()) return "Going for a little walk.";
+            if (Spots().Count == 0) return "There's no room to walk around here.";
+            Wander();
+            return "Wandering off somewhere.";
+        }
 
         // She glitches out and back in with her hip on the point, kept on its screen, then drops onto a window close under her.
         private void Teleport(Point to)
@@ -4447,6 +4579,11 @@ namespace CapriDesktop
         // later she sits back up. Talking, music, a job, her menu or a nap wait it out.
         private void CheckLie(double now)
         {
+            if (lieBy >= 0)
+            {
+                if (now > lieBy || lying || dragging || riding || hanging || hidden) lieBy = -1;
+                else if (clip == perch && SittingStill) { lieBy = -1; LieDown(); return; }
+            }
             bool calm = preferences.Motion && !preferences.NoSitting && !hidden && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && !napAsked && !napping && !musicOn && !danceAsked && working == null && outro == null && Quiet(now);
             if (lying)
             {
@@ -8882,6 +9019,42 @@ namespace CapriDesktop
                                 wanderItem.PerformClick();
                                 if (!wanderOn || preferences.Wander || wanderItem.Checked || nextWander >= 0) throw new Exception("Wander around did not toggle.");
                                 checks.Add("PASS wander: hops onto another open window or the taskbar each time, never the one she's on, and the menu toggles it");
+                                // Her moves by name, with the shelf standing in for their Roblox window: "lie down" and "sit up" where she sits,
+                                // "sit on the taskbar", "sit on my Roblox window" and back, one that isn't open, "lie down on the taskbar" once
+                                // she's sat there, and "walk around".
+                                Func<System.Collections.Generic.List<OpenWindow>> namedWindows = Hands.Windows;
+                                try
+                                {
+                                    Hands.Windows = delegate { return new System.Collections.Generic.List<OpenWindow> { new OpenWindow(shelf.Handle, "Roblox", "RobloxPlayerBeta") }; };
+                                    Func<string, string, string> named = delegate(string action, string window) { return Hands.Do("move_yourself", new ToolArguments { Action = action, Window = window }); };
+                                    clipStart -= 1;
+                                    RenderFrame();
+                                    string lieLine = named("lie_down", null);
+                                    bool lay = lying && lieLine == "Lying down.";
+                                    string upLine = named("sit_up", null);
+                                    bool rose = !lying && upLine == "Sitting up." && seat != null && seat.Window == shelf.Handle;
+                                    string floorLine = named("sit_on", "the taskbar");
+                                    bool onFloor = seat != null && seat.Floor && !seat.Free && floorLine == "Sitting on the taskbar.";
+                                    string robloxLine = named("sit_on", "my Roblox window");
+                                    bool onRoblox = seat != null && seat.Window == shelf.Handle && Hip().Y == shelf.Top && robloxLine == "Sitting on your Roblox window.";
+                                    string againLine = named("sit_on", "Roblox"), missingLine = named("sit_on", "Minecraft");
+                                    string lieOnLine = named("lie_down", "taskbar");
+                                    clipStart -= 1;
+                                    RenderFrame();
+                                    CheckLie(clock.Elapsed.TotalSeconds);
+                                    bool layOnFloor = lying && seat != null && seat.Floor && lieOnLine == "Lying down on the taskbar.";
+                                    named("sit_up", null);
+                                    string walkLine = named("walk_around", null);
+                                    bool strolled = walkLine == "Going for a little walk." ? walking : walkLine == "Wandering off somewhere." && !walking;
+                                    EndWalk();
+                                    string backLine = named("sit_on", "Roblox");
+                                    clipStart -= 1;
+                                    RenderFrame();
+                                    if (!lay || !rose || !onFloor || !onRoblox || againLine != "Already sitting on your Roblox window." || missingLine != "I can't see Minecraft open." || !layOnFloor || !strolled || backLine != "Sitting on your Roblox window." || seat == null || seat.Window != shelf.Handle || lying)
+                                        throw new Exception("Her moves by name went wrong: lie " + lay + " (" + lieLine + "), up " + rose + " (" + upLine + "), taskbar " + onFloor + " (" + floorLine + "), Roblox " + onRoblox + " (" + robloxLine + "), again " + againLine + ", missing " + missingLine + ", lie on taskbar " + layOnFloor + " (" + lieOnLine + "), walk " + strolled + " (" + walkLine + "), back " + backLine);
+                                }
+                                finally { Hands.Windows = namedWindows; }
+                                checks.Add("PASS her moves by name: \"lie down\" and \"sit up\" where she sits, \"sit on the taskbar\", \"sit on my Roblox window\" onto its top edge, a window that isn't open says so, \"lie down on the taskbar\" lies her along it once she's sat, and \"walk around\" strolls or wanders");
                                 if (WalkTarget(500, 100, 600, 240, 0.2, 0) != 380 || WalkTarget(500, 100, 2000, 240, 0.2, 1) != 1220 || WalkTarget(500, 450, 560, 240, 0.7, 0.5) != 500) throw new Exception("Walk targets came out wrong.");
                                 Point shelfWas = shelf.Location;
                                 if (shelf.Top < work.Top + preferences.Size + 40) { shelf.Location = new Point(shelf.Left, work.Top + preferences.Size + 40); HoldSeat(clock.Elapsed.TotalSeconds); }
@@ -11256,7 +11429,7 @@ namespace CapriDesktop
                                 finally { Hands.Power = powerWas; }
                                 checks.Add("PASS power: turn off, restart, sleep, lock and sign out their PC straight away without asking, timed shutdowns, \"wait no\" right after cancels, and chat about shutting down doesn't");
                                 // Her own nap: "go to sleep" or "take a nap" said to her, and "wake up", never their PC's sleep.
-                                string[,] napCases = { { "go to sleep", "sleep" }, { "Capri, take a nap", "sleep" }, { "go to bed capri", "sleep" }, { "please go back to sleep", "sleep" }, { "nap time", "sleep" }, { "go to sleep, Capri!", "sleep" }, { "wake up", "wake" }, { "wakey wakey", "wake" } };
+                                string[,] napCases = { { "go to sleep", "sleep" }, { "Capri, take a nap", "sleep" }, { "go to bed capri", "sleep" }, { "please go back to sleep", "sleep" }, { "nap time", "sleep" }, { "go to sleep, Capri!", "sleep" }, { "Hey Capri, sleep here", "sleep" }, { "go to sleep right here", "sleep" }, { "wake up", "wake" }, { "wakey wakey", "wake" } };
                                 for (int i = 0; i < napCases.GetLength(0); i++)
                                     if (!Hands.Heard(napCases[i, 0], out shortTool, out shortArgs) || shortTool != "nap" || shortArgs.Action != napCases[i, 1]) throw new Exception("A nap was heard wrong: " + napCases[i, 0] + " -> " + shortTool + " " + shortArgs.Action);
                                 foreach (string chat in new[] { "i should go to sleep", "i'm going to sleep", "how do you sleep", "did you sleep well", "put my computer to sleep" })
@@ -11275,18 +11448,40 @@ namespace CapriDesktop
                                     { "hang here", "move_yourself|hang|" }, { "ride my cursor", "move_yourself|ride_cursor|" }, { "hop off my cursor", "move_yourself|hop_off|" },
                                     { "stop riding", "move_yourself|hop_off|" }, { "hide", "move_yourself|hide|" }, { "show yourself", "move_yourself|show|" },
                                     { "play your idle animation", "animate|idle|" }, { "do your glitch", "animate|glitch|" }, { "dance", "animate|dance|" }, { "dance for me capri!", "animate|dance|" },
-                                    { "stop dancing", "animate|stop_dancing|" }, { "smile for me", "animate|grin|" }, { "blink", "animate|blink|" }, { "show me your dance moves", "animate|dance|" }
+                                    { "stop dancing", "animate|stop_dancing|" }, { "smile for me", "animate|grin|" }, { "blink", "animate|blink|" }, { "show me your dance moves", "animate|dance|" },
+                                    { "Hey Capri, move to my cursor", "move_yourself|come_here|" }, { "come here please", "move_yourself|come_here|" }, { "lie down", "move_yourself|lie_down|" },
+                                    { "lay down capri", "move_yourself|lie_down|" }, { "go lie down for a bit", "move_yourself|lie_down|" }, { "sit up", "move_yourself|sit_up|" },
+                                    { "walk around", "move_yourself|walk_around|" }, { "go for a walk", "move_yourself|walk_around|" }, { "teleport somewhere", "move_yourself|wander|" },
+                                    { "go somewhere else please", "move_yourself|wander|" }
                                 };
                                 for (int i = 0; i < selfCases.GetLength(0); i++)
                                 {
                                     string selfGot = Hands.Heard(selfCases[i, 0], out shortTool, out shortArgs) ? shortTool + "|" + (shortTool == "animate" ? shortArgs.Name : shortArgs.Action) + "|" + shortArgs.Screen : "";
                                     if (selfGot != selfCases[i, 1]) throw new Exception("Her own move was heard wrong: " + selfCases[i, 0] + " -> " + selfGot);
                                 }
-                                foreach (string chat in new[] { "hang on", "hang up", "hop off", "sit with me im bored af", "i love to dance", "do you dance?", "hide and seek?", "my other monitor is broken", "the mainframe looks cool", "come here often?", "i can't stand it", "go away" })
+                                foreach (string chat in new[] { "hang on", "hang up", "hop off", "sit with me im bored af", "i love to dance", "do you dance?", "hide and seek?", "my other monitor is broken", "the mainframe looks cool", "come here often?", "i can't stand it", "go away",
+                                    "i need to lie down", "walk me through it", "lay off", "lie to me", "let's go somewhere", "sit on my lap", "sit on it" })
                                     if (Hands.Heard(chat, out shortTool, out shortArgs) && (shortTool == "move_yourself" || shortTool == "animate")) throw new Exception("Chat was taken as her own move: " + chat + " -> " + shortTool);
+                                // A window she's told to sit or lie on counts while one by that name is open; "hop on Roblox" still means play it.
+                                Func<System.Collections.Generic.List<OpenWindow>> heardWindows = Hands.Windows;
+                                try
+                                {
+                                    Hands.Windows = delegate { return new System.Collections.Generic.List<OpenWindow> { new OpenWindow(new IntPtr(11), "Roblox", "RobloxPlayerBeta"), new OpenWindow(new IntPtr(12), "lofi beats - YouTube - Google Chrome", "chrome") }; };
+                                    string[,] seatCases = { { "Hey Capri, sit on my Roblox window", "sit_on|Roblox" }, { "perch on roblox", "sit_on|roblox" }, { "hop onto my chrome window please", "sit_on|chrome" }, { "sit on the taskbar", "sit_on|taskbar" }, { "sit on your mainframe", "sit_on|mainframe" }, { "lie down on my roblox window", "lie_down|roblox" }, { "lay down on the taskbar capri", "lie_down|taskbar" } };
+                                    for (int i = 0; i < seatCases.GetLength(0); i++)
+                                    {
+                                        string seatGot = Hands.Heard(seatCases[i, 0], out shortTool, out shortArgs) && shortTool == "move_yourself" ? shortArgs.Action + "|" + shortArgs.Window : shortTool;
+                                        if (seatGot != seatCases[i, 1]) throw new Exception("Sitting on a window was heard wrong: " + seatCases[i, 0] + " -> " + seatGot);
+                                    }
+                                    foreach (string chat in new[] { "sit on my homework", "hop on roblox", "get on roblox", "sit on minecraft" })
+                                        if (Hands.Heard(chat, out shortTool, out shortArgs) && shortTool == "move_yourself") throw new Exception("Chat was taken as sitting on a window: " + chat + " -> " + shortArgs.Action + " " + shortArgs.Window);
+                                }
+                                finally { Hands.Windows = heardWindows; }
                                 string moveTool;
                                 ToolArguments writtenMove;
                                 if (!Hands.Valid("move_yourself", new ToolArguments { Action = "come_here" }) || !Hands.Valid("move_yourself", new ToolArguments { Action = "move_mainframe", Screen = "2" }) || Hands.Valid("move_yourself", new ToolArguments { Action = "fly" })
+                                    || !Hands.Valid("move_yourself", new ToolArguments { Action = "sit_on", Window = "Roblox" }) || Hands.Valid("move_yourself", new ToolArguments { Action = "sit_on" }) || !Hands.Valid("move_yourself", new ToolArguments { Action = "lie_down" })
+                                    || !Hands.Typed("move_yourself{\"action\": \"sit_on\", \"window\": \"Roblox\"}", out moveTool, out writtenMove) || writtenMove.Action != "sit_on" || writtenMove.Window != "Roblox"
                                     || !Hands.Valid("animate", new ToolArguments { Name = "dance" }) || Hands.Valid("animate", new ToolArguments { Name = "moonwalk" })
                                     || !Hands.Typed("move_yourself{\"action\": \"other_screen\", \"screen\": \"left\"}", out moveTool, out writtenMove) || moveTool != "move_yourself" || writtenMove.Screen != "left"
                                     || !Hands.Typed("Sure! animate{\"name\": \"dance\"}", out moveTool, out writtenMove, true) || moveTool != "animate" || writtenMove.Name != "dance") throw new Exception("Her own moves' arguments were checked or read wrong.");
