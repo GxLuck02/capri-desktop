@@ -81,6 +81,7 @@ namespace CapriDesktop
         internal const string Prompt =
             "You are the hands of Capri, a desktop companion on the user's Windows PC. You don't chat.\n" +
             "Act only on their latest request. Earlier messages are context for names, not commands to repeat. Call one tool for each thing they ask for, however many there are (open Discord, Spotify and Steam is three open_app calls): open an app, game or website, search a site, play music, control media or volume, check the current song, switch to, minimize or close an app, or look at their screen when asked about it. Use the names they gave.\n" +
+            "Their words come from speech in any language, so an app name can be misheard, like Logitech Jobs for Logitech G HUB: still call open_app with the name they said.\n" +
             "If the job needs clicking, typing or more than one step, like opening an app and then searching, going somewhere or making something in it, call use_computer once with the whole job in their words.\n" +
             "Sending a message, DM, reply or post, joining, leaving or ending a call, and any other job inside an app are use_computer jobs: pass their exact words, including what to send. They asked, so it's a job even when it sends, deletes or ends something.\n" +
             "When they name an app, never guess a website for it: use open_app, or use_computer if there's more to do.\n" +
@@ -94,7 +95,7 @@ namespace CapriDesktop
             "Questions about their current screen or song need a tool too. If the target is unclear, pick the closest match yourself. For chat, negated or hypothetical requests, call no tool and reply with only the word: chat";
 
         internal const string Chat =
-            "\nNo tools ran for this message. Answer as yourself, with your own opinions and tastes. Don't claim you opened, played or looked at anything. You keep notes about them in me.md, saved whenever they ask you to remember something, so never say you can't remember things or keep memories; if they asked you to and nothing was saved, ask what they want you to remember. You can search Google for them: if they ask something you don't know or that changes, like the weather, news, scores or prices, say you'll look it up instead of guessing or saying you can't. If they asked you to do something on their PC, like send a message or end a call, never ask whether to: say On it and what you're doing, like On it, sending it now.";
+            "\nNo tools ran for this message. Answer as yourself, with your own opinions and tastes. Don't claim you opened, played or looked at anything. You can open their apps, games, websites and music, so never say you can't open or launch things: if they asked you to open something, say you couldn't find it and ask for its name as it shows in their app list. You keep notes about them in me.md, saved whenever they ask you to remember something, so never say you can't remember things or keep memories; if they asked you to and nothing was saved, ask what they want you to remember. You can search Google for them: if they ask something you don't know or that changes, like the weather, news, scores or prices, say you'll look it up instead of guessing or saying you can't. If they asked you to do something on their PC, like send a message or end a call, never ask whether to: say On it and what you're doing, like On it, sending it now.";
 
         private static readonly string[,] Specs =
         {
@@ -754,6 +755,7 @@ namespace CapriDesktop
             if (string.IsNullOrWhiteSpace(wanted)) return "Which app, choom?";
             if (Safety.Stops(wanted) != null) return "Not opening that, choom.";
             List<InstalledApp> found = Match(Apps(), wanted);
+            if (found.Count == 0) found = Closest(Apps(), wanted);
             if (found.Count == 0) return "No app called " + wanted.Trim() + " is installed on this PC.";
             // When several match equally well, the one with the fewest extra words is closest to what they said.
             InstalledApp chosen = found[0];
@@ -777,6 +779,25 @@ namespace CapriDesktop
                 if (!top.Exists(other => AppName(other) == name)) top.Add(app);
             }
             return top;
+        }
+
+        internal static List<InstalledApp> Closest(List<InstalledApp> apps, string wanted)
+        {
+            List<InstalledApp> top = new List<InstalledApp>();
+            string plain = Regex.Replace(Plain(wanted), @"^(the|le|la|les|l) |( app| application| game| appli| jeu)$", "");
+            if (plain.Length == 0) return top;
+            string[] words = plain.Split(' ');
+            if (words.Length < 2) return top;
+            for (int skip = 0; skip < words.Length; skip++)
+            {
+                List<string> kept = new List<string>(words);
+                kept.RemoveAt(skip);
+                string want = string.Join(" ", kept);
+                if (want.Length < 4) continue;
+                foreach (InstalledApp app in apps)
+                    if (Score(app, want) >= 3 && !top.Exists(other => AppName(other) == AppName(app))) top.Add(app);
+            }
+            return top.Count == 1 ? top : new List<InstalledApp>();
         }
 
         private static int Score(string name, string want)

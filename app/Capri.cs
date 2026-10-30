@@ -8171,7 +8171,14 @@ namespace CapriDesktop
                                     Hands.Catalog = delegate { return new System.Collections.Generic.List<InstalledApp> { new InstalledApp("\u00c9diteur audio", "editor") }; };
                                     Hands.Forget();
                                     if (!Hands.Direct("open editeur", out junkTool, out junkArgs) || junkTool != "open_app" || Hands.Do("open_app", new ToolArguments { Name = "E\u0301diteur audio" }) != "Opened \u00c9diteur audio.") throw new Exception("Accented app names did not match.");
-                                    checks.Add("PASS app matching keeps display names, merges Spotify aliases, reads French accents, and skips French uninstallers, help and web links");
+                                    System.Collections.Generic.List<InstalledApp> logiApps = new System.Collections.Generic.List<InstalledApp> { new InstalledApp("Logitech G HUB", "ghub"), new InstalledApp("Unity Hub", "unity") };
+                                    Hands.Catalog = delegate { return logiApps; };
+                                    Hands.Forget();
+                                    if (Hands.Do("open_app", new ToolArguments { Name = "la Logitech Jobs" }) != "Opened Logitech G HUB." || ran[ran.Count - 1] != "ghub") throw new Exception("A misheard word in an app name lost the app.");
+                                    logiApps.Add(new InstalledApp("Logitech Options+", "options"));
+                                    Hands.Forget();
+                                    if (Hands.Do("open_app", new ToolArguments { Name = "Logitech Jobs" }) != "No app called Logitech Jobs is installed on this PC.") throw new Exception("A misheard name opened one of several matching apps.");
+                                    checks.Add("PASS app matching keeps display names, merges Spotify aliases, reads French accents, skips French uninstallers, help and web links, and finds an app with one misheard word only when one app fits");
                                     int catalogReads = 0;
                                     Hands.Catalog = delegate { catalogReads++; throw new IOException("catalog offline"); };
                                     Hands.Exists = delegate(string path) { return path == spotifyPath; };
