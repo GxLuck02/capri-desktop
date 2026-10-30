@@ -57,7 +57,7 @@ namespace CapriSetup
                     if (launched == null) throw new IOException("Capri updated but couldn't restart. Open her from the Start menu.");
                 return 0;
             }
-            catch (Exception error) { MessageBox.Show(error.Message, "Capri couldn't update", MessageBoxButtons.OK, MessageBoxIcon.Error); return 1; }
+            catch (Exception error) { Notice.Tell(null, error.Message, "Capri couldn't update", true); return 1; }
         }
 
         internal static byte[] Payload()
@@ -110,7 +110,20 @@ namespace CapriSetup
                     Snap(farewell, Path.Combine(output, "installer-remove.png"));
                     farewell.Close();
                 }
-                File.WriteAllText(Path.Combine(output, "packaging-test.txt"), "PASS embedded executable extracted\nPASS PE signature\nPASS SHA-256 computed\nPASS an unmarked Capri.exe is recognised as Capri, other programs aren't\nPASS installer and uninstaller windows rendered\nPASS the installer says it's installing the local speech model, that it may take some time, and that an API key gives a better, faster voice\nPASS the uninstaller closes Capri and anything running from her folder, like her brain, and nothing else\nPASS her shortcut is saved through Windows' own shell link, even over an old read-only one, and points at Capri.exe\nPASS a shortcut Windows won't save comes back as its reason instead of stopping the install\nLIMIT installation and uninstallation were not performed\n");
+                // Her notices, which stand in for Windows' grey boxes, fit their message under their title with OK below it.
+                using (Notice told = new Notice("Capri has been removed.\n\nYour position and size settings were kept in " + InstallPath + ".", "Capri", false))
+                using (Notice failed = new Notice("There's a Capri.exe in " + InstallPath + " that isn't this Capri. Move it out of that folder, then install again.", "Capri couldn't install", true))
+                {
+                    told.Show();
+                    failed.Show();
+                    Application.DoEvents();
+                    if (!told.Fits || !failed.Fits || !told.Said.StartsWith("CAPRI\nCapri has been removed.", StringComparison.Ordinal) || !failed.Said.StartsWith("CAPRI COULDN'T INSTALL\n", StringComparison.Ordinal)) throw new InvalidDataException("A notice doesn't fit or show its message: " + told.Said + " / " + failed.Said);
+                    Snap(told, Path.Combine(output, "notice.png"));
+                    Snap(failed, Path.Combine(output, "notice-error.png"));
+                    told.Close();
+                    failed.Close();
+                }
+                File.WriteAllText(Path.Combine(output, "packaging-test.txt"), "PASS embedded executable extracted\nPASS PE signature\nPASS SHA-256 computed\nPASS an unmarked Capri.exe is recognised as Capri, other programs aren't\nPASS installer and uninstaller windows rendered\nPASS her notices show their title, message and OK in her look, sized to fit the message\nPASS the installer says it's installing the local speech model, that it may take some time, and that an API key gives a better, faster voice\nPASS the uninstaller closes Capri and anything running from her folder, like her brain, and nothing else\nPASS her shortcut is saved through Windows' own shell link, even over an old read-only one, and points at Capri.exe\nPASS a shortcut Windows won't save comes back as its reason instead of stopping the install\nLIMIT installation and uninstallation were not performed\n");
                 return 0;
             }
             catch (Exception error) { Directory.CreateDirectory(output); File.WriteAllText(Path.Combine(output, "failure.txt"), error.ToString()); return 1; }
@@ -376,10 +389,10 @@ namespace CapriSetup
                 DeleteShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Capri.lnk"), destination);
                 Startup.Clear(Path.Combine(destination, "Capri.exe"));
                 Registry.CurrentUser.DeleteSubKeyTree(RegistryPath, false);
-                MessageBox.Show("Capri has been removed.\n\nYour position and size settings were kept in " + destination + ".", "Capri", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Notice.Tell(null, "Capri has been removed.\n\nYour position and size settings were kept in " + destination + ".", "Capri", false);
                 return 0;
             }
-            catch (Exception error) { MessageBox.Show(error.Message, "Capri could not be removed", MessageBoxButtons.OK, MessageBoxIcon.Error); return 1; }
+            catch (Exception error) { Notice.Tell(null, error.Message, "Capri could not be removed", true); return 1; }
         }
 
         // Capri and anything running from her folder, like her brain's engine, hold its files, so they're closed first.
@@ -611,7 +624,7 @@ namespace CapriSetup
                 status.Text = "Making a little room for Capri…";
                 noShortcut = Program.Install(desktop.Checked);
             }
-            catch (Exception error) { status.Text = "Capri could not finish. Your files are still here."; primary.Enabled = true; MessageBox.Show(error.Message, "Capri", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+            catch (Exception error) { status.Text = "Capri could not finish. Your files are still here."; primary.Enabled = true; Notice.Tell(this, error.Message, "Capri couldn't install", true); return; }
             if (Environment.Is64BitOperatingSystem && !VoicePack.Complete(VoicePack.Folder(Program.InstallPath))) FetchVoice();
             else Finish();
         }
@@ -622,7 +635,7 @@ namespace CapriSetup
             string app = Path.Combine(Program.InstallPath, "Capri.exe");
             if (noShortcut != null)
             {
-                MessageBox.Show(this, "Capri is installed, but Windows wouldn't let the installer save her shortcut:\n" + noShortcut + "\n\nShe's in " + Program.InstallPath + ". Right-click Capri.exe there and pick Pin to Start.", "Capri", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Notice.Tell(this, "Capri is installed, but Windows wouldn't let the installer save her shortcut:\n" + noShortcut + "\n\nShe's in " + Program.InstallPath + ". Right-click Capri.exe there and pick Pin to Start.", "Capri", false);
                 try { using (Process.Start("explorer.exe", "/select,\"" + app + "\"")) { } }
                 catch (System.ComponentModel.Win32Exception) { }
             }
