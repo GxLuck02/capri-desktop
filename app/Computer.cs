@@ -1246,11 +1246,17 @@ namespace CapriDesktop
             watcher.Start();
         }
 
+        // Esc also cuts off a turn her brain is still thinking about, since a game's turn can think for minutes. Capri points
+        // it at her brain.
+        internal static Action Halted = delegate { };
+
         internal static void Interrupt(string reason)
         {
             if (interrupted) return;
             why = reason;
             interrupted = true;
+            try { Halted(); }
+            catch (Exception) { }
         }
 
         internal static bool Interrupted { get { return interrupted; } }
@@ -1902,6 +1908,8 @@ namespace CapriDesktop
                 ClaudeReply reply;
                 try { reply = Drive(Computer.Allowing(Computer.Seeing) + (Playing ? Computer.Playing : ""), Computer.Toolset, Conversation()); }
                 catch (System.Runtime.Serialization.SerializationException) { return End("failed", "Got a reply from my brain I couldn't read. Try again."); }
+                // Their Esc cut the turn off while it was still thinking.
+                catch (System.Net.WebException) { if (!Computer.Interrupted) throw; return End("stopped", Computer.Why); }
                 catch (BrainException error)
                 {
                     // Credits, keys and outages fail the same either way. An unexplained rejection of the first turn means the

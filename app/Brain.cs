@@ -1639,6 +1639,15 @@ namespace CapriDesktop
         // jobs stay quick on low effort and 4096.
         internal const int DeepTokens = 16000;
 
+        // The turn her hands are waiting on. A game's turn can think for minutes, so Esc cuts it off instead of waiting it out.
+        private volatile HttpWebRequest driving;
+
+        internal void StopDriving()
+        {
+            HttpWebRequest open = driving;
+            if (open != null) open.Abort();
+        }
+
         internal ClaudeReply Drive(string system, string tools, string messages, bool deep = false)
         {
             int ticket;
@@ -1654,11 +1663,17 @@ namespace CapriDesktop
             string body = "{\"model\":" + Voice.Quote(remote.Model) + ",\"max_tokens\":" + limit + (bound ? ",\"thinking\":{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}}" : "")
                 + ",\"system\":[{\"type\":\"text\",\"text\":" + Voice.Quote(system) + ",\"cache_control\":{\"type\":\"ephemeral\"}}],\"messages\":" + messages + ",\"tools\":" + tools + ",\"output_config\":{\"effort\":\"" + (deep ? "high" : "low") + "\"}" + (fallback ? ",\"fallbacks\":\"default\"" : "") + "}";
             string betas = (fallback ? "server-side-fallback-2026-07-01" : "") + (fallback && bound ? "," : "") + (bound ? "thinking-binding-controls-2026-08-01" : "");
-            string text = Send<string>(Anthropic + "/v1/messages", body, deep ? Math.Max(CloudWait, limit * 50) : CloudWait, null, delegate(HttpWebRequest request)
+            string text;
+            try
             {
-                Sign(request, remote.Key, true);
-                if (betas.Length > 0) request.Headers["anthropic-beta"] = betas;
-            }, null, ticket);
+                text = Send<string>(Anthropic + "/v1/messages", body, deep ? Math.Max(CloudWait, limit * 50) : CloudWait, null, delegate(HttpWebRequest request)
+                {
+                    driving = request;
+                    Sign(request, remote.Key, true);
+                    if (betas.Length > 0) request.Headers["anthropic-beta"] = betas;
+                }, null, ticket);
+            }
+            finally { driving = null; }
             return Parsed(text);
         }
 

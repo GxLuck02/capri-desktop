@@ -1401,6 +1401,7 @@ namespace CapriDesktop
             Hands.Animate = AnimateTool;
             Hands.Hush = Computer.Mask;
             Computer.Grab = HandsGrab;
+            Computer.Halted = brain.StopDriving;
             string textKey = Voice.Unprotect(preferences.TextKey);
             if (!preferences.NvidiaGlm)
             {
@@ -12441,6 +12442,30 @@ namespace CapriDesktop
                                     Computer.Glimpse = delegate { return new Sight { Window = new IntPtr(7), Title = "#general - Discord", Program = "Discord" }; };
                                     if (drivePlayed != "Played a round." || !drivePlay.Playing || playSystem != Computer.Seeing + Computer.Playing || funRun != "Played a round." || funBefore || !driveFun.Playing || funSystem != Computer.Seeing + Computer.Playing || new Job("send hi in #general on discord").Playing)
                                         throw new Exception("A game job didn't get her game lines: " + drivePlayed + " / " + drivePlay.Playing + " / " + funRun + " / " + driveFun.Playing);
+                                    // Esc while a turn is still thinking stops the job then, not when the turn would have ended.
+                                    Func<bool> thinkEscapeWas = Computer.Escape;
+                                    Stopwatch thinkClock = Stopwatch.StartNew();
+                                    string thinkStopped = null;
+                                    long thinkMs = -1;
+                                    Job driveThinking = new Job("play bedwars on roblox");
+                                    driveThinking.Drive = delegate(string thinkSys, string thinkTools, string thinkMessages)
+                                    {
+                                        while (!Computer.Interrupted && thinkClock.ElapsedMilliseconds < 8000) Thread.Sleep(20);
+                                        throw new WebException("Reply cancelled.", WebExceptionStatus.RequestCanceled);
+                                    };
+                                    try
+                                    {
+                                        Computer.Escape = delegate { return thinkClock.ElapsedMilliseconds > 400; };
+                                        thinkStopped = driveThinking.Run();
+                                        thinkMs = thinkClock.ElapsedMilliseconds;
+                                    }
+                                    catch (WebException) { thinkStopped = "threw"; }
+                                    finally
+                                    {
+                                        Computer.Escape = thinkEscapeWas;
+                                        Computer.Arm();
+                                    }
+                                    if (thinkStopped != Computer.Escaped || driveThinking.Outcome != "stopped" || thinkMs > 3000) throw new Exception("Esc didn't stop a job whose turn was still thinking: " + thinkStopped + " after " + thinkMs + " ms");
                                 }
                                 finally
                                 {
@@ -12495,7 +12520,37 @@ namespace CapriDesktop
                                     driveFake.Stop();
                                     Brain.Anthropic = driveAnthropic;
                                 }
-                                checks.Add("PASS Claude's hands: Claude 5 models get Anthropic's computer tools plus open_app and open_website, see a screenshot of the monitor in front, click and type at its coordinates scaled to the real screen, get a fresh look after each batch with only the last three pictures kept, keep its thinking, stop a batch at the first failure, re-look when the window in front changes, still stop before Buy now until they say yes, skip asking about a send they asked for, refuse banned keys (unless Bypass is on) and spots off the screenshot, and fall back to reading buttons if the model turns the computer tools down");
+                                // Esc cuts off a turn that's still thinking: her brain drops the request instead of waiting minutes for it.
+                                System.Collections.Generic.List<string> cutAsked = new System.Collections.Generic.List<string>();
+                                System.Net.Sockets.TcpListener cutFake;
+                                Brain.Anthropic = FakeServer(new[] { driveReply }, cutAsked, out cutFake, 200, 8000);
+                                try
+                                {
+                                    Brain cutDriver = new Brain();
+                                    cutDriver.Remote = new Cloud("sk-ant-test", "claude-sonnet-5-5");
+                                    cutDriver.Model = "claude-sonnet-5-5";
+                                    Exception cutError = null;
+                                    Thread cutTurn = new Thread(delegate()
+                                    {
+                                        try { cutDriver.Drive(Computer.Seeing + Computer.Playing, Computer.Toolset, "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]", true); }
+                                        catch (Exception error) { cutError = error; }
+                                    });
+                                    cutTurn.IsBackground = true;
+                                    Stopwatch cutClock = Stopwatch.StartNew();
+                                    cutTurn.Start();
+                                    while (cutClock.ElapsedMilliseconds < 3000) { lock (cutAsked) if (cutAsked.Count > 0) break; Thread.Sleep(20); }
+                                    cutDriver.StopDriving();
+                                    bool cutEnded = cutTurn.Join(3000);
+                                    WebException cutWeb = cutError as WebException;
+                                    if (!cutEnded || cutWeb == null || cutWeb.Status != WebExceptionStatus.RequestCanceled || cutClock.ElapsedMilliseconds > 6000) throw new Exception("Esc didn't cut off a turn that was still thinking: " + (cutError == null ? "no error" : cutError.GetType().Name + " " + cutError.Message) + " after " + cutClock.ElapsedMilliseconds + " ms");
+                                }
+                                finally
+                                {
+                                    cutFake.Stop();
+                                    Brain.Anthropic = driveAnthropic;
+                                }
+                                checks.Add("PASS Esc while she thinks: a game's turn can think for minutes, so Esc drops the request she's waiting on and stops the job at once");
+                                checks.Add("PASS Claude's hands:Claude 5 models get Anthropic's computer tools plus open_app and open_website, see a screenshot of the monitor in front, click and type at its coordinates scaled to the real screen, get a fresh look after each batch with only the last three pictures kept, keep its thinking, stop a batch at the first failure, re-look when the window in front changes, still stop before Buy now until they say yes, skip asking about a send they asked for, refuse banned keys (unless Bypass is on) and spots off the screenshot, and fall back to reading buttons if the model turns the computer tools down");
                                 checks.Add("PASS game jobs think harder: a job that plays a game, by its words or once a game's window is in front, gets her game lines and asks Claude for high effort with 16000 tokens and as long as those take; songs, videos and messages that only mention a game stay quick");
                                 if (brainSent[6].IndexOf("\"tools\":", StringComparison.Ordinal) >= 0 || brainSent[6].IndexOf("To use one, reply with only the call", StringComparison.Ordinal) < 0 || brainSent[7].IndexOf("Searched youtube.com for parkour.", StringComparison.Ordinal) < 0) throw new Exception("The cached text path did not run its Listing call.");
                                 if (ran.Count != 9 || ran[6] != "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify" || ran[7] != "https://www.youtube.com/results?search_query=parkour" || ran[8] != "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify") throw new Exception("The brain's tool calls opened the wrong targets.");
