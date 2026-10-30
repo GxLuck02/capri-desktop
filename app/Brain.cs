@@ -1634,7 +1634,12 @@ namespace CapriDesktop
         // Claude 5.5 and the other toolset models drive the mouse and keyboard from screenshots themselves.
         internal bool Drives { get { Cloud remote = Remote; return remote != null && remote.Claude && Regex.IsMatch(remote.Model ?? "", @"^claude-((opus|sonnet)-5|haiku-5-5|(fable|mythos)-5|opus-4-8)"); } }
 
-        internal ClaudeReply Drive(string system, string tools, string messages)
+        // A game gets room to think on every turn (Lachy, 30 Oct, after her live stream: "they seemingly weren't getting enough
+        // time to actually think through their tasks"): high effort and 16000 tokens, with as long as those take, where other
+        // jobs stay quick on low effort and 4096.
+        internal const int DeepTokens = 16000;
+
+        internal ClaudeReply Drive(string system, string tools, string messages, bool deep = false)
         {
             int ticket;
             lock (gate) ticket = cancelled;
@@ -1645,10 +1650,11 @@ namespace CapriDesktop
             // the turns before it, and accounts made since 31 August 2026 reject a changed one with a 400, so it's dropped instead
             // and the model thinks again. Adaptive is already their default.
             bool bound = Regex.IsMatch(remote.Model, @"^claude-(opus-5-5|sonnet-5-5|fable-5-1|haiku-5-5)");
-            string body = "{\"model\":" + Voice.Quote(remote.Model) + ",\"max_tokens\":4096" + (bound ? ",\"thinking\":{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}}" : "")
-                + ",\"system\":[{\"type\":\"text\",\"text\":" + Voice.Quote(system) + ",\"cache_control\":{\"type\":\"ephemeral\"}}],\"messages\":" + messages + ",\"tools\":" + tools + ",\"output_config\":{\"effort\":\"low\"}" + (fallback ? ",\"fallbacks\":\"default\"" : "") + "}";
+            int limit = deep ? DeepTokens : 4096;
+            string body = "{\"model\":" + Voice.Quote(remote.Model) + ",\"max_tokens\":" + limit + (bound ? ",\"thinking\":{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}}" : "")
+                + ",\"system\":[{\"type\":\"text\",\"text\":" + Voice.Quote(system) + ",\"cache_control\":{\"type\":\"ephemeral\"}}],\"messages\":" + messages + ",\"tools\":" + tools + ",\"output_config\":{\"effort\":\"" + (deep ? "high" : "low") + "\"}" + (fallback ? ",\"fallbacks\":\"default\"" : "") + "}";
             string betas = (fallback ? "server-side-fallback-2026-07-01" : "") + (fallback && bound ? "," : "") + (bound ? "thinking-binding-controls-2026-08-01" : "");
-            string text = Send<string>(Anthropic + "/v1/messages", body, CloudWait, null, delegate(HttpWebRequest request)
+            string text = Send<string>(Anthropic + "/v1/messages", body, deep ? Math.Max(CloudWait, limit * 50) : CloudWait, null, delegate(HttpWebRequest request)
             {
                 Sign(request, remote.Key, true);
                 if (betas.Length > 0) request.Headers["anthropic-beta"] = betas;

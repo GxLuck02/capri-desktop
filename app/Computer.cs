@@ -150,6 +150,10 @@ namespace CapriDesktop
             "When they leave a choice to you, like which video or song, pick one yourself. On YouTube, type searches into its search bar yourself, then scroll down through the results and look at several before you click one.\n" +
             "When the job is done, stop calling tools and say what you did in one plain sentence. If you're stuck, say what went wrong in one plain sentence.";
 
+        // What a game job's brain gets after her hands' prompt (Lachy, 30 Oct, after her live stream).
+        internal const string Playing =
+            "\nThis job plays a game, so take your time on every turn: look closely at the screen, work out where you are, what's around you and what's in the way, and plan your next moves before you act. After each move, check what changed before the next one.";
+
         private static readonly string[,] Specs =
         {
             { "click", "Click a numbered button, box, link or item on screen.",
@@ -757,6 +761,27 @@ namespace CapriDesktop
 
         // Their job asks to buy, pay for or book something itself, for Pay, buy and book with Things your request didn't mention off.
         internal static bool Buys(string task) { return Regex.IsMatch(task ?? "", @"\b(buy|purchase|pay|order|checkout|check out|book|reserve|subscribe|donate)\b", RegexOptions.IgnoreCase); }
+
+        // Game jobs, like "play bedwars on roblox" or "hop on minecraft and answer chat", think harder and get her game lines.
+        // Songs, videos and shows aren't games, so the music jobs her quick tools hand her cursor stay quick, and neither is a
+        // message that only talks about one.
+        private static readonly Regex GameTitles = new Regex(@"\b(roblox|minecraft|fortnite|valorant|terraria|stardew valley|among us|geometry dash|rocket league|apex legends|overwatch|league of legends|genshin impact|counter-strike|osu!)(?!\w)", RegexOptions.IgnoreCase);
+        private static readonly Regex GameWords = new Regex(@"\b(play|playing|plays|games?|gaming|gameplay|obby|obbies|bedwars|skywars|blox fruits|brookhaven|speedrun\w*|pvp)\b", RegexOptions.IgnoreCase);
+        private static readonly Regex Watching = new Regex(@"\b(songs?|music|tracks?|albums?|playlists?|artists?|videos?|podcasts?|radio|audiobooks?|episodes?|movies?|films?|series|trailers?|spotify|youtube|soundcloud|netflix|lofi|lo-fi|tunes)\b", RegexOptions.IgnoreCase);
+        private static readonly Regex Messaging = new Regex(@"^\W*(send|message|text|dm|pm|tell|reply|respond|post|tweet|email|write)\b", RegexOptions.IgnoreCase);
+
+        internal static bool Gaming(string job)
+        {
+            string text = job ?? "";
+            return (GameTitles.IsMatch(text) || GameWords.IsMatch(text)) && !Watching.IsMatch(text) && !Messaging.IsMatch(text);
+        }
+
+        // A game's window in front makes it a game job too, like the Roblox window she opened herself. A video of one doesn't.
+        internal static bool GameWindow(Sight sight)
+        {
+            if (sight == null || sight.Window == IntPtr.Zero) return false;
+            return GameTitles.IsMatch((sight.Title ?? "") + " " + (sight.Program ?? "")) && !Watching.IsMatch(sight.Title ?? "");
+        }
 
         // Typing or writing something somewhere means sending it; only an explicit draft or "don't send" keeps it in the box.
         internal static bool Unsent(string task) { return Unsending.IsMatch(task ?? "") || (Drafty.IsMatch(task ?? "") && !Sending.IsMatch(task ?? "")); }
@@ -1635,6 +1660,9 @@ namespace CapriDesktop
         // Set for Claude models that drive from screenshots with Anthropic's computer tools. Blind runs if the model turns them down.
         internal Func<string, string, string, ClaudeReply> Drive;
         internal Action Blind;
+        // A game job thinks harder on every turn and gets her game lines. Their words make it one, or a game's window in front
+        // partway through, and it stays one.
+        internal bool Playing { get; private set; }
         // Kinds of step they said yes to while the job ran, and the kinds their job asked for itself.
         private readonly HashSet<string> approved = new HashSet<string>();
         private readonly HashSet<string> told = new HashSet<string>();
@@ -1676,6 +1704,7 @@ namespace CapriDesktop
             bool theirs = !string.IsNullOrWhiteSpace(asked) && !string.Equals(asked.Trim(), task.Trim(), StringComparison.OrdinalIgnoreCase);
             Task = theirs ? task + Computer.Exact + Voice.Quote(asked.Trim()) : task;
             Words = theirs ? asked.Trim() : task.Trim();
+            Playing = Computer.Gaming(task) || (theirs && Computer.Gaming(asked));
             Computer.KeysOk = false;
             told.UnionWith(Computer.Allowed(task));
             buys = Computer.Buys(task);
@@ -1759,6 +1788,7 @@ namespace CapriDesktop
                 if (firstWords == null && sight != null) firstWords = new HashSet<string>(sight.Words);
                 if (print != lastPrint || sight == null || sight.Targets.Count == 0) still = 0;
                 else if (lastTool != null) still++;
+                if (!Playing && Computer.GameWindow(sight)) Playing = true;
                 // Small brains reach the page they were asked for, then open the first thing on it. A screen with empty boxes still has filling in to do.
                 string searched = moved && lastTool != null ? Computer.Searched(Task, sight) : null;
                 if (searched != null) nudge += "\nThe page now shows results for " + Voice.Quote(searched) + ", which is what their job asked for. Call done and say so.";
@@ -1774,7 +1804,7 @@ namespace CapriDesktop
                 Show("Thinking");
                 string fresh = Heard();
                 if (fresh != null) asides += "\nWhile you worked they also said " + fresh + ": if that's something for you to do, do it, then finish their job.";
-                try { written = Think(Computer.Allowing(Computer.Prompt), Computer.Brief(Task, Steps, sight, notes, earlier) + asides + (lost > 0 ? "\nYour last reply had no tool call. Reply with only one tool call, or call done." : "") + nudged, calls); }
+                try { written = Think(Computer.Allowing(Computer.Prompt) + (Playing ? Computer.Playing : ""), Computer.Brief(Task, Steps, sight, notes, earlier) + asides + (lost > 0 ? "\nYour last reply had no tool call. Reply with only one tool call, or call done." : "") + nudged, calls); }
                 catch (System.Runtime.Serialization.SerializationException) { written = ""; calls.Clear(); }
                 Show(null);
                 if (Computer.Interrupted) return End("stopped", Computer.Why);
@@ -1868,8 +1898,9 @@ namespace CapriDesktop
                     string last = talk[talk.Count - 1];
                     talk[talk.Count - 1] = last.Substring(0, last.Length - 2) + ",{\"type\":\"text\",\"text\":" + Voice.Quote("While you work, they just said " + fresh + ". If that's something for you to do, do it now, then carry on with their job where you left off. If not, just carry on.") + "}]}";
                 }
+                if (!Playing && Computer.GameWindow(Computer.Glimpse())) Playing = true;
                 ClaudeReply reply;
-                try { reply = Drive(Computer.Allowing(Computer.Seeing), Computer.Toolset, Conversation()); }
+                try { reply = Drive(Computer.Allowing(Computer.Seeing) + (Playing ? Computer.Playing : ""), Computer.Toolset, Conversation()); }
                 catch (System.Runtime.Serialization.SerializationException) { return End("failed", "Got a reply from my brain I couldn't read. Try again."); }
                 catch (BrainException error)
                 {

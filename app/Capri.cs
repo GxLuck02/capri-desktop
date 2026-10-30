@@ -5308,7 +5308,8 @@ namespace CapriDesktop
             job = running;
             running.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return brain.Step(system, user, Computer.Tools, Computer.ClaudeTools, Computer.Listing, calls); };
             Cloud driver = brain.Remote;
-            running.Drive = brain.Drives && driver.Model != blindModel ? new Func<string, string, string, ClaudeReply>(brain.Drive) : null;
+            // A game job thinks harder on every turn.
+            running.Drive = brain.Drives && driver.Model != blindModel ? new Func<string, string, string, ClaudeReply>(delegate(string system, string tools, string messages) { return brain.Drive(system, tools, messages, running.Playing); }) : null;
             running.Blind = delegate { blindModel = driver.Model; };
             running.Progress = delegate(string status) { Post(delegate { working = status + " Esc stops me."; UpdateTalk(clock.Elapsed.TotalSeconds); }); };
             running.Seen = delegate(Sight sight)
@@ -12417,6 +12418,29 @@ namespace CapriDesktop
                                     if (heardRun != "Installed it." || heardAt < 0 || resultAt < 0 || resultAt > heardAt || heardTurns[0].Contains("spotify"))
                                         throw new Exception("What they said mid-job didn't reach her next turn: " + heardRun + " / " + heardTurns.Count + " turns");
                                     checks.Add("PASS mid-job words: what they say while a job runs rides on her next turn after its tool results, so she does it and carries on");
+                                    // A game job thinks harder and gets her game lines, from its words or once a game's window is in front (Lachy, 30 Oct).
+                                    if (!Computer.Gaming("play bedwars on roblox and answer chat") || !Computer.Gaming("go play minecraft") || !Computer.Gaming("hop on fortnite for a bit") || !Computer.Gaming("keep playing")
+                                        || Computer.Gaming("play lofi on youtube") || Computer.Gaming("Play \"Resist and Disorder\" on Spotify: open Spotify, click its search box, type \"Resist and Disorder\" and press Enter, then press play on the best match.")
+                                        || Computer.Gaming("watch a minecraft video") || Computer.Gaming("tell sam I'll play roblox later on discord") || Computer.Gaming("send hi in #general on discord") || Computer.Gaming(null)
+                                        || !Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "Roblox", Program = "RobloxPlayerBeta" }) || !Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "Minecraft 1.21.4", Program = "javaw" })
+                                        || Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "Minecraft Let's Play - YouTube - Google Chrome", Program = "chrome" }) || Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "#general - Discord", Program = "Discord" }) || Computer.GameWindow(null))
+                                        throw new Exception("Game jobs were told apart wrong.");
+                                    driveTurn = 0;
+                                    driveScript = new[] { "{\"content\":[{\"type\":\"text\",\"text\":\"Played a round.\"}],\"stop_reason\":\"end_turn\"}" };
+                                    Job drivePlay = new Job("play bedwars on roblox");
+                                    drivePlay.Drive = scripted;
+                                    string drivePlayed = drivePlay.Run();
+                                    string playSystem = driveSystem;
+                                    driveTurn = 0;
+                                    Job driveFun = new Job("have some fun");
+                                    driveFun.Drive = scripted;
+                                    bool funBefore = driveFun.Playing;
+                                    Computer.Glimpse = delegate { return new Sight { Window = new IntPtr(7), Title = "Roblox", Program = "RobloxPlayerBeta" }; };
+                                    string funRun = driveFun.Run();
+                                    string funSystem = driveSystem;
+                                    Computer.Glimpse = delegate { return new Sight { Window = new IntPtr(7), Title = "#general - Discord", Program = "Discord" }; };
+                                    if (drivePlayed != "Played a round." || !drivePlay.Playing || playSystem != Computer.Seeing + Computer.Playing || funRun != "Played a round." || funBefore || !driveFun.Playing || funSystem != Computer.Seeing + Computer.Playing || new Job("send hi in #general on discord").Playing)
+                                        throw new Exception("A game job didn't get her game lines: " + drivePlayed + " / " + drivePlay.Playing + " / " + funRun + " / " + driveFun.Playing);
                                 }
                                 finally
                                 {
@@ -12433,7 +12457,7 @@ namespace CapriDesktop
                                 System.Net.Sockets.TcpListener driveFake;
                                 string driveAnthropic = Brain.Anthropic;
                                 string driveReply = "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Clicking it.\"},{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"left_click\",\"toolset_name\":\"computer\",\"input\":{\"coordinate\":[12,34]}}],\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5}}";
-                                Brain.Anthropic = FakeServer(new[] { driveReply, driveReply }, driveAsked, out driveFake);
+                                Brain.Anthropic = FakeServer(new[] { driveReply, driveReply, driveReply }, driveAsked, out driveFake);
                                 try
                                 {
                                     Brain driver = new Brain();
@@ -12444,18 +12468,22 @@ namespace CapriDesktop
                                     driver.Remote = new Cloud("sk-ant-test", "claude-opus-5");
                                     driver.Drive(Computer.Seeing, Computer.Toolset, "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]");
                                     driver.Remote = new Cloud("sk-ant-test", "claude-sonnet-5-5");
+                                    // A game's turn thinks harder: high effort and room for it (Lachy, 30 Oct).
+                                    driver.Drive(Computer.Seeing + Computer.Playing, Computer.Toolset, "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]", true);
                                     string[] driveSent;
                                     lock (driveAsked) driveSent = driveAsked.ToArray();
-                                    string driveRequest = driveSent.Length == 2 ? driveSent[0] : "", unboundRequest = driveSent.Length == 2 ? driveSent[1] : "";
-                                    int driveBody = driveRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal), unboundBody = unboundRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal);
-                                    string driveJson = driveBody < 0 ? "" : driveRequest.Substring(driveBody + 4), unboundJson = unboundBody < 0 ? "" : unboundRequest.Substring(unboundBody + 4);
+                                    string driveRequest = driveSent.Length == 3 ? driveSent[0] : "", unboundRequest = driveSent.Length == 3 ? driveSent[1] : "", deepRequest = driveSent.Length == 3 ? driveSent[2] : "";
+                                    int driveBody = driveRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal), unboundBody = unboundRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal), deepBody = deepRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                                    string driveJson = driveBody < 0 ? "" : driveRequest.Substring(driveBody + 4), unboundJson = unboundBody < 0 ? "" : unboundRequest.Substring(unboundBody + 4), deepJson = deepBody < 0 ? "" : deepRequest.Substring(deepBody + 4);
                                     bool driveShaped = Brain.Field(driveJson, "tools") == Computer.Toolset && Brain.Field(driveJson, "max_tokens") == "4096" && Brain.Field(driveJson, "output_config") == "{\"effort\":\"low\"}"
                                         && Brain.Field(driveJson, "system") == "[{\"type\":\"text\",\"text\":" + Voice.Quote(Computer.Seeing) + ",\"cache_control\":{\"type\":\"ephemeral\"}}]"
                                         && Brain.Field(driveJson, "messages") == "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]"
                                         && Brain.Field(driveJson, "thinking") == "{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}}"
                                         && driveRequest.IndexOf("anthropic-beta: server-side-fallback-2026-07-01,thinking-binding-controls-2026-08-01\r\n", StringComparison.OrdinalIgnoreCase) > 0
                                         && Brain.Field(unboundJson, "thinking") == null && Brain.Field(unboundJson, "max_tokens") == "4096"
-                                        && unboundRequest.IndexOf("anthropic-beta: server-side-fallback-2026-07-01\r\n", StringComparison.OrdinalIgnoreCase) > 0;
+                                        && unboundRequest.IndexOf("anthropic-beta: server-side-fallback-2026-07-01\r\n", StringComparison.OrdinalIgnoreCase) > 0
+                                        && Brain.Field(deepJson, "max_tokens") == "16000" && Brain.Field(deepJson, "output_config") == "{\"effort\":\"high\"}" && Brain.Field(deepJson, "thinking") == Brain.Field(driveJson, "thinking")
+                                        && Brain.Field(deepJson, "system") == "[{\"type\":\"text\",\"text\":" + Voice.Quote(Computer.Seeing + Computer.Playing) + ",\"cache_control\":{\"type\":\"ephemeral\"}}]";
                                     bool driveRead = drove.Raw == "[{\"type\":\"text\",\"text\":\"Clicking it.\"},{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"left_click\",\"toolset_name\":\"computer\",\"input\":{\"coordinate\":[12,34]}}]"
                                         && drove.Content.Length == 2 && drove.Content[1].Toolset == "computer" && drove.Content[1].Id == "toolu_1" && drove.Content[1].Input.Coordinate[1] == 34;
                                     bool driveNew = driver.Drives;
@@ -12468,6 +12496,7 @@ namespace CapriDesktop
                                     Brain.Anthropic = driveAnthropic;
                                 }
                                 checks.Add("PASS Claude's hands: Claude 5 models get Anthropic's computer tools plus open_app and open_website, see a screenshot of the monitor in front, click and type at its coordinates scaled to the real screen, get a fresh look after each batch with only the last three pictures kept, keep its thinking, stop a batch at the first failure, re-look when the window in front changes, still stop before Buy now until they say yes, skip asking about a send they asked for, refuse banned keys (unless Bypass is on) and spots off the screenshot, and fall back to reading buttons if the model turns the computer tools down");
+                                checks.Add("PASS game jobs think harder: a job that plays a game, by its words or once a game's window is in front, gets her game lines and asks Claude for high effort with 16000 tokens and as long as those take; songs, videos and messages that only mention a game stay quick");
                                 if (brainSent[6].IndexOf("\"tools\":", StringComparison.Ordinal) >= 0 || brainSent[6].IndexOf("To use one, reply with only the call", StringComparison.Ordinal) < 0 || brainSent[7].IndexOf("Searched youtube.com for parkour.", StringComparison.Ordinal) < 0) throw new Exception("The cached text path did not run its Listing call.");
                                 if (ran.Count != 9 || ran[6] != "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify" || ran[7] != "https://www.youtube.com/results?search_query=parkour" || ran[8] != "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify") throw new Exception("The brain's tool calls opened the wrong targets.");
                                 System.Collections.Generic.List<string> thinkAsked = new System.Collections.Generic.List<string>();
