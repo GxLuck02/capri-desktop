@@ -14677,14 +14677,16 @@ namespace CapriDesktop
                             string pageOutside = mainframe.Outside();
                             if (pageOutside != null) throw new Exception("A settings control pokes out of the page: " + pageOutside);
                             // Her personality and safety lines are fixed in code (personality.md is gone since 0.7.6), her reply rules come last, and her chat and voice-chat prompts start with all three.
-                            const string todaysPersona = "8d477080fe2773435efc60cc5ca13056f3c71aba5034e667f4e58977f262ded6";
+                            const string todaysPersona = "f6615f3412168b8efaedc75a14022c997f3d8175220a661642b9a82ed9a11a21";
                             Func<string, string> personaHash = delegate(string text) { using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(new System.Text.UTF8Encoding(false).GetBytes(text))).Replace("-", "").ToLowerInvariant(); };
                             bool personaEditable = false;
                             foreach (Control control in mainframe.Controls) if (control is Button && control.Text == "Edit personality") personaEditable = true;
-                            bool personaFixed = Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Safety + "\n" + Brain.Machinery && Brain.Persona.Length == 5098 && personaHash(Brain.Persona) == todaysPersona && Brain.PersonalityStamp == ""
-                                && Brain.Character.StartsWith(Brain.Persona, StringComparison.Ordinal) && Agent.Prompt.StartsWith(Brain.Persona + Hands.Note, StringComparison.Ordinal);
+                            bool personaFixed = Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Safety + "\n" + Brain.Machinery && Brain.Persona.Length == 5326 && personaHash(Brain.Persona) == todaysPersona && Brain.PersonalityStamp == ""
+                                && Brain.Character.StartsWith(Brain.Persona, StringComparison.Ordinal) && Agent.Prompt.StartsWith(Brain.Persona + Hands.Note, StringComparison.Ordinal)
+                                && Brain.Machinery.IndexOf("call people only by names you've actually seen or heard", StringComparison.Ordinal) > 0 && Brain.Machinery.IndexOf("never apologise for the same thing twice", StringComparison.Ordinal) > 0
+                                && Computer.Playing.IndexOf("never invent a name, a message or something nobody said", StringComparison.Ordinal) > 0;
                             if (!personaFixed || personaEditable) throw new Exception("Her personality or safety lines changed, or can be edited: " + Brain.Persona.Length + " characters, SHA-256 " + personaHash(Brain.Persona) + ", Edit personality button " + personaEditable + ". If they changed on purpose, update todaysPersona here.");
-                            checks.Add("PASS her personality: fixed in code with her safety lines right after it and her reply rules last (5098 characters, known SHA-256); there's no personality.md and no Edit personality button, and her chat and voice-chat prompts start with it");
+                            checks.Add("PASS her personality: fixed in code with her safety lines right after it and her reply rules last (5326 characters, known SHA-256), and her reply rules and game lines keep her to names she's really seen or heard, correcting a slip once instead of apologising over and over; there's no personality.md and no Edit personality button, and her chat and voice-chat prompts start with it");
                             if (mainframe.PerchStatus != "30 fps | -" || !mainframe.PerchFits) throw new Exception("The perch fps row didn't open right: " + mainframe.PerchStatus + " / fits " + mainframe.PerchFits);
                             mainframe.SlidePerch(3);
                             string perchFast = mainframe.PerchStatus;
