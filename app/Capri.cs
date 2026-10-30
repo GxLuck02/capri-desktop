@@ -581,37 +581,183 @@ namespace CapriDesktop
 
     internal sealed class Clip
     {
-        internal readonly Bitmap Strip;
+        // Art that only some moments need loads off her thread when she might need it and is let go after this long undrawn:
+        // every facing-left set, and the clips made lazy (her perch talking). The rest loads with her, as it always has.
+        internal const int RestAfter = 90000;
+        private static readonly System.Collections.Generic.List<Clip> all = new System.Collections.Generic.List<Clip>();
+        private readonly string name;
+        private readonly bool lazy;
+        private readonly bool flippable;
+        private readonly Clip source;
+        private readonly object gate = new object();
+        private Bitmap strip;
         // her artist's facing-left frames, for the clips that have them (her perches): her red arm and leg swap sides, so a
         // mirror of Strip isn't her. They're stored mirrored back onto Strip's cells and drawn mirrored like the rest.
-        internal readonly Bitmap Flipped;
+        private Bitmap flipped;
+        private bool fetching;
+        private int stripUsed, flippedUsed;
         internal readonly int Count;
         internal readonly double Fps;
         internal readonly float Height;
         // How far a cell's middle sits from the middle of her square, as a share of her size. Narrow cells cut to the art need it.
         internal readonly float ShiftX, ShiftY;
 
-        internal Clip(string name, int count, double fps, float height, float shiftX = 0, float shiftY = 0)
+        internal Clip(string name, int count, double fps, float height, float shiftX = 0, float shiftY = 0, bool lazy = false)
         {
+            this.name = name;
+            this.lazy = lazy;
             Count = count;
             Fps = fps;
             Height = height;
             ShiftX = shiftX;
             ShiftY = shiftY;
-            Strip = Companion.LoadArt("Capri.Sprite." + name + ".png");
-            if (Strip == null) throw new FileNotFoundException("Capri's " + name + " animation is missing. Rebuild with assets/sprites.");
-            Flipped = Companion.LoadArt("Capri.Sprite." + name + "_flipped.png");
+            if (!Companion.HasArt(Resource(false))) throw new FileNotFoundException("Capri's " + name + " animation is missing. Rebuild with assets/sprites.");
+            flippable = Companion.HasArt(Resource(true));
+            if (!lazy) strip = Companion.LoadArt(Resource(false));
+            lock (all) all.Add(this);
         }
 
+        // Another clip's art under a new name, like her dance: her idle with a nod on top.
         internal Clip(Clip art)
         {
-            Strip = art.Strip;
-            Flipped = art.Flipped;
+            source = art;
             Count = art.Count;
             Fps = art.Fps;
             Height = art.Height;
             ShiftX = art.ShiftX;
             ShiftY = art.ShiftY;
+        }
+
+        private string Resource(bool left) { return "Capri.Sprite." + name + (left ? "_flipped" : "") + ".png"; }
+
+        // Her facing-right art, or her only art. A lazy clip that isn't in yet loads on the spot.
+        internal Bitmap Strip
+        {
+            get
+            {
+                if (source != null) return source.Strip;
+                stripUsed = Environment.TickCount;
+                Bitmap art = strip;
+                if (art != null) return art;
+                lock (gate)
+                {
+                    if (strip == null) strip = Companion.LoadArt(Resource(false));
+                    return strip;
+                }
+            }
+        }
+
+        // Her facing-left art, or null for clips without any and while it loads, which asking for it starts. Until it's in
+        // she's drawn as a mirror of Strip.
+        internal Bitmap Flipped
+        {
+            get
+            {
+                if (source != null) return source.Flipped;
+                if (!flippable) return null;
+                flippedUsed = Environment.TickCount;
+                Bitmap art = flipped;
+                if (art == null) Warm(true);
+                return art;
+            }
+        }
+
+        // The facing-left art straight away, loading it here if it isn't in. For her smoke test.
+        internal Bitmap FlippedNow
+        {
+            get
+            {
+                if (source != null) return source.FlippedNow;
+                if (!flippable) return null;
+                flippedUsed = Environment.TickCount;
+                lock (gate)
+                {
+                    if (flipped == null) flipped = Companion.LoadArt(Resource(true));
+                    return flipped;
+                }
+            }
+        }
+
+        internal bool HasFlipped { get { return source != null ? source.HasFlipped : flippable; } }
+
+        // Whether the art for that way round is in, so she can show it without waiting: facing left, that's her artist's
+        // flipped set when the clip has one.
+        internal bool Ready(bool left)
+        {
+            if (source != null) return source.Ready(left);
+            return left && flippable ? flipped != null : strip != null;
+        }
+
+        // Starts loading the art for that way round off her thread, and counts as using it, so it stays in while she asks.
+        internal void Warm(bool left)
+        {
+            if (source != null) { source.Warm(left); return; }
+            bool wantLeft = left && flippable;
+            if (wantLeft) flippedUsed = Environment.TickCount; else stripUsed = Environment.TickCount;
+            lock (gate)
+            {
+                if (fetching || (wantLeft ? flipped != null : strip != null)) return;
+                fetching = true;
+            }
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                Bitmap art = null;
+                // A load that fails, out of memory say, leaves her drawn as she was, and the next ask tries again.
+                try { art = Companion.LoadArt(Resource(wantLeft)); }
+                catch (Exception) { }
+                lock (gate)
+                {
+                    fetching = false;
+                    if (art == null) return;
+                    if (wantLeft && flipped == null) flipped = art;
+                    else if (!wantLeft && strip == null) strip = art;
+                    else art.Dispose();
+                }
+            });
+        }
+
+        // Lets go of art undrawn for RestAfter: lazy clips' own, and every facing-left set. Called on her thread, between frames.
+        internal static void RestAll(int now)
+        {
+            Clip[] clips;
+            lock (all) clips = all.ToArray();
+            foreach (Clip clip in clips) clip.Rest(now);
+        }
+
+        private void Rest(int now)
+        {
+            lock (gate)
+            {
+                if (fetching) return;
+                if (lazy && strip != null && unchecked(now - stripUsed) > RestAfter) { strip.Dispose(); strip = null; }
+                if (flipped != null && unchecked(now - flippedUsed) > RestAfter) { flipped.Dispose(); flipped = null; }
+            }
+        }
+
+        // How much of her art is in memory, in bytes, for her smoke test.
+        internal static long Loaded()
+        {
+            Clip[] clips;
+            lock (all) clips = all.ToArray();
+            long bytes = 0;
+            foreach (Clip clip in clips)
+                lock (clip.gate)
+                    foreach (Bitmap art in new[] { clip.strip, clip.flipped })
+                        if (art != null) bytes += 4L * art.Width * art.Height;
+            return bytes;
+        }
+
+        internal static void DisposeAll()
+        {
+            Clip[] clips;
+            lock (all) { clips = all.ToArray(); all.Clear(); }
+            foreach (Clip clip in clips)
+                lock (clip.gate)
+                {
+                    if (clip.strip != null) clip.strip.Dispose();
+                    if (clip.flipped != null) clip.flipped.Dispose();
+                    clip.strip = clip.flipped = null;
+                }
         }
     }
 
@@ -635,9 +781,11 @@ namespace CapriDesktop
         private readonly Clip wake = new Clip("wake", 13, 15, 1.11f);
         // her artist's perch: 60 frames at 30 fps. Its cells are cut to her outline, so they sit 26 px left of her
         // square's middle and start 36 px down it, in 384 px art, which leaves room for her longer dangling legs. Facing left,
-        // every perch clip shows her artist's flipped set (the _flipped strips) on the same cells.
+        // every perch clip shows her artist's flipped set (the _flipped strips) on the same cells, loaded while she sits.
         private const float PerchShiftX = -26f / 384, PerchShiftY = 36f / 384;
         private readonly Clip perch = new Clip("perch", 60, 30, 1, PerchShiftX, PerchShiftY);
+        // her artist's talking perch, frame for frame with the plain one, shown while she talks on a perch.
+        private readonly Clip perchTalk = new Clip("perch_talk", 60, 30, 1, PerchShiftX, PerchShiftY, true);
         // her artist's own blink, frames 29 to 36 of the blink set, and the same with a glitch around her eye.
         private readonly Clip perchBlink = new Clip("perch_blink", 8, 30, 1, PerchShiftX, PerchShiftY);
         private readonly Clip perchBlinkGlitch = new Clip("perch_blink_glitch", 8, 30, 1, PerchShiftX, PerchShiftY);
@@ -1260,6 +1408,7 @@ namespace CapriDesktop
                 if (!testing) CheckPlayer(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckHome(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckLag(clock.Elapsed.TotalSeconds);
+                if (!testing) Clip.RestAll(Environment.TickCount);
                 if (!testing) CheckPopIn(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckNudge(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) presence.Show(preferences.NoDiscord ? null : Doing);
@@ -1414,6 +1563,8 @@ namespace CapriDesktop
             else if (!Drop()) SavePreferences();
         }
 
+        internal static bool HasArt(string name) { return Assembly.GetExecutingAssembly().GetManifestResourceInfo(name) != null; }
+
         internal static Bitmap LoadArt(string name)
         {
             using (Stream image = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
@@ -1489,6 +1640,7 @@ namespace CapriDesktop
         {
             bool seated = clip == perch || clip == perchGlitch || clip == perchDance || clip == perchArrive || clip == perchLeave;
             bool perched = riding || onPanel || seat != null;
+            if (seated) WarmPerch();
             if (perched && !seated && !walking) Play(perch);
             if ((!perched && seated) || (clip == dangle && !dragging && !falling && !hanging)) Play(idle);
             int index = (int)((now - clipStart) * clip.Fps);
@@ -7489,9 +7641,10 @@ namespace CapriDesktop
             }
             Clip shown = clip;
             int blinkFrom = clip == perch ? PerchBlinkFrom : BlinkFrom;
-            int following = (cell + 1) % clip.Count;
+            int following = (cell + 1) % clip.Count, loopCell = cell;
             if ((clip == idle || clip == perch) && blinkWith != null && cell >= blinkFrom && cell < blinkFrom + blinkWith.Count) { shown = blinkWith; cell -= blinkFrom; }
             int talk = MouthCell(now, shown);
+            if (PerchTalks(TalkingNow)) { shown = perchTalk; cell = loopCell; }
             Bitmap tween = perchMix > 0 ? Tween(shown, cell, following) : null;
             Bitmap next = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb);
             using (Graphics graphics = Graphics.FromImage(next)) Draw(graphics, shown, cell, talk, tween);
@@ -7510,16 +7663,22 @@ namespace CapriDesktop
         // Neighbouring frames barely differ, so a straight mix reads as the frame between them, with no extra art in memory.
         private Bitmap Tween(Clip shown, int cell, int following)
         {
-            Clip after = clip;
-            if (clip == perch && blinkWith != null && following >= PerchBlinkFrom && following < PerchBlinkFrom + blinkWith.Count) { after = blinkWith; following -= PerchBlinkFrom; }
-            int width = shown.Strip.Width / shown.Count;
-            if (inBetween == null) inBetween = new Bitmap(width, shown.Strip.Height, PixelFormat.Format32bppPArgb);
-            Mix(Art(shown), cell, Art(after), following, perchMix, inBetween);
+            Clip after = shown == perchTalk ? perchTalk : clip;
+            if (after == perch && blinkWith != null && following >= PerchBlinkFrom && following < PerchBlinkFrom + blinkWith.Count) { after = blinkWith; following -= PerchBlinkFrom; }
+            Bitmap from = Art(shown);
+            int width = from.Width / shown.Count;
+            if (inBetween != null && (inBetween.Width != width || inBetween.Height != from.Height)) { inBetween.Dispose(); inBetween = null; }
+            if (inBetween == null) inBetween = new Bitmap(width, from.Height, PixelFormat.Format32bppPArgb);
+            Mix(from, cell, Art(after), following, perchMix, inBetween);
             return inBetween;
         }
 
-        // The strip she's drawn from: facing left, a clip's flipped art when it has some.
-        private Bitmap Art(Clip shown) { return facingLeft && shown.Flipped != null ? shown.Flipped : shown.Strip; }
+        // The strip she's drawn from: facing left, a clip's flipped art once it's in.
+        private Bitmap Art(Clip shown)
+        {
+            Bitmap left = facingLeft ? shown.Flipped : null;
+            return left ?? shown.Strip;
+        }
 
         // Cell a of one strip mixed with weight 256ths of cell b of another, into a spare cell. Her strips are premultiplied,
         // so a straight mix of each channel fades her edges right too.
@@ -7565,6 +7724,26 @@ namespace CapriDesktop
             if (speech != null) EndWalk();
             if (speech != null && (clip == sleep || clip == wake || clip == glitch || clip == grin || clip == dance || clip == perchDance)) Play(idle);
             UpdateAnimation();
+        }
+
+        // Whether her mouth is moving: a line she's saying, or her voice chat's audio. Read after MouthCell, which ends a line.
+        private bool TalkingNow { get { return (chatting && speaker.Busy) || speech != null; } }
+
+        // On a perch she talks in her artist's talking frames, frame for frame with the plain ones, once they're in.
+        private bool PerchTalks(bool talking) { return clip == perch && talking && perchTalk.Ready(facingLeft); }
+
+        // While she sits, the perch art she might need next loads off her thread, facing whichever way she does: her talking
+        // frames, and facing left her artist's flipped set, with the music perch while a song plays.
+        private void WarmPerch()
+        {
+            perchTalk.Warm(facingLeft);
+            if (!facingLeft) return;
+            perch.Warm(true);
+            perchBlink.Warm(true);
+            perchBlinkGlitch.Warm(true);
+            perchGlitch.Warm(true);
+            perchLeave.Warm(true);
+            if (musicOn) perchDance.Warm(true);
         }
 
         private int MouthCell(double now, Clip shown)
@@ -7615,8 +7794,8 @@ namespace CapriDesktop
             graphics.TranslateTransform(Width / 2f, Height / 2f + breathe);
             graphics.RotateTransform(tilt + (float)leanAngle);
             if (facingLeft) graphics.ScaleTransform(-1, 1);
-            Bitmap strip = tween ?? Art(shown);
-            int width = shown.Strip.Width / shown.Count;
+            Bitmap art = Art(shown), strip = tween ?? art;
+            int width = art.Width / shown.Count;
             if (tween != null) cell = 0;
             float tall = preferences.Size * shown.Height;
             float wide = tall * width / strip.Height;
@@ -7850,11 +8029,7 @@ namespace CapriDesktop
                 box.Dispose();
                 typer.Dispose();
                 mainframe.Dispose();
-                foreach (Clip owned in new[] { idle, blink, blinkGlitch, grin, glitch, dangle, sleep, wake, perch, perchBlink, perchBlinkGlitch, perchGlitch, mouth })
-                {
-                    owned.Strip.Dispose();
-                    if (owned.Flipped != null) owned.Flipped.Dispose();
-                }
+                Clip.DisposeAll();
                 if (frame != null) frame.Dispose();
                 if (inBetween != null) inBetween.Dispose();
             }
@@ -10314,10 +10489,10 @@ namespace CapriDesktop
                                 sheet.Save(Path.Combine(output, "clips.png"), ImageFormat.Png);
                             }
                             checks.Add("PASS all 12 clips draw: idle, blinks, grin, glitch, drag, sleep, wake and perch, plus the talking mouth");
-                            // Facing left, her perches are a plain mirror for now: her artist's flipped sets are out until the updated
-                            // ones come (Lachy, 29 Oct). The mirror is the normal cell drawn as a tween, the same way.
-                            foreach (Clip seated in new[] { perch, perchBlink, perchBlinkGlitch, perchGlitch, perchDance, perchArrive, perchLeave })
-                                if (seated.Flipped != null) throw new Exception("A perch clip still has flipped art.");
+                            // Facing left, her perches show her artist's flipped frames: the outline of the mirrored perch, with her red
+                            // arm and leg on the other side. The mirror is the normal cell drawn as a tween, the same way.
+                            foreach (Clip seated in new[] { perch, perchBlink, perchBlinkGlitch, perchGlitch, perchDance, perchArrive, perchLeave, perchTalk })
+                                if (seated.FlippedNow == null || seated.FlippedNow.Size != seated.Strip.Size) throw new Exception("A perch clip has no flipped art the size of its own.");
                             bool facedWas = facingLeft, motionWas = preferences.Motion;
                             int outline = 0, sameOutline = 0, recoloured = 0;
                             try
@@ -10355,8 +10530,47 @@ namespace CapriDesktop
                                 }
                             }
                             finally { facingLeft = facedWas; preferences.Motion = motionWas; }
-                            if (sameOutline < outline * 98 / 100 || recoloured > outline / 100) throw new Exception("Facing left, her perch wasn't a plain mirror: " + sameOutline + " of " + outline + " outline pixels match the mirror, " + recoloured + " recoloured.");
-                            checks.Add("PASS perch facing left: all 7 perch clips are a plain mirror until her artist's updated flipped sets come (" + sameOutline * 100 / outline + "% matching, " + recoloured * 100 / outline + "% recoloured)");
+                            if (sameOutline < outline * 98 / 100 || recoloured < outline * 3 / 100) throw new Exception("Facing left, her perch wasn't her artist's flipped frame: " + sameOutline + " of " + outline + " outline pixels match the mirror, " + recoloured + " recoloured.");
+                            checks.Add("PASS perch facing left: all 8 perch clips have her artist's flipped art the size of their own, drawn in the mirrored outline (" + sameOutline * 100 / outline + "% matching) with her arm and leg swapped (" + recoloured * 100 / outline + "% recoloured)");
+                            // On a perch she talks in her artist's talking frames: cut like her perch, changed only around her mouth, and
+                            // shown while she talks, facing either way.
+                            Clip clipBeforeTalk = clip;
+                            Play(perch);
+                            int talkWide = perch.Strip.Width / perch.Count, talkHigh = perch.Strip.Height;
+                            if (perchTalk.Count != perch.Count || perchTalk.Strip.Size != perch.Strip.Size) throw new Exception("Her perch talking isn't cut like her perch.");
+                            int[] quietCell = new int[talkWide * talkHigh], talkCell = new int[quietCell.Length];
+                            Pixels(perch.Strip, new Rectangle(20 * talkWide, 0, talkWide, talkHigh), quietCell, false);
+                            Pixels(perchTalk.Strip, new Rectangle(20 * talkWide, 0, talkWide, talkHigh), talkCell, false);
+                            int mouthLeft = talkWide, mouthTop = talkHigh, mouthRight = -1, mouthBottom = -1;
+                            for (int i = 0; i < quietCell.Length; i++)
+                            {
+                                int moved = 0;
+                                for (int shift = 0; shift < 32; shift += 8) moved = Math.Max(moved, Math.Abs((quietCell[i] >> shift & 255) - (talkCell[i] >> shift & 255)));
+                                if (moved <= 40) continue;
+                                mouthLeft = Math.Min(mouthLeft, i % talkWide);
+                                mouthRight = Math.Max(mouthRight, i % talkWide);
+                                mouthTop = Math.Min(mouthTop, i / talkWide);
+                                mouthBottom = Math.Max(mouthBottom, i / talkWide);
+                            }
+                            if (mouthRight < 0 || mouthRight - mouthLeft > 60 || mouthBottom - mouthTop > 60) throw new Exception("Her perch talking changes more than her mouth: " + mouthLeft + "," + mouthTop + " to " + mouthRight + "," + mouthBottom);
+                            bool talksRight = PerchTalks(true), quietRight = !PerchTalks(false);
+                            facingLeft = true;
+                            bool talksLeft = PerchTalks(true);
+                            facingLeft = facedWas;
+                            Play(clipBeforeTalk);
+                            if (!talksRight || !quietRight || !talksLeft) throw new Exception("Her perch didn't switch to its talking frames while she talks: right " + talksRight + ", quiet " + quietRight + ", left " + talksLeft);
+                            // Art undrawn for a while is let go, and comes back off her thread when she asks for it again: her perch
+                            // talking and her flipped sets, never the art she always has.
+                            long artBefore = Clip.Loaded();
+                            Clip.RestAll(Environment.TickCount + Clip.RestAfter + 1000);
+                            long artRested = Clip.Loaded();
+                            if (perchTalk.Ready(false) || perchTalk.Ready(true) || perch.Ready(true) || !perch.Ready(false) || artRested >= artBefore) throw new Exception("Resting didn't let go of her perch talking and flipped art: " + artBefore + " to " + artRested + " bytes.");
+                            perchTalk.Warm(false);
+                            perch.Warm(true);
+                            Stopwatch warming = Stopwatch.StartNew();
+                            while ((!perchTalk.Ready(false) || !perch.Ready(true)) && warming.ElapsedMilliseconds < 8000) Thread.Sleep(20);
+                            if (!perchTalk.Ready(false) || !perch.Ready(true)) throw new Exception("Her perch talking and flipped perch didn't load again off her thread.");
+                            checks.Add("PASS her perch talks in her artist's talking frames (changed only around her mouth, facing either way), and art undrawn for " + Clip.RestAfter / 1000 + " s is let go (" + (artBefore - artRested) / (1 << 20) + " MB here) and loads again off her thread in " + warming.ElapsedMilliseconds + " ms");
                             using (Font display = Look.Mono(14, FontStyle.Bold))
                             using (Font slanted = Look.Mono(9f, FontStyle.Italic, GraphicsUnit.Point))
                                 if (display.Name != "Share Tech Mono" || slanted.Name != "Share Tech Mono") throw new Exception("Embedded font did not load: " + display.Name);
