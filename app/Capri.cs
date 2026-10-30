@@ -4945,11 +4945,15 @@ namespace CapriDesktop
         // Voice chat pauses her glances only while their mic is on. Muted, she keeps commenting on their screen.
         private bool MicOpen { get { return chatting && !ears.Muted; } }
 
+        // While she plays a game for them she keeps quiet about the screen, since her glances would be a running commentary on
+        // her own play (Lachy, 30 Oct: "they were constantly yapping to chat").
+        private bool PlayingGame { get { Job running = job; return running != null && working != null && running.Playing; } }
+
         private void CheckGlance(double now, long quiet)
         {
             if (!preferences.Watch || glancing || Hushed) return;
             if (nextGlance < 0) nextGlance = now + Math.Min(20, GlanceGap);
-            if (now < nextGlance || quiet > 600000 || brain.Model == null || hidden || MicOpen || dragging || typer.Visible || talkState != TalkState.Off) return;
+            if (now < nextGlance || quiet > 600000 || brain.Model == null || hidden || MicOpen || PlayingGame || dragging || typer.Visible || talkState != TalkState.Off) return;
             nextGlance = now + GlanceGap * (0.8 + random.NextDouble() * 0.4);
             if (Unseeing() != null) return;
             byte[] shot;
@@ -4995,7 +4999,7 @@ namespace CapriDesktop
             string unseen = Unseeing();
             if (unseen != null || problem != null) { lastPrint = null; mainframe.ShowProblem(unseen ?? problem); return; }
             if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
-            if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || Hushed || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
+            if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || PlayingGame || Hushed || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
             // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
             if (Glances.Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) { Glimpsed(saw); return; }
             glanced.Add(Tuple.Create(clock.Elapsed.TotalSeconds, said));
@@ -12480,6 +12484,10 @@ namespace CapriDesktop
                                     Computer.Glimpse = delegate { return new Sight { Window = new IntPtr(7), Title = "#general - Discord", Program = "Discord" }; };
                                     if (drivePlayed != "Played a round." || !drivePlay.Playing || playSystem != Computer.Seeing + Computer.Playing || funRun != "Played a round." || funBefore || !driveFun.Playing || funSystem != Computer.Seeing + Computer.Playing || new Job("send hi in #general on discord").Playing)
                                         throw new Exception("A game job didn't get her game lines: " + drivePlayed + " / " + drivePlay.Playing + " / " + funRun + " / " + driveFun.Playing);
+                                    // Lachy, 30 Oct: "they were constantly yapping to chat".
+                                    if (Computer.Playing.IndexOf("read it but keep playing quietly", StringComparison.Ordinal) < 0 || Computer.Playing.IndexOf("answer each message once", StringComparison.Ordinal) < 0 || Computer.Playing.IndexOf("Never comment on the game to chat between messages.", StringComparison.Ordinal) < 0)
+                                        throw new Exception("Her game lines lost the chat rules: " + Computer.Playing);
+                                    checks.Add("PASS quiet in chat: playing a game she reads the chat but answers only messages worth answering, once each in one short line, and never comments on the game to chat between them; her glances wait while she plays");
                                     // Esc while a turn is still thinking stops the job then, not when the turn would have ended.
                                     Func<bool> thinkEscapeWas = Computer.Escape;
                                     Stopwatch thinkClock = Stopwatch.StartNew();
@@ -18515,6 +18523,8 @@ namespace CapriDesktop
                             dragging = true; paused(); dragging = false;
                             chatting = true; paused(); chatting = false;
                             typer.Show(); paused(); typer.Hide();
+                            // She plays a game quietly (Lachy, 30 Oct).
+                            job = new Job("play bedwars on roblox"); working = "On it. Esc stops me."; paused(); working = null; job = null;
                             foreach (TalkState state in new[] { TalkState.Thinking, TalkState.Talking, TalkState.Online, TalkState.Dormant }) { talkState = state; paused(); }
                             talkState = TalkState.Off;
                             brain.Model = null; paused(); brain.Model = brain.Remote.Model;
@@ -18562,11 +18572,12 @@ namespace CapriDesktop
                             hidden = true; held(); hidden = false;
                             chatting = true; held(); chatting = false;
                             typer.Show(); held(); typer.Hide();
+                            job = new Job("play bedwars on roblox"); working = "On it. Esc stops me."; held(); working = null; job = null;
                             talkState = TalkState.Thinking; held(); talkState = TalkState.Off;
                             lastPrint = new byte[64 * 36 * 3];
                             FinishGlance(asking, watchTicket, null, "Couldn't read the screen. I'll try again.");
                             if (reply != null || lastPrint != null || mainframe.Status.IndexOf("Couldn't read the screen.", StringComparison.Ordinal) < 0) throw new Exception("A failed vision request did not allow a retry or show its reason.");
-                            checks.Add("PASS glance gates: watch, busy, hidden, dragging, typing, voice chat with the mic on, talk states, unsighted models and 10 minutes away pause capture; her sleep pose and a muted voice chat do not; black frames stay local; failures retry; stopped or interrupted glances stay silent");
+                            checks.Add("PASS glance gates: watch, busy, hidden, dragging, typing, voice chat with the mic on, a game she's playing, talk states, unsighted models and 10 minutes away pause capture; her sleep pose and a muted voice chat do not; black frames stay local; failures retry; stopped or interrupted glances stay silent");
                             Grab = delegate(Rectangle place)
                             {
                                 Bitmap shot = new Bitmap(place.Width, place.Height, PixelFormat.Format24bppRgb);

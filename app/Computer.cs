@@ -153,7 +153,8 @@ namespace CapriDesktop
         // What a game job's brain gets after her hands' prompt (Lachy, 30 Oct, after her live stream).
         internal const string Playing =
             "\nThis job plays a game, so take your time on every turn: look closely at the screen, work out where you are, what's around you and what's in the way, and plan your next moves before you act. After each move, check what changed before the next one." +
-            "\nMove by holding keys for a second or two at a time, like w to walk forward. If you're stuck, like under a block, against a wall or in a hole, hold w and press space together to jump forward out of it: call hold_and_press with hold w and press space. If that doesn't free you, back off or step sideways with s, a or d and try again.";
+            "\nMove by holding keys for a second or two at a time, like w to walk forward. If you're stuck, like under a block, against a wall or in a hole, hold w and press space together to jump forward out of it: call hold_and_press with hold w and press space. If that doesn't free you, back off or step sideways with s, a or d and try again." +
+            "\nIf a chat is on screen, like the game's or a stream's, read it but keep playing quietly. Only answer a message worth answering, like a question for Capri, a dare or a donation, in one short line as Capri herself, and answer each message once: old messages stay on screen after you answer, so skip any you already did. To answer in the game's own chat, open it first, like / in Roblox or t in Minecraft. Never comment on the game to chat between messages.";
 
         private static readonly string[,] Specs =
         {
