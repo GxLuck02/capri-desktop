@@ -251,7 +251,7 @@ namespace CapriDesktop
         [DataMember] public int VoiceSpeed = 100;
         [DataMember] public int VoiceRobot;
         [DataMember] public int VoiceGlitch;
-        // Her HD voice keeps its own robot and its own glitch. They start Off here, and Tune gives a new install 40% and 20%.
+        // Her HD voice keeps its own robot and its own glitch, both Off out of the box, tuned voice included.
         // Early 0.7.4 builds saved a 10% HD glitch as HdGlitch, so the new name starts it at Off.
         [DataMember] public int HdRobot = VoiceFx.HdRobotDefault;
         [DataMember] public int HdVoiceGlitch;
@@ -297,15 +297,13 @@ namespace CapriDesktop
             return fresh;
         }
 
-        // Her voice as Lachy tuned it (30 Oct: "free voice settings default"): 80% volume, pitch +3, 1.2x, her HD voice at 40%
-        // robot and 20% glitch, and her voice layers on at their defaults. Pitch, speed, volume and layers go for every voice.
+        // Her voice as Lachy tuned it (30 Oct: "free voice settings default"): 80% volume, pitch +3, 1.2x, robot and glitch left
+        // Off, and her voice layers on at their defaults. Pitch, speed, volume and layers go for every voice.
         internal void Tune()
         {
             Volume = 80;
             VoicePitch = 3;
             VoiceSpeed = 120;
-            HdRobot = 40;
-            HdVoiceGlitch = 20;
             VoiceLayers = true;
             LayerPitch1 = VoiceFx.Layering.HigherPitch;
             LayerDelay1 = VoiceFx.Layering.Behind;
@@ -3397,7 +3395,7 @@ namespace CapriDesktop
                 return read;
             };
             Func<Preferences, string> tunedShown = delegate(Preferences p) { return p.Volume + " | " + p.VoicePitch + " | " + p.VoiceSpeed + " | " + p.VoiceRobot + "/" + p.VoiceGlitch + " | HD " + p.HdRobot + "/" + p.HdVoiceGlitch + " | " + LayersOf(p).Shown + " | " + p.VoiceTuned; };
-            const string tunedWanted = "80 | 3 | 120 | 0/0 | HD 40/20 | On | +2, 25 ms | -2.5, 25 ms | True";
+            const string tunedWanted = "80 | 3 | 120 | 0/0 | HD 0/0 | On | +2, 25 ms | -2.5, 25 ms | True";
             string tunedNew = tunedShown(Preferences.Fresh());
             string tunedOld = tunedShown(tunedRead("{\"Volume\":100,\"VoicePitch\":0,\"VoiceSpeed\":100,\"VoiceRobot\":0,\"VoiceGlitch\":0,\"HdRobot\":0,\"HdVoiceGlitch\":0,\"VoiceLayers\":false,\"LayerPitch1\":1.5,\"LayerDelay1\":25,\"LayerPitch2\":-2.5,\"LayerDelay2\":25}"));
             string tunedBare = tunedShown(tunedRead("{\"Size\":240}"));
@@ -3407,7 +3405,7 @@ namespace CapriDesktop
             if (tunedNew != tunedWanted || tunedOld != tunedWanted || tunedBare != tunedWanted || tunedMoved != "100 | 2 | 100 | 0/0 | HD 0/0 | Off | +2, 25 ms | -2.5, 25 ms | True"
                 || tunedLouder != "120 | 0 | 100 | 0/0 | HD 0/0 | Off | +2, 25 ms | -2.5, 25 ms | True" || tunedKept != "100 | 0 | 100 | 0/0 | HD 0/0 | Off | +2, 25 ms | -2.5, 25 ms | True" || new Preferences().VoiceTuned)
                 throw new Exception("Her tuned voice went wrong: new " + tunedNew + " // untouched " + tunedOld + " // bare " + tunedBare + " // moved " + tunedMoved + " // louder " + tunedLouder + " // kept " + tunedKept);
-            checks.Add("PASS her tuned voice: a new install starts at 80% volume, pitch +3, 1.2x, her HD voice at 40% robot and 20% glitch, and voice layers on at +2 and -2.5, 25 ms behind her; settings from before it with every voice slider untouched get it once, and anyone who moved one keeps theirs");
+            checks.Add("PASS her tuned voice: a new install starts at 80% volume, pitch +3, 1.2x, robot and glitch Off on every voice, and voice layers on at +2 and -2.5, 25 ms behind her; settings from before it with every voice slider untouched get it once, and anyone who moved one keeps theirs");
 
             // Her VOICE LAYERS window from Settings > VOICE: the switch, a slider each, MAIN's pitch and Settings' moving together,
             // Defaults, and the layout at 100%, 150% and 200%.
