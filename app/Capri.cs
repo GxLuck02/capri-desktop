@@ -11694,6 +11694,10 @@ namespace CapriDesktop
                                     }
                                     if (heldFor != Computer.Escaped || heldMs > 3000 || repeated != Computer.Escaped || repeatedMs > 3000) throw new Exception("Esc didn't stop a long hold or a run of key presses: " + heldFor + " after " + heldMs + " ms / " + repeated + " after " + repeatedMs + " ms");
                                     checks.Add("PASS Esc during a hold: a 60-second key hold and a 1,000-press run both stop within a moment of Esc and let the key go; only her own Esc presses are ignored");
+                                    // Games like Roblox and Minecraft only feel keys that carry their real scan codes.
+                                    if (Computer.Scan(Computer.Code("space")) != 0x39 || Computer.Scan(Computer.Code("enter")) != 0x1C || Computer.Scan(Computer.Code("esc")) != 0x01 || Computer.Scan(Computer.Code("print")) != 0 || Computer.Scan(Computer.Code("xf86audioraisevolume")) != 0)
+                                        throw new Exception("Her keys don't carry their scan codes: space " + Computer.Scan(Computer.Code("space")) + ", enter " + Computer.Scan(Computer.Code("enter")));
+                                    checks.Add("PASS her keys in games: each press carries the key's real scan code, so games like Roblox and Minecraft feel it, and stays down a few frames; Print Screen and media keys stay virtual");
                                     // A brain error partway through a job, like a rate limit, used to leave their mouse borrowed.
                                     Func<Point> cursorAtWas = Computer.CursorAt;
                                     Action<Point> putCursorWas = Computer.PutCursor;

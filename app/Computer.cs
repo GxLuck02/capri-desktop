@@ -323,6 +323,7 @@ namespace CapriDesktop
         [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
         [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
         [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+        [DllImport("user32.dll")] private static extern uint MapVirtualKey(uint code, uint type);
         [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out Box box);
         [DllImport("user32.dll")] private static extern int GetWindowThreadProcessId(IntPtr window, out int process);
         [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr window);
@@ -1553,9 +1554,15 @@ namespace CapriDesktop
             SendInput(1, inputs, Marshal.SizeOf(typeof(Input)));
         }
 
+        // Games such as Roblox and Minecraft read a key's scan code rather than its virtual-key code, so each press sends the
+        // real one, or holding w wouldn't move her. Print Screen and the media keys have no plain scan code and stay virtual.
+        internal static short Scan(short key) { return key == 0x2C || (key >= 0xA6 && key <= 0xB7) ? (short)0 : (short)MapVirtualKey((uint)key, 0); }
+
         private static void Key(short key, bool up, bool extended = false)
         {
-            Input[] inputs = { new Input { Type = 1, Data = new InputUnion { Key = new KeyInput { Key = key, Flags = (up ? 0x0002 : 0) | (extended ? 0x0001 : 0) } } } };
+            short scan = Scan(key);
+            int flags = (up ? 0x0002 : 0) | (extended ? 0x0001 : 0) | (scan != 0 ? 0x0008 : 0);
+            Input[] inputs = { new Input { Type = 1, Data = new InputUnion { Key = new KeyInput { Key = key, Scan = scan, Flags = flags } } } };
             SendInput(1, inputs, Marshal.SizeOf(typeof(Input)));
         }
 
@@ -1641,6 +1648,8 @@ namespace CapriDesktop
             try
             {
                 for (int i = 0; i < codes.Length; i++) { Key(codes[i], false, Extended(codes[i])); Thread.Sleep(25); }
+                // Games check keys once a frame, so a press stays down for a few frames or a jump gets missed.
+                Thread.Sleep(60);
                 for (int i = codes.Length - 1; i >= 0; i--) { Key(codes[i], true, Extended(codes[i])); Thread.Sleep(25); }
             }
             finally { Thread.Sleep(60); if (esc) escaping = false; }
