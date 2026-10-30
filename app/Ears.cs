@@ -107,14 +107,19 @@ namespace CapriDesktop
             return text.Length == 0 ? null : text.ToString();
         }
 
+        // Windows' own record of a mic, under its endpoint id.
+        private static RegistryKey Properties(string id)
+        {
+            int cut = id == null ? -1 : id.LastIndexOf("}.{", StringComparison.Ordinal);
+            if (cut < 0) return null;
+            return Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture\" + id.Substring(cut + 2) + @"\Properties");
+        }
+
         private static string FullName(string id)
         {
-            if (id == null) return null;
-            int cut = id.LastIndexOf("}.{", StringComparison.Ordinal);
-            if (cut < 0) return null;
             try
             {
-                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture\" + id.Substring(cut + 2) + @"\Properties"))
+                using (RegistryKey key = Properties(id))
                 {
                     if (key == null) return null;
                     string kind = key.GetValue("{a45c254e-df1c-4efd-8020-67d146a850e0},2") as string;
@@ -124,6 +129,43 @@ namespace CapriDesktop
                 }
             }
             catch (Exception) { return null; }
+        }
+
+        // The mic Start opens for a pick: the picked one while it's plugged in, or Windows' default.
+        private static string Opens(string chosen)
+        {
+            if (Pick(chosen) >= 0) return chosen;
+            ISoundDevices devices = null;
+            ISoundDevice device = null;
+            try
+            {
+                devices = (ISoundDevices)new SoundDevices();
+                string id;
+                if (devices.GetDefaultAudioEndpoint(1, 0, out device) != 0 || device == null || device.GetId(out id) != 0) return null;
+                return id;
+            }
+            catch (Exception) { return null; }
+            finally
+            {
+                if (device != null) Marshal.ReleaseComObject(device);
+                if (devices != null) Marshal.ReleaseComObject(devices);
+            }
+        }
+
+        // A Bluetooth headset's mic is its hands-free side: while it's open the headset is on a call, and everything Windows
+        // plays through it drops to phone-call quality. The mic's name when a pick would open one, else null.
+        internal static string HandsFree(string chosen)
+        {
+            string id = Opens(chosen);
+            try
+            {
+                using (RegistryKey key = Properties(id))
+                {
+                    if (key == null || !string.Equals(key.GetValue("{a45c254e-df1c-4efd-8020-67d146a850e0},24") as string, "BTHHFENUM", StringComparison.OrdinalIgnoreCase)) return null;
+                }
+            }
+            catch (Exception) { return null; }
+            return FullName(id) ?? "Bluetooth headset";
         }
 
         private static int Pick(string chosen)

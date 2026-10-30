@@ -1076,7 +1076,9 @@ namespace CapriDesktop
         private readonly LocalEars parakeet;
         // "Hey Capri": the wake word's own mic and spotter, open only while the setting is on and nothing pauses it.
         private readonly WakeWord heyCapri;
-        private bool wakeOpen, settingUpWake, wakeAskedVoice, wakeTell, wakeSaid, wakeMicSaid, wakeMicMuted, wakeWarming;
+        private bool wakeOpen, settingUpWake, wakeAskedVoice, wakeTell, wakeSaid, wakeMicSaid, wakeMicMuted, wakeWarming, wakeHandsFreeSaid;
+        // The Bluetooth headset mic she'd listen with, which she leaves shut.
+        private string wakeHandsFree;
         // True only inside her smoke test's own wake checks.
         private bool wakeChecks;
         private double wakeRetryAt = -1, wakeMuteAt = -1;
@@ -1086,6 +1088,8 @@ namespace CapriDesktop
         private Action getWakeVoice, getWakePack;
         // Windows' own mute on the mic she'd listen with. Her smoke test swaps it.
         internal static Func<string, bool?> MicMuted = Mics.Muted;
+        // The Bluetooth headset's name when the mic she'd listen with is one. Her smoke test swaps it.
+        internal static Func<string, string> HandsFreeMic = Ears.HandsFree;
         private static readonly string[] WakeLines = { "I'm here.", "Yeah, choom?", "Listening.", "Right here, choom.", "Go on, I'm listening.", "You rang?" };
         private readonly Presence presence;
         private bool settingUpEars, settingUpHd, wakingHd, hdTest;
@@ -2734,7 +2738,7 @@ namespace CapriDesktop
         internal string ErrorDetails()
         {
             Cloud remote = brain.Remote;
-            string head = "Capri v" + Assembly.GetExecutingAssembly().GetName().Version.ToString(3) + " | brain: " + (remote != null ? remote.Name + " " + remote.Model : brain.Local != null ? "built-in " + brain.Model : brain.Model != null ? "Ollama " + brain.Model : "none") + " | watch: " + (preferences.Watch ? GlanceGap + " s" : "off") + " | voice: " + (voice.Key != null ? "ElevenLabs" : "none");
+            string head = "Capri v" + Assembly.GetExecutingAssembly().GetName().Version.ToString(3) + " | brain: " + (remote != null ? remote.Name + " " + remote.Model : brain.Local != null ? "built-in " + brain.Model : brain.Model != null ? "Ollama " + brain.Model : "none") + " | watch: " + (preferences.Watch ? GlanceGap + " s" : "off") + " | voice: " + (voice.Key != null ? "ElevenLabs" : "none") + " | hey capri: " + (preferences.HeyCapri ? "on" : "off");
             string[] lines = new string[0];
             try { if (Brain.LogPath != null && File.Exists(Brain.LogPath)) lines = File.ReadAllLines(Brain.LogPath); } catch (IOException) { }
             int from = Math.Max(0, lines.Length - 25);
@@ -5386,7 +5390,8 @@ namespace CapriDesktop
             herPointer.Begin(Computer.HerAt);
             PassThrough();
             // With Hey Capri on, her own offline ears open for the job, so they can tell her more without saying it first (Lachy, 29 Oct).
-            if (!chatting && !testing && preferences.HeyCapri && FreeChatOn && OwnEars) { jobEars = true; StartLocal(); }
+            // Not on a Bluetooth headset's mic, which would put the job's sound at call quality.
+            if (!chatting && !testing && preferences.HeyCapri && FreeChatOn && OwnEars && HandsFreeMic(preferences.Mic) == null) { jobEars = true; StartLocal(); }
             UpdateTalk(clock.Elapsed.TotalSeconds);
             SayJobStart(running);
         }
@@ -6063,8 +6068,20 @@ namespace CapriDesktop
             if (!WakeReady) { if (wakeOpen) CloseWake(); GetWake(now); return; }
             if (wakeAskedVoice || wakeTries > 0) { wakeAskedVoice = false; wakeTries = 0; wakeRetryAt = -1; }
             heyCapri.Held = now < voiceUntil || speaker.Busy;
-            if (now >= wakeMuteAt) { wakeMuteAt = now + 2; wakeMicMuted = MicMuted(preferences.Mic) == true; }
+            if (now >= wakeMuteAt) { wakeMuteAt = now + 2; wakeMicMuted = MicMuted(preferences.Mic) == true; wakeHandsFree = HandsFreeMic(preferences.Mic); }
             if (WakePaused) { if (wakeOpen) CloseWake(); return; }
+            // A Bluetooth headset's mic would keep the headset on a call, playing everything at call quality, for as long as she
+            // listens (a tester, 30 Oct), so she leaves it shut and says why once. Voice chat still uses it.
+            if (wakeHandsFree != null)
+            {
+                if (wakeOpen) CloseWake();
+                if (wakeHandsFreeSaid) return;
+                wakeHandsFreeSaid = true;
+                string why = "I'm not listening for \"Hey Capri\" on your Bluetooth headset: while its mic is open, everything you hear drops to phone-call quality. Pick another mic under VOICE, or use my talk key.";
+                if (wakeTell) WakeNote(why, false);
+                else mainframe.VoiceNote(why, false);
+                return;
+            }
             // A mic that stopped sending, unplugged or lost in sleep, is opened again: the picked one, or Windows' default.
             if (wakeOpen && !testing && heyCapri.Stalled) { CloseWake(); wakeRetryAt = now + 2; return; }
             if (!wakeOpen && now >= wakeRetryAt) OpenWake(now);
@@ -6123,7 +6140,7 @@ namespace CapriDesktop
         {
             if (testing && !wakeChecks) return;
             wakeTell = preferences.HeyCapri;
-            wakeSaid = wakeMicSaid = false;
+            wakeSaid = wakeMicSaid = wakeHandsFreeSaid = false;
             wakeRetryAt = wakeMuteAt = -1;
             wakeTries = 0;
             if (preferences.HeyCapri) { CheckWake(clock.Elapsed.TotalSeconds); return; }
@@ -17735,12 +17752,15 @@ namespace CapriDesktop
                             // voice first, then the pack; on, it listens on its own mic, decodes nothing while she talks, and closes the mic in
                             // voice chat, on mute, with Windows' mute and in Quiet; firing glitches her in and opens voice chat.
                             Func<string, bool?> micMutedWas = MicMuted;
+                            Func<string, string> handsFreeWas = HandsFreeMic;
                             Action getWakeVoiceWas = getWakeVoice, getWakePackWas = getWakePack;
                             bool? windowsMicMuted = false;
+                            string handsFreeTest = null;
                             int wakeVoiceGets = 0, wakePackGets = 0;
                             bool quietWakeWas = preferences.Quiet;
                             string wakeFlow = null;
                             MicMuted = delegate { return windowsMicMuted; };
+                            HandsFreeMic = delegate { return handsFreeTest; };
                             getWakeVoice = delegate { wakeVoiceGets++; };
                             getWakePack = delegate { wakePackGets++; };
                             try
@@ -17798,6 +17818,20 @@ namespace CapriDesktop
                                 wakeMuteAt = -1;
                                 CheckWake(clock.Elapsed.TotalSeconds);
                                 pausedWindows &= mutePolled && wakeOpen;
+                                // A Bluetooth headset's mic: she shuts it and says why once, then listens again once the mic isn't one.
+                                handsFreeTest = "Headset (Test Hands-Free)";
+                                wakeMuteAt = -1;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                string handsFreeLine = speech;
+                                bool handsFree = !wakeOpen && handsFreeLine == "I'm not listening for \"Hey Capri\" on your Bluetooth headset: while its mic is open, everything you hear drops to phone-call quality. Pick another mic under VOICE, or use my talk key." && mainframe.VoiceNoteText == handsFreeLine;
+                                mainframe.VoiceNote("-", false);
+                                wakeMuteAt = -1;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                handsFree &= !wakeOpen && mainframe.VoiceNoteText == "-";
+                                handsFreeTest = null;
+                                wakeMuteAt = -1;
+                                CheckWake(clock.Elapsed.TotalSeconds);
+                                handsFree &= wakeOpen;
                                 ToggleShush();
                                 CheckWake(clock.Elapsed.TotalSeconds);
                                 HeardHeyCapri();
@@ -17830,8 +17864,8 @@ namespace CapriDesktop
                                 CheckWake(clock.Elapsed.TotalSeconds);
                                 HeardHeyCapri();
                                 bool offAgain = !wakeOpen && !chatting && mainframe.VoiceNoteText == "Not listening for \"Hey Capri\".";
-                                if (!offShut || !askedVoice || !askedPack || !listens || !heldTalking || !pausedMute || !pausedWindows || !pausedQuiet || !pausedChat || !hiddenListens || !fired || !backAfter || !offAgain)
-                                    wakeFlow = "off shut " + offShut + ", asked voice " + askedVoice + ", asked pack " + askedPack + ", listens " + listens + ", held talking " + heldTalking + ", mute " + pausedMute + ", Windows mute " + pausedWindows + ", Quiet " + pausedQuiet + ", chat " + pausedChat + ", hidden listens " + hiddenListens + ", fired " + fired + " (" + greeting + "), back after " + backAfter + ", off again " + offAgain + " / " + voiceAsk + " / " + mainframe.VoiceNoteText;
+                                if (!offShut || !askedVoice || !askedPack || !listens || !heldTalking || !pausedMute || !pausedWindows || !handsFree || !pausedQuiet || !pausedChat || !hiddenListens || !fired || !backAfter || !offAgain)
+                                    wakeFlow = "off shut " + offShut + ", asked voice " + askedVoice + ", asked pack " + askedPack + ", listens " + listens + ", held talking " + heldTalking + ", mute " + pausedMute + ", Windows mute " + pausedWindows + ", Bluetooth headset " + handsFree + ", Quiet " + pausedQuiet + ", chat " + pausedChat + ", hidden listens " + hiddenListens + ", fired " + fired + " (" + greeting + "), back after " + backAfter + ", off again " + offAgain + " / " + voiceAsk + " / " + mainframe.VoiceNoteText;
                             }
                             finally
                             {
@@ -17841,6 +17875,7 @@ namespace CapriDesktop
                                 if (shushed) ToggleShush();
                                 if (hidden) ShowHidden(false);
                                 MicMuted = micMutedWas;
+                                HandsFreeMic = handsFreeWas;
                                 getWakeVoice = getWakeVoiceWas;
                                 getWakePack = getWakePackWas;
                                 wakeReadyTest = wakeVoiceTest = null;
@@ -17850,7 +17885,7 @@ namespace CapriDesktop
                                 CloseTalk();
                             }
                             if (wakeFlow != null) throw new Exception("Hey Capri went wrong: " + wakeFlow);
-                            checks.Add("PASS Hey Capri: off out of the box, and while off it opens no mic and downloads nothing; in the smoke test, turning it on outside these checks (SECURITY's Blackwall preset does) wakes nothing; the first turn-on says plainly that it's getting her free voice, then the pack; on, it listens on its own mic and says so, keeps the mic open but decodes nothing while she talks, and closes the mic in voice chat, on her mute, with Windows' mute and in Quiet, opening it again after; \"Hey Capri\" glitches her in when she's hidden, opens voice chat the way her talk key does and she says a short line; turned off, the mic closes");
+                            checks.Add("PASS Hey Capri: off out of the box, and while off it opens no mic and downloads nothing; in the smoke test, turning it on outside these checks (SECURITY's Blackwall preset does) wakes nothing; the first turn-on says plainly that it's getting her free voice, then the pack; on, it listens on its own mic and says so, keeps the mic open but decodes nothing while she talks, and closes the mic in voice chat, on her mute, with Windows' mute and in Quiet, opening it again after; a Bluetooth headset's mic stays shut, so the headset isn't left on a call, and she says why once; \"Hey Capri\" glitches her in when she's hidden, opens voice chat the way her talk key does and she says a short line; turned off, the mic closes");
                             if (WakeWord.PackUrl != "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2" || WakeWord.PackSize != 17626723 || WakeWord.PackSha != "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a")
                                 throw new Exception("Her wake word points at the wrong download: " + WakeWord.PackUrl + " / " + WakeWord.PackSize + " / " + WakeWord.PackSha);
                             string wakeRoot = Path.Combine(Path.GetDirectoryName(settingsPath), "wake-test");
