@@ -12765,7 +12765,7 @@ namespace CapriDesktop
                                     }
                                     bool playsSorted = Computer.PlaysMedia("Open YouTube, search for the real slim shady and play the video", "capri, play the real slim shady", false) && Computer.PlaysMedia("put on some lofi", null, false)
                                         && !Computer.PlaysMedia("pause the video", null, false) && !Computer.PlaysMedia("play bedwars on roblox", null, true) && !Computer.PlaysMedia("send hi in #general on discord", null, false);
-                                    const string autoplays = "A video you open starts playing by itself, so once it's open don't click it or press space or k, which pause it";
+                                    const string autoplays = "A video you open starts playing by itself, so once it's open don't click it again or press space or k, which pause it";
                                     if (keptWrong != null || !playsSorted || Computer.Prompt.IndexOf(autoplays, StringComparison.Ordinal) < 0 || Computer.Seeing.IndexOf(autoplays, StringComparison.Ordinal) < 0)
                                         throw new Exception("Videos she played didn't keep playing: " + keptWrong + " / sorted " + playsSorted);
                                     checks.Add("PASS videos keep playing: her hands know a YouTube video starts by itself, so they don't click it or press space or k; \"play the real slim shady instrumental version\" is a video job, not a game; and after a job that played something she presses play once on a video it left paused, leaving alone what was paused before the job, what's playing and jobs that stopped");
