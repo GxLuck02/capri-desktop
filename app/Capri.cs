@@ -251,12 +251,12 @@ namespace CapriDesktop
         [DataMember] public int VoiceSpeed = 100;
         [DataMember] public int VoiceRobot;
         [DataMember] public int VoiceGlitch;
-        // Her HD voice keeps its own robot and its own glitch, both Off out of the box. Early 0.7.4 builds saved a 10% HD
-        // glitch as HdGlitch, so the new name starts it at Off.
+        // Her HD voice keeps its own robot and its own glitch. They start Off here, and Tune gives a new install 40% and 20%.
+        // Early 0.7.4 builds saved a 10% HD glitch as HdGlitch, so the new name starts it at Off.
         [DataMember] public int HdRobot = VoiceFx.HdRobotDefault;
         [DataMember] public int HdVoiceGlitch;
         // Her voice layers (Lachy, 29 Oct): two copies of her voice under her, each with its own pitch (semitones off hers, in
-        // half steps) and delay (ms). Off out of the box and in settings from before them, which get the layers' defaults.
+        // half steps) and delay (ms). Off here and in settings from before them, which get the layers' defaults; Tune turns them on.
         [DataMember] public bool VoiceLayers;
         [DataMember] public double LayerPitch1 = VoiceFx.Layering.HigherPitch;
         [DataMember] public int LayerDelay1 = VoiceFx.Layering.Behind;
@@ -286,6 +286,44 @@ namespace CapriDesktop
         [DataMember] public int PlayerX;
         [DataMember] public int PlayerY;
         [DataMember] public bool HasPlayerSpot;
+        // Set once she has her tuned voice, or kept theirs because they'd already moved a voice slider.
+        [DataMember] public bool VoiceTuned;
+
+        // A new install: she starts in the PC's own language when she speaks it, and with her tuned voice.
+        internal static Preferences Fresh()
+        {
+            Preferences fresh = new Preferences { Language = Brain.SystemLanguage(System.Globalization.CultureInfo.CurrentUICulture) };
+            fresh.Tune();
+            return fresh;
+        }
+
+        // Her voice as Lachy tuned it (30 Oct: "free voice settings default"): 80% volume, pitch +3, 1.2x, her HD voice at 40%
+        // robot and 20% glitch, and her voice layers on at their defaults. Pitch, speed, volume and layers go for every voice.
+        internal void Tune()
+        {
+            Volume = 80;
+            VoicePitch = 3;
+            VoiceSpeed = 120;
+            HdRobot = 40;
+            HdVoiceGlitch = 20;
+            VoiceLayers = true;
+            LayerPitch1 = VoiceFx.Layering.HigherPitch;
+            LayerDelay1 = VoiceFx.Layering.Behind;
+            LayerPitch2 = VoiceFx.Layering.LowerPitch;
+            LayerDelay2 = VoiceFx.Layering.Behind;
+            VoiceTuned = true;
+        }
+
+        // Settings from before her tuned voice get it once if every voice slider is still where it started (Layer 1 started at
+        // +1.5); anyone who moved one keeps theirs.
+        internal void TuneOnce()
+        {
+            if (VoiceTuned) return;
+            bool untouched = Volume == 100 && VoicePitch == 0 && VoiceSpeed == 100 && VoiceRobot == 0 && VoiceGlitch == 0 && HdRobot == 0 && HdVoiceGlitch == 0 && !VoiceLayers
+                && (LayerPitch1 == 1.5 || LayerPitch1 == VoiceFx.Layering.HigherPitch) && LayerDelay1 == VoiceFx.Layering.Behind && LayerPitch2 == VoiceFx.Layering.LowerPitch && LayerDelay2 == VoiceFx.Layering.Behind;
+            if (untouched) Tune();
+            VoiceTuned = true;
+        }
 
         [OnDeserializing]
         private void Defaults(StreamingContext context)
@@ -3345,10 +3383,31 @@ namespace CapriDesktop
             }
             SetVoiceLayers(was);
             string loadedShown = LayersOf(loaded).Shown, oldShown = LayersOf(old).Shown, freshShown = LayersOf(new Preferences()).Shown, clamped = new VoiceFx.Layering(true, 40, 900, -0.26, -5).Shown;
-            const string plain = "Off | +1.5, 25 ms | -2.5, 25 ms";
+            const string plain = "Off | +2, 25 ms | -2.5, 25 ms";
             if (loadedShown != "On | +3.5, 40 ms | -4.5, 90 ms" || oldShown != plain || freshShown != plain || VoiceFx.Layering.Off.Shown != plain || clamped != "On | +12, 250 ms | -0.5, 0 ms" || VoiceFx.Layers.Shown != was.Shown)
                 throw new Exception("Her layers' settings went wrong: saved " + loadedShown + ", from before them " + oldShown + ", new " + freshShown + ", clamped " + clamped);
-            checks.Add("PASS voice layers' settings: off out of the box and in settings from before them, with Layer 1 at +1.5 and Layer 2 at -2.5 semitones, both 25 ms behind her; each layer's pitch and delay save and load as set, in half steps from -12 to +12 semitones and 0 to 250 ms");
+            checks.Add("PASS voice layers' settings: off in blank settings and in settings from before them, with Layer 1 at +2 and Layer 2 at -2.5 semitones, both 25 ms behind her; each layer's pitch and delay save and load as set, in half steps from -12 to +12 semitones and 0 to 250 ms");
+
+            // Her tuned voice (Lachy, 30 Oct): a new install starts with it; settings from before it get it once while every voice
+            // slider is where it started, Layer 1's old +1.5 included; anyone who moved one, or already has it, keeps theirs.
+            Func<string, Preferences> tunedRead = delegate(string text)
+            {
+                Preferences read = (Preferences)json.ReadObject(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text)));
+                read.TuneOnce();
+                return read;
+            };
+            Func<Preferences, string> tunedShown = delegate(Preferences p) { return p.Volume + " | " + p.VoicePitch + " | " + p.VoiceSpeed + " | " + p.VoiceRobot + "/" + p.VoiceGlitch + " | HD " + p.HdRobot + "/" + p.HdVoiceGlitch + " | " + LayersOf(p).Shown + " | " + p.VoiceTuned; };
+            const string tunedWanted = "80 | 3 | 120 | 0/0 | HD 40/20 | On | +2, 25 ms | -2.5, 25 ms | True";
+            string tunedNew = tunedShown(Preferences.Fresh());
+            string tunedOld = tunedShown(tunedRead("{\"Volume\":100,\"VoicePitch\":0,\"VoiceSpeed\":100,\"VoiceRobot\":0,\"VoiceGlitch\":0,\"HdRobot\":0,\"HdVoiceGlitch\":0,\"VoiceLayers\":false,\"LayerPitch1\":1.5,\"LayerDelay1\":25,\"LayerPitch2\":-2.5,\"LayerDelay2\":25}"));
+            string tunedBare = tunedShown(tunedRead("{\"Size\":240}"));
+            string tunedMoved = tunedShown(tunedRead("{\"Volume\":100,\"VoicePitch\":2}"));
+            string tunedLouder = tunedShown(tunedRead("{\"Volume\":120}"));
+            string tunedKept = tunedShown(tunedRead("{\"VoiceTuned\":true,\"Volume\":100,\"VoicePitch\":0,\"VoiceSpeed\":100}"));
+            if (tunedNew != tunedWanted || tunedOld != tunedWanted || tunedBare != tunedWanted || tunedMoved != "100 | 2 | 100 | 0/0 | HD 0/0 | Off | +2, 25 ms | -2.5, 25 ms | True"
+                || tunedLouder != "120 | 0 | 100 | 0/0 | HD 0/0 | Off | +2, 25 ms | -2.5, 25 ms | True" || tunedKept != "100 | 0 | 100 | 0/0 | HD 0/0 | Off | +2, 25 ms | -2.5, 25 ms | True" || new Preferences().VoiceTuned)
+                throw new Exception("Her tuned voice went wrong: new " + tunedNew + " // untouched " + tunedOld + " // bare " + tunedBare + " // moved " + tunedMoved + " // louder " + tunedLouder + " // kept " + tunedKept);
+            checks.Add("PASS her tuned voice: a new install starts at 80% volume, pitch +3, 1.2x, her HD voice at 40% robot and 20% glitch, and voice layers on at +2 and -2.5, 25 ms behind her; settings from before it with every voice slider untouched get it once, and anyone who moved one keeps theirs");
 
             // Her VOICE LAYERS window from Settings > VOICE: the switch, a slider each, MAIN's pitch and Settings' moving together,
             // Defaults, and the layout at 100%, 150% and 200%.
@@ -3407,9 +3466,9 @@ namespace CapriDesktop
                 at200 = mainframe.LayersAt(2f / machine, Path.Combine(output, "layers-200.png"));
             }
             finally { SetVoiceLayers(was); }
-            if (keyOff != "Layers" || opened != "Off | Normal | +1.5, 25 ms | -2.5, 25 ms" || flipped != "On | Normal | +1.5, 25 ms | -2.5, 25 ms" || keyOn != "Layers (lit)"
+            if (keyOff != "Layers" || opened != "Off | Normal | +2, 25 ms | -2.5, 25 ms" || flipped != "On | Normal | +2, 25 ms | -2.5, 25 ms" || keyOn != "Layers (lit)"
                 || slid != "On | Normal | +3, 40 ms | -4.5, 90 ms / On | +3, 40 ms | -4.5, 90 ms / 3 40 -4.5 90" || mainSlid != "On | +3 | +3, 40 ms | -4.5, 90 ms / +3 | Normal | Off | Off / 3 3"
-                || fromSettings != "On | -2 | +3, 40 ms | -4.5, 90 ms" || defaulted != "On | -2 | +1.5, 25 ms | -2.5, 25 ms" || closedOff != "Off | -2 | +1.5, 25 ms | -2.5, 25 ms / Layers / False" || said != "switch layer main")
+                || fromSettings != "On | -2 | +3, 40 ms | -4.5, 90 ms" || defaulted != "On | -2 | +2, 25 ms | -2.5, 25 ms" || closedOff != "Off | -2 | +2, 25 ms | -2.5, 25 ms / Layers / False" || said != "switch layer main")
                 throw new Exception("The VOICE LAYERS window went wrong: " + keyOff + " // " + opened + " // " + flipped + " // " + keyOn + " // " + slid + " // " + mainSlid + " // " + fromSettings + " // " + defaulted + " // " + closedOff + " // she spoke for: " + said);
             if (page != null || crowded != null || at100 != null || at150 != null || at200 != null) throw new Exception("The VOICE LAYERS window's layout doesn't fit: Settings " + page + " / open " + crowded + " / 100% " + at100 + " / 150% " + at150 + " / 200% " + at200);
             checks.Add("PASS VOICE LAYERS window: the Layers button in Settings > VOICE's heading opens it; its switch turns them on and lights the button, each layer's pitch and delay slider sets and saves it, MAIN's pitch and Settings' Pitch move together both ways, Defaults puts both layers back, and the switch and letting go of a slider have her say a line; Settings still fits, with VOICE's note and Layers button fitting their text at 100%, 125%, 150%, 175% and 200% (mainframe-settings-layers.png), and at 100%, 150% and 200% nothing in the window overlaps, pokes out or gets cut off (layers-100.png, layers-150.png, layers-200.png)");
@@ -8330,11 +8389,12 @@ namespace CapriDesktop
                     if (value.Size < MinSize || value.Size > MaxSize) value.Size = 240;
                     value.PerchFps = PerchRate(value.PerchFps);
                     CheckKeys(value);
+                    value.TuneOnce();
                     return value;
                 }
             }
-            // A new install, or settings that can't be read: she starts in the PC's own language when she speaks it.
-            catch { return new Preferences { Language = Brain.SystemLanguage(System.Globalization.CultureInfo.CurrentUICulture) }; }
+            // A new install, or settings that can't be read.
+            catch { return Preferences.Fresh(); }
         }
 
         private void SavePreferences()

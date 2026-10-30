@@ -725,7 +725,7 @@ namespace CapriDesktop
         {
             internal const double MostPitch = 12;
             internal const int MostDelay = 250;
-            internal const double HigherPitch = 1.5;
+            internal const double HigherPitch = 2;
             internal const double LowerPitch = -2.5;
             internal const int Behind = 25;
             internal static readonly Layering Off = new Layering(false, HigherPitch, Behind, LowerPitch, Behind);
@@ -773,7 +773,7 @@ namespace CapriDesktop
 
             internal static string DelayName(int ms) { return ms + " ms"; }
 
-            // "On | +1.5, 25 ms | -2.5, 25 ms", for the smoke tests.
+            // "On | +2, 25 ms | -2.5, 25 ms", for the smoke tests.
             internal string Shown { get { return (On ? "On" : "Off") + " | " + PitchName(Pitch1) + ", " + DelayName(Delay1) + " | " + PitchName(Pitch2) + ", " + DelayName(Delay2); } }
         }
 

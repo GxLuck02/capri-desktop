@@ -3544,7 +3544,7 @@ namespace CapriDesktop
                 owner.capri.HearVoiceStyle();
             }
 
-            // "On | Normal | +1.5, 25 ms | -2.5, 25 ms", as the window shows it, for the smoke test.
+            // "On | Normal | +2, 25 ms | -2.5, 25 ms", as the window shows it, for the smoke test.
             internal string Showing
             {
                 get { return (onOff.Checked ? "On" : "Off") + " | " + mainName.Text + " | " + pitchNames[0].Text + ", " + delayNames[0].Text + " | " + pitchNames[1].Text + ", " + delayNames[1].Text; }
