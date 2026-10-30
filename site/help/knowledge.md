@@ -68,6 +68,8 @@ A mic is only needed for voice chat.
 
 The installer also has "Add a desktop shortcut" (off by default). While it works it says "Making a little room for Capri…".
 
+From 0.7.7 the installer looks like the Mainframe and has no Windows title bar: drag it from anywhere that isn't a button, and use the – and × at its top right to minimize or close it.
+
 If the speech model fails it says "Couldn't install the local speech model" and "Capri is installed. Get it later in Capri Mainframe, or add an API key." Press Finish. Capri still works; get her free voice later with Get free voice under VOICE.
 
 ### Why does Windows warn me?
@@ -278,6 +280,8 @@ Right-click her > Open Capri Mainframe. You can also use her tray icon (bottom r
 The main page has three sections: BRAIN, VOICE and CAPRI.
 
 From 0.7.7 the Mainframe looks like Cyberpunk 2077's settings screen: each section sits on a dark band under a thin teal line, setting names are red on the left and their values cyan on the right. On and off settings have an OFF button and an ON button: click the one you want (ON lights up cyan, OFF red), or click the setting's name to flip it. Settings with a few choices have ◁ and ▷ arrows with a small red mark under the value showing where it is; ones with many have a bar with a red handle to drag. The arrow keys work on both, and Tab moves through everything.
+
+Her right-click menu, the Type box, the installer and her pop-up notes (like "Capri has been removed") match that look from 0.7.7 too. In one of those notes, Enter or Esc closes it and Ctrl + C copies its text.
 
 ### BRAIN section
 - The top line shows which brain she's using:
