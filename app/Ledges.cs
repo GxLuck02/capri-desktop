@@ -38,6 +38,22 @@ namespace CapriDesktop
 
         private static readonly string[] Shell = { "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "#32768", "tooltips_class32" };
         private const int IconInset = 2;
+        // Her mini player is a layered tool window like her bubbles, which the checks below pass over, yet she sits on it like a
+        // window. Its plate, without the glow around it, is the edge.
+        private static readonly object ownLock = new object();
+        private static IntPtr ownSeat;
+        private static Rectangle ownPlate;
+
+        internal static void OwnSeat(IntPtr window, Rectangle plate) { lock (ownLock) { ownSeat = window; ownPlate = plate; } }
+
+        private static bool Own(IntPtr window, out Rectangle plate)
+        {
+            lock (ownLock)
+            {
+                plate = ownPlate;
+                return window != IntPtr.Zero && window == ownSeat && plate.Width > 0 && plate.Height > 0;
+            }
+        }
 
         private sealed class Shown
         {
@@ -57,6 +73,8 @@ namespace CapriDesktop
         {
             bounds = Rectangle.Empty;
             if (!IsWindow(window) || !IsWindowVisible(window) || IsIconic(window)) return false;
+            Rectangle own;
+            if (Own(window, out own)) { bounds = own; return true; }
             int cloaked;
             if (DwmGetWindowAttribute(window, 14, out cloaked, 4) == 0 && cloaked != 0) return false;
             int extended = Native.GetWindowLong(window, -20);
@@ -81,6 +99,8 @@ namespace CapriDesktop
 
         internal static bool Seatable(IntPtr window, Rectangle bounds)
         {
+            Rectangle own;
+            if (Own(window, out own)) return true;
             int extended = Native.GetWindowLong(window, -20);
             if ((extended & 0x80) != 0 && (extended & 0x40000) == 0) return false;
             if (IsZoomed(window) || bounds.Width < 120 || bounds.Height < 60) return false;

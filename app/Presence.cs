@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
@@ -104,16 +105,58 @@ namespace CapriDesktop
 
         private static NamedPipeClientStream Connect()
         {
-            for (int i = 0; i < 10; i++)
+            foreach (string name in Names())
             {
-                NamedPipeClientStream pipe = new NamedPipeClientStream(".", PipeName + i, PipeDirection.InOut, PipeOptions.Asynchronous);
+                NamedPipeClientStream pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
                 try { pipe.Connect(100); return pipe; }
                 catch (TimeoutException) { pipe.Dispose(); }
                 catch (IOException) { pipe.Dispose(); }
                 catch (UnauthorizedAccessException) { pipe.Dispose(); }
+#if CROSS
+                catch (Exception) { pipe.Dispose(); }
+#endif
             }
             return null;
         }
+
+        // Windows: the pipes discord-ipc-0 to 9. Mac and Linux: sockets with those names in Discord's runtime or temp
+        // folder, or where its Flatpak and Snap apps put them, as full paths, which .NET opens as Unix sockets.
+        internal static List<string> Names()
+        {
+            List<string> names = new List<string>();
+#if CROSS
+            foreach (string folder in Folders())
+                for (int i = 0; i < 10; i++)
+                {
+                    string path = Path.Combine(folder, PipeName + i);
+                    if (File.Exists(path)) names.Add(path);
+                }
+#else
+            for (int i = 0; i < 10; i++) names.Add(PipeName + i);
+#endif
+            return names;
+        }
+
+#if CROSS
+        private static List<string> Folders()
+        {
+            List<string> folders = new List<string>();
+            foreach (string variable in new[] { "XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP" })
+            {
+                string folder = Environment.GetEnvironmentVariable(variable);
+                if (!string.IsNullOrEmpty(folder) && !folders.Contains(folder)) folders.Add(folder);
+            }
+            if (!folders.Contains("/tmp")) folders.Add("/tmp");
+            string runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+            if (!string.IsNullOrEmpty(runtime))
+            {
+                folders.Add(Path.Combine(runtime, "app", "com.discordapp.Discord"));
+                folders.Add(Path.Combine(runtime, "snap.discord"));
+                folders.Add(Path.Combine(runtime, ".flatpak", "dev.vencord.Vesktop", "xdg-run"));
+            }
+            return folders;
+        }
+#endif
 
         // One connection: hello, then a line whenever what she's doing changes. Hanging up takes her off their profile.
         // Returns how long to wait before calling again.

@@ -95,7 +95,7 @@ namespace CapriDesktop
     internal sealed class Agent : IDisposable
     {
         internal const double Pace = 15;
-        internal const int Version = 16;
+        internal const int Version = 20;
         private const string Patience = "\"turn\":{\"turn_timeout\":30,\"silence_end_call_timeout\":45}";
         internal event Action<int> Opened;
         internal event Action<string> Heard;
@@ -112,7 +112,7 @@ namespace CapriDesktop
 
         internal static string Prompt { get { return Brain.Persona + Hands.Note + "\nYou are talking out loud in a live voice chat: keep every reply to one or two short spoken sentences, and never write tags in square brackets.\nIf the user goes quiet, they're busy, gaming or muted: stay quiet until they talk to you. Never check in, ask if they're still there, beg them to talk or say they left you hanging.\nSo the voice says your slang right, always spell choom as chewm, preem as preme and yezzirrr as yessirrr. Say chewm rarely, at most once every few replies and never on its own."; } }
 
-        // ElevenLabs keeps its own copy of her prompt, so her agent is tuned again after an update or when personality.md changes.
+        // ElevenLabs keeps its own copy of her prompt, so her agent is tuned again after an update, or when it was tuned with an edited personality.md before 0.7.6.
         internal static bool Stale(int version, string personality) { return version < Version || (personality ?? "") != Brain.PersonalityStamp; }
 
         internal static string Create(string key, string voiceId)

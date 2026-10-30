@@ -38,6 +38,8 @@ namespace CapriDesktop
         [DataMember(Name = "seconds")] public string Seconds;
         [DataMember(Name = "minutes")] public string Minutes;
         [DataMember(Name = "level")] public string Level;
+        [DataMember(Name = "screen")] public string Screen;
+        [DataMember(Name = "window")] public string Window;
         [DataMember(Name = "coordinate")] public double[] Coordinate;
         [DataMember(Name = "start_coordinate")] public double[] From;
         [DataMember(Name = "region")] public double[] Region;
@@ -45,6 +47,9 @@ namespace CapriDesktop
         [DataMember(Name = "scroll_amount")] public double? Amount;
         [DataMember(Name = "duration")] public double? Duration;
         [DataMember(Name = "repeat")] public double? Repeat;
+        [DataMember(Name = "hold")] public string Hold;
+        [DataMember(Name = "press")] public string Press;
+        [DataMember(Name = "times")] public string Times;
 
         internal ToolArguments Copy() { return (ToolArguments)MemberwiseClone(); }
     }
@@ -54,6 +59,352 @@ namespace CapriDesktop
         internal readonly string Name;
         internal readonly string Id;
         internal InstalledApp(string name, string id) { Name = name; Id = id; }
+    }
+
+    // Her SECURITY window (Lachy, 29 Oct): a toggle for each kind of thing she does on their PC, set by a slider of four presets.
+    // A toggle that's off means she asks first in chat ("Open Spotify? Say yes and I will.") and does it on their yes, never a
+    // silent no. Typing passwords and card numbers is the one exception: with it off they type those themselves. Trusted, the
+    // default, is how she worked before the window, and Blackwall is Blackwall mode (Bypass all permissions before 0.7.4) plus
+    // listening for "Hey Capri". The gate is in code: her tools stop here, and her jobs' steps stop in Computer's checks.
+    internal static class Security
+    {
+        internal const int Open = 0, Media = 1, Shortcuts = 2, Windows = 3, Power = 4, Mouse = 5, Sends = 6, Pays = 7, Unasked = 8, Secrets = 9, Wake = 10, Count = 11;
+        internal const int Lockdown = 0, Guarded = 1, Trusted = 2, Blackwall = 3, Custom = 4;
+        internal static readonly string[] Names = { "Open apps, games and sites", "Music, media and volume", "Shortcuts (screenshots, Game Bar, captions, Discord mute)", "Close and switch apps and tabs", "Shut down, restart, sleep, lock and sign out", "Use your mouse and keyboard for jobs", "Send, post and delete what you asked for", "Pay, buy and book", "Things your request didn't mention", "Type passwords and card numbers", "Listen for \"Hey Capri\"" };
+        internal static readonly string[] Lines =
+        {
+            "On: she opens them when you ask. Off: she asks first.",
+            "On: she plays music and sets the volume. Off: she asks first.",
+            "On: she presses them for you. Off: she asks first.",
+            "On: she switches and closes them. Off: she asks first.",
+            "On: she does it as soon as you ask. Off: she asks first.",
+            "On: she clicks and types in your apps. Off: she asks first.",
+            "On: she sends it without checking again. Off: she asks first.",
+            "On: she pays and books without checking. Off: she asks first.",
+            "On: she does the extra steps a job needs. Off: she asks first.",
+            "On: she types the ones your job gives her. Off: you type them.",
+            "On: she listens on this PC for her name. Off: she doesn't."
+        };
+        internal static readonly string[] Presets = { "Lockdown", "Guarded", "Trusted", "Blackwall", "Custom" };
+        private static readonly string[] Told =
+        {
+            "Everything is off: she asks first before she does anything on your PC.",
+            "She opens apps and sites, plays music and presses shortcuts, and asks first for the rest.",
+            "She does what you ask, and asks first before paying or anything you didn't mention.",
+            "Everything is on: she never asks, types passwords and card numbers, and listens for \"Hey Capri\".",
+            "Your own mix. Pick a preset to start again from it."
+        };
+        // The Settings line under her SECURITY button, short enough for its row.
+        private static readonly string[] Shorts = { "She asks first before everything.", "Apps, music and shortcuts. She asks for the rest.", "She asks before paying or what you didn't say.", "She never asks, and listens for Hey Capri.", "Your own mix of toggles." };
+        // Lockdown has them all off, Guarded the first three on, Trusted the first seven and Blackwall all eleven.
+        private static readonly int[] Masks = { 0, 0x7, 0x7F, 0x7FF };
+        private static int mask = 0x7F;
+        private static readonly object gate = new object();
+        // Toggle 11 is her wake word's own setting on Windows, read and set through these. Elsewhere it's kept here with the rest.
+        internal static Func<bool> HeyOn;
+        internal static Action<bool> SetHey;
+        // Whether this PC has a toggle's feature at all: Mac and Linux have the first five, with no jobs or wake word yet.
+        internal static Func<int, bool> Has = delegate { return true; };
+        // Saves and redraws whatever shows them, once a toggle or preset changes.
+        internal static Action Changed;
+        internal const string Yes = " Say yes and I will.";
+        internal const string Left = "Okay, I left it alone.";
+        // A tool result that held the call to ask first. Voice chat reads it as it is; text chat says only the question.
+        internal const string Hold = "Not done yet: their SECURITY settings ask first. Ask them ";
+
+        internal static bool On(int toggle)
+        {
+            if (toggle == Wake && HeyOn != null) return HeyOn();
+            lock (gate) return (mask & (1 << toggle)) != 0;
+        }
+
+        internal static void Set(int toggle, bool on)
+        {
+            if (On(toggle) == on) return;
+            if (toggle == Wake && SetHey != null) SetHey(on);
+            else lock (gate) mask = on ? mask | (1 << toggle) : mask & ~(1 << toggle);
+            Action changed = Changed;
+            if (changed != null) changed();
+        }
+
+        // Every toggle as bits, toggle 1 in the lowest, with "Hey Capri" read from where it lives.
+        internal static int Mask
+        {
+            get
+            {
+                int bits;
+                lock (gate) bits = mask;
+                if (HeyOn != null) bits = (bits & 0x3FF) | (HeyOn() ? 1 << Wake : 0);
+                return bits;
+            }
+        }
+
+        internal static void Pick(int preset)
+        {
+            if (preset < 0 || preset >= Masks.Length) return;
+            bool wake = (Masks[preset] & (1 << Wake)) != 0;
+            lock (gate) mask = Masks[preset];
+            if (SetHey != null && On(Wake) != wake) SetHey(wake);
+            Action changed = Changed;
+            if (changed != null) changed();
+        }
+
+        // Toggles 1 to 10 the way Blackwall mode's switch used to set them, leaving "Hey Capri" alone. Nothing is saved.
+        internal static void Jobs(bool blackwall) { lock (gate) mask = (mask & (1 << Wake)) | (Masks[blackwall ? Blackwall : Trusted] & 0x3FF); }
+
+        // The preset their toggles match, or Custom. "Hey Capri" only counts where there's a wake word.
+        internal static int Preset
+        {
+            get
+            {
+                int bits = Mask, counted = Has(Wake) ? 0x7FF : 0x3FF;
+                for (int i = 0; i < Masks.Length; i++) if ((bits & counted) == (Masks[i] & counted)) return i;
+                return Custom;
+            }
+        }
+
+        internal static string PresetName { get { return Presets[Preset]; } }
+
+        // What the preset does, in a line. Without her jobs (Mac and Linux so far) Trusted never asks either, and without a
+        // wake word Blackwall's line doesn't promise one.
+        internal static string PresetLine(int preset)
+        {
+            if (preset == Trusted && !Has(Mouse)) return "She does what you ask without asking first.";
+            if (preset == Blackwall && !Has(Wake)) return "Everything is on: she never asks before doing what you ask.";
+            return Told[Math.Max(0, Math.Min(Custom, preset))];
+        }
+
+        internal static string Short { get { int preset = Preset; return preset == Blackwall && !Has(Wake) ? "She never asks first." : Shorts[preset]; } }
+
+        // Toggles 1 to 10 as 1s and 0s for their settings file, like "1111111000" for Trusted.
+        internal static string Saved { get { int bits; lock (gate) bits = mask; return Marks(bits); } }
+
+        internal static int MaskOf(int preset) { return Masks[preset]; }
+
+        // A preset's toggles 1 to 10 the way Saved writes them.
+        internal static string Of(int preset) { return Marks(Masks[preset]); }
+
+        private static string Marks(int bits)
+        {
+            char[] marks = new char[Wake];
+            for (int i = 0; i < Wake; i++) marks[i] = (bits & (1 << i)) != 0 ? '1' : '0';
+            return new string(marks);
+        }
+
+        // Their saved toggles, or Trusted for anything unreadable. "Hey Capri" stays where it lives.
+        internal static void Load(string saved, bool wake = false)
+        {
+            int bits = 0;
+            if (saved == null || saved.Length != Wake || saved.Trim('0', '1').Length > 0) bits = Masks[Trusted] & 0x3FF;
+            else for (int i = 0; i < Wake; i++) if (saved[i] == '1') bits |= 1 << i;
+            lock (gate) mask = bits | (wake ? 1 << Wake : 0);
+        }
+
+        // Which toggle one of her tools needs, or -1 for one that never asks: looking at the screen, her notes, her own nap,
+        // moves and animations, checking what's playing and cancelling a shutdown.
+        internal static int Needs(string tool, ToolArguments args)
+        {
+            string action = args == null ? null : args.Action;
+            switch (tool)
+            {
+                case "open_app": case "open_website": return Open;
+                case "media": return action == "now_playing" ? -1 : Media;
+                case "play_music": return Media;
+                case "shortcut": return Shortcuts;
+                case "app_window": return Windows;
+                case "power": return action == "cancel" ? -1 : Power;
+                case "use_computer": return Mouse;
+                default: return -1;
+            }
+        }
+
+        private sealed class Held
+        {
+            internal string Tool;
+            internal ToolArguments Args;
+            internal string Asked;
+        }
+
+        private static readonly List<Held> held = new List<Held>();
+        // Calls their yes let through, each once.
+        private static readonly List<string> cleared = new List<string>();
+
+        // True when the toggle this call needs is off here, so she'd ask first.
+        internal static bool Asks(string tool, ToolArguments args)
+        {
+            int toggle = Needs(tool, args);
+            if (toggle < 0 || !Has(toggle) || On(toggle)) return false;
+            lock (gate) return !cleared.Contains(Asking(tool, args));
+        }
+
+        // Null when the call can run. Otherwise she holds it and the result says what to ask them.
+        internal static string Gate(string tool, ToolArguments args)
+        {
+            int toggle = Needs(tool, args);
+            if (toggle < 0 || !Has(toggle) || On(toggle)) return null;
+            string asked = Asking(tool, args);
+            lock (gate)
+            {
+                if (cleared.Remove(asked)) return null;
+                if (!held.Exists(call => call.Asked == asked)) held.Add(new Held { Tool = tool, Args = args == null ? new ToolArguments() : args.Copy(), Asked = asked });
+            }
+            return Hold + "\"" + Up(asked) + "?" + Yes + "\" and wait for their answer. Their yes runs it, so don't call the tool again.";
+        }
+
+        internal static bool IsHold(string result) { return result != null && result.StartsWith(Hold, StringComparison.Ordinal); }
+
+        // The tool she's holding, if any.
+        internal static string Holding { get { lock (gate) return held.Count == 0 ? null : held[0].Tool; } }
+
+        // Her question for everything she's holding, like "Open Discord and open Spotify? Say yes and I will."
+        internal static string Question
+        {
+            get
+            {
+                List<string> asked = new List<string>();
+                lock (gate) foreach (Held call in held) asked.Add(call.Asked);
+                if (asked.Count == 0) return null;
+                string all = asked.Count == 1 ? asked[0] : string.Join(", ", asked.GetRange(0, asked.Count - 1).ToArray()) + " and " + asked[asked.Count - 1];
+                return Up(all) + "?" + Yes;
+            }
+        }
+
+        // What she says after her tools ran when one was held: what did run, then her question. Null when nothing was held.
+        internal static string Reply(List<string> results)
+        {
+            if (!results.Exists(IsHold)) return null;
+            List<string> done = results.FindAll(result => !IsHold(result) && !string.IsNullOrEmpty(result));
+            string question = Question ?? "";
+            return done.Count == 0 ? question : string.Join(" ", done.ToArray()) + " " + question;
+        }
+
+        // A held result shown on its own, like before she has a brain, becomes just her question.
+        internal static string Said(string result) { return IsHold(result) ? Question ?? result : result; }
+
+        internal static bool Agrees(string said)
+        {
+            string text = (said ?? "").Trim();
+            return Hands.Agrees(text) || Regex.IsMatch(text, @"^(yes|yeah|yep|yup|ya|yea|sure|ok|okay|do it|go ahead|go for it|send it|press it|oui)\b[\s.!,]*(please|pls|plz|choom)?[\s.!]*$", RegexOptions.IgnoreCase);
+        }
+
+        internal static bool Declines(string said) { return Regex.IsMatch((said ?? "").Trim(), @"^(no|nah|nope|don't|do not|stop|cancel|never mind|nevermind|leave it|non)\b", RegexOptions.IgnoreCase); }
+
+        // Their answer to her asking first: yes runs what she held, each call once; no leaves it alone; anything else drops it
+        // and goes on as a new message. Null when nothing was held or it wasn't a yes or no.
+        internal static string Resume(string text, Func<string, ToolArguments, string> run)
+        {
+            List<Held> waiting;
+            lock (gate)
+            {
+                if (held.Count == 0) return null;
+                waiting = new List<Held>(held);
+                held.Clear();
+            }
+            if (Declines(text)) return Left;
+            if (!Agrees(text)) return null;
+            List<string> done = new List<string>();
+            foreach (Held call in waiting)
+            {
+                lock (gate) cleared.Add(call.Asked);
+                string result;
+                try { result = run(call.Tool, call.Args); }
+                finally { lock (gate) cleared.Remove(call.Asked); }
+                if (!string.IsNullOrEmpty(result)) done.Add(Said(result));
+            }
+            return done.Count == 0 ? "Done." : string.Join(" ", done.ToArray());
+        }
+
+        // Drops whatever she was holding, when they've moved on to something else.
+        internal static void Drop() { lock (gate) held.Clear(); }
+
+        private static string Up(string text) { return string.IsNullOrEmpty(text) ? text : char.ToUpperInvariant(text[0]) + text.Substring(1); }
+
+        private static string Plain(string text, string fallback)
+        {
+            string cleaned = Regex.Replace((text ?? "").Trim(), @"\s+", " ").TrimEnd('.', '!', '?', ' ');
+            if (cleaned.Length == 0) return fallback;
+            return cleaned.Length > 70 ? cleaned.Substring(0, 67).TrimEnd() + "..." : cleaned;
+        }
+
+        // What she'd do, in a few words: "open Spotify", "turn the volume up", "close Discord".
+        internal static string Asking(string tool, ToolArguments args)
+        {
+            ToolArguments a = args ?? new ToolArguments();
+            switch (tool)
+            {
+                case "open_app": return "open " + Plain(a.Name, "that app");
+                case "open_website":
+                    string site = Plain(a.Site, "that site");
+                    return string.IsNullOrWhiteSpace(a.Search) ? "open " + site : "search " + Regex.Replace(site, @"^(https?://)?(www\.)?|\.(com|org|net|tv)(/.*)?$", "", RegexOptions.IgnoreCase) + " for " + Plain(a.Search, "that");
+                case "media":
+                    switch (a.Action)
+                    {
+                        case "play_pause": return "play or pause what's playing";
+                        case "next": return "skip to the next track";
+                        case "previous": return "go back a track";
+                        case "volume_up": return "turn the volume up";
+                        case "volume_down": return "turn the volume down";
+                        case "volume_set": return "set the volume to " + Plain(a.Level, "that") + (Regex.IsMatch(a.Level ?? "", @"^\s*\d+\s*$") ? "%" : "");
+                        case "mute": return "mute your PC";
+                        case "unmute": return "unmute your PC";
+                        default: return "control what's playing";
+                    }
+                case "play_music": return "play " + Plain(a.Song, "some music") + (a.App == "spotify" ? " on Spotify" : a.App == "youtube" ? " on YouTube" : "");
+                case "shortcut":
+                    switch (a.Name)
+                    {
+                        case "discord_mute": return "mute or unmute your mic in Discord";
+                        case "discord_deafen": return "deafen or undeafen you in Discord";
+                        case "screenshot": return "take a screenshot";
+                        case "clip_that": return "clip the last 30 seconds";
+                        case "record": return "start or stop recording";
+                        case "game_bar": return "open the Game Bar";
+                        case "show_desktop": return "show the desktop";
+                        case "task_manager": return "open Task Manager";
+                        case "clipboard": return "open your clipboard history";
+                        case "emoji": return "open the emoji picker";
+                        case "voice_typing": return "start voice typing";
+                        case "live_captions": return "turn Live Captions on or off";
+                        case "narrator": return "turn Narrator on or off";
+                        case "magnifier": return "zoom in with Magnifier";
+                        case "magnifier_off": return "close Magnifier";
+                        case "color_filters": return "turn colour filters on or off";
+                        case "quick_settings": return "open Quick Settings";
+                        default: return "press that shortcut";
+                    }
+                case "app_window": return (a.Action == "close" ? "close " : a.Action == "minimize" ? "minimize " : "switch to ") + Plain(a.Name, "that app");
+                case "power":
+                    string when = Regex.IsMatch(a.Minutes ?? "", @"^\s*\d+\s*$") && a.Minutes.Trim() != "0" ? " in " + a.Minutes.Trim() + (a.Minutes.Trim() == "1" ? " minute" : " minutes") : "";
+                    switch (a.Action)
+                    {
+                        case "shut_down": return "shut down your PC" + when;
+                        case "restart": return "restart your PC" + when;
+                        case "sleep": return "put your PC to sleep" + when;
+                        case "lock": return "lock your PC" + when;
+                        case "sign_out": return "sign you out" + when;
+                        default: return "do that to your PC";
+                    }
+                case "use_computer":
+                    string job = Plain(Hands.Asked(a.Task ?? ""), "");
+                    return job.Length == 0 ? "use your mouse and keyboard for that" : "use your mouse and keyboard to " + char.ToLowerInvariant(job[0]) + job.Substring(1);
+                default: return "do that";
+            }
+        }
+
+        // Her brain's line about toggles that are off, so she still calls the tool and lets Capri ask instead of asking
+        // herself or saying it's done. Empty under Trusted and Blackwall, so their prompts are as they were.
+        internal static string Note
+        {
+            get
+            {
+                string[] what = { "open apps, games or sites", "play music or change the volume", "press shortcuts", "switch to or close apps and tabs", "shut down, restart, sleep, lock or sign out of their PC", "use their mouse and keyboard for a job" };
+                List<string> off = new List<string>();
+                for (int i = 0; i <= Mouse; i++) if (Has(i) && !On(i)) off.Add(what[i]);
+                if (off.Count == 0) return "";
+                string list = off.Count == 1 ? off[0] : string.Join(", ", off.GetRange(0, off.Count - 1).ToArray()) + " or " + off[off.Count - 1];
+                return "\nThey've set her SECURITY settings to ask first before you " + list + ". Still call the tool as soon as they ask: Capri asks them herself and does it when they say yes, so never ask them yourself, and never say it's done before it is.";
+            }
+        }
     }
 
     internal sealed class OpenWindow
@@ -66,19 +417,30 @@ namespace CapriDesktop
 
     internal static class Hands
     {
-        internal const string Note =
+        // Her chat and voice chat line about her tools, with SECURITY's line after it while one of her tools' toggles is off.
+        internal static string Note { get { return Noted + Security.Note; } }
+
+        private const string Noted =
             "\nYou have tools for their PC: open (launch, play) their apps and games, switch to, minimize or close apps that are open, play songs or videos they name, open websites or search them, control their music and volume, look at their screen, and use their mouse and keyboard for jobs inside apps and sites. " +
             "Use a tool whenever they ask you to do something like that, and never say you did or are doing it without one. Look at their screen when they ask what you see or what you think of something on it. Only close an app when they ask you to. " +
             "Your own website, where people download you, is " + Home + ". " +
             "They've already given you permission for anything they ask you to do on their PC, so do all of it straight away: never ask which option they meant, never ask if they're sure, never make them confirm or ask for things one at a time, and when they leave the choice to you, like which song, video or game, pick one yourself. " +
             "You can do anything on their PC they ask: send messages and DMs, reply, post, join, leave or end calls, and any other job in their apps with use_computer. Never ask if they want you to, never read a message back to check it first, and never tell them to do it themselves. Mute my mic means mute their mic, not deafen them. Never say you can't do something your tools can do. " +
-            "You can press shortcuts: mute or deafen them in Discord, screenshots, clips, recording, Game Bar, show desktop, Task Manager, clipboard history and emoji. " +
+            "You can press shortcuts: mute or deafen them in Discord, screenshots, clips, recording, Game Bar, show desktop, Task Manager, clipboard history, emoji, voice typing, Live Captions, Narrator, Magnifier, colour filters and Quick Settings. " +
+            "You can change Windows settings too, like Bluetooth, Wi-Fi, airplane mode, hotspot, Energy Saver and brightness, with use_computer. " +
             "You can shut down, restart, sleep, lock or sign out of their PC with power: when they ask, do it straight away and never ask if they're sure. " +
+            "When they tell you to go to sleep, take a nap or wake up, that's you: use nap, never power. " +
+            "When they tell you to come here or teleport to them, go to another monitor, sit down, sit on a window they name (like their Roblox window) or the taskbar, lie down, sit up, stand up, walk around, wander off somewhere, hang, ride their cursor or hop off it, hide or come back, that's you too: use move_yourself, which also moves your Capri Mainframe window to another monitor. " +
+            "When they ask you to dance, stop dancing, glitch, grin, blink or play one of your animations, use animate. " +
             "When they ask you to remember or forget something about them, or to leave or make a memory, use remember: it saves to your notes, me.md, which you read every chat. Never say you can't keep memories. " +
             "You have a web browser: when they ask something you don't know or that changes, like the weather, news, scores, prices or times, search Google for it instead of guessing or saying you can't. " +
             "Most messages are just chat, not jobs: answer those as yourself, with your own opinions and tastes, and don't offer to open, play or look at anything unless they ask.";
 
-        internal const string Prompt =
+        // Her hands' prompt. While one of her tools' toggles is off in SECURITY, its line goes in after "Call the tool.", so she
+        // still calls it and Capri asks them.
+        internal static string Prompt { get { string note = Security.Note; return note.Length == 0 ? Handing : Handing.Replace("Call the tool.\n", "Call the tool." + note + "\n"); } }
+
+        private const string Handing =
             "You are the hands of Capri, a desktop companion on the user's Windows PC. You don't chat.\n" +
             "Act only on their latest request. Earlier messages are context for names, not commands to repeat. Call one tool for each thing they ask for, however many there are (open Discord, Spotify and Steam is three open_app calls): open an app, game or website, search a site, play music, control media or volume, check the current song, switch to, minimize or close an app, or look at their screen when asked about it. Use the names they gave.\n" +
             "Their words come from speech in any language, so an app name can be misheard, like Logitech Jobs for Logitech G HUB: still call open_app with the name they said.\n" +
@@ -88,8 +450,11 @@ namespace CapriDesktop
             "If they leave the pick to you, like a song or a video, pick one yourself that fits.\n" +
             "Your own website is " + Home + ": when they ask for your website or page, call open_website with that address.\n" +
             "If they ask something you'd have to look up, like the weather, news, scores, prices, times or facts you're unsure of, call open_website with site google and their question as the search.\n" +
-            "To mute, unmute or turn off their mic, call shortcut with discord_mute; to deafen or undeafen them, discord_deafen. Don't ask which: mute means the mic. Screenshots, clips, recording, Game Bar, show desktop, Task Manager, clipboard and emoji are shortcuts too.\n" +
+            "To mute, unmute or turn off their mic, call shortcut with discord_mute; to deafen or undeafen them, discord_deafen. Don't ask which: mute means the mic. Screenshots, clips, recording, Game Bar, show desktop, Task Manager, clipboard, emoji, voice typing, Live Captions, Narrator, Magnifier (magnifier_off closes it), colour filters and Quick Settings are shortcuts too.\n" +
+            "To turn Bluetooth, Wi-Fi, airplane mode, hotspot, Nearby sharing, Energy Saver or night light on or off, or change the brightness, call use_computer with the job in their words.\n" +
             "To shut down, turn off, restart, sleep, lock or sign out of their PC, call power. They asked, so do it: never ask if they're sure.\n" +
+            "When they tell you yourself to go to sleep, take a nap, go to bed or wake up, call nap: that's Capri, not their PC.\n" +
+            "When they tell you yourself to come here, teleport to them or their mouse, go to another monitor, sit, sit on a window they name or the taskbar, lie down, sit up, stand up, walk around, wander off somewhere, hang, ride or hop off their cursor, hide or come back, call move_yourself; moving your Mainframe window to a monitor is move_yourself too. To dance, stop dancing, glitch, grin, blink or play one of your animations, call animate.\n" +
             "Never reply with a question about whether to do what they asked. Call the tool.\n" +
             "If they ask you to remember, note down or forget something about them, or to leave, make or save a memory, call remember with a short note about them in the third person.\n" +
             "Questions about their current screen or song need a tool too. If the target is unclear, pick the closest match yourself. For chat, negated or hypothetical requests, call no tool and reply with only the word: chat";
@@ -99,7 +464,7 @@ namespace CapriDesktop
 
         private static readonly string[,] Specs =
         {
-            { "open_app", "Open, launch or play an app or game installed on their PC, like Spotify, Discord, Steam or Roblox.",
+            { "open_app", "Open, launch or play an app or game installed on their PC, like Spotify, Discord, Steam or Roblox. Give its full name, not a nickname: Counter-Strike 2 for cs, Valorant for val. If it's already open and they want something done in it, like a mode, a match or accepting a match, call use_computer instead of opening it again.",
               "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The app's name\"}},\"required\":[\"name\"]}" },
             { "open_website", "Open a website in their browser, or search a site like YouTube or Google.",
               "{\"type\":\"object\",\"properties\":{\"site\":{\"type\":\"string\",\"description\":\"The site's name or address, like youtube.com\"},\"search\":{\"type\":\"string\",\"description\":\"Words to search for on that site, if any\"}},\"required\":[\"site\"]}" },
@@ -111,20 +476,28 @@ namespace CapriDesktop
               "{\"type\":\"object\",\"properties\":{\"song\":{\"type\":\"string\",\"description\":\"What to play, like a song and its artist or a playlist's name\"},\"kind\":{\"type\":\"string\",\"description\":\"What it is\",\"enum\":[\"song\",\"playlist\",\"album\",\"artist\"]},\"app\":{\"type\":\"string\",\"description\":\"Where to play it, if they said\",\"enum\":[\"spotify\",\"youtube\"]}},\"required\":[\"song\"]}" },
             { "app_window", "Switch to, minimize or close an app or game that's open on their PC. Naming a site closes that browser tab.",
               "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The app's name, or the site in a browser tab\"},\"action\":{\"type\":\"string\",\"description\":\"What to do\",\"enum\":[\"switch_to\",\"minimize\",\"close\"]}},\"required\":[\"name\",\"action\"]}" },
-            { "use_computer", "Use their mouse and keyboard for any job inside an app or website: sending a message or DM, joining, leaving or ending a call, or anything that needs clicking, typing or several steps, like opening an app and searching in it.",
+            { "use_computer", "Use their mouse and keyboard for any job inside an app or website: sending a message or DM, joining, leaving or ending a call, or anything that needs clicking, typing or several steps, like opening an app and searching in it, or in a game: picking a mode, queueing for a match, or waiting for one and accepting it while they're away. You always have their mouse and keyboard through this tool.",
               "{\"type\":\"object\",\"properties\":{\"task\":{\"type\":\"string\",\"description\":\"The whole job in their exact words, including any message to send\"}},\"required\":[\"task\"]}" },
-            { "shortcut", "Press a keyboard shortcut for them: mute or unmute their mic in Discord (discord_mute), deafen or undeafen in Discord (discord_deafen), take a screenshot, clip the last 30 seconds, start or stop recording, open the Game Bar, show the desktop, open Task Manager, clipboard history or the emoji picker.",
-              "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Which shortcut\",\"enum\":[\"discord_mute\",\"discord_deafen\",\"screenshot\",\"clip_that\",\"record\",\"game_bar\",\"show_desktop\",\"task_manager\",\"clipboard\",\"emoji\"]}},\"required\":[\"name\"]}" },
+            { "shortcut", "Press a keyboard shortcut for them: mute or unmute their mic in Discord (discord_mute), deafen or undeafen in Discord (discord_deafen), take a screenshot, clip the last 30 seconds, start or stop recording, open the Game Bar, show the desktop, open Task Manager, clipboard history or the emoji picker, start voice typing, turn Live Captions, Narrator or colour filters on or off, zoom in with Magnifier or close it, or open Quick Settings.",
+              "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Which shortcut\",\"enum\":[\"discord_mute\",\"discord_deafen\",\"screenshot\",\"clip_that\",\"record\",\"game_bar\",\"show_desktop\",\"task_manager\",\"clipboard\",\"emoji\",\"voice_typing\",\"live_captions\",\"narrator\",\"magnifier\",\"magnifier_off\",\"color_filters\",\"quick_settings\"]}},\"required\":[\"name\"]}" },
             { "remember", "Save a short note about them to your notes (me.md) so you remember it next time, like a favourite game or what they're making, or forget a note. Use it whenever they ask you to remember, note down, save or forget something, or to leave or make a memory.",
               "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"The note, about them in the third person, or what to forget\"},\"action\":{\"type\":\"string\",\"description\":\"What to do\",\"enum\":[\"remember\",\"forget\"]}},\"required\":[\"text\"]}" },
-            { "power", "Shut down, restart, sleep, lock or sign out of their PC, or cancel a shutdown. Do it as soon as they ask, without asking if they're sure.",
-              "{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\",\"description\":\"What to do\",\"enum\":[\"shut_down\",\"restart\",\"sleep\",\"lock\",\"sign_out\",\"cancel\"]},\"minutes\":{\"type\":\"string\",\"description\":\"How many minutes from now, only if they said when\"}},\"required\":[\"action\"]}" }
+            { "power", "Shut down, restart, sleep, lock or sign out of their PC, or cancel a shutdown. Do it as soon as they ask, without asking if they're sure. \"Go to sleep\" or \"take a nap\" said to you is about you, not their PC: use nap.",
+              "{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\",\"description\":\"What to do\",\"enum\":[\"shut_down\",\"restart\",\"sleep\",\"lock\",\"sign_out\",\"cancel\"]},\"minutes\":{\"type\":\"string\",\"description\":\"How many minutes from now, only if they said when\"}},\"required\":[\"action\"]}" },
+            { "nap", "Go to sleep yourself on their screen, or wake up: your own nap, not their PC's. Use it when they tell you to go to sleep, take a nap, go to bed or wake up. You stay asleep until they click you or talk to you.",
+              "{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\",\"description\":\"What to do\",\"enum\":[\"sleep\",\"wake\"]}},\"required\":[\"action\"]}" },
+            { "move_yourself", "Move yourself on their screens: teleport to their mouse (come_here), go to another monitor, sit down or stand up where you are, sit on top of a window they name, like their Roblox or Discord window, or the taskbar (sit_on), lie down along the window you sit on or the one they name, or sit back up, walk around, wander off to a random window, hang where you are, ride their cursor or hop off it, hide or come back. move_mainframe moves your Capri Mainframe window to another monitor, or to the one their mouse is on. Use it whenever they tell you to come here, teleport, go somewhere, sit, lie down, walk, stand, hang, hide or show yourself.",
+              "{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\",\"description\":\"What to do\",\"enum\":[\"come_here\",\"other_screen\",\"sit\",\"sit_on\",\"lie_down\",\"sit_up\",\"stand_up\",\"walk_around\",\"wander\",\"hang\",\"ride_cursor\",\"hop_off\",\"hide\",\"show\",\"move_mainframe\"]},\"screen\":{\"type\":\"string\",\"description\":\"For other_screen or move_mainframe, which monitor, only if they said: next, left, right, up, down, main, here for the one their mouse is on, or a number like 2\"},\"window\":{\"type\":\"string\",\"description\":\"For sit_on, and lie_down if they named one, the app or game whose window to sit on, like Roblox, or taskbar\"}},\"required\":[\"action\"]}" },
+            { "animate", "Play one of your own animations on their screen: your idle, your glitch, your grin or a blink, or dance until they tell you to stop. Use it when they ask you to dance, stop dancing, do your glitch, grin, smile or blink, or play an animation by name.",
+              "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Which animation\",\"enum\":[\"idle\",\"glitch\",\"grin\",\"blink\",\"dance\",\"stop_dancing\"]}},\"required\":[\"name\"]}" }
         };
 
         internal static readonly string Tools = Render(false);
         internal static readonly string ClaudeTools = Render(true);
         internal static readonly string Listing = Written();
         private const string LookupWords = @"^(what('?s| is| are)|how('?s| is)|is it|will it|when('?s| is| does| do)|who won|did|check|get|tell me|show me|find)\b.*\b(weather|forecast|temperature|raining|snowing|news|headlines|scores?|stock price|price of|exchange rate|time (is it )?in|opening hours|open (today|now|tonight)|release date|showtimes|rain|snow|sunny|hot out|cold out)\b|^(weather|forecast|news|headlines)\b|^who (won|is winning)\b";
+        // Burmese asks with ပေး (for me), လိုက် (go ahead) or ပါ (please) after the verb, and ends a sentence with "။".
+        private const string BurmeseAsk = @"(လိုက်|ပေး|စမ်း|ပါ)+(ဦး|ဥ\u102Eး)?(နော်)?[။၊!?.\s]*$";
 
         private static readonly Regex Asks = new Regex(
             @"^(open|launch|start|run|load up|boot up|fire up|play|shuffle|put on|blast|queue|close|quit|exit|kill|shut down|switch (back |over )?to|back to|go to|bring up|pull up|show me|minimi[sz]e|pause|unpause|resume|stop the music|skip|next|previous|go back|volume|louder|quieter|mute|unmute|search|google|look up|mind (opening|launching|playing|closing))\b" +
@@ -139,7 +512,109 @@ namespace CapriDesktop
             @"|^(i (want|need|wanna|would like) (you to |to )?(open|launch|play|listen|watch|search|remember|forget|mute|unmute|deafen)|^(deafen|undeafen|keep in mind|make a note)|let's (play|listen|watch)|find (me )?.+ (on|online)|can (you|u) see)\b" +
             "|" + LookupWords +
             @"|^(ouvre|ouvrir|lancer?|d[ée]marrer?|fermer?|quitter?|r[ée]duis|r[ée]duire|minimiser?|chercher?|rechercher?|mets|mettre|jouer?|passer?|couper?|augmenter?|baisser?|regarder?|afficher?|montre-moi|va sur|aller sur|retourne sur)\b" +
-            @"|^(tu vois|qu'est-ce que (tu vois|je fais)|c'est quoi (cette|la) (chanson|musique)|quelle (chanson|musique)|qu'est-ce qu'il y a sur mon [ée]cran)\b", RegexOptions.IgnoreCase);
+            @"|^(tu vois|qu'est-ce que (tu vois|je fais)|c'est quoi (cette|la) (chanson|musique)|quelle (chanson|musique)|qu'est-ce qu'il y a sur mon [ée]cran)\b" +
+            // Spanish: "abre Spotify", "pon Bohemian Rhapsody", "¿me puedes buscar...?" go to her hands too, instead of a chat reply saying she can't.
+            @"|^(abr[aeií]r?|[aá]bre(me|lo|la)|inicia(r|lo)?|inicie|lanza(r)?|ejecuta(r|lo)?|arranca(r)?|enciende|prende|activa(r)?|desactiva(r)?|apaga(r)?|cierra|ci[eé]rra(me|lo|la)|cerrar|minimiza(r|lo)?|busca(r)?|b[uú]sca(me|lo)|pon(me|lo|la|le|er)?|reproduce|reproducir|reprod[uú]ce(me|lo)|toca(r)?|t[oó]ca(me|la)|pausa|reanuda|salta|silencia|quita(le)?|sube|s[uú]bele|subir|baja|b[aá]jale|bajar|mu[eé]stra(me)?|ens[eé][ñn]a(me)?|escribe|escr[ií]be(le|me)|manda|m[aá]nda(le|me)|env[ií]a(le|me)?|responde|contesta|ve al?|vete al?|ir al?|entra (al?|en)|haz clic|dale clic|pulsa|presiona|googlea|quiero que (me )?(abras|pongas|reproduzcas|toques|busques|cierres|inicies|lances|mandes|env[ií]es|escribas)|(me )?(abres|pones|pondr[ií]as|abrir[ií]as|buscas|cierras|quitas|subes|bajas|pasas))\b" +
+            @"|^(ves|qu[eé] (ves|hay en (mi|la) pantalla|estoy haciendo|est[aá] sonando)|mira (mi pantalla|esto|eso)|qu[eé] (canci[oó]n|m[uú]sica|tema) (es|suena)|(cu[aá]l es|c[oó]mo se llama) (esta|esa) canci[oó]n)\b" +
+            // A new install talks in Windows' language, so German, Portuguese, Italian, Polish, Dutch and Russian requests reach her hands too.
+            @"|^(([öo]ffne|[öo]ffnen|starte|spiele?|schlie(ß|ss)e?|suche?|zeig(e|\s+mir)?|pausiere|schalte)\b|mach(e)? .+ (auf|an|aus|lauter|leiser)$|(kannst|k[öo]nntest|w[üu]rdest) du\b.*\b([öo]ffnen|starten|spielen|abspielen|schlie(ß|ss)en|suchen|zeigen|anmachen|aufmachen|ausmachen|pausieren)\b)" +
+            @"|^(abra|abrir|toque|tocar|coloca|coloque|p[õo]e|bota|fecha|feche|fechar|procura|procure|pesquisa|pesquise|mostra|mostre|pula|pule|aumenta|diminui|(voc[eê] |vc )?(pode|poderia|consegue)s? (me )?(abrir|tocar|colocar|p[ôo]r|fechar|procurar|pesquisar|mostrar|iniciar|pausar))\b" +
+            @"|^(apri|aprire|avvia|avviare|lancia|metti|mettimi|riproduci|suona|chiudi|chiudere|cerca|cercare|mostrami|fammi (vedere|sentire)|alza|abbassa|(puoi|potresti|riesci a) (aprire|avviare|mettere|riprodurre|chiudere|cercare|mostrarmi|suonare|alzare|abbassare))\b" +
+            @"|^(otw[óo]rz|uruchom|w[łl][aą]cz|pu[śs][ćc]|zamknij|wyszukaj|szukaj|znajd[źz]|poka[żz]|zatrzymaj|(mo[żz]esz|m[óo]g[łl]by[śs]|mog[łl]aby[śs]) (mi )?(otworzy[ćc]|uruchomi[ćc]|w[łl][aą]czy[ćc]|pu[śs]ci[ćc]|zamkn[aą][ćc]|wyszuka[ćc]|znale[źz][ćc]|pokaza[ćc]))(?!\w)" +
+            @"|^(((speel|sluit|zoek|toon|pauzeer)\b(?! (je|jij|jy|julle|u|we|wij|ons)\b)|laat (me )?zien\b)|zet .+ op$|(kun|kan|wil) je\b.*\b(openen|starten|spelen|afspelen|opzetten|sluiten|zoeken|laten zien)\b)" +
+            @"|^(открой|открыть|запусти|запустить|включи|включить|поставь|поставить|закрой|закрыть|найди|найти|покажи|показать|выключи|сделай (громче|тише)|(можешь|можете|мог бы|могла бы|не могла бы) (ты )?(открыть|запустить|включить|поставить|закрыть|найти|показать))(?!\w)" +
+            // Chinese, Japanese, Korean, Thai, Vietnamese, Indonesian, Turkish, Ukrainian, Arabic and Hindi too. Chinese and Thai write
+            // no spaces, and Japanese, Korean, Turkish and Hindi put the verb last, so those match where the verb sits.
+            @"|^(请|請|麻烦你?|麻煩你?)?(你|您)?(能不能|可不可以|能|可以|会不会|會不會)?(帮我|幫我|给我|給我|替我)?(打开|打開|开启|開啟|启动|啟動|运行|運行|播放|放(一首|首|点|點|些|个|個|歌|音乐|音樂)|来一?首|來一?首|关闭|關閉|关掉|關掉|退出|暂停|暫停|继续播放|繼續播放|下一首|上一首|跳过|跳過|切换到|切換到|搜索|搜尋|搜一下|查一下|找一下|调高|調高|调低|調低|调大|調大|调小|調小|静音|靜音|最小化|关机|關機|重启|重啟|发消息|發消息|把(音量|声音|聲音))" +
+            @"|^(看看|看一下)(我的)?(屏幕|螢幕|画面|畫面)|^(你|您)(能)?看到(了)?(什么|什麼)|^(这|這|现在|現在)(是|放的是|在放的是)?(什么|什麼)歌|^我(在|正在)(玩|干|幹|做)(什么|什麼)" +
+            @"|(開いて|ひらいて|開けて|あけて|起動して|再生して|流して|かけて|閉じて|とじて|終了して|止めて|とめて|停止して|一時停止して|スキップして|飛ばして|検索して|調べて|探して|上げて|下げて|ミュートして|見せて|見て|送って|切り替えて|最小化して)(ください|くれる|くれない|くれます|くれますか|くれませんか|もらえる|もらえない|もらえますか|もらえませんか|ほしい|欲しい|よ|ね)?[。！？!?\s]*$" +
+            @"|何が見える|(この|今の)(曲|歌)(は|って)?(何|なに)|(今|いま)(流れてる|かかってる)(曲|歌)" +
+            @"|(열어|켜|꺼|닫아|틀어|재생해|검색해)[.!?。！？\s]*$|(열어|켜|꺼|닫아|틀어|재생해|실행해|일시정지해|멈춰|정지해|검색해|찾아|올려|낮춰|줄여|키워|넘겨|건너뛰어|보여|봐|보내|음소거해|최소화해|종료해) ?(줘|줘요|줄래|줄래요|줄 ?수 ?있어|줄 ?수 ?있어요|주세요|주실래요|주시겠어요)[.!?。！？\s]*$|^(다음|이전) ?(곡|노래)|^(이|지금) ?(노래|곡) ?(뭐야|뭐지|제목)|뭐가 보여|화면에 뭐" +
+            // Lao and Khmer write no spaces between words either, so they match from the start, like Thai.
+            @"|^(ກະລຸນາ|ຊ່ວຍ)?(ເປີດ|ປິດ|ຫຼິ້ນເພງ|ຫລິ້ນເພງ|ຊອກຫາ|ຄົ້ນຫາ|ເພີ່ມສຽງ|ຫຼຸດສຽງ|ຢຸດເພງ|ຂ້າມເພງ|ສົ່ງຂໍ້ຄວາມ)|^(សូម|ជួយ|សូមជួយ)?(បើក|បិទ|ចាក់ចម្រៀង|ចាក់បទ|ចាក់តន្ត្រី|ស្វែងរក|រកមើល|ដំឡើងសំឡេង|បន្ថយសំឡេង|ឈប់ចាក់|រំលងបទ|ផ្ញើសារ)" +
+            @"|^(กรุณา|ช่วย|รบกวน)?(เปิด|ปิด|เล่นเพลง|ค้นหา|เพิ่มเสียง|ลดเสียง|หยุดเพลง|ข้ามเพลง|ส่งข้อความ|ย่อ)|^ขอ(ฟัง)?เพลง|^(ดู|มอง)หน้าจอ|^(เธอ|คุณ)?เห็นอะไร|^(นี่|นี่คือ|ตอนนี้)?(เป็น)?เพลงอะไร" +
+            @"|^(làm ơn |hãy |bạn |có thể |giúp (mình|tôi|tớ|em|anh|chị) )*(mở|bật|phát|tắt|đóng|tìm kiếm|tìm|tăng|giảm|tạm dừng|dừng|chuyển|tiếp tục|cho (mình|tôi|tớ|em) (nghe|xem))(?!\w)|^(bài|nhạc) gì (đây|thế|vậy)" +
+            @"|^(tolong |coba |bisa(kah)? |(kamu|kau|anda|lu|lo) )*(buka(kan|in)?|jalankan|putar(kan|in)?|puterin|mainkan|setel|tutup|matikan|nyalakan|hidupkan|cari(kan|in)?|naikkan|turunkan|besarkan|kecilkan|keraskan|pelankan|jeda|hentikan|lanjutkan|lewati|tampilkan|tunjukkan|kirim(kan|in)?|lihat (layar|ini|itu))(?!\w)|^lagu apa (ini|yang)" +
+            // Turkish "aç" is hungry too ("karnım aç", or "çok aç" on its own, while "sesi çok aç" turns it up a lot), and
+            // "çeneni kapat" (shut your mouth), Hindi and Urdu "बकवास बंद करो"
+            // (stop the nonsense) and Kazakh "қарным аш" (I'm hungry) are chat, not something for her hands.
+            @"|(^|\s)(aç(?<!(karnım|karnımız|karnın)( (çok|aşırı|acayip|cidden|bayağı|baya|hala|hâlâ|de))? aç)(?<!^((ben|biz)( de)?( (çok|aşırı|acayip|cidden|bayağı|baya|hala|hâlâ))?|çok|aşırı|acayip|cidden|bayağı|baya|hala|hâlâ) aç)|açar m[ıi]s[ıi]n|açabilir misin|açsana|çal|çalar m[ıi]s[ıi]n|çalabilir misin|çalsana|oynat|kapat(?<!(çeneni|ağzını) kapat)|kapatır m[ıi]s[ıi]n|kapatabilir misin|kapatsana|ara|arar m[ıi]s[ıi]n|durdur|duraklat|göster|gösterir misin|gönder|kıs|yükselt|sustur|küçült|(şarkıyı|parçayı|bunu) (geç|atla))( lütfen)?[.!?\s]*$|^ekran(ım)?a bak|^bu (şarkı|parça) ne" +
+            @"|^(відкрий|відкрити|увімкни|увімкнути|запусти|запустити|постав|поставити|закрий|закрити|вимкни|вимкнути|знайди|знайти|покажи|показати|зроби (гучніше|тихіше)|(можеш|можете|міг би|могла б|чи можеш|чи можете) (ти |ви )?(відкрити|увімкнути|запустити|поставити|закрити|знайти|показати|вимкнути))(?!\w)" +
+            @"|^(من فضلك |لو سمحت |ممكن |هل (يمكنك|تستطيع) |يا كابري )*(افتح|إفتح|تفتح|فتح|شغل|شغّل|تشغل|تشغّل|تشغيل|اغلق|أغلق|إغلق|تغلق|إغلاق|اغلاق|سكر|سكّر|اطفئ|أطفئ|طفي|ابحث|إبحث|تبحث|البحث|دور|ارفع|اخفض|وطي|أوقف|اوقف|اعرض|أرني|ارني|ارسل|أرسل|ابعث)(لي)?(?!\w)|^(ماذا|شو) (ترى|تشوف|بتشوف)|^(ما|ايش|شو) (هذه|هاي|هذي) الأغنية" +
+            @"|(खोलो|खोलिए|खोलिये|खोल दो|खोल दीजिए|चलाओ|चलाइए|चला दो|चला दीजिए|बजाओ|बजाइए|बजा दो|(?<!(बकवास|ड्रामा|नाटक|मज़ाक|मजाक|बोलना|रोना|चिल्लाना|नखरे|बातें) )बंद (करो|कर दो|कीजिए|करिए)|रोको|रोक दो|ब(ढ़|ढ़?)ाओ|ब(ढ़|ढ़?)ा दो|कम करो|कम कर दो|खोजो|ढूंढो|ढूँढो|ढूंढ दो|ढूँढ दो|दिखाओ|दिखा दो|भेजो|भेज दो|(ओपन|प्ले|क्लोज़|क्लोज|सर्च|स्टार्ट|म्यूट|स्किप|पॉज़|पॉज) (करो|कर दो|कीजिए|करिए)|(स्क्रीन|ये|यह) (देखो|देख लो|देखिए))( ना| न| प्लीज़| प्लीज)?[।.!?\s]*$|(खोल|चला|बजा|बंद कर|दिखा|ढूंढ|ढूँढ) (सकते|सकती|सकोगे|सकोगी)|कौन सा गाना" +
+            @"|\b(kholo|khol do|kholdo|chalao|chala do|chalado|bajao|baja do|bajado|(?<!(bakwas|bakwaas|drama|natak|naatak|mazak|mazaak|majak|bolna|rona|chillana|nakhre) )band (karo|kar do|kardo)|roko|badhao|badha do|kam karo|dhundo|dhoondo|dikhao|bhejo|(open|play|close|search|start|mute|unmute|skip|pause|stop|on|off) (karo|kar do|kardo|kar dena|kijiye)|(screen|ye) dekho)( na| please| plz| pls)?[.!?\s]*$|\bkaun ?sa gaana\b" +
+            // Swedish, Norwegian, Danish, Finnish, Czech, Slovak, Hungarian, Romanian, Greek and Filipino.
+            @"|^((öppna|spela|stäng|sök|visa|pausa|starta|höj|sänk|åpne|spill(?!\s+(the|it|your|ur|my|them|all|everything)\b)|lukk|søk|åbn|spil|luk|søg|vis|skru (op|opp|ned))(?!\w)|(kan|kunde|skulle|vil) du\b.*\b(öppna|spela|stänga|söka|visa|starta|åpne|spille|lukke|søke|vise|starte|åbne|søge)(?!\w))" +
+            @"|^((avaa|soita|sulje|etsi|hae|näytä|laita|käynnistä|pysäytä|keskeytä)(?!\w)|(voisitko|voitko)\b.*\b(avata|soittaa|sulkea|etsiä|hakea|näyttää|laittaa|käynnistää)(?!\w))" +
+            @"|^((otevři|pusť|zavři|najdi|vyhledej|ukaž|zastav|spusť|přehraj|zesil|ztlum|otvor|pusti|zatvor|nájdi|vyhľadaj|ukáž|spusti|prehraj)(?!\w)|(můžeš|mohl bys|mohla bys|môžeš|mohol by si|mohla by si)\b.*\b(otevřít|pustit|zavřít|najít|vyhledat|ukázat|spustit|přehrát|otvoriť|pustiť|zatvoriť|nájsť|vyhľadať|ukázať|spustiť|prehrať)(?!\w))" +
+            @"|^((nyisd|indítsd|játssz|játszd|zárd|keress|keresd|mutasd|állítsd|tedd|kapcsold|hangosítsd|halkítsd)(?!\w)|((meg|el|be|le) )?tudnád\b.*\b(nyitni|indítani|játszani|zárni|keresni|mutatni|kapcsolni)(?!\w))" +
+            @"|^((deschide|pune|închide|caută|arată(-mi)?|pornește|porneste|oprește|opreste|redă|dă mai (tare|încet)|da mai (tare|incet))(?!\w)|(poți|poti|ai putea) (să |sa )?(deschizi|pui|închizi|inchizi|cauți|cauti|arăți|pornești|oprești|redai)(?!\w))" +
+            @"|^((άνοιξε|ανοιξε|βάλε|βαλε|κλείσε|κλεισε|ψάξε|ψαξε|δείξε|δειξε|παίξε|παιξε|σταμάτα|σταματα|δυνάμωσε|χαμήλωσε|ξεκίνα)(?!\w)|(μπορείς|μπορεις|θα μπορούσες) να (ανοίξεις|ανοιξεις|βάλεις|βαλεις|κλείσεις|κλεισεις|ψάξεις|ψαξεις|δείξεις|δειξεις|παίξεις|παιξεις)(?!\w))" +
+            @"|^((buksan|patugtugin|tugtugin|magpatugtog|isara|hanapin|ipakita|lakasan|hinaan|ihinto|i-?play|i-?open|i-?close)(?!\w)|paki(-\w+|bukas|buksan|patugtog|sara|isara|hanap|lakas|hina|play|open|close)(?!\w)|pa-(open|play|close|on|off)(?!\w)|(pwede|puwede|kaya) (mo )?(bang? )?(buksan|patugtugin|isara|hanapin|ipakita|i-?play|i-?open)(?!\w))" +
+            // Malay, Swahili, Catalan, and Serbian, which covers Croatian and Bosnian too.
+            @"|^(tolong |boleh(kah)? (tak |tidak )?|(awak|engkau) )*(buka(kan)?|pasang(kan)?|mainkan|tutup|cari(kan)?|kuatkan|perlahankan|hentikan|tunjuk(kan)?|hantar(kan)?|tengok (skrin|ni|tu))(?!\w)|^lagu apa (ni|ini)(?!\w)" +
+            @"|^((tafadhali |naomba )*(fungua|cheza|funga|tafuta|onyesha|zima|washa|ongeza sauti|punguza sauti|simamisha|tuma)(?!\w)|(je )?(unaweza|waweza) (ku)?(fungua|cheza|funga|tafuta|onyesha|zima|washa|ongeza|punguza|tuma)(?!\w))" +
+            @"|^((obre|posa(-me)?|tanca|mostra'?m|atura|reprodueix|engega|a?puja (el )?(volum|so|música)|a?baixa (el )?(volum|so|música))(?!\w)|(em )?(pots|podries) (obrir|posar|tancar|cercar|buscar|mostrar|aturar|reproduir|apujar|abaixar|engegar|apagar)(?!\w))" +
+            @"|^((otvori|pusti|zatvori|pronađi|pronadji|nađi|nadji|traži|trazi|pokaži|pokazi|pojačaj|pojacaj|utišaj|utisaj|ugasi|upali|zaustavi|pošalji|posalji)(?!\w)|(možeš li|mozes li|da li možeš|da li mozes|možete li|mozete li) (mi )?(da )?(otvoriš|otvoris|otvoriti|pustiš|pustis|pustiti|zatvoriš|zatvoris|zatvoriti|pronađeš|pronadjes|pronaći|pronaci|pokažeš|pokazes|pokazati|pojačaš|pojacas|pojačati|pojacati|ugasiš|ugasis|ugasiti|upališ|upalis|upaliti)(?!\w))" +
+            @"|^((отвори|пусти|затвори|пронађи|нађи|тражи|покажи|појачај|утишај|угаси|упали|заустави|пошаљи)(?!\w)|(можеш ли|да ли можеш|можете ли) (ми )?(да )?(отвориш|пустиш|затвориш|пронађеш|нађеш|покажеш|појачаш|угасиш|упалиш)(?!\w))" +
+            // Estonian, Latvian, Lithuanian, Slovenian, Bulgarian and Maltese.
+            @"|^((ava(?! (is|was|said|says|and|has|had|loves|likes|wants|thinks)\b)|mängi|sulge|otsi|näita|peata|pane|keera|käivita|saada)(?!\w)|(kas )?(sa |te )?(saad|saaksid|võiksid|saate|saaksite|võiksite) (palun )?(avada|mängida|sulgeda|otsida|näidata|panna|käivitada)(?!\w))" +
+            @"|^((atver|atskaņo|aizver|meklē|parādi|apturi|ieslēdz|izslēdz|uzliec|palaid)(?!\w)|(vai )?(tu )?(vari|varētu|varat) (lūdzu )?(atvērt|atskaņot|aizvērt|meklēt|parādīt|ieslēgt|izslēgt|uzlikt|palaist)(?!\w))" +
+            @"|^((atidaryk|paleisk|uždaryk|ieškok|surask|parodyk|sustabdyk|įjunk|išjunk|pagarsink|patylink)(?!\w)|(ar )?(gali|galėtum|galite|galėtumėte) (atidaryti|paleisti|uždaryti|ieškoti|surasti|parodyti|sustabdyti|įjungti|išjungti)(?!\w))" +
+            @"|^((odpri|predvajaj|zapri|poišči|išči|ustavi|vklopi|izklopi|zaženi|pošlji)(?!\w)|(ali |a )?(mi )?(lahko|bi lahko) (mi )?(odpreš|predvajaš|zapreš|poiščeš|pokažeš|vklopiš|izklopiš|zaženeš|odprl|odprla|predvajal|predvajala)(?!\w))" +
+            @"|^((пусни|намери|потърси|спри|увеличи|намали|изключи|прати)(?!\w)|(можеш ли|би ли могла|би ли могъл|може ли) (да )?(отвориш|пуснеш|затвориш|намериш|потърсиш|покажеш|спреш|включиш|изключиш)(?!\w))" +
+            @"|^((iftaħ|iftah|doqq|agħlaq|aghlaq|fittex|urini|waqqaf|ixgħel|ixghel|itfi|għolli|gholli|baxxi)(?!\w)|(tista'?|tistax|tistgħu) (tiftaħ|tiftah|iddoqq|tagħlaq|taghlaq|tfittex|turini|twaqqaf|tixgħel|titfi)(?!\w))" +
+            // Galician, Basque, Afrikaans, Icelandic, Albanian, Irish and Welsh. Words that are everyday chat in another of her
+            // languages, like Portuguese "agora", Vietnamese "cau" or Spanish "vale", are left out.
+            @"|^((pecha(me|o|a|lo|la)?|am[oó]sa(me)?)(?!\w)|(podes|poder[ií]as) (abrir|po[ñn]er|pechar|buscar|amosar|reproducir|tocar)(?!\w))" +
+            @"|^(ireki|itxi|bilatu|erakutsi|gelditu|bidali|erreproduzitu|piztu|itzali)(?!\w)|(^|\s)(ireki|itxi|bilatu|erakutsi|gelditu|bidali|erreproduzitu|piztu|itzali)( ezazu| ezazue| mesedez)?$|(ireki|itxi|bilatu|erakutsi|gelditu|bidali|piztu|itzali) (dezakezu|ahal duzu|al duzu)(?!\w)" +
+            @"|^((soek|wys my|stuur)(?!\w)|maak .+ (oop|toe)$|sit (die|dit|hom|haar)( .+)? (aan|af|harder|sagter)$|(kan|sal) jy\b.*\b(oopmaak|toemaak|speel|soek|wys|stuur|aansit|afsit)(?!\w))" +
+            @"|^((opnaðu|opnadu|spilaðu|spiladu|lokaðu|lokadu|leitaðu|leitadu|sýndu|syndu|stöðvaðu|stodvadu|stoppaðu|stoppadu|sendu|hækkaðu|haekkadu|lækkaðu|laekkadu|kveiktu|slökktu|slokktu|settu)(?!\w)|(geturðu|geturdu|gætirðu|gaetirdu)\b.*\b(opnað|opnad|spilað|spilad|lokað|lokad|leitað|leitad|sýnt|synt|sett|kveikt|slökkt)(?!\w)|viltu (opna|loka|leita|sýna|syna|setja|kveikja|slökkva|slokkva|senda)(?!\w))" +
+            @"|^((hape|luaj|mbyll|mbylle|kërko|kerko|më trego|me trego|ndalo|dërgo|dergo|ndiz)(?!\w)|(a )?(mund|mundesh|mundeni) (të |te |ta |t'i )?(hapësh|hapesh|luash|mbyllësh|mbyllesh|kërkosh|kerkosh|tregosh|ndezësh|ndezesh|dërgosh|dergosh)(?!\w))" +
+            @"|^((oscail|seinn|dún|cuardaigh|taispeáin|taispeain|seol|ardaigh|ísligh|isligh|múch)(?!\w)|an (féidir|feidir) leat\b.*\b(oscailt|sheinm|sheinnt|chasadh|dhúnadh|dhunadh|chuardach|thaispeáint|thaispeaint|mhúchadh)(?!\w))" +
+            @"|^((agor|agorwch|chwarae|chwaraea|chwaraewch|caea|caewch|chwilia|chwiliwch|dangos|dangosa|dangoswch|stopia|anfon|anfona|anfonwch|diffodd|diffodda)(?!\w)|(alli di|allet ti|wnei di|fedri di|gallwch chi|wnewch chi) (plîs |plis )?(agor|chwarae|cau|chwilio|dangos|anfon|diffodd|troi)(?!\w))" +
+            // Belarusian and Macedonian; Azerbaijani, Uzbek, Kazakh, Mongolian and Nepali put the verb last.
+            @"|^(адкрый|ўключы|уключы|прайграй|пастаў|зачыні|знайдзі|пакажы|спыні|выключы|дашлі|зрабі (гучней|цішэй)|(можаш|можаце|ці можаш|ці можаце) (ты |вы )?(адкрыць|уключыць|ўключыць|прайграць|паставіць|зачыніць|знайсці|паказаць|выключыць))(?!\w)" +
+            @"|^((пушти|најди|пребарај|запри|стопирај|испрати|засили|вклучи|исклучи)(?!\w)|(можеш ли|дали можеш|може ли) (да )?(го |ја |ги )?(отвориш|пуштиш|затвориш|најдеш|пребараш|покажеш|вклучиш|исклучиш|испратиш)(?!\w))" +
+            @"|(^|\s)(aç(?<!(karnım|karnımız|karnın)( (çok|aşırı|acayip|cidden|bayağı|baya|hala|hâlâ|de))? aç)(?<!^((ben|biz)( de)?( (çok|aşırı|acayip|cidden|bayağı|baya|hala|hâlâ))?|çok|aşırı|acayip|cidden|bayağı|baya|hala|hâlâ) aç)|bağla|oxut|qoş|axtar|göstər|dayandır|göndər|açarsan|aça bilərsən|bağlaya bilərsən|səsi artır|səsi azalt)( zəhmət olmasa)?$" +
+            @"|ni (och|yop)( iltimos)?$|(^|\s)(oching|ochib ber|yoping|qo['ʻ‘`]?y|qo['ʻ‘`]?ying|ijro et|ijro eting|qidir|qidiring|ko['ʻ‘`]?rsat|ko['ʻ‘`]?rsating|to['ʻ‘`]?xtat|to['ʻ‘`]?xtating|yubor|yuboring)( iltimos)?$" +
+            @"|(^|\s)(аш(?<!(қарным|қарнымыз|қарның|мен|біз|өте|қатты|әбден|тым) аш)|ашшы|ашыңыз|ашып бер|жап|жапшы|жабыңыз|қос|қосшы|қосыңыз|ойнат|ойнатшы|ізде|іздеші|іздеңіз|көрсет|көрсетші|көрсетіңіз|тоқтат|тоқтатшы|жібер|жіберші)( өтінемін)?$" +
+            @"|(^|\s)(нээ|нээгээч|нээж өг|нээнэ үү|хаагаач|тоглуул|тоглуулаач|тоглуулна уу|хайгаач|хайна уу|харуул|харуулаач|харуулна уу|зогсоо|зогсоогоорой|зогсооно уу|илгээ|илгээгээч|илгээнэ үү|асаа|асаагаач|асаана уу|унтраа|унтраагаач|унтраана уу)( л| дээ)?$" +
+            @"|(^|\s)(खोल|खोलिदेऊ|खोलिदिनुहोस्|खोल्नुहोस्|बजाऊ|बजाइदेऊ|बजाउनुहोस्|चलाऊ|चलाइदेऊ|चलाउनुहोस्|बन्द गर|बन्द गरिदेऊ|बन्द गर्नुहोस्|खोज|खोजिदेऊ|खोज्नुहोस्|देखाऊ|देखाइदेऊ|देखाउनुहोस्|रोक|रोक्नुहोस्|पठाऊ|पठाइदेऊ|पठाउनुहोस्)( न| है| प्लिज)?[।.!?\s]*$" +
+            // Javanese, Hausa, Yoruba, Igbo, Zulu, Xhosa and Somali.
+            @"|^((tulung|mbok|coba) )*(bukak(en|na|ke)?|bukaen|puter(en|na|ke)|setel(en|na|ke)?|tutupen|tutupna|golek(na|ke|ana)|goleki|tuduh(na|ke)|mandheg(na|ke)|kirim(na|ke|en))(?!\w)" +
+            @"|^((don|dan) allah )?((ka|ki|ku) )?(buɗe|kunna|rufe|nuna min|tsayar|dakatar|kashe)(?!\w)|^(don|dan) allah ((ka|ki|ku) )?bude(?!\w)|\b(za ka iya|za ki iya|kana iya|kina iya) (buɗe|bude|kunna|rufe|nemo|nuna|aika|kashe)(?!\w)" +
+            @"|^((jọ̀wọ́|jọwọ|jowo) )?(ṣí|ṣi|ṣe orin|kọ orin|wá|fi hàn mí|fi han mi|dá dúró|fi ránṣẹ́|fi ranse)(?!\w)" +
+            @"|^(biko )?(meghee|mepee|kpọọ|kpoo|mechie|chọọ|gosi m|kwụsị|kwusi|ziga|gbanye|gbanyụọ|gbanyuo)(?!\w)" +
+            @"|^((ngicela|ndicela|sicela) )?(vula|uvule|dlala|udlale|vala|uvale|sesha|usesha|khombisa|ukhombise|thumela|uthumele|khangela|ukhangele|bonisa|ubonise|yeka)(?!\w)|\bunga(vula|dlala|vala|sesha|khombisa|thumela|khangela|bonisa)(?!\w)" +
+            // Somali puts the verb last, after a word ending in an article like "-ga" ("Spotify-ga fur"), so English "your fur" stays chat.
+            @"|^fadlan\b.*\b(fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami|tus|dir)$|(-(ka|ga|ha|ta|da)|\b(heesta|heesaha|muusigga|muusikada|fiidiyowga|barnaamijka|codka)) (fur|fura|shid|shida|xir|xidh|raadi|raadiya|jooji|dami)( fadlan)?$|\bi tus( fadlan)?$" +
+            // Amharic puts the verb last too, and ends a sentence with "።" or asks with "፧".
+            @"|(^|\s)(ክፈት|ክፈቺ|ክፈቱ|ክፈትልኝ|ክፈቺልኝ|ክፈቱልኝ|አጫውት|አጫውቺ|አጫውቱ|አጫውትልኝ|አጫውቺልኝ|አጫውቱልኝ|ዝጋ|ዝጊ|ዝጉ|ዝጋልኝ|ዝጊልኝ|ዝጉልኝ|ፈልግ|ፈልጊ|ፈልጉ|ፈልግልኝ|ፈልጊልኝ|ፈልጉልኝ|አሳየኝ|አሳይኝ|አሳዩኝ|አቁም|አቁሚ|አቁሙ|ላክ|ላኪ|ላኩ|ላክልኝ|ላኪልኝ|ላኩልኝ)( እባክህ| እባክሽ| እባካችሁ| እባክዎ)?[።፧!?.\s]*$" +
+            // Burmese puts the verb last too. ပြ (show) is left out, since it also ends ပြောပြ (tell) and ရှင်းပြ (explain),
+            // and ပါးစပ်ပိတ် (shut your mouth) is chat. So is ရင်ဖွင့် (opening one's heart), but အရင် ("first") and the "if"
+            // endings ပြီးရင် and ဆိုရင် come before real commands.
+            @"|(?<!(ပါးစပ်|ပါးစပ်ကို|နှုတ်|ငိုတာ|ငိုနေတာ|ရယ်တာ|အော်တာ) ?)(?<!(?<!အ|ပြီး|ဆို)ရင်)(ဖွင့်(ပြ)?|ပိတ်|ရှာဖွေ|ရှာ|ပို့|ရပ်|ကျော်)" + BurmeseAsk + @"|အသံ.*(ချဲ့|လျှော့|တိုး)" + BurmeseAsk +
+            @"|(ဖွင့်|ပိတ်|ရှာ|ပို့|ရပ်|ကျော်)(လိုက်)?ပေး(နိုင်မလား|နိုင်လား|မလား)|^(ဒါ(က)? ?ဘာ ?သီချင်း|(ဒီ ?|အခု ?(ဖွင့်နေတဲ့ ?)?)သီချင်း(က)? ?(ဘာ ?သီချင်း|ဘာ|နာမည် ?ဘာ))(လဲ|လည်း)" +
+            @"|(မျက်နှာပြင်|စခရင်|screen)( ?ကို)? ?ကြည့်" + BurmeseAsk + @"|^(မင်း|နင်|သင်|ရှင်)? ?ဘာ ?(တွေ)? ?မြင်(ရ)?(လဲ|သလဲ)" +
+            // Georgian and Armenian put the verb first or last, so their command forms match anywhere, as whole words.
+            @"|(^|\s)(გახსენი|გახსენით|ჩართე|ჩართეთ|დაუკარი|დაუკარით|დახურე|დახურეთ|გამორთე|გამორთეთ|მოძებნე|მოძებნეთ|მოიძიე|მაჩვენე|მაჩვენეთ|გააჩერე|გააჩერეთ|გაგზავნე|გაგზავნეთ|აუწიე|დაუწიე)(?!\w)|ეს რა სიმღერაა|(ეკრანს|ეკრანზე) (შეხედე|დახედე|ნახე)|^რას ხედავ" +
+            @"|(^|\s)(բացիր|բացեք|միացրու|միացրեք|նվագիր|նվագեք|փակիր|փակեք|անջատիր|անջատեք|որոնիր|որոնեք|գտիր|գտեք|փնտրիր|ցույց տուր|ցույց տվեք|կանգնեցրու|դադարեցրու|ուղարկիր|ուղարկեք|բարձրացրու|իջեցրու)(?!\w)|(^|\s)(սա )?ինչ երգ է( սա| հիմա| նվագում| հնչում| միացված)*[.!?\s]*$|նայիր (իմ )?էկրան|^ինչ ես տեսնում" +
+            // Hebrew, Urdu and Persian. Urdu and Persian put the verb last.
+            @"|^(בבקשה )?(פתח|פתחי|תפתח|תפתחי|נגן|נגני|תנגן|תנגני|סגור(?= )|סגרי|תסגור|תסגרי|חפש|חפשי|תחפש|תחפשי|תראה לי|תראי לי|הראה לי|הראי לי|עצור|עצרי|תעצור|תעצרי|הגבר|תגביר|תגבירי|הנמך|תנמיך|תנמיכי|שים(?! לב)|שימי(?! לב)|תשים|תשימי|הפעל|הפעילי|תפעיל|תפעילי|כבה|כבי|תכבה|תכבי|שלח|שלחי|תשלח|תשלחי)(?!\w)|^(את יכולה|אתה יכול|תוכלי|תוכל|אפשר) (בבקשה )?ל(פתוח|נגן|סגור|חפש|הראות|הפעיל|כבות|שים|הגביר|הנמיך|שלוח)(?!\w)" +
+            @"|(کھولو|کھول دو|کھولیں|کھول دیں|چلاؤ|چلا دو|چلائیں|چلا دیں|بجاؤ|بجا دو|بجائیں|(?<!(بکواس|ڈرامہ|ڈرامے|مذاق|بولنا|رونا|چلانا|نخرے) )بند (کرو|کر دو|کریں|کر دیں)|ڈھونڈو|ڈھونڈ دو|تلاش کرو|تلاش کریں|دکھاؤ|دکھا دو|دکھائیں|روکو|روک دو|روکیں|بڑھاؤ|بڑھا دو|کم کرو|کم کر دو|بھیجو|بھیج دو)( نا| پلیز| پلز)?[۔.!?؟\s]*$|(کھول|چلا|بجا|بند کر|دکھا|ڈھونڈ) (سکتے|سکتی|سکو) (ہو|ہیں|گے|گی)|کون سا گانا" +
+            @"|(باز کن|بازش کن|باز کنید|پخش کن|پخشش کن|پخش کنید|بذار|بزار|بگذار|بذارش|ببند|ببندش|ببندید|جستجو کن|سرچ کن|بگرد|پیدا کن|نشون بده|نشونم بده|نشان بده|نشانم بده|متوقف کن|قطع کن|زیاد کن|زیادش کن|کم کن|کمش کن|بفرست|اجرا کن)( لطفا| لطفاً| دیگه| پلیز)?[.!?؟\s]*$|^(لطفا |لطفاً )?(می[\u200C ]?(تونی|توانی)|می[\u200C ]?شه) .*(باز کنی|بازش کنی|پخش کنی|بذاری|بزاری|بگذاری|ببندی|جستجو کنی|بگردی|پیدا کنی|نشون بدی|نشان بدهی|اجرا کنی|بفرستی)" +
+            // Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada and Malayalam put the verb last too, and English verbs
+            // with Tamil, Telugu, Kannada or Malayalam endings ("open pannu") are common.
+            @"|(^|\s)(খোলো|খুলে দাও|খুলুন|খোল|চালাও|চালিয়ে দাও|চালান|চালু করো|চালু করে দাও|বাজাও|বাজিয়ে দাও|বাজান|বন্ধ করো|বন্ধ করে দাও|বন্ধ করুন|বন্ধ কর|খোঁজো|খুঁজে দাও|খুঁজুন|দেখাও|দেখিয়ে দাও|দেখান|থামাও|থামিয়ে দাও|থামান|পাঠাও|পাঠিয়ে দাও|পাঠান|বাড়াও|বাড়িয়ে দাও|কমাও|কমিয়ে দাও)( না| প্লিজ| প্লীজ)?[।.!?\s]*$|(খুলতে|চালাতে|বাজাতে|বন্ধ করতে|দেখাতে|খুঁজতে) (পারবে|পারবেন|পারো|পারেন|পারবি)" +
+            @"|(^|\s)(उघड|उघडा|उघडून दे|लाव|लावा|लावून दे|चालू कर|चालू करा|बंद कर|बंद करा|बंद करून दे|शोधा|शोधून दे|दाखव|दाखवा|थांबव|थांबवा|पाठव|पाठवा|वाढव|वाढवा|कमी कर|कमी करा)( ना| प्लीज)?[।.!?\s]*$|(उघडू|लावू|चालू करू|बंद करू|दाखवू|शोधू) (शकतेस|शकतोस|शकता|शकाल) का" +
+            @"|(^|\s)(ખોલ|ખોલો|ખોલી દે|ખોલી દો|વગાડ|વગાડો|વગાડી દે|વગાડી દો|ચાલુ કર|ચાલુ કરો|બંધ કર|બંધ કરો|બંધ કરી દે|બંધ કરી દો|શોધ|શોધો|શોધી દે|બતાવ|બતાવો|રોકો|મોકલ|મોકલો|વધારો|ઘટાડો)( ને| પ્લીઝ)?[.!?\s]*$|(ખોલી|વગાડી|ચાલુ કરી|બંધ કરી|બતાવી|શોધી) (શકે|શકીશ|શકો|શકશો)" +
+            @"|(^|\s)(ਖੋਲ੍ਹੋ|ਖੋਲੋ|ਖੋਲ੍ਹ ਦਿਓ|ਖੋਲ੍ਹ ਦੇ|ਖੋਲ ਦਿਓ|ਖੋਲ ਦੇ|ਚਲਾਓ|ਚਲਾ ਦਿਓ|ਚਲਾ ਦੇ|ਵਜਾਓ|ਵਜਾ ਦਿਓ|ਵਜਾ ਦੇ|ਬੰਦ ਕਰੋ|ਬੰਦ ਕਰ ਦਿਓ|ਬੰਦ ਕਰ ਦੇ|ਲੱਭੋ|ਲੱਭ ਦਿਓ|ਦਿਖਾਓ|ਦਿਖਾ ਦਿਓ|ਰੋਕੋ|ਰੋਕ ਦਿਓ|ਭੇਜੋ|ਭੇਜ ਦਿਓ|ਵਧਾਓ|ਘਟਾਓ)( ਨਾ| ਪਲੀਜ਼| ਪਲੀਜ)?[।.!?\s]*$|(ਖੋਲ੍ਹ|ਖੋਲ|ਚਲਾ|ਵਜਾ|ਬੰਦ ਕਰ|ਦਿਖਾ|ਲੱਭ) (ਸਕਦੇ|ਸਕਦੀ|ਸਕੋਗੇ|ਸਕੋਗੀ)" +
+            @"|(^|\s)(திற|திறங்க|திறக்கவும்|திறந்து விடு|இயக்கு|இயக்குங்க|இயக்கவும்|போடு|போடுங்க|போட்டு விடு|மூடு|மூடுங்க|மூடவும்|மூடி விடு|தேடு|தேடுங்க|தேடவும்|காட்டு|காட்டுங்க|காட்டவும்|நிறுத்து|நிறுத்துங்க|நிறுத்தவும்|அனுப்பு|அனுப்புங்க|அனுப்பவும்|(ஓபன்|ஓப்பன்|ப்ளே|பிளே|க்ளோஸ்|சர்ச்|ஸ்டாப்) (பண்ணு|பண்ணுங்க|செய்|செய்யவும்))( ப்ளீஸ்| பிளீஸ்)?[.!?\s]*$|(திறக்க|இயக்க|போட|மூட|தேட|காட்ட) முடியுமா" +
+            @"|(^|\s)(తెరువు|తెరవండి|తెరిచి పెట్టు|ప్లే చేయి|ప్లే చెయ్యి|ప్లే చేయండి|పెట్టు|పెట్టండి|మూసివేయి|మూసేయి|మూసివేయండి|వెతుకు|వెతకండి|చూపించు|చూపించండి|ఆపు|ఆపండి|పంపు|పంపండి|పెంచు|పెంచండి|తగ్గించు|తగ్గించండి|(ఓపెన్|క్లోజ్|సెర్చ్|స్టార్ట్|స్టాప్) (చేయి|చెయ్యి|చేయండి))( ప్లీజ్)?[.!?\s]*$|(తెరవ|ప్లే చేయ|పెట్ట|మూసివేయ|వెతక|చూపించ)గల(వా|రా)" +
+            @"|(^|\s)(ತೆರೆ|ತೆರೆಯಿರಿ|ತೆರೆದು ಬಿಡು|ಪ್ಲೇ ಮಾಡು|ಪ್ಲೇ ಮಾಡಿ|ಹಾಕು|ಹಾಕಿ|ಮುಚ್ಚು|ಮುಚ್ಚಿ|ಹುಡುಕು|ಹುಡುಕಿ|ತೋರಿಸು|ತೋರಿಸಿ|ನಿಲ್ಲಿಸು|ನಿಲ್ಲಿಸಿ|ಕಳುಹಿಸು|ಕಳುಹಿಸಿ|ಹೆಚ್ಚಿಸು|ಹೆಚ್ಚಿಸಿ|ಕಡಿಮೆ ಮಾಡು|ಕಡಿಮೆ ಮಾಡಿ|(ಓಪನ್|ಕ್ಲೋಸ್|ಸರ್ಚ್|ಸ್ಟಾರ್ಟ್|ಸ್ಟಾಪ್) (ಮಾಡು|ಮಾಡಿ))( ಪ್ಲೀಸ್)?[.!?\s]*$|(ತೆರೆಯ|ಪ್ಲೇ ಮಾಡ|ಹಾಕ|ಮುಚ್ಚ|ಹುಡುಕ|ತೋರಿಸ)ಬಹುದಾ" +
+            @"|(^|\s)(തുറക്കൂ|തുറക്ക്|തുറന്നു തരൂ|പ്ലേ ചെയ്യൂ|പ്ലേ ചെയ്യ്|ഇടൂ|ഇട്|അടയ്ക്കൂ|അടയ്ക്ക്|അടച്ചു തരൂ|തിരയൂ|തിരയ്|തപ്പ്|കാണിക്കൂ|കാണിക്ക്|നിർത്തൂ|നിർത്ത്|അയയ്ക്കൂ|അയയ്ക്ക്|കൂട്ടൂ|കുറയ്ക്കൂ|കുറയ്ക്ക്|(ഓപ്പൺ|ക്ലോസ്|സെർച്ച്|സ്റ്റാർട്ട്|സ്റ്റോപ്പ്) (ചെയ്യൂ|ചെയ്യ്))( പ്ലീസ്)?[.!?\s]*$|(തുറക്ക|പ്ലേ ചെയ്യ|ഇട|അടയ്ക്ക|തിരയ|കാണിക്ക)ാമോ|(തുറക്കാൻ|പ്ലേ ചെയ്യാൻ|ഇടാൻ|അടയ്ക്കാൻ) പറ്റുമോ" +
+            @"|\b(open|play|close|search|start|stop|pause|skip) (pannu|pannunga|panni vidu|cheyyi|chey|cheyandi|cheyyandi|maadu|maadi|madu|madi|cheyyu|cheyy)( da| di| please| pls| plz)?[.!?\s]*$", RegexOptions.IgnoreCase);
 
         private static readonly Regex Errands = new Regex(
             @"^(send|dm|pm|reply to|respond to)\b(?!\s+(me|us|help)\b)|^(message|msg|text|ping) (?!(is|was|are|were|from|looks|said|says|me|us)\b)\w|^(post|tweet) (this|that|it|a|an|my|our|something|on|in|to)\b" +
@@ -156,6 +631,12 @@ namespace CapriDesktop
         internal static Func<string, string> Fetch = Download;
         internal static Func<List<OpenWindow>> Windows = ReadWindows;
         internal static Func<OpenWindow, string, bool> Steer = Apply;
+        // Why open windows couldn't be listed just now, or null. Mac and Linux say so when their window tool is missing.
+        internal static Func<string> Unlisted = delegate { return null; };
+        // False where she can't press keys yet (Mac and Linux), so a Discord shortcut says so before Discord comes to the front.
+        internal static bool Presses = true;
+        // A shortcut done another way, like a screenshot tool on Mac and Linux, returns what she did; null presses the keys.
+        internal static Func<string, string> Instead = delegate { return null; };
         internal static Func<string, bool> PressPlay = ClickPlay;
         internal static Func<string> NowPlaying = SpotifyTitle;
         internal static Func<string, string, string> Work = delegate { return "Using the mouse and keyboard isn't ready on this PC yet."; };
@@ -164,6 +645,13 @@ namespace CapriDesktop
         internal static Func<string, string> Hush = delegate(string text) { return text; };
         internal static Action<byte[]> Chord = PressChord;
         internal static Func<string, int, bool> Power = Switch;
+        // Puts her to sleep (true) or wakes her (false), and says how it went. Her window sets it.
+        internal static Func<bool, string> Nap = delegate { return "Couldn't nap just now."; };
+        // Moves her, or her Mainframe, and says how it went: an action like come_here, and which screen if they said, or for sit_on
+        // and lie_down the window they named. Her window sets it.
+        internal static Func<string, string, string> MoveSelf = delegate { return "Couldn't move just now."; };
+        // Plays one of her animations by name, or starts or stops her dance, and says how it went. Her window sets it.
+        internal static Func<string, string> Animate = delegate { return "Couldn't do that just now."; };
         private static readonly string[] Browsers = { "chrome", "msedge", "firefox", "brave", "opera", "vivaldi" };
         private static readonly string[] Shell = { "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd" };
         private delegate bool Visit(IntPtr window, IntPtr data);
@@ -209,10 +697,13 @@ namespace CapriDesktop
                 if (tool == "look_at_screen") return Look(args.Focus);
                 if (tool == "play_music") return PlayMusic(args.Song, args.App, args.Kind);
                 if (tool == "app_window") return Window(args.Name, args.Action);
-                if (tool == "use_computer") return string.IsNullOrWhiteSpace(args.Task) ? "Which job, choom?" : Safety.Stops(args.Task) != null ? "Not doing that, choom." : Work(args.Task.Trim(), args.Asked);
+                if (tool == "use_computer") return string.IsNullOrWhiteSpace(args.Task) ? "Which job, choom?" : Work(args.Task.Trim(), args.Asked);
                 if (tool == "shortcut") return Shortcut(args.Name);
                 if (tool == "remember") return args.Action == "forget" ? Brain.Unnote(Theirs(args.Text)) : CallMe(args.Text) ?? Brain.Note(Theirs(args.Text));
                 if (tool == "power") return Turn(args.Action, args.Minutes);
+                if (tool == "nap") return Nap(args.Action != "wake");
+                if (tool == "move_yourself") return MoveSelf(args.Action, args.Action == "sit_on" || args.Action == "lie_down" ? args.Window : args.Screen);
+                if (tool == "animate") return Animate(args.Name);
                 return "There's no tool called " + tool + ".";
             }
             catch (Exception error) { return "That didn't work: " + error.Message; }
@@ -281,8 +772,29 @@ namespace CapriDesktop
         }
 
         internal const string SayPlease = "Say please.";
-        private static readonly Regex Polite = new Regex(@"\b(please|pls|plz|pleas|thank you|thanks|por favor|porfa|porfis|gracias|merci|s'il (te|vous) pla[iî]t|stp|svp)\b", RegexOptions.IgnoreCase);
-        private static readonly Regex JustPlease = new Regex(@"^\W*((ok|okay|fine|sorry|vale|perd[oó]n|d[ée]sol[ée])\W+)?(pretty\s+)?(please+|pls|plz|pleas+e*|por favor|porfa|porfis|s'il (te|vous) pla[iî]t|stp|svp)(\s+capri)?\W*$", RegexOptions.IgnoreCase);
+        // Please and thanks in all her languages, so "öffne bitte Spotify" never gets Say please and "bitte" runs what was held.
+        // Chinese, Japanese, Korean, Thai and the Indian scripts have no word breaks a \b can see, so they match anywhere.
+        private static readonly Regex Polite = new Regex(@"\b(please|pls|plz|pleas|thank you|thanks|por favor|porfavor|porfa|porfis|gracias|merci|s'il (te|vous) pla[iî]t|sil (te|vous) pla[iî]t|stp|svp" +
+            @"|bitte|danke|per favore|perfavore|per piacere|grazie|pfv|obrigad[oa]|si us plau|sisplau|siusplau|gr[àa]cies|grazas|mesedez|eskerrik asko|alsjeblieft|alstublieft|a\.?u\.?b|dank je|dankjewel|bedankt|asseblief|dankie" +
+            @"|snälla|snalla|tack|vær så snill|vennligst|venligst|takk|tak|vinsamlegast|ole hyvä|ole kiltti|kiitos|palun|aitäh|aitah|lūdzu|ludzu|paldies|prašau|prasau|ačiū|aciu" +
+            @"|proszę|prosze|dzięki|dzieki|dziękuję|dziekuje|prosím|prosim|díky|diky|děkuji|dekuji|ďakujem|dakujem|kérlek|kerlek|légyszi|legyszi|köszi|koszi|köszönöm|hvala|molim|молим|хвала" +
+            @"|të lutem|te lutem|ju lutem|faleminderit|te rog|vă rog|va rog|mersi|mulțumesc|multumesc|le do thoil|go raibh maith agat|plîs|plis|os gwelwch yn dda|diolch|jekk jogħġbok|jekk joghgbok|grazzi" +
+            @"|lütfen|lutfen|teşekkürler|tesekkurler|sağ ?ol|sag ?ol|zəhmət olmasa|xahiş edirəm|təşəkkürlər|iltimos|rahmat" +
+            @"|пожалуйста|пожалуста|плиз|плз|пж|спасибо|будь ласка|дякую|калі ласка|дзякуй|моля|благодаря|мерси|те молам|ве молам|фала|благодарам|өтінемін|рахмет|гуйя|баярлалаа|παρακαλώ|παρακαλω|ευχαριστώ|ευχαριστω" +
+            @"|làm ơn|lam on|cảm ơn|cám ơn|cam on|tolong|mohon|terima kasih|makasih|sila|tulung|mangga|matur nuwun|suwun|pakiusap|paki\w*|salamat|tafadhali|asante|don allah|dan allah|na gode" +
+            @"|jọ̀wọ́|jọwọ|jowo|o ṣeun|o seun|biko|daalụ|daalu|ngiyacela|ngicela|sicela|ngiyabonga|siyabonga|ndiyacela|ndicela|enkosi|fadlan|mahadsanid" +
+            @"|من فضلك|لو سمحت|رجاء|رجاءً|الرجاء|شكرا|شكراً|براہ کرم|مہربانی|پلیز|شکریہ|لطفا|لطفاً|ممنون|مرسی|בבקשה|תודה|እባክህ|እባክሽ|እባካችሁ|እባክዎ|አመሰግናለሁ|እናመሰግናለን|გთხოვ|გთხოვთ|მადლობა|გმადლობ|გმადლობთ|խնդրում եմ|խնդրեմ|շնորհակալություն|շնորհակալ եմ|մերսի)\b" +
+            @"|请|請|麻烦|麻煩|拜托|拜託|谢谢|謝謝|ください|下さい|お願い|おねがい|ありがとう|주세요|부탁|제발|고마워|감사|กรุณา|รบกวน|ขอบคุณ|ກະລຸນາ|ຂອບໃຈ|សូម|អរគុណ|ကျေးဇူးပြု၍|ကျေးဇူးပြုပြီး|ကျေးဇူးတင်|ကျေးဇူးပဲ|ပါ(ဦး|ဥ\u102Eး|နော်)?[။၊!?.\s]*$" +
+            @"|कृपया|प्लीज़|प्लीज|प्लिज|धन्यवाद|शुक्रिया|দয়া করে|প্লিজ|প্লীজ|ধন্যবাদ|કૃપા કરીને|પ્લીઝ|આભાર|ਕਿਰਪਾ ਕਰਕੇ|ਪਲੀਜ਼|ਪਲੀਜ|ਧੰਨਵਾਦ" +
+            @"|தயவுசெய்து|ப்ளீஸ்|பிளீஸ்|நன்றி|దయచేసి|ప్లీజ్|ధన్యవాదాలు|ದಯವಿಟ್ಟು|ಪ್ಲೀಸ್|ಧನ್ಯವಾದ|ദയവായി|പ്ലീസ്|നന്ദി", RegexOptions.IgnoreCase);
+        private static readonly Regex JustPlease = new Regex(@"^\W*((ok|okay|fine|sorry|vale|perd[oó]n|d[ée]sol[ée])\W+)?(pretty\s+)?(please+|pls|plz|pleas+e*|por favor|porfavor|porfa|porfis|s'il (te|vous) pla[iî]t|sil (te|vous) pla[iî]t|stp|svp" +
+            @"|bitte( sehr| schön)?|per favore|perfavore|per piacere|pfv|si us plau|sisplau|siusplau|mesedez|alsjeblieft|alstublieft|a\.?u\.?b\.?|asseblief|snälla|snalla|vær så snill|vennligst|venligst|vinsamlegast|ole hyvä|ole kiltti|palun|lūdzu|ludzu|prašau|prasau" +
+            @"|proszę|prosze|prosím|prosim|kérlek|kerlek|légyszi|legyszi|molim( te| vas)?|молим( те)?|të lutem|te lutem|ju lutem|te rog|vă rog|va rog|le do thoil|plîs|plis|os gwelwch yn dda|jekk jogħġbok|jekk joghgbok" +
+            @"|lütfen|lutfen|zəhmət olmasa|xahiş edirəm|iltimos|пожалуйста|пожалуста|плиз|плз|пж|будь ласка|калі ласка|моля|те молам|ве молам|өтінемін|гуйя|παρακαλώ|παρακαλω" +
+            @"|làm ơn|lam on|tolong|mohon|sila|tulung|mangga|pakiusap|tafadhali|don allah|dan allah|jọ̀wọ́|jọwọ|jowo|biko|ngiyacela|ngicela|sicela|ndiyacela|ndicela|fadlan" +
+            @"|请|請|拜托|拜託|お願い(します)?|おねがい(します)?|ください|부탁(해|해요|합니다)|제발|กรุณา|ขอร้อง|ກະລຸນາ|សូម(មេត្តា)?|ကျေးဇူးပြု၍|ကျေးဇူးပြုပြီး" +
+            @"|कृपया|प्लीज़|प्लीज|प्लिज|দয়া করে|প্লিজ|প্লীজ|કૃપા કરીને|પ્લીઝ|ਕਿਰਪਾ ਕਰਕੇ|ਪਲੀਜ਼|ਪਲੀਜ|தயவுசெய்து|ப்ளீஸ்|பிளீஸ்|దయచేసి|ప్లీజ్|ದಯವಿಟ್ಟು|ಪ್ಲೀಸ್|ദയവായി|പ്ലീസ്" +
+            @"|من فضلك|لو سمحت|رجاء|رجاءً|الرجاء|براہ کرم|پلیز|لطفا|لطفاً|בבקשה|እባክህ|እባክሽ|እባካችሁ|እባክዎ|გთხოვ|გთხოვთ|խնդրում եմ|խնդրեմ)(\s+capri)?\W*$", RegexOptions.IgnoreCase);
         private static readonly Random Dice = new Random();
         internal static Func<int> PleaseRoll = delegate { lock (Dice) return Dice.Next(10); };
         private static string heldForPlease;
@@ -302,9 +814,10 @@ namespace CapriDesktop
         internal static bool Wants(string said)
         {
             if (Regex.IsMatch(said ?? "", @"\b(please|pls|plz|stp)\s*[.!?]*$", RegexOptions.IgnoreCase) && Site(Asked(said))) return true;
-            foreach (string part in Regex.Split(said ?? "", @"[,;!?]\s*|\.\s+"))
+            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？。．،؟।።፣፧။၊։՝]\s*|\.\s+"))
             {
-                string text = Asked(part);
+                // Cleaned up before and after, so the idioms are found however they're typed.
+                string text = Asked(WithoutMouthOrEyes(Asked(part)));
                 if (!Chatter.IsMatch(text) && Asks.IsMatch(text)) return true;
             }
             return false;
@@ -314,7 +827,7 @@ namespace CapriDesktop
         {
             string text = Asked(said);
             if (calls.Exists(call => call.Key == "use_computer" || call.Key == "look_at_screen" || call.Key == "media" || call.Key == "play_music")) return;
-            if (Wants(said) && ((Errand(said) && !calls.Exists(call => call.Key == "shortcut" || call.Key == "remember")) || Regex.IsMatch(text, @"\s(and|then|&)\s+(then\s+)?(\w+\s+)?(search|look|type|click|go|make|create|write|find|open|sign|log|send|start|join|watch|check|put|add|draw|set|turn|say|tell|message|text|dm|reply|post|ask|paste|share|ping)\b", RegexOptions.IgnoreCase)))
+            if (Wants(said) && ((Errand(said) && !calls.Exists(call => call.Key == "shortcut" || call.Key == "remember")) || Regex.IsMatch(text, @"\s(and|then|&)\s+(then\s+)?(\w+\s+)?(search|look|type|click|go|make|create|write|find|open|sign|log|send|start|join|watch|check|put|add|draw|set|turn|say|tell|message|text|dm|reply|post|ask|paste|share|ping|install|uninstall|reinstall|download|upload|update|upgrade)\b", RegexOptions.IgnoreCase)))
             {
                 calls.Clear();
                 calls.Add(new KeyValuePair<string, ToolArguments>("use_computer", new ToolArguments { Task = text }));
@@ -336,7 +849,7 @@ namespace CapriDesktop
         {
             string text = Asked(said);
             string plain = Regex.Replace(text, @"^(do|did) (you|u) (know|have any idea)\b|\byou know\b|^(tell|show|get|find) me\b|\b(near me|where i (am|live)|in my (area|city|town|suburb))\b", "", RegexOptions.IgnoreCase);
-            if (text.Length < 4 || !Question.IsMatch((said ?? "").Trim()) || !Unknown.IsMatch((reply ?? "").Replace('’', '\'')) || Regex.IsMatch(plain, @"\b(screen|song|playing|track|you|your|yourself|u|ur|capri|me|my|i|i'm|im)\b", RegexOptions.IgnoreCase) || Regex.IsMatch(reply ?? "", @"\bscreen\b", RegexOptions.IgnoreCase) || Safety.Screen(text) != null) return null;
+            if (text.Length < 4 || !Question.IsMatch((said ?? "").Trim()) || !Unknown.IsMatch((reply ?? "").Replace('’', '\'')) || Regex.IsMatch(plain, @"\b(screen|song|playing|track|you|your|yourself|u|ur|capri|me|my|i|i'm|im)\b", RegexOptions.IgnoreCase) || Regex.IsMatch(reply ?? "", @"\bscreen\b", RegexOptions.IgnoreCase)) return null;
             return new ToolArguments { Site = "google", Search = text };
         }
 
@@ -354,6 +867,9 @@ namespace CapriDesktop
             @"|^((sure|ok|okay|alright|bet|got it|on it|say less|yessir+|yezzir+)[,.!\s—–-]+)?((choom|chooms)[,.!\s—–-]+)?(opening|launching|loading|pulling up|bringing up|firing up|booting up|heading to|searching|clicking|typing|closing|switching|playing|putting on|queuing|queueing|blasting|spinning|muting|unmuting|deafening|sending|messaging|texting|dming|replying|posting|hanging up|ending (the|your) call|leaving (the|your) (call|vc)|joining (the|your) (call|vc)|disconnecting)\b" +
             @"|\bi'?m\s+(now\s+)?(sending|messaging|texting|dming|opening(?!\s+up\b)|launching|closing|muting|unmuting|deafening|hanging up|posting|replying)\b" +
             @"|^\W*((ok|okay|sure|bet|alright)[,.!\s—–-]+)?(i'?m\s+)?on it\b|\b(call|vc|message|dm|text)\s+(ended|sent|posted)\b" +
+            // The same promise in her other big languages ("Otwieram YouTube!" with nothing opened, a Polish tester, 30 Oct).
+            @"|^\W*((ok|okej|okay|jasne|dobra|spoko|już|juz|sure|vale|claro|vamos|d'accord|ok[eé]|alles klar|klar|certo|va bene|хорошо|ладно|окей|сейчас)[,.!\s—–-]+)*((choom|chooms)[,.!\s—–-]+)?(otwieram|odpalam|włączam|wlaczam|uruchamiam|puszczam|zamykam|wysyłam|wysylam|otworzę|otworze|włączę|wlacze|odpalę|odpale|puszczę|puszcze|uruchomię|uruchomie|otworzyłam|otworzylam|włączyłam|wlaczylam|odpaliłam|odpalilam|puściłam|puscilam|uruchomiłam|uruchomilam" +
+            @"|abriendo|abro|pongo|reproduciendo|abr[ií]|puse|te abro|te pongo|j'ouvre|je lance|je mets|j'ai ouvert|j'ai lanc[ée]|ich [öo]ffne|ich starte|ich spiele|ich habe (\w+\s+){0,3}(ge[öo]ffnet|gestartet)|abrindo|vou abrir|abri|coloquei|apro|metto|ho aperto|открываю|включаю|запускаю|открыла|включила|запустила)(?!\w)" +
             @"|^((done|sorted|there|boom|bet|ok|okay|alright)[,.!\s—–-]+)?(i('ve| have)\s+)?(just\s+)?(opened|launched|closed|sent(?!\s+(you|u|ya)\b)|messaged|texted|dmed|dm'd|posted|replied|muted|unmuted|deafened|undeafened|hung up|(ended|left|joined) (the|your|this|that) (call|vc|meeting|server|channel))\b", RegexOptions.IgnoreCase);
 
         // "I'm sending you the biggest hug" is warmth, not a message she owes them. Warmth sent to someone by name still counts.
@@ -391,7 +907,7 @@ namespace CapriDesktop
 
         internal static bool Errand(string said)
         {
-            foreach (string part in Regex.Split(said ?? "", @"[,;!?]\s*|\.\s+"))
+            foreach (string part in Regex.Split(said ?? "", @"[,;!?，；！？。．،؟।።፣፧။၊։՝]\s*|\.\s+"))
             {
                 string text = Asked(part);
                 if (!Chatter.IsMatch(text) && Errands.IsMatch(text)) return true;
@@ -411,25 +927,293 @@ namespace CapriDesktop
             return text.Length > 1 && text.Length < 80 && Regex.IsMatch(answered ?? "", @"(?<!\w)" + Regex.Escape(text) + @"(?!\w)", RegexOptions.IgnoreCase);
         }
 
-        private static readonly Regex Lead = new Regex(@"^((hey|yo|ok|okay|salut|bonjour|oye|hola)[\s,]+)?(capri\b[\s,]*)?(((can|could|would|will) (you|u)|do (you|u)(?= mind)|please|pls|plz|stp|s'il te pla[iî]t|(est-ce que )?tu peux|peux-tu|pourrais-tu|(me )?puedes|(me )?podr[ií]as|por favor|porfa)\s+)*", RegexOptions.IgnoreCase);
+        private static readonly Regex Lead = new Regex(@"^((hey|yo|ok|okay|salut|bonjour|oye|hola)[\s,]+)?(capri\b[\s,，、]*)?(((can|could|would|will) (you|u)|do (you|u)(?= mind)|please|pls|plz|stp|s'il te pla[iî]t|sil te pla[iî]t|(est-ce que )?tu peux|peux-tu|pourrais-tu|(me )?puedes|(me )?podr[ií]as|por favor|porfavor|porfa|bitte|per favore|perfavore|per piacere|proszę|prosze|пожалуйста|будь ласка|lütfen|lutfen|alsjeblieft|alstublieft|tolong)\s+)*", RegexOptions.IgnoreCase);
         // "Check my screen", "can you see this?", "what game is this?": she takes a screenshot and looks, every time.
-        private static readonly Regex ScreenAsk = new Regex(@"^(?:(?:can|could|would|will|do|did) (?:you|u) )?(?:(?:take a |have a |quick )?(?:look|peek|peep|glance)(?: at)?|check(?: out)?|see|watch|read|scan|view|look over|screenshot)(?: on)? (?:my|the|our|this|ur|your) (?:screen|monitor|display|desktop|pc|computer|stream|window|tab)s?$|^(?:(?:can|could|would|will|do|did) (?:you|u) )?(?:see|look at|check(?: out)?|peep|watch) (?:this|that|what i'?m (?:doing|playing|watching|looking at|working on|seeing))$|^(?:look at|check out|check|peep|watch) (?:this|that)(?: (?:out|real quick|quick))?$|^(?:take a|have a|quick) (?:look|peek|glance)(?: at (?:this|that|it|my screen|the screen))?$|^what(?:'s| is) on (?:my|the|our) (?:screen|monitor|display|desktop|pc)\b|^what (?:do|can|did) (?:you|u) see\b|^what are (?:you|u) (?:seeing|looking at)$|^what am i (?:doing|playing|watching|looking at|working on|reading)(?: (?:on my (?:screen|pc|computer)|rn|right now|now))?$|^regardes? (?:mon [ée]cran|[çc]a)$|^(?:tu )?(?:peux )?(?:voir|vois) mon [ée]cran$|^tu vois (?:mon [ée]cran|[çc]a)$|^qu'est-ce que (?:je fais|tu vois)$|^qu'est-ce qu'il y a sur mon [ée]cran$", RegexOptions.IgnoreCase);
+        private static readonly Regex ScreenAsk = new Regex(@"^(?:(?:can|could|would|will|do|did) (?:you|u) )?(?:(?:take a |have a |quick )?(?:look|peek|peep|glance)(?: at)?|check(?: out)?|see|watch|read|scan|view|look over|screenshot)(?: on)? (?:my|the|our|this|ur|your) (?:screen|monitor|display|desktop|pc|computer|stream|window|tab)s?$|^(?:(?:can|could|would|will|do|did) (?:you|u) )?(?:see|look at|check(?: out)?|peep|watch) (?:this|that|what i'?m (?:doing|playing|watching|looking at|working on|seeing))$|^(?:look at|check out|check|peep|watch) (?:this|that)(?: (?:out|real quick|quick))?$|^(?:take a|have a|quick) (?:look|peek|glance)(?: at (?:this|that|it|my screen|the screen))?$|^what(?:'s| is) on (?:my|the|our) (?:screen|monitor|display|desktop|pc)\b|^what (?:do|can|did) (?:you|u) see\b|^what are (?:you|u) (?:seeing|looking at)$|^what am i (?:doing|playing|watching|looking at|working on|reading)(?: (?:on my (?:screen|pc|computer)|rn|right now|now))?$|^regardes? (?:mon [ée]cran|[çc]a)$|^(?:tu )?(?:peux )?(?:voir|vois) mon [ée]cran$|^tu vois (?:mon [ée]cran|[çc]a)$|^qu'est-ce que (?:je fais|tu vois)$|^qu'est-ce qu'il y a sur mon [ée]cran$|^(?:mira|revisa|checa|chequea|ve|ver|mirar|revisar|checar) (?:mi pantalla|esto|eso)$|^(?:ves|puedes ver) (?:mi pantalla|esto|eso)$|^qu[ée] (?:ves|estoy haciendo)(?: en (?:mi|la) pantalla)?$|^qu[ée] hay en (?:mi|la) pantalla$", RegexOptions.IgnoreCase);
         private static readonly Regex ScreenQuestion = new Regex(@"^what(?:'s| is) this(?: (?:game|app|thing|site|website|show|anime|movie|video|error|bug|code|program|word|map|level|boss|character|item|guy))?$|^what(?:'s| is) that (?:game|app|thing|site|website|show|anime|movie|video|error|bug|code|program|word|map|level|boss|character|item|guy)$|^what (?:game|app|anime|show|movie|video|website|site|error|program|level|map|boss|character|item) is (?:this|that)$|^who is this(?: (?:guy|character|boss))?$|^(?:how does|does) this look(?: (?:good|ok|okay|right|alright))?$|^what do (?:you|u) think (?:of|about) (?:this|my (?:screen|setup|build|base|drawing|art|design|avatar|character|thumbnail|outfit|fit|skin))$|^(?:look at|check out|peep|read) (?:this|that) \w+(?: \w+)?$|^rate (?:this|my (?:setup|desktop|wallpaper|screen|build|base|drawing|art|design|avatar|character|thumbnail|outfit|fit|skin))$", RegexOptions.IgnoreCase);
         // A reply that says she can't see their screen means she should look instead.
         private static readonly Regex Unseen = new Regex(@"\b(can'?t|cannot|can not|don'?t|do not|unable to|not able to|no way to|have no way to)\s+(\w+\s+){0,4}(see|look at|view|access|check|read)\s+(your|ur|the|their)\s+(screen|monitor|display|desktop)\b|\b(no|without)\s+(access to|way to see|eyes on)\s+(your|ur|the)\s+screen\b|\b(share|show)\s+(me\s+)?(your|ur)\s+screen\b|\bi('m| am)\s+(blind|not looking at (your|the) screen)\b", RegexOptions.IgnoreCase);
 
         internal static bool CantSee(string reply) { return Unseen.IsMatch(reply ?? ""); }
 
+        // "I don't have access to your Spotify" or "no puedo abrir apps" is never true either: her hands get a go first.
+        private static readonly Regex Refusal = new Regex(
+            @"\bi (can'?t|cannot|can not|couldn'?t)\s+(\w+\s+){0,2}" + Able + @"|\bi('?m| am) (unable|not able) to\s+(\w+\s+){0,2}" + Able + @"|\bi (don'?t|do not) have (the )?(ability|permission|a way|any way) to\s+(\w+\s+){0,2}" + Able +
+            @"|\b(don'?t|do not|can'?t|cannot) (have )?(any )?access (to )?((your|ur|the|their)\s+)?(apps?|spotify|youtube|discord|steam|music|pc|computer|programs?|browser|files|media player)\b" +
+            @"|\bno (tengo|puedo) (acceso|abrir|reproducir|poner|controlar|acceder|usar|buscar|cerrar|tocar)\b|\bno tengo (forma|manera) de\b" +
+            @"|\bje ne (peux|sais) pas (ouvrir|lancer|jouer|contr[oô]ler|acc[ée]der|utiliser|chercher|fermer|mettre)\b|\bje n'ai pas acc[eè]s\b" +
+            @"|\b(don'?t|do not|can'?t|cannot) (have )?(any )?(control|access|ability)\s+(of|over|to|on)\s+((your|ur|the|their)\s+)?(pc|computer|mouse|keyboard|cursor|screen|games?)\b|\bi (can'?t|cannot|can not) (move|click|press) (\w+\s+){0,2}(mouse|cursor|keys|keyboard|buttons?)\b" +
+            @"|\bich kann (\w+\s+){0,3}nicht\s+([öo]ffnen|abspielen|starten|steuern|spielen|zugreifen|bedienen|aufrufen)\b|\bkeinen? zugriff\b" +
+            @"|\bn[ãa]o (consigo|posso|tenho como) (abrir|tocar|acessar|controlar|reproduzir|colocar|iniciar)\b|\bn[ãa]o tenho acesso\b" +
+            @"|\bnon (posso|riesco a) (aprire|riprodurre|accedere|controllare|avviare|mettere|suonare)\b|\bnon ho accesso\b" +
+            @"|\bnie (mog[ęe]|jestem w stanie) (otworzy[ćc]|odtworzy[ćc]|uruchomi[ćc]|w[łl][aą]czy[ćc]|pu[śs]ci[ćc])(?!\w)|\bnie mam dost[ęe]pu\b" +
+            @"|\bik kan (\w+\s+){0,3}niet\s+(openen|afspelen|starten|bedienen|spelen)\b|\bik heb geen toegang\b" +
+            @"|\bне могу (открыть|включить|запустить|воспроизвести|поставить|получить доступ)(?!\w)|\bу меня нет доступа(?!\w)" +
+            @"|我(无法|無法|不能|没办法|沒辦法|没有办法|沒有辦法)(直接|帮你|幫你|为你|為你)?(打开|打開|开启|開啟|启动|啟動|播放|访问|訪問|存取|控制|运行|運行|使用|搜索|搜尋|关闭|關閉)|我(没有|沒有)(权限|權限|访问|訪問|存取)" +
+            @"|(開く|開ける|起動する|再生する|操作する|アクセスする|検索する|閉じる)こと(が|は)?できません|(開け|起動でき|再生でき|操作でき|アクセスでき|検索でき|閉じられ)ません|アクセス(権|権限)?がありません" +
+            @"|(열|켤|끌|닫을|틀|재생할|실행할|접근할|제어할|검색할|조작할) ?수 ?(가 ?)?없|접근 ?권한이 ?없" +
+            @"|ไม่สามารถ(ที่จะ)?(เปิด|เล่น|เข้าถึง|ควบคุม|ปิด|ค้นหา)|ไม่มีสิทธิ์(ใน)?(การ)?เข้าถึง" +
+            @"|\b(mình|tôi|tớ|em) (không thể|ko thể|không|chẳng thể) (mở|bật|phát|truy cập|điều khiển|tắt|đóng|tìm)(?!\w)|\bkhông (có )?quyền truy cập(?!\w)" +
+            @"|\b(aku|saya|gue|gw) (tidak|nggak|ga|gak|tak) (bisa|dapat|mampu) (membuka|buka|memutar|putar|menjalankan|mengakses|akses|mengontrol|mengendalikan|menutup|mencari|memainkan)\b|\btidak (punya|memiliki) akses\b" +
+            @"|\b(açamıyorum|açamam|çalamıyorum|çalamam|oynatamıyorum|erişemiyorum|erişemem|kontrol edemiyorum|kapatamıyorum|başlatamıyorum)(?!\w)|\berişimim yok(?!\w)" +
+            @"|\bне можу (відкрити|увімкнути|запустити|відтворити|поставити|отримати доступ)(?!\w)|\bу мене (немає|нема) доступу(?!\w)" +
+            @"|(لا|ما) (أستطيع|استطيع|يمكنني|أقدر|اقدر) (فتح|تشغيل|الوصول|التحكم|إغلاق|اغلاق|البحث)|ليس لدي (وصول|صلاحية|إمكانية)|لا (أملك|املك) (وصول|صلاحية)" +
+            @"|नहीं (खोल|चला|बजा|बंद कर|कंट्रोल कर|एक्सेस कर) (सकती|सकता)|(एक्सेस|पहुंच|पहुँच) नहीं है|\b(nahi|nahin) (khol|chala|baja|control kar) (sakti|sakta)\b" +
+            @"|\bjag kan (\w+\s+){0,2}inte (öppna|spela|starta|styra|komma åt)(?!\w)|\bjag har ingen (åtkomst|tillgång)(?!\w)|\bjeg kan (\w+\s+){0,2}ikke (åpne|åbne|spille|starte|styre)(?!\w)|\bjeg har ikke (tilgang|adgang)(?!\w)" +
+            @"|\ben (voi|pysty) (avaamaan|avata|soittamaan|soittaa|käynnistämään|käynnistää|hallitsemaan)(?!\w)|\bei ole pääsyä(?!\w)|\ben pääse käsiksi(?!\w)" +
+            @"|\b(nemohu|nemůžu|nedokážu|nemôžem|nedokážem) (otevřít|pustit|spustit|přehrát|ovládat|otvoriť|pustiť|spustiť|prehrať|ovládať)(?!\w)|\bnemám (přístup|prístup)(?!\w)" +
+            @"|\bnem tudom (megnyitni|elindítani|lejátszani|bezárni|irányítani)(?!\w)|\bnincs hozzáférésem(?!\w)|\bnem (tudok hozzáférni|férek hozzá)(?!\w)" +
+            @"|\bnu pot (să |sa )?(deschid|deschide|pornesc|porni|reda|controla|închide|inchide)(?!\w)|\bnu am acces(?!\w)" +
+            @"|δεν μπορώ να (ανοίξω|βάλω|παίξω|ξεκινήσω|ελέγξω|κλείσω)|δεν έχω πρόσβαση" +
+            @"|\bhindi ko (kayang |magawang )?(mabuksan|buksan|mapatugtog|patugtugin|maisara|ma-?open|ma-?play)(?!\w)|\bwala akong access(?!\w)" +
+            @"|\b(saya|aku) (tidak|tak) (boleh|dapat|mampu) (membuka|buka|memainkan|mainkan|memasang|pasang|mengakses|akses|mengawal|menutup|mencari)(?!\w)|\b(saya|aku) tiada akses(?!\w)" +
+            @"|\bsiwezi (ku)?(fungua|cheza|funga|tafuta|washa|zima|dhibiti|fikia)(?!\w)|\bsina (ufikiaji|uwezo wa (ku)?(fungua|cheza|fikia))(?!\w)" +
+            @"|\bno puc (obrir|reproduir|posar|engegar|controlar|accedir|tancar)(?!\w)|\bno tinc accés(?!\w)" +
+            @"|\bne mogu (da )?(otvorim|pustim|pokrenem|kontrolišem|kontrolisem|otvoriti|pustiti|pokrenuti|kontrolirati|pristupiti)(?!\w)|\bnemam pristup(?!\w)|\bне могу (да )?(отворим|пустим|покренем|контролишем)(?!\w)|\bнемам приступ(?!\w)" +
+            @"|\bei (saa|suuda) (ma |mina )?(\w+ ){0,2}(avada|mängida|käivitada|juhtida|sulgeda)(?!\w)|\bmul (pole|ei ole) (juurdepääsu|ligipääsu)(?!\w)" +
+            @"|\bnevaru (\w+ ){0,2}(atvērt|atskaņot|palaist|piekļūt|kontrolēt|ieslēgt|aizvērt)(?!\w)|\bman nav piekļuves(?!\w)" +
+            @"|\bnegaliu (\w+ ){0,2}(atidaryti|paleisti|groti|valdyti|pasiekti|įjungti|uždaryti)(?!\w)|\bneturiu prieigos(?!\w)" +
+            @"|\bne morem (\w+ ){0,2}(odpreti|predvajati|zagnati|upravljati|dostopati|zapreti)(?!\w)|\bnimam dostopa(?!\w)" +
+            @"|\bне мога да (отворя|пусна|включа|контролирам|стартирам|достъпя|затворя)(?!\w)|\bнямам достъп(?!\w)" +
+            @"|\bma (nistax|nistgħax) (niftaħ|niftah|indoqq|nikkontrolla|nidħol|nixgħel|nagħlaq)(?!\w)|\bm'?għandix aċċess(?!\w)" +
+            @"|אני לא (יכולה|יכול|מסוגלת|מסוגל) ל(פתוח|נגן|הפעיל|שלוט|גשת|סגור|חפש)|אין לי גישה" +
+            @"|نہیں (کھول|چلا|بجا|بند کر|کنٹرول کر|ایکسیس کر|رسائی حاصل کر) (سکتی|سکتا)|(رسائی|ایکسیس) (نہیں ہے|حاصل نہیں)|میرے پاس (رسائی|ایکسیس) نہیں" +
+            @"|نمی[\u200C ]?(تونم|توانم) .{0,40}?(باز کنم|پخش کنم|اجرا کنم|کنترل کنم|ببندم|بذارم|بگذارم)|دسترسی (ندارم|نداریم)" +
+            @"|(খুলতে|চালাতে|বাজাতে|বন্ধ করতে|নিয়ন্ত্রণ করতে|অ্যাক্সেস করতে) (পারব না|পারবো না|পারছি না|পারি না|পারবনা|পারছিনা|পারিনা)|(অ্যাক্সেস|প্রবেশাধিকার) নেই" +
+            @"|(उघडू|लावू|चालू करू|बंद करू|नियंत्रित करू) शकत नाही|(ऍक्सेस|ॲक्सेस|एक्सेस|प्रवेश) नाही" +
+            @"|(ખોલી|વગાડી|ચાલુ કરી|બંધ કરી|નિયંત્રિત કરી) (શકતી|શકતો|શકું) નથી|(ઍક્સેસ|એક્સેસ|પ્રવેશ) નથી" +
+            @"|ਨਹੀਂ (ਖੋਲ੍ਹ|ਖੋਲ|ਚਲਾ|ਵਜਾ|ਬੰਦ ਕਰ|ਕੰਟਰੋਲ ਕਰ) (ਸਕਦੀ|ਸਕਦਾ)|(ਐਕਸੈਸ|ਐਕਸੈੱਸ|ਪਹੁੰਚ) ਨਹੀਂ" +
+            @"|(திறக்க|இயக்க|மூட|கட்டுப்படுத்த|அணுக|போட) (முடியாது|இயலாது)|அணுகல் இல்லை" +
+            @"|(తెరవ|ప్లే చేయ|నియంత్రించ|యాక్సెస్ చేయ|మూసివేయ)లేను|యాక్సెస్ లేదు" +
+            @"|(ತೆರೆಯಲು|ಪ್ಲೇ ಮಾಡಲು|ನಿಯಂತ್ರಿಸಲು|ಪ್ರವೇಶಿಸಲು|ಮುಚ್ಚಲು) (ಸಾಧ್ಯವಿಲ್ಲ|ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ|ಆಗುವುದಿಲ್ಲ|ಆಗಲ್ಲ)|ಆಕ್ಸೆಸ್ ಇಲ್ಲ" +
+            @"|(തുറക്കാൻ|പ്ലേ ചെയ്യാൻ|നിയന്ത്രിക്കാൻ|ആക്സസ് ചെയ്യാൻ|അടയ്ക്കാൻ) (കഴിയില്ല|പറ്റില്ല|സാധിക്കില്ല)|ആക്സസ് ഇല്ല" +
+            // Galician, Basque, Afrikaans, Icelandic, Albanian, Irish, Welsh, Belarusian, Macedonian, Azerbaijani, Uzbek, Kazakh,
+            // Mongolian, Nepali, Javanese, Hausa, Yoruba, Igbo, Zulu, Xhosa and Somali.
+            @"|\bnon (podo|son quen de) (abrir|reproducir|poñer|poner|acceder|controlar|pechar|iniciar)(?!\w)|\bnon teño acceso(?!\w)" +
+            @"|\bezin (dut|dizut) (\w+ ){0,3}(ireki|erreproduzitu|jarri|itxi|kontrolatu|bilatu|piztu|itzali|abiarazi)(?!\w)|\b(ireki|erreproduzitu|jarri|itxi|kontrolatu|piztu) ezin (dut|dizut)(?!\w)|\bez (dut|daukat) sarbiderik(?!\w)" +
+            @"|\bek kan nie (\w+\s+){0,3}(oopmaak|speel|afspeel|beheer|toemaak|aansit|begin|bykom)(?!\w)|\bek kan (\w+\s+){0,3}nie (oopmaak|speel|afspeel|beheer|toemaak|aansit|begin|bykom)(?!\w)|\bek het (nie|geen) toegang(?!\w)" +
+            @"|\b(ég get|get ég) (ekki|ei) (\w+ ){0,2}(opnað|opnad|spilað|spilad|stjórnað|stjornad|lokað|lokad|ræst|raest|nálgast|nalgast)(?!\w)|\b(ég hef|hef ég) ekki aðgang(?!\w)" +
+            @"|\bnuk (mund|mundem|jam në gjendje|jam ne gjendje) (të |te |ta |t'i )?(hap|luaj|mbyll|kontrolloj|aksesoj|nis|ndez|vë|ve)(?!\w)|\bnuk kam (qasje|akses)(?!\w)" +
+            @"|\bní (féidir|feidir|thig) liom (\w+ ){0,3}(a )?(oscailt|sheinm|sheinnt|rialú|rialu|dhúnadh|dhunadh|rochtain|chur ar siúl)(?!\w)|\bníl rochtain agam(?!\w)" +
+            @"|\b(dw i ddim yn gallu|dydw i ddim yn gallu|alla i ddim|fedra i ddim|ni allaf) (\w+ ){0,2}(agor|chwarae|rheoli|cau|cyrchu|cael mynediad|dechrau)(?!\w)|\b(does gen i ddim|does dim) mynediad(?!\w)" +
+            @"|\bне магу (адкрыць|уключыць|ўключыць|запусціць|прайграць|паставіць|атрымаць доступ|зачыніць)(?!\w)|\bу мяне няма доступу(?!\w)" +
+            @"|\bне можам (да )?(го |ја |ги )?(отворам|пуштам|вклучам|контролирам|стартувам|пристапам|затворам)(?!\w)|\bнемам пристап(?!\w)" +
+            @"|\b(aça|oxuda|qoşa|işə sala|ise sala|idarə edə|idare ede|bağlaya|baglaya) bilmirəm(?!\w)|\b(girişim|çıxışım|icazəm) yoxdur(?!\w)" +
+            @"|\b(ocha|ochib bera|ijro eta|boshqara|yopa|qo['ʻ‘`]?ya|ishga tushira) olmayman(?!\w)|\b(kirish|ruxsat|ruxsatim|kirishim) yo['ʻ‘`]?q(?!\w)" +
+            @"|(аша|ойната|қоса|басқара|жаба|іске қоса) алмаймын(?!\w)|(қолжетімділігім|рұқсатым|кіру мүмкіндігім) жоқ(?!\w)" +
+            @"|(нээж|тоглуулж|асааж|удирдаж|хааж|хандаж) (чадахгүй|чадсангүй)|(хандах эрх|хандалт) (байхгүй|алга)" +
+            @"|(खोल्न|बजाउन|चलाउन|बन्द गर्न|नियन्त्रण गर्न|पहुँच गर्न) (सक्दिनँ|सक्दिन|सक्दिँन|सक्तिनँ)|पहुँच छैन" +
+            @"|\b(aku|kula) (ora|mboten) (iso|isa|bisa|saged) (mbukak|bukak|mbikak|muter|nyetel|ngakses|ngontrol|nutup|nggoleki|nglakokake)(?!\w)|\b(aku|kula) (ora|mboten) (duwe|nduwe|gadhah) akses(?!\w)" +
+            @"|\bba (zan|na) iya (buɗe|bude|kunna|rufe|sarrafa|samun dama)(?!\w)|\bba ni da (damar|izinin|ikon)(?!\w)" +
+            @"|\b(mi ò lè|mi o le|mi kò lè|mi ko le|n kò lè|n ko le|èmi kò lè|emi ko le) (ṣí|ṣi|si|ṣe|se|ṣàkóso|sakoso|wọlé|wole|pa)(?!\w)" +
+            @"|\b(enweghị m ike|enweghi m ike|apụghị m|apughi m) (imeghe|imepe|ịkpọ|ikpo|imechi|ịchịkwa|ichikwa|ịbanye|ibanye)(?!\w)|\benweghị m (ohere|ikike)(?!\w)" +
+            @"|\b(angikwazi|andikwazi|andinako) uku(vula|dlala|vala|lawula|finyelela|fikelela|qala|cisha|qalisa)(?!\w)|\b(anginayo|andinayo|andinalo) (imvume|ukufinyelela|ufikelelo)(?!\w)" +
+            @"|\bma (awoodo|kari karo|karo) (inaan )?(furo|daaro|shido|xiro|xidho|maamulo|galo|bilaabo)(?!\w)|\bma (furi|daari|shidi|xiri|xidhi|maamuli|gali|bilaabi) karo(?!\w)|\bma haysto (oggolaansho|fursad|marin)(?!\w)" +
+            @"|(መክፈት|ማጫወት|መዝጋት|መቆጣጠር|መድረስ|ማስጀመር|መፈለግ) (አልችልም|አልቻልኩም)|(መዳረሻ|ፈቃድ|ፍቃድ) የለኝም" +
+            @"|ບໍ່ສາມາດ ?(ເປີດ|ຫຼິ້ນ|ຫລິ້ນ|ເຂົ້າເຖິງ|ຄວບຄຸມ|ປິດ|ຊອກຫາ)|ບໍ່ມີສິດ ?(ເຂົ້າເຖິງ|ເຂົ້າໃຊ້)|មិន ?អាច ?(បើក|ចាក់|ចូលប្រើ|គ្រប់គ្រង|បិទ|ស្វែងរក)|(គ្មាន|មិនមាន) ?សិទ្ធិ ?(ចូលប្រើ|ចូល)" +
+            @"|မ(ဖွင့်|ပိတ်|ရှာ|ထိန်းချုပ်|ဝင်ရောက်)(ပေး)?နိုင်|(ဖွင့်|ပိတ်|ရှာ|ထိန်းချုပ်|ဝင်ရောက်)(ပေး)?(လို့|၍) ?မရ|(ဝင်ရောက်ခွင့်|ဝင်ခွင့်|အသုံးပြုခွင့်|ခွင့်ပြုချက်) ?မရှိ" +
+            @"|ვერ (გავხსნი|ვხსნი|ჩავრთავ|ვრთავ|დავუკრავ|ვუკრავ|ვაკონტროლებ|ვმართავ|დავხურავ|მოვძებნი|შევალ)(?!\w)|არ შემიძლია (\S+ ){0,2}(გახსნა|ჩართვა|დაკვრა|კონტროლი|მართვა|დახურვა)(?!\w)|(გახსნა|ჩართვა|დაკვრა|კონტროლი|მართვა|დახურვა) არ შემიძლია|წვდომა არ მაქვს|არ მაქვს წვდომა" +
+            @"|չեմ կարող (\S+ ){0,2}(բացել|միացնել|նվագել|կառավարել|փակել|անջատել|մուտք գործել)(?!\w)|(բացել|միացնել|նվագել|կառավարել|փակել|անջատել) չեմ կարող|(հասանելիություն|մուտք) չունեմ|չունեմ (հասանելիություն|մուտք)", RegexOptions.IgnoreCase);
+        private const string Able = @"(open|launch|start|run|play|pause|resume|skip|control|access|use|search|google|close|mute|unmute|put on|turn (up|down|on|off)|change)\b";
+
+        internal static bool Refused(string reply) { return Refusal.IsMatch(Dots((reply ?? "").Replace('’', '\''))); }
+
+        // Burmese can store a dot below and an asat on one letter in either order, so they're put in one order to match.
+        private static string Dots(string text) { return text.Replace("\u103A\u1037", "\u1037\u103A"); }
+
+        // They asked her to do something, rather than asked about her: "do you play Valorant?" is a question, "can you put on some music?" isn't.
+        internal static bool Requested(string said)
+        {
+            string text = (said ?? "").Trim();
+            // Greek asks with ";" for a question mark.
+            if (Regex.IsMatch(text, @"[\u0370-\u03FF\u1F00-\u1FFF]")) text = Regex.Replace(text, @"[;\u037E]\s*$", "?");
+            if (!Regex.IsMatch(text, @"[?？؟፧]\s*$")) return true;
+            text = Regex.Replace(Opener.Replace(text, ""), @"^[\s¿¡]+", "");
+            return Regex.IsMatch(text, @"^((hey|yo|ok|okay|oye|hola|hallo|ol[aá]|ciao|cze[śs][ćc]|hoi|привет)[\s,]+)?(capri[\s,]+)?((can|could|would|will) (you|u)|(me )?(puedes|podr[ií]as|pones|abres)|(est-ce que )?tu (peux|pourrais)|peux-tu|pourrais-tu|kannst du|k[öo]nntest du|w[üu]rdest du|(voc[eê] |vc )?(pode|poderia|consegue)s?|puoi|potresti|riesci a|mo[żz]esz|m[óo]g[łl]by[śs]|mog[łl]aby[śs]|(kun|kan|wil) je|можешь|можете|мог бы|могла бы|не могла бы" +
+                @"|làm ơn|hãy|bạn có thể|tolong|bisa(kah)?|(kamu|kau|anda) bisa|ممكن|هل (يمكنك|تستطيع)|من فضلك|لو سمحت|можеш|чи можеш|чи можете" +
+                @"|kan du|kunde du|skulle du|vil du|voisitko|voitko|můžeš|mohl bys|mohla bys|môžeš|((meg|el|be|le) )?tudnád|poți|poti|ai putea|μπορείς να|μπορεις να|θα μπορούσες να|pwede mo bang|puwede mo bang|pwede bang|kaya mo bang" +
+                @"|boleh(kah)?|(je )?(unaweza|waweza)|tafadhali|naomba|(em )?(pots|podries)|možeš li|mozes li|da li možeš|da li mozes|možete li|mozete li|да ли можеш" +
+                @"|kas (sa |te )?(saad|saate|võiksid|võiksite|saaksid|saaksite)|vai (tu )?(vari|varētu)|ar (gali|galėtum|galite)|(ali |a )?(mi )?lahko|bi (mi )?lahko|би ли|може ли|tista'?|tistax|tistgħu" +
+                @"|podes|poder[ií]as|mesedez|kan jy|sal jy|geturðu|geturdu|gætirðu|gaetirdu|viltu|(a )?mund(esh)? (të|te|ta)|an (féidir|feidir) leat|alli di|allet ti|wnei di|fedri di|gallwch chi|wnewch chi" +
+                @"|(ці )?можаш|(ці )?можаце|дали можеш|za (ka|ki) iya|(don|dan) allah|ṣé o lè|se o le|jọ̀wọ́|jọwọ|jowo|biko|(i|ị) nwere ike|ungakwazi|ngicela|ndicela|sicela|fadlan|tulung" +
+                @"|את יכולה|אתה יכול|תוכלי|תוכל|אפשר|בבקשה|می[\u200C ]?(تونی|توانی)|می[\u200C ]?شه|لطفا|لطفاً|შეგიძლია|შეძლებ|გთხოვ|გთხოვთ|կարող ես|կարո՞ղ ես|կարող եք|կարո՞ղ եք|խնդրում եմ)(?!\w)", RegexOptions.IgnoreCase)
+                // Chinese and Thai ask at the start without spaces; Japanese, Korean, Turkish, Hindi and the other verb-last languages ask at the end.
+                || Regex.IsMatch(text, @"^(capri[\s,，]*)?((你|您)?(能不能|可不可以|能|可以|会不会|會不會)?(帮|幫|给|給|替)我|(你|您)(能|可以)|请|請|麻烦|麻煩|ช่วย|กรุณา|รบกวน|ກະລຸນາ|ຊ່ວຍ|សូម|ជួយ|ကျေးဇူးပြု၍|ကျေးဇူးပြုပြီး)", RegexOptions.IgnoreCase)
+                || Regex.IsMatch(text, @"(くれる|くれない|くれます|くれませんか|もらえる|もらえない|もらえます|もらえませんか|ください|줄래|줄래요|줄 ?수 ?있어|줄 ?수 ?있어요|주세요|주실래요|줘|줘요|r m[ıi]s[ıi]n|bilir misin|सकते हो|सकती हो|सकोगे|सकोगी|सकते हैं|सकती हैं|سکتے ہو|سکتی ہو|سکتے ہیں|سکتی ہیں|سکو گے|سکو گی|পারবে|পারবেন|পারবি|शकतेस का|शकतोस का|शकता का|शकाल का|શકે|શકીશ|શકો|શકશો|ਸਕਦੇ ਹੋ|ਸਕਦੀ ਹੋ|ਸਕਦੀ ਹੈਂ|ਸਕੋਗੇ|ਸਕੋਗੀ|முடியுமா|గలవా|గలరా|ಬಹುದಾ|ാമോ|പറ്റുമോ|ได้ไหม|ได้มั้ย|ได้มั๊ย|หน่อย" +
+                    @"|dezakezu|ahal duzu|al duzu|bilərsən|bilərsənmi|bilərsiniz|bilərsinizmi|olasanmi|olasizmi|berasanmi|berasizmi|аласың ба|аласыз ба|бересің бе|бересіз бе|чадах уу|өгөх үү|өгнө үү|өгөөч|सक्छौ|सक्नुहुन्छ|सक्छस्|दिनुहुन्छ|दिन्छौ|kartaa|kartid|ትችላለህ|ትችያለሽ|ትችላላችሁ|ይችላሉ|ໄດ້ບໍ|ໄດ້ບໍ່|បានទេ|បានអត់|နိုင်မလား|နိုင်လား|ပေးမလား|လို့ ?ရမလား|လို့ ?ရလား|შეგიძლია|შეძლებ|կարո՞ղ ես|կարող ես|կարո՞ղ եք|կարող եք)\s*(か)?\s*[?？؟፧]\s*$", RegexOptions.IgnoreCase);
+        }
+
+        // "Close your mouth" (shut up) and "open your eyes" use her open and close words in every language, but they're said
+        // to her, not about the PC, so they're taken out before her request check, with the "and" after them: "zamknij się i
+        // włącz muzykę" (shut up and play music) still plays music.
+        private static readonly Regex MouthOrEyes = new Regex(
+            @"\b(close|shut) (your|ur|ya|that) (damn |fucking )?(mouth|trap|gob|eyes)\b|\bopen (your|ur|ya) (eyes|mind|heart|mouth)\b" +
+            @"|\bcierra (la|tu|esa) boca\b|\bcierra el pico\b|\b(cierra|abre) (los|tus) ojos\b|\bferme(-la\b|[- ]la\s*[.!?]*$|[- ]ta (gueule|bouche)\b|[- ]ton clapet\b|[- ](les|tes) yeux\b)|\bouvre (les|tes) yeux\b" +
+            @"|\bfecha (a|essa|tua|sua) (boca|matraca)\b|\b(fecha|abre) (os|teus|seus) olhos\b|\bchiudi (la|quella|sta|la tua) bocca\b|\bchiudi il becco\b|\b(chiudi|apri) gli occhi\b" +
+            @"|\bmach(e)? (die|deine) augen (auf|zu)\b|\bmach(e)? (den|deinen) mund (auf|zu)\b|\b(schlie(ß|ss)e?|[öo]ffne) (die|deine) augen\b" +
+            @"|\bzamknij (się|sie|mordę|morde|japę|jape|ryj|buzię|buzie|dziób|dziob|pysk|gębę|gebe|oczy)(?!\w)|\botw[óo]rz oczy\b" +
+            @"|(?<!\w)(закрой|закрий|зачыні|затвори) (свой |свій |си )?(рот|рота|пасть|хлебало|варежку|пельку|писок|уста|устата|губицу|глаза|очі|вочы|очи)(?!\w)|(?<!\w)(открой|відкрий|адкрый|отвори) (глаза|очі|вочы|очи)(?!\w)" +
+            @"|\b(zatvori|zapri) (usta|gubicu|labrnju|gobec|oči|oci)\b|\botvori (oči|oci)\b|\btutup (mulut|mulutmu|mata|matamu)\b|\bbuka (mata|matamu)\b|\btutupen cangkem(mu)?\b" +
+            @"|\bg[öo]zlerini (kapat|aç)\b|\bağzını bağla\b|\bgözlərini (bağla|aç)\b|\bog['ʻ‘`]?zingni yop\b|\bko['ʻ‘`]?zingni (yop|och)\b|аузыңды жап" +
+            @"|\bstäng (munnen|käften|truten|ögonen)\b|\böppna ögonen\b|\blukk (munnen|kjeften|trynet|øynene)\b|\båpne øynene\b|\bluk (munden|kæften|øjnene)\b|\båbn øjnene\b" +
+            @"|\bsulje (suusi|turpasi|silmäsi)\b|\bavaa silmäsi\b|\bzavři (hubu|pusu|zobák|tlamu|klapačku|oči)\b|\botevři oči\b|\bzatvor (hubu|ústa|zobák|oči)\b|\botvor oči\b" +
+            @"|\bzárd be a (szád|szádat|pofád|pofádat|szemed)\b|\bnyisd ki a szemed\b|\b[îi]nchide(-[țt]i)? (gura|pliscul|ochii)\b|\bdeschide(-[țt]i)? ochii\b" +
+            @"|κλε[ίι]σε το στ[όο]μα|κλε[ίι]σε τα μ[άα]τια|[άα]νοιξε τα μ[άα]τια|\bisara (mo )?(ang )?(bibig|mata)\b|\bbuksan (mo )?(ang )?mata\b|\bfunga (mdomo|domo|macho)\b|\bfungua macho\b" +
+            @"|\btanca (la boca|el bec|els ulls)\b|\bobre els ulls\b|\bpecha (a boca|os ollos)\b|\bitxi (ahoa|muturra|begiak)\b|\bireki begiak\b|\bmaak (jou )?(bek|mond|smoel|oë) toe\b|\bmaak (jou )?oë oop\b" +
+            @"|\bloka(ð|d)u (munninum|kjaftinum|augunum)\b|\bmbylle goj[ëe]n\b|\bmbylli syt[ëe]\b|\bhape syt[ëe]\b|\bdún do (bhéal|shúile)\b|\bcae(a|wch) (dy|eich) (geg|ceg|llygaid)\b" +
+            @"|\buždaryk (burną|burna|snukį|akis)\b|\baizver (muti|purnu|acis)\b|\batver acis\b|\bpane (suu|silmad) kinni\b|\bagħlaq (ħalqek|għajnejk)\b|\baghlaq (halqek|ghajnejk)\b" +
+            @"|\brufe (bakin|idanu)|\bmechie (ọnụ|onu|anya)|\bvala (umlomo|amehlo)\b|\bđóng (mồm|miệng|mõm)\b|\bmở mắt\b|\b(muh|munh|mooh|muhh|mu) band\b|\baankhen (band|kholo)\b" +
+            @"|(סגור|סגרי|תסגור|תסגרי) את (הפה|העיניים)|(פתח|פתחי|תפתח|תפתחי) את העיניים|(سكر|سكّر|اغلق|أغلق|إغلق|سد|سدّ) (تمك|فمك|بقك|نيعك|عيونك|عينيك)|(افتح|إفتح) (عيونك|عينيك)" +
+            @"|(دهنتو|دهنت رو|دهانت را|دهنت|چشماتو|چشمانت را) ببند|چشماتو باز کن|منہ بند|آنکھیں (بند|کھولو)|(मुंह|मुँह) बंद|मुख बन्द|तोंड बंद|(आंखें|आँखें) (बंद|खोलो)" +
+            @"|মুখ বন্ধ|চোখ (বন্ধ|খোলো)|મોઢું બંધ|આંખો બંધ|ਮੂੰਹ ਬੰਦ|ਅੱਖਾਂ ਬੰਦ|வாயை மூடு|(கண்களை|கண்ணை) மூடு|ಬಾಯಿ ಮುಚ್ಚು|ಕಣ್ಣು ಮುಚ್ಚು|വായ അടയ്ക്ക|കണ്ണ് ?അടയ്ക്ക" +
+            @"|አፍህን ዝጋ|አፍሽን ዝጊ|አፋችሁን ዝጉ|បិទមាត់|បិទភ្នែក|ປິດປາກ|ປິດຕາ(?!ຕະລາງ|ມ(?!ັ)|ຍ(?!ັ))|ปิดปาก|ปิดตา(?!ราง|ม(?!ั)|ย(?!ั)|ก(?![่ั]))|เปิดตา(?!ราง|ม(?!ั)|ย(?!ั)|ก(?![่ั]))|目を(閉じて|とじて|開けて|あけて)|口を(閉じて|とじて)|입 ?(닫아|다물어)" +
+            @"|բերանդ փակիր|աչքերդ (փակիր|բացիր)|မျက်လုံး ?(ပိတ်|ဖွင့်)", RegexOptions.IgnoreCase);
+
+        // What's left of a message without "close your mouth" or "open your eyes", and the "and" after it.
+        private static string WithoutMouthOrEyes(string said)
+        {
+            if (!MouthOrEyes.IsMatch(said ?? "")) return said;
+            return Regex.Replace(MouthOrEyes.Replace(said, " ").Trim(), @"^[\s,]*(and|then|i|y|e|et|und|и|і|та|ve|dan|và|en|och|og|ja|és|și|και|at|na|dhe|ac|a)\s+", "", RegexOptions.IgnoreCase);
+        }
+
         private static readonly Regex Chatter = new Regex(@"^(play (with|along|around|dead|dumb|nice|fair|a game with|a joke)|open up (to|about)|start (a story|a joke|an argument)|run (a mile|a race)|kill (the boss|me|time)|look (at it this way|forward)|show me (how|why)|check my (spelling|grammar)|rate my joke|mets-toi)\b", RegexOptions.IgnoreCase);
 
-        private static string Asked(string said)
+        // "Go to sleep" or "take a nap" said to her is her own nap, not the PC's (that needs a PC word), and "wake up" ends it.
+        // "Sleep here" is the same nap, where she is.
+        private static readonly Regex Napping = new Regex(@"^(?:(?:go (?:back )?to (?:sleep|bed)|(?:go )?(?:take|have|grab) (?:a |ur |your )?(?:little |quick |power )?(?:nap|snooze|rest)|go (?:nap|rest|snooze|sleep)|nap(?: time)?|sleep|doze off|get some (?:sleep|rest))(?: (?:here|there|right here|right there|over here|where you are))?|(?<wake>wake(?: up|y wakey)|rise and shine))(?:[\s,]+(?:now|then|already|girl|choom|[ck]app?r(?:i|ee|ie|y)))*$", RegexOptions.IgnoreCase);
+
+        // Her own moves said to her, so they never wait on a brain: "teleport here", "go to my other monitor", "move the Mainframe
+        // to my other screen", "sit down", "sit on my Roblox window", "lie down", "walk around", "hang here", "ride my cursor",
+        // "hide". A bare "hop off" stays a call to leave, and "hang on", "hang up", "sit with me" and "go away" aren't moves.
+        private const string Hers = @"(?:[\s,]+(?:now|then|already|again|quick|real quick|for me|for us|please|pls|plz|girl|choom|bestie|[ck]app?r(?:i|ee|ie|y)))*$";
+        // The window she's told to sit or lie on, by its app's or game's name: "Roblox" in "sit on my Roblox window". Words for
+        // a person, a pronoun or her cursor never name one.
+        private const string OnWindow = @"(?!(?:(?:the|my|your|ur|our|that|this) )?(?:it|that|this|there|here|me|you|him|her|them|us|lap|face|head|knees?|bed|couch|sofa|chair|cursor|mouse|pointer|window|ledge|back|side|stomach|tummy)\b)(?:the |my |your |ur |our |that |this )?(?<w>[\p{L}\p{Nd}][\p{L}\p{Nd} .'&+-]{0,40}?)";
+        private const string Bidding = @"^(?:(?:go|come|now|please|pls|plz) )?";
+        // The taskbar and her own Mainframe are seats she can be told to sit on too.
+        internal static readonly Regex TaskbarWords = new Regex(@"^(?:(?:the|my|your|ur) )?(?:task ?bar|floor|ground|bottom of (?:the|my) screen)$", RegexOptions.IgnoreCase);
+        internal static readonly Regex MainframeWords = new Regex(@"^(?:(?:the|my|your|ur|capri'?s?) )?(?:capri )?main ?frame(?: window)?$", RegexOptions.IgnoreCase);
+        private const string Which = @"(?<s>other|next|another|second|2nd|third|3rd|fourth|4th|first|1st|left|right|top|bottom|upper|lower|main|primary|previous|last)(?: one)? ?(?:monitor|screen|display)s?|(?:monitor|screen|display) (?:number |no\.? ?|#)?(?<s>\d|one|two|three|four)";
+        private const string Frame = @"(?: (?:the|my|your|ur|capri'?s?|her))?(?: capri)? main ?frame(?: window| app)?";
+        private static readonly string[] SelfWords =
         {
-            said = Regex.Replace(said ?? "", @"^[\s¿¡]+", "");
+            @"^(?:move|put|bring|send|drag|throw|toss|shift|teleport|switch|take|push)" + Frame + @"(?: (?:over|back|across))?(?: (?:to|onto|on|into|over to))? (?:the |my |your |ur )?(?:" + Which + ")" + Hers, "move_mainframe",
+            @"^(?:move|put|bring|send|drag|teleport|take|pull)" + Frame + @"(?: (?:over|back|up))? (?<s>here|over here|to me|to (?:my|the) (?:mouse|cursor|pointer)|to this (?:monitor|screen|display))" + Hers, "move_mainframe",
+            @"^(?:move|switch|swap)" + Frame + @"(?: (?:over|across))?(?: (?:monitors|screens|displays))?" + Hers, "move_mainframe",
+            @"^(?:teleport|tp|warp|glitch|zap|beam|go|move|hop|jump|switch|head|pop|run|walk|fly|float|get|come)(?: (?:yourself|urself|your ass|ur ass))?(?: (?:over|back|across))?(?: (?:to|onto|on|into|over to|across to))? (?:the |my |your |ur |our )?(?:" + Which + ")" + Hers, "other_screen",
+            @"^(?:switch|swap|change) (?:monitors|screens|displays)" + Hers, "other_screen",
+            @"^(?:(?:teleport|tp|warp|glitch|zap|beam|come|get|hop|pop|jump|move|go|run|walk|fly|float)(?: (?:yourself|urself|your ass|ur ass))?(?: (?:on|over|back|right))? (?:here|over here|to me|over to me|(?:to|by|next to) (?:my|the) (?:mouse|cursor|pointer)|(?:(?:over )?to |over )?where (?:my|the) (?:mouse|cursor|pointer) is|next to me|to this (?:monitor|screen|display))|come here|c'?mere|get over here|come (?:back|over)(?: here)?|come (?:back )?to me|teleport|tp)" + Hers, "come_here",
+            @"^(?:sit(?: (?:down|back down))?(?: (?:here|there|right here|right there|where you are))?|take a seat|have a seat|park it|sit still)" + Hers, "sit",
+            @"^(?:stand(?: (?:up|back up))?|get up|let go|on your feet)" + Hers, "stand_up",
+            @"^(?:hang|dangle)(?: (?:here|there|right here|right there|in the air|in mid ?air|where you are))?" + Hers, "hang",
+            @"^(?:ride|hop on|get on|jump on|sit on|climb on|ride on)(?: (?:my|the|ur|your))? (?:mouse|cursor|pointer)(?: again)?" + Hers, "ride_cursor",
+            @"^(?:(?:hop|get|jump|climb) off(?: (?:of|from))?(?: (?:my|the|ur|your))? (?:mouse|cursor|pointer)|stop riding(?: (?:my|the|ur|your) (?:mouse|cursor|pointer))?|(?:let go of|leave) (?:my|the) (?:mouse|cursor|pointer))" + Hers, "hop_off",
+            @"^(?:hide(?: (?:yourself|urself|away))?|go (?:and )?hide|disappear|vanish|go invisible|turn invisible|poof)" + Hers, "hide",
+            @"^(?:show (?:yourself|urself)|un-?hide(?: (?:yourself|urself))?|reappear|appear|come out(?: of hiding)?|stop hiding|show up)" + Hers, "show",
+            Bidding + @"(?:(?:lie|lay)(?: (?:yourself|urself))?(?: back)? down(?: (?:for a (?:bit|while|minute|sec)|and (?:rest|relax|chill)))?(?: (?:here|there|right here|right there|where you are|on (?:it|that|this|the window|this window|that window|your window|the ledge)))?|(?:lie|lay) (?:back|flat)|lie on your back|(?:take|have) a lie ?down)" + Hers, "lie_down",
+            Bidding + @"sit (?:back )?up(?: straight)?" + Hers, "sit_up",
+            Bidding + @"(?:let'?s )?(?:(?:walk|stroll|wander|roam|pace)(?: (?:around|about|a bit|a little|for a bit|for a while|back and forth|up and down))*|(?:go )?(?:for|on) a (?:little |short |quick )?(?:walk|stroll)|take a (?:little |short |quick )?(?:walk|stroll)|stretch your legs)" + Hers, "walk_around",
+            Bidding + @"(?:teleport|tp|warp|glitch|zap|beam|hop|jump|go|move|pop|fly|float|run)(?: (?:yourself|urself|your ass|ur ass))?(?: (?:off|away))?(?: (?:to|over to|off to))? (?:somewhere(?: else| random| new)?|anywhere(?: else)?|a random (?:spot|place|window)|some ?place (?:else|random|new)|elsewhere|around)" + Hers, "wander",
+            // "Sit on my Roblox window", "perch on Discord", "hop onto my Chrome window", "lie down on the taskbar". Without
+            // "window", hop, get and move stay her hands' ("hop on Roblox" means play it).
+            Bidding + @"(?:sit|perch|plop|park|settle)(?: (?:down|yourself|urself|your ass|ur ass|back down))? (?:on|onto|on top of|up on|atop|over on) " + OnWindow + @"(?: window| app| game| tab)?" + Hers, "sit_on",
+            Bidding + @"(?:hop|jump|climb|get|move|teleport|tp|warp|glitch|fly|float)(?: (?:yourself|urself|your ass|ur ass))?(?: (?:over|up|back))?(?: (?:on|onto|on top of|up on|to|over to))? (?!(?:the |my |your |ur |our )?(?:other|next|another|second|third|left|right|top|bottom|main|primary)\b)" + OnWindow + @" window" + Hers, "sit_on",
+            Bidding + @"(?:lie|lay)(?: (?:yourself|urself))?(?: back)?(?: down)? (?:on|onto|on top of|along|across) " + OnWindow + @"(?: window| app| game| tab)?" + Hers, "lie_down"
+        };
+
+        // Her animations by name: "dance", "stop dancing", "do your glitch", "smile", "blink", "play your idle animation".
+        private static readonly string[] AnimationWords =
+        {
+            @"^(?:stop|quit|no more|enough|that'?s enough|cut the|cut out the) (?:dancing|the dance|your dance|ur dance|the dancing|grooving|boogying)" + Hers, "stop_dancing",
+            @"^(?:dance|let'?s dance|start dancing|keep dancing|go dance|bust a move|show (?:me|us) (?:your|ur|some) (?:dance )?moves|do (?:a|the|your|ur|some|that) (?:little |lil |happy |victory )?(?:dance|jig|boogie)|dance (?:with me|to (?:it|this|that|the music|the song|the beat|my music|my song)|again|some more|a bit|a little))" + Hers, "dance",
+            @"^(?:glitch(?: out)?|do (?:a|your|ur|the|that) (?:little )?glitch(?: thing)?|do the glitchy thing)" + Hers, "glitch",
+            @"^(?:grin|smile|smirk|do (?:a|your|ur|the|that) (?:little |big )?(?:grin|smile|smirk)|give (?:me|us) (?:a |your |ur |that )?(?:little |big )?(?:grin|smile)|smile (?:for (?:me|us|the camera)|at me))" + Hers, "grin",
+            @"^(?:blink(?: (?:once|twice|at me))?|do (?:a|your|ur) (?:little )?blink)" + Hers, "blink",
+            @"^(?:idle|go idle|be idle|stand still|stay still|stop moving|(?:go )?back to (?:normal|idle))" + Hers, "idle",
+            @"^(?:(?:play|do|show me|show|run|perform|start|go)(?: (?:your|ur|the|a|an|that))? )?(?<n>idle|glitch|grin|smile|blink|dance|dancing)(?: (?:animation|anim|animations|clip|move|moves|loop))" + Hers, ""
+        };
+
+        internal static string MovingFor(string text, out string screen, out string window)
+        {
+            screen = null;
+            window = null;
+            for (int i = 0; i < SelfWords.Length; i += 2)
+            {
+                Match found = Regex.Match(text ?? "", SelfWords[i], RegexOptions.IgnoreCase);
+                if (!found.Success) continue;
+                if (found.Groups["s"].Success) screen = Regex.IsMatch(found.Groups["s"].Value, @"^(here|over here|to me|to (my|the) (mouse|cursor|pointer)|to this (monitor|screen|display))$", RegexOptions.IgnoreCase) ? "here" : found.Groups["s"].Value.ToLowerInvariant();
+                if (found.Groups["w"].Success) window = found.Groups["w"].Value.Trim();
+                return SelfWords[i + 1];
+            }
+            return null;
+        }
+
+        internal static string AnimationFor(string text)
+        {
+            for (int i = 0; i < AnimationWords.Length; i += 2)
+            {
+                Match found = Regex.Match(text ?? "", AnimationWords[i], RegexOptions.IgnoreCase);
+                if (!found.Success) continue;
+                if (AnimationWords[i + 1].Length > 0) return AnimationWords[i + 1];
+                string name = found.Groups["n"].Value.ToLowerInvariant();
+                return name == "smile" ? "grin" : name == "dancing" ? "dance" : name;
+            }
+            return null;
+        }
+
+        // The screen "next", "other", "left", "right", "up", "down", "main", "last", "here" or "2" picks from the one she's on, as
+        // an index into the screens' middles, or -1 when there isn't one. A number is the one Windows gives the screen (DISPLAY2
+        // is 2) when there is one, otherwise screens count from the left.
+        internal static int PickScreen(int[] x, int[] y, int[] numbers, int primary, int current, int pointed, string which)
+        {
+            int count = x.Length;
+            if (count == 0) return -1;
+            string pick = Regex.Replace((which ?? "").ToLowerInvariant(), @"\b(the|my|your|ur|to|on|onto|(?:monitor|screen|display)s?|number|no)\b|[#.]", " ");
+            pick = Regex.Replace(Regex.Replace(pick, @"\s+", " ").Trim(), @"(?<=\w) one$", "");
+            List<int> order = new List<int>();
+            for (int i = 0; i < count; i++) order.Add(i);
+            order.Sort(delegate(int a, int b) { return x[a] != x[b] ? x[a].CompareTo(x[b]) : y[a].CompareTo(y[b]); });
+            if (Regex.IsMatch(pick, @"^(here|this|mouse|cursor|pointer)$")) return pointed;
+            if (Regex.IsMatch(pick, @"^(main|primary)$")) return primary;
+            if (pick == "last") return order[count - 1];
+            string[] words = { "first|1st|one", "second|2nd|two", "third|3rd|three", "fourth|4th|four" };
+            int number = Regex.IsMatch(pick, @"^\d$") ? pick[0] - '0' : 0;
+            for (int i = 0; i < words.Length; i++) if (Regex.IsMatch(pick, "^(" + words[i] + ")$")) number = i + 1;
+            if (number > 0)
+            {
+                if (numbers != null) for (int i = 0; i < count; i++) if (numbers[i] == number) return i;
+                return number <= count ? order[number - 1] : -1;
+            }
+            if (count < 2 || current < 0 || current >= count) return -1;
+            int place = order.IndexOf(current);
+            if (Regex.IsMatch(pick, @"^(previous|back)$")) return order[(place + count - 1) % count];
+            Match way = Regex.Match(pick, @"^(?:(left)|(right)|(top|upper|up|above)|(bottom|lower|down|below))$");
+            if (!way.Success) return order[(place + 1) % count];
+            int best = -1;
+            long nearest = long.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                long dx = x[i] - x[current], dy = y[i] - y[current];
+                bool fits = way.Groups[1].Success ? dx < 0 : way.Groups[2].Success ? dx > 0 : way.Groups[3].Success ? dy < 0 : dy > 0;
+                if (i == current || !fits || dx * dx + dy * dy >= nearest) continue;
+                nearest = dx * dx + dy * dy;
+                best = i;
+            }
+            return best;
+        }
+
+        internal static string Asked(string said)
+        {
+            said = Dots(Regex.Replace(said ?? "", @"^[\s¿¡]+", ""));
             string text = Lead.Replace(Opener.Replace(Regex.Replace((said ?? "").Replace('\u2019', '\'').Trim(), @"\s+", " "), ""), "");
-            for (int i = 0; i < 3; i++) text = Regex.Replace(Regex.Replace(text, @"[\s,.!?]+$", ""), @"\s+(for me|please|pls|plz|rn|right now|now|stp|s'il te pla[iî]t|por favor|porfa|porfis)$", "", RegexOptions.IgnoreCase);
+            for (int i = 0; i < 3; i++) text = Regex.Replace(Regex.Replace(text, @"[\s,.!?;，；！？、。．…،؟।॥።፣፧။၊։՞՜՝;]+$", ""),@"\s+(for me|please|pls|plz|rn|right now|now|stp|s'il te pla[iî]t|sil te pla[iî]t|por favor|porfavor|porfa|porfis|bitte|bitte schön|per favore|perfavore|per piacere|proszę|prosze|пожалуйста|плз|пж|будь ласка|lütfen|lutfen|alsjeblieft|alstublieft|a\.?u\.?b|tolong|dong)$", "", RegexOptions.IgnoreCase);
             return text;
         }
-        // Volume, mute and music in everyday words, in English, Spanish and French, so they never wait on a brain.
+        // Volume, mute and music in everyday words, so they never wait on a brain: English, Spanish and French in full, and the
+        // plain commands and "what song is this" in German, Portuguese, Italian, Polish, Dutch, Russian, Ukrainian, Turkish,
+        // Indonesian, Japanese, Chinese and Korean. Words that also tell a person to hush, carry on or keep playing a game
+        // ("тише", "потише", "avanti", "continua", "weiterspielen") stay with her brain, since pause and resume both press
+        // play/pause, and so do "was läuft" (what's up), "harder" and "声音小" (it's quiet).
         // Volume means the PC's volume: Spotify's own slider only when they say Spotify.
         private const string Owner = @"(?:(?:the|my|ur|your|our|this|that|all the|pc'?s?|computer'?s?|laptop'?s?|spotify'?s?|youtube'?s?|game'?s?|video'?s?|music'?s?|song'?s?)\s+)*";
         private const string Noise = Owner + @"(?:volume|vol|sound|sounds|audio|music|song|track|tune|tunes|video|game|pc|computer|laptop|speakers?|headphones?|headset|everything|spotify|youtube)";
@@ -448,30 +1232,85 @@ namespace CapriDesktop
             @"^(?:turn|bring|put)\s+" + Thing + @"\s+(?:all the way down|down all the way)$|^" + Sound + @"\s+(?:to\s+)?(?:zero|nothing)$", "volume_set", "0",
             @"^(?:half|50%)\s+volume$|^" + Sound + @"\s+(?:to\s+|at\s+)?half(?:\s*way)?$", "volume_set", "50",
             @"^(?:(?:pon|sube|baja|ajusta|deja)\s+)?(?:el\s+)?volumen\s+(?:al|a|en)\s+(?<n>\d{1,3})" + Percent + @"$|^(?:mets\s+)?(?:le\s+)?(?:son|volume)\s+[a\u00e0]\s+(?<n>\d{1,3})" + Percent + "$", "volume_set", "n",
+            @"^(?:(?:stell|stelle|mach|setz|setze)\s+)?(?:die\s+)?lautst\u00e4rke\s+(?:auf\s+)?(?<n>\d{1,3})\s*(?:%|prozent)?(?:\s+(?:stellen|setzen))?$" +
+            @"|^(?:(?:coloca|coloque|p\u00f5e|poe|bota|deixa|muda|metti|imposta|porta|ustaw|daj|zmie\u0144|zmien|zet|doe|\u043f\u043e\u0441\u0442\u0430\u0432\u044c|\u0441\u0434\u0435\u043b\u0430\u0439|\u0443\u0441\u0442\u0430\u043d\u043e\u0432\u0438|\u043f\u043e\u0441\u0442\u0430\u0432|\u0437\u0440\u043e\u0431\u0438)\s+)?(?:o\s+|il\s+|het\s+)?(?:volume|g\u0142o\u015bno\u015b\u0107|glosnosc|\u0433\u0440\u043e\u043c\u043a\u043e\u0441\u0442\u044c|\u0433\u0443\u0447\u043d\u0456\u0441\u0442\u044c)\s+(?:no|em|pra|para|a|al|na|op|\u043d\u0430)?\s*(?<n>\d{1,3})\s*(?:%|por ?cento|per ?cento|procent|\u043f\u0440\u043e\u0446\u0435\u043d\u0442\u043e\u0432|\u0432\u0456\u0434\u0441\u043e\u0442\u043a\u0456\u0432)?$" +
+            @"|^(?:sesi|ses seviyesini)\s+(?:y\u00fczde\s*|%\s*)?(?<n>\d{1,3})\s*%?\s*(?:yap|ayarla|olsun)$|^(?:volume|suara)\s+(?:ke\s+)?(?<n>\d{1,3})\s*%?$" +
+            @"|^(?:\u97f3\u91cf|\u30dc\u30ea\u30e5\u30fc\u30e0)\u3092?(?<n>\d{1,3})\s*%?\u306b(?:\u3057\u3066|\u8a2d\u5b9a\u3057\u3066)(?:\u304f\u3060\u3055\u3044)?$|^(?:\u8bf7|\u8acb)?(?:\u628a)?(?:\u97f3\u91cf|\u58f0\u97f3|\u8072\u97f3)(?:\u8c03|\u8abf|\u8bbe|\u8a2d)?(?:\u5230|\u6210|\u4e3a|\u70ba)\s*(?<n>\d{1,3})\s*%?$|^(?:\ubcfc\ub968|\uc74c\ub7c9|\uc18c\ub9ac)(?:\uc744|\ub97c)?\s*(?<n>\d{1,3})\s*%?(?:\uc73c\ub85c|\ub85c)\s*(?:\ud574|\ub9de\ucdb0|\uc124\uc815\ud574)(?:\uc918|\uc918\uc694|\uc8fc\uc138\uc694)?$", "volume_set", "n",
             // Unmute before mute, since "turn mute off" says mute.
             @"^(?:un-?mute|unsilence)(?:\s+" + Thing + @")?$|^(?:turn|switch|put|set)\s+(?:the\s+)?mute\s+off$|^(?:turn|switch)\s+off\s+(?:the\s+)?mute$|^(?:take|get)\s+(?:" + Thing + @"\s+)?off\s+(?:of\s+)?mute$|^mute off$", "unmute", "",
             @"^(?:turn|switch|put|bring)\s+" + Sound + @"\s+(?:back\s+)?on$|^(?:turn|switch)\s+(?:back\s+)?on\s+" + Sound + @"$|^(?:sound|volume|audio)\s+(?:back\s+)?on$|^bring\s+(?:back\s+)?" + Sound + @"(?:\s+back)?$", "unmute", "",
             @"^(?:quita(?:le)? el silencio|desmutea(?:r)?|activa el (?:sonido|audio|volumen)|pon el (?:sonido|audio|volumen)|enciende el (?:sonido|audio|volumen)|devu[e\u00e9]lveme el sonido)$|^(?:remets|r[\u00e9e]active|rallume) le son$|^enl[e\u00e8]ve la sourdine$", "unmute", "",
-            @"^(?:mute|silence|hush)(?:\s+" + Thing + @")?$|^(?:kill|cut)\s+" + Sound + @"$|^(?:turn|switch|shut)\s+off\s+" + Sound + @"$|^(?:turn|switch|shut)\s+" + Sound + @"\s+off$", "mute", "",
+            @"^(?:(?:schalt|schalte|mach|mache)\s+(?:den\s+)?)?(?:ton|sound|audio)\s+(?:wieder\s+)?an$|^(?:stummschaltung\s+aufheben|nicht mehr stumm|laut\s*schalten)$" +
+            @"|^(?:desmuta|desmutar|desmute|tira do mudo|tira o mudo|liga o som|volta o som|ativa o som|togli (?:il )?muto|riattiva (?:l')?audio|rimetti (?:l')?audio|riattiva il suono|w\u0142\u0105cz d\u017awi\u0119k|wlacz dzwiek|odcisz|przywr\u00f3\u0107 d\u017awi\u0119k|przywroc dzwiek|geluid aan|zet het geluid (?:weer )?aan|ontdempen)$" +
+            @"|^(?:\u0432\u043a\u043b\u044e\u0447\u0438 \u0437\u0432\u0443\u043a|\u0432\u0435\u0440\u043d\u0438 \u0437\u0432\u0443\u043a|\u0440\u0430\u0437\u043c\u044c\u044e\u0442\u044c|\u0440\u0430\u0437\u043c\u0443\u0442\u044c|\u0443\u0432\u0456\u043c\u043a\u043d\u0438 \u0437\u0432\u0443\u043a|\u043f\u043e\u0432\u0435\u0440\u043d\u0438 \u0437\u0432\u0443\u043a|sesi geri a\u00e7|sessizden \u00e7\u0131kar|nyalakan suara|hidupkan suara|bunyikan lagi)$" +
+            @"|^(?:\u30df\u30e5\u30fc\u30c8(?:\u3092)?\u89e3\u9664\u3057\u3066|\u97f3\u3092\u623b\u3057\u3066)(?:\u304f\u3060\u3055\u3044)?$|^(?:\u8bf7|\u8acb)?(?:\u53d6\u6d88\u9759\u97f3|\u53d6\u6d88\u975c\u97f3|\u89e3\u9664\u9759\u97f3|\u89e3\u9664\u975c\u97f3)$|^(?:\uc74c\uc18c\uac70\s*\ud574\uc81c(?:\ud574|\ud574\uc918|\ud574\s*\uc918)?|\uc18c\ub9ac\s*\ucf1c(?:\uc918)?)$", "unmute", "",
+            // "Hush" is said to her, not the PC, so it goes to her brain like any chat.
+            @"^(?:mute|silence)(?:\s+" + Thing + @")?$|^(?:kill|cut)\s+" + Sound + @"$|^(?:turn|switch|shut)\s+off\s+" + Sound + @"$|^(?:turn|switch|shut)\s+" + Sound + @"\s+off$", "mute", "",
             @"^(?:turn|switch|put|set)\s+(?:on\s+)?(?:the\s+)?mute(?:\s+on)?$|^(?:put|set)\s+(?:" + Thing + @"\s+)?on mute$|^(?:mute on|sound off|volume off|audio off|no sound)$", "mute", "",
             @"^(?:silencia(?:r)?|mutea(?:r)?|quita(?:le)? el (?:sonido|volumen|audio)|pon(?:lo)? en silencio|apaga el (?:sonido|volumen|audio))(?:\s+(?:el|la)\s+(?:volumen|sonido|audio|pc|computadora|ordenador|compu))?$|^(?:coupe(?:r)?|couper) (?:le )?(?:son|volume)$|^mets(?: le pc| l'ordi)? en sourdine$", "mute", "",
+            @"^(?:(?:schalt|schalte|mach|mache)\s+(?:den\s+)?)?(?:ton|sound|audio)\s+aus$|^(?:stumm|stummschalten|schalte? (?:alles|den pc|den computer|es) stumm)$" +
+            @"|^(?:muta|tira o som|desliga o som|corta o som|muto|silenzia|togli (?:l')?audio|togli il volume|metti (?:in|il) muto|wycisz(?:\s+(?:dźwięk|dzwiek|komputer|wszystko))?|wyłącz dźwięk|wylacz dzwiek|dempen|demp het geluid|geluid uit|zet het geluid uit)$" +
+            @"|^(?:выключи звук|отключи звук|убери звук|без звука|замьють|замуть|вимкни звук|без звуку|sesi kapat|sessize al|matikan suara|bisukan|senyapkan)$" +
+            @"|^(?:ミュートして|消音して|音を消して)(?:ください)?$|^(?:请|請)?(?:静音|靜音)(?:一下)?$|^(?:음소거(?:해|해줘|해\s*줘)?|소리\s*꺼(?:줘)?)$", "mute", "",
             // Up and down. "A bit", "a lot" or "by 20" say how far.
             @"^(?:turn|crank|pump|bump|jack|kick|ramp|dial|boost|raise|push|bring|knock|put)\s+" + Thing + @"\s+up$|^(?:turn|crank|pump|bump|jack|ramp|dial|boost)\s+up\s+" + Thing + @"$|^(?:raise|increase|boost|up|amp up)\s+" + Thing + @"$|^(?:make|get)\s+" + Thing + @"\s+(?:louder|loud|higher)$|^louder$|^" + Loud + @"\s+(?:louder|up|higher)$|^more (?:volume|sound)$", "volume_up", "",
             @"^(?:(?:it'?s|its|it is|that'?s|thats|this is|the (?:volume|sound|music|audio|game|video|song) is)\s+)?(?:(?:way|so|really|kinda|a bit|bit)\s+)?too (?:quiet|soft|low)$|^i can'?t hear (?:it|that|anything|the (?:music|video|game|sound|audio|song))$", "volume_up", "",
             @"^(?:sube(?:le)?|s[u\u00fa]bele|subir|aumenta(?:r)?|alza|pon(?:le)? m[a\u00e1]s alto|m[a\u00e1]s alto|m[a\u00e1]s volumen)(?:\s+(?:el|la|al)\s+(?:volumen|sonido|m[u\u00fa]sica|audio|canci[o\u00f3]n))?$|^(?:monte(?:r)?|augmente(?:r)?|mets plus fort|plus fort)(?:\s+(?:le|la)\s+(?:son|volume|musique))?$", "volume_up", "",
+            @"^(?:(?:mach|mache|dreh|drehe)\s+(?:(?:es|das|die musik|den ton|den sound|die lautstärke)\s+)?)?(?:etwas\s+|ein bisschen\s+|ein wenig\s+|viel\s+)?lauter$|^(?:dreh|drehe)\s+(?:(?:es|die musik|den ton|den sound|die lautstärke)\s+)?auf$|^(?:die\s+)?lautstärke\s+(?:hoch|rauf|erhöhen|lauter)$|^(?:erhöhe|erhöh)\s+(?:die\s+)?lautstärke$" +
+            @"|^(?:aumenta|aumente|sobe|suba|alza)(?:\s+(?:o\s+|il\s+)?(?:volume|som|áudio|audio|música|musica|suono))?(?:\s+(?:um pouco|um pouquinho|bastante|un po'?|di più|di piu))?$|^(?:mais alto|mais volume|più forte|piu forte)$" +
+            @"|^(?:podgłoś|podglos|pogłośnij|poglosnij|zrób głośniej|zrob glosniej|głośniej|glosniej|daj głośniej|daj glosniej)(?:\s+(?:muzykę|muzyke|dźwięk|dzwiek))?$" +
+            @"|^(?:(?:zet|doe|draai)\s+(?:(?:het|de muziek|het geluid|het volume)\s+)?(?:wat\s+|iets\s+)?|(?:wat|iets)\s+)harder$|^(?:het\s+)?volume\s+(?:omhoog|hoger)$|^(?:zet|draai)\s+(?:het\s+)?(?:volume|geluid)\s+(?:omhoog|hoger)$" +
+            @"|^(?:сделай\s+)?(?:погромче|громче)(?:\s+(?:музыку|звук))?$|^(?:прибавь|увеличь)\s+(?:громкость|звук)$|^(?:зроби\s+)?гучніше(?:\s+(?:музику|звук))?$" +
+            @"|^sesi\s+(?:biraz\s+)?(?:arttır|artır|yükselt)$|^(?:keraskan|kerasin)(?:\s+(?:volume|suara|volumenya|suaranya))?$|^(?:besarkan|kencangkan|naikkan|gedein)\s+(?:volume|suara|volumenya|suaranya)$" +
+            @"|^(?:音量|ボリューム|音)を?(?:上げて|あげて|大きくして)(?:ください)?$|^(?:请|請)?(?:把)?(?:音量|声音|聲音)(?:(?:调|調)(?:大|高)(?:一点|一點|点|點)?|(?:大|高)(?:一点|一點|点|點))$|^(?:请|請)?(?:调|調)(?:大|高)(?:音量|声音|聲音)$|^(?:볼륨|소리|음량)\s*(?:좀\s*)?(?:키워|올려|높여)(?:줘|줘요|주세요)?$", "volume_up", "",
             @"^(?:turn|crank|bring|knock|dial|drop)\s+" + Thing + @"\s+down$|^(?:turn|crank|knock|dial|drop|bring)\s+down\s+" + Thing + @"$|^(?:lower|decrease|reduce|quieten)\s+" + Thing + @"$|^(?:drop|soften)\s+" + Noise + @"$|^(?:make|get)\s+" + Thing + @"\s+(?:quieter|softer|lower|less loud)$|^(?:quieter|softer)$|^" + Loud + @"\s+(?:down|quieter|softer|lower)$|^less (?:volume|sound)$", "volume_down", "",
             @"^(?:(?:it'?s|its|it is|that'?s|thats|this is|you'?re|ur|the (?:volume|sound|music|audio|game|video|song) is)\s+)?(?:(?:way|so|really|kinda|a bit|bit)\s+)?too loud$", "volume_down", "",
             @"^(?:baja(?:le)?|b[a\u00e1]jale|bajar|disminuye|reduce|pon(?:le)? m[a\u00e1]s bajo|m[a\u00e1]s bajo|menos volumen)(?:\s+(?:el|la|al)\s+(?:volumen|sonido|m[u\u00fa]sica|audio|canci[o\u00f3]n))?$|^(?:baisse(?:r)?|diminue(?:r)?|moins fort|mets moins fort)(?:\s+(?:le|la)\s+(?:son|volume|musique))?$", "volume_down", "",
+            @"^(?:(?:mach|mache|dreh|drehe)\s+(?:(?:es|das|die musik|den ton|den sound|die lautstärke)\s+)?)?(?:etwas\s+|ein bisschen\s+|ein wenig\s+|viel\s+)?leiser$|^(?:dreh|drehe)\s+(?:(?:es|die musik|den ton|den sound|die lautstärke)\s+)?(?:runter|ab)$|^(?:die\s+)?lautstärke\s+(?:runter|senken|leiser)$|^(?:senke|senk)\s+(?:die\s+)?lautstärke$" +
+            @"|^(?:abaixa|abaixe|diminui|diminua|baixa|baixe|abbassa|diminuisci)(?:\s+(?:o\s+|il\s+)?(?:volume|som|áudio|audio|música|musica|suono))?(?:\s+(?:um pouco|um pouquinho|bastante|un po'?))?$|^(?:mais baixo|menos volume|più piano|piu piano)$" +
+            @"|^(?:przycisz|ścisz|scisz|zrób ciszej|zrob ciszej|daj ciszej)(?:\s+(?:muzykę|muzyke|dźwięk|dzwiek))?$" +
+            @"|^(?:(?:zet|doe|draai)\s+(?:(?:het|de muziek|het geluid|het volume)\s+)?)?(?:wat\s+|iets\s+)?zachter$|^(?:het\s+)?volume\s+(?:omlaag|lager)$|^(?:zet|draai)\s+(?:het\s+)?(?:volume|geluid)\s+(?:omlaag|lager)$" +
+            @"|^сделай\s+потише(?:\s+(?:музыку|звук))?$|^потише\s+(?:музыку|звук)$|^сделай\s+тише(?:\s+(?:музыку|звук))?$|^(?:убавь|уменьши)\s+(?:громкость|звук)$|^зроби\s+тихіше(?:\s+(?:музику|звук))?$" +
+            @"|^sesi\s+(?:biraz\s+)?(?:kıs|azalt|düşür)$|^(?:kecilkan|pelankan|turunkan|kecilin|pelanin)\s+(?:volume|suara|volumenya|suaranya)$" +
+            @"|^(?:音量|ボリューム|音)を?(?:下げて|さげて|小さくして)(?:ください)?$|^(?:请|請)?(?:把)?(?:音量|声音|聲音)(?:(?:调|調)(?:小|低)(?:一点|一點|点|點)?|(?:小|低)(?:一点|一點|点|點))$|^(?:请|請)?(?:调|調)(?:小|低)(?:音量|声音|聲音)$|^(?:볼륨|소리|음량)\s*(?:좀\s*)?(?:줄여|낮춰|내려)(?:줘|줘요|주세요)?$", "volume_down", "",
             // The music itself.
             @"^pause(?:\s+" + Tune + @"|\s+(?:it|this|that))?$|^(?:stop|hold|freeze)\s+" + Tune + @"$|^(?:turn|switch|shut)\s+off\s+(?:the\s+)?(?:music|song|video|podcast)$|^(?:turn|switch|shut)\s+(?:the\s+)?(?:music|song|video|podcast)\s+off$", "pause", "",
             @"^(?:pausa(?:r)?|pon pausa|pausa la (?:m[u\u00fa]sica|canci[o\u00f3]n)|det[e\u00e9]n la (?:m[u\u00fa]sica|canci[o\u00f3]n)|para la (?:m[u\u00fa]sica|canci[o\u00f3]n))$|^(?:mets(?: la musique)? en pause|pause la musique)$", "pause", "",
+            @"^(?:pausier(?:e|en)?|(?:musik|lied|song|video)\s+(?:pausieren|anhalten|stoppen)|(?:halt|halte|stopp|stoppe)\s+(?:die\s+musik|das\s+lied|den\s+song|das\s+video)(?:\s+an)?)$" +
+            @"|^(?:pausa a (?:música|musica)|para a (?:música|musica)|metti in pausa|ferma la musica|stoppa la musica|pauza|zapauzuj|wstrzymaj(?:\s+muzykę|\s+muzyke)?|zatrzymaj muzykę|zatrzymaj muzyke|pauzeer|pauzeren|pauze|pauzeer de muziek)$" +
+            @"|^(?:пауза|поставь на паузу|останови музыку|постав на паузу|зупини музику|duraklat|(?:müziği|şarkıyı|videoyu)\s+(?:durdur|duraklat)|jeda(?:\s+lagu(?:nya)?)?|hentikan lagu(?:nya)?)$" +
+            @"|^(?:一時停止して|(?:曲|音楽)を?止めて)(?:ください)?$|^(?:请|請)?(?:暂停|暫停)(?:一下|音乐|音樂|播放)?$|^(?:일시\s*정지(?:해|해줘)?|(?:노래|음악)\s*멈춰(?:줘)?)$", "pause", "",
             @"^(?:resume|unpause)(?:\s+" + Tune + @"|\s+(?:it|this|that))?$|^continue\s+" + Tune + @"$|^(?:keep playing|hit play|press play|play|play it again)$|^(?:turn|switch|put)\s+(?:the\s+)?(?:music|song|video|podcast)\s+back\s+on$", "resume", "",
             @"^(?:reanuda(?:r)?|contin[u\u00fa]a la (?:m[u\u00fa]sica|canci[o\u00f3]n)|dale play|quita la pausa|sigue con la m[u\u00fa]sica)$|^(?:reprends|relance|remets)(?: la musique)?$", "resume", "",
+            @"^(?:musik\s+weiter|(?:spiel|spiele|mach|mache)\s+(?:die\s+)?(?:musik|das lied|den song)\s+weiter)$" +
+            @"|^(?:continua a (?:música|musica)|continue a (?:música|musica)|despausa|despausar|volta a tocar|riprendi la musica|fai ripartire la musica|wznów|wznow|wznów muzykę|wznow muzyke|odpauzuj|hervat)$" +
+            @"|^(?:продолжи музыку|сними с паузы|сними паузу|продовж музику|зніми з паузи|(?:müziği|şarkıyı)\s+(?:devam ettir|sürdür)|lanjutkan (?:lagu|musik)(?:nya)?|putar lagi)$" +
+            @"|^(?:再生して|続きを再生して|再開して)(?:ください)?$|^(?:请|請)?(?:继续播放|繼續播放|继续放|繼續放)$|^(?:다시\s*재생(?:해|해줘)?|계속\s*재생(?:해|해줘)?)$", "resume", "",
             @"^(?:skip|next)(?:\s+(?:to\s+)?(?:the\s+)?(?:next\s+)?(?:(?:this|that|current)\s+)?(?:song|track|one|tune|it|this|that))?$|^(?:play|go to|put on)\s+(?:the\s+)?next\s+(?:song|track|one|tune)$|^(?:change|switch)\s+(?:the\s+)?(?:song|track|tune)$|^(?:another|different|new)\s+(?:song|track|tune)$|^skip\s+(?:ahead|forward)$", "next", "",
             @"^(?:siguiente(?: canci[o\u00f3]n)?|la siguiente|pasa(?: la)? canci[o\u00f3]n|p[a\u00e1]sala|salta(?: esta| la)?(?: canci[o\u00f3]n)?|s[a\u00e1]ltala|otra canci[o\u00f3]n|cambia(?: la)? canci[o\u00f3]n)$|^(?:suivant(?:e)?|chanson suivante|passe (?:la chanson|[a\u00e0] la suivante)|la suivante)$", "next", "",
+            @"^(?:n\u00e4chste[sr]?|n\u00e4chstes lied|n\u00e4chster song|n\u00e4chster titel|\u00fcberspring(?:e|en)?(?:\s+(?:das|dieses)\s+(?:lied|song))?|(?:das|dieses)\s+(?:lied|song)\s+\u00fcberspringen)$" +
+            @"|^(?:pr\u00f3xima|proxima|pr\u00f3xima (?:m\u00fasica|musica|faixa)|pula(?: essa| a)?(?: m\u00fasica| musica)?|pule(?: essa| a)?(?: m\u00fasica| musica)?|passa (?:a|essa) (?:m\u00fasica|musica)|prossima(?: canzone)?|la prossima|canzone successiva|successiva)$" +
+            @"|^(?:nast\u0119pna|nastepna|nast\u0119pny|nastepny|pomi\u0144|pomin|przewi\u0144|przewin)(?:\s+(?:piosenka|piosenk\u0119|piosenke|utw\u00f3r|utwor|kawa\u0142ek|kawalek))?$|^(?:volgende(?:\s+(?:nummer|liedje))?|sla (?:dit|het) (?:nummer|liedje) over)$" +
+            @"|^(?:\u0441\u043b\u0435\u0434\u0443\u044e\u0449(?:\u0430\u044f|\u0438\u0439|\u0443\u044e)(?:\s+(?:\u043f\u0435\u0441\u043d\u044f|\u043f\u0435\u0441\u043d\u044e|\u0442\u0440\u0435\u043a))?|\u043f\u0440\u043e\u043f\u0443\u0441\u0442\u0438(?:\s+(?:\u044d\u0442\u0443\s+)?(?:\u043f\u0435\u0441\u043d\u044e|\u0442\u0440\u0435\u043a))?|\u043f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0438 (?:\u043f\u0435\u0441\u043d\u044e|\u0442\u0440\u0435\u043a)|\u043d\u0430\u0441\u0442\u0443\u043f\u043d\u0430(?:\s+\u043f\u0456\u0441\u043d\u044f)?|\u043d\u0430\u0441\u0442\u0443\u043f\u043d\u0438\u0439 \u0442\u0440\u0435\u043a|\u043f\u0440\u043e\u043f\u0443\u0441\u0442\u0438(?:\s+(?:\u0446\u044e\s+)?\u043f\u0456\u0441\u043d\u044e)?)$" +
+            @"|^(?:sonraki(?: \u015fark\u0131)?|s\u0131radaki \u015fark\u0131|\u015fark\u0131y\u0131 (?:ge\u00e7|atla)|lagu (?:berikutnya|selanjutnya)|lewati lagu(?: ini)?|skip lagu(?: ini)?|ganti lagu)$" +
+            @"|^(?:\u6b21\u306e\u66f2(?:\u306b\u3057\u3066|\u306b\u884c\u3063\u3066|\u3078)?|\u66f2\u3092\u30b9\u30ad\u30c3\u30d7\u3057\u3066|\u30b9\u30ad\u30c3\u30d7\u3057\u3066)(?:\u304f\u3060\u3055\u3044)?$|^(?:\u8bf7|\u8acb)?(?:\u4e0b\u4e00\u9996|\u4e0b\u4e00\u66f2|\u5207\u6b4c|\u8df3\u8fc7\u8fd9\u9996|\u8df3\u904e\u9019\u9996)(?:\u6b4c)?$|^(?:\ub2e4\uc74c\s*(?:\uace1|\ub178\ub798)(?:\uc73c\ub85c|\ub85c)?(?:\s*\ub118\uaca8(?:\uc918)?)?|(?:\uc774\s*)?(?:\uace1|\ub178\ub798)\s*\ub118\uaca8(?:\uc918)?|\uc2a4\ud0b5(?:\ud574|\ud574\uc918)?)$", "next", "",
             @"^(?:previous|prev)(?:\s+(?:song|track|one|tune))?$|^go\s+back(?:\s+(?:a|one)\s+(?:song|track|tune))?$|^(?:(?:play|go to|put on)\s+)?(?:the\s+)?(?:last|previous|prior)\s+(?:song|track|one|tune)(?:\s+again)?$|^back\s+(?:a|one)\s+(?:song|track|tune)$", "previous", "",
             @"^(?:anterior|canci[o\u00f3]n anterior|la anterior|pon la anterior)$|^(?:pr[\u00e9e]c[\u00e9e]dent(?:e)?|chanson pr[\u00e9e]c[\u00e9e]dente|la pr[\u00e9e]c[\u00e9e]dente)$", "previous", "",
-            @"^((what('|\u2019)?s|what is) (playing|this song|this track|the song|on spotify)|what (song|track)( is|('|\u2019)s)? (this|playing|on)|what am i listening to|what are we listening to)$", "now_playing", ""
+            @"^(?:vorherige[sr]?(?:\s+(?:lied|song|titel))?|m\u00fasica anterior|musica anterior|volta uma m\u00fasica|volta uma musica|precedente|canzone precedente|la precedente|poprzednia(?:\s+piosenka)?|poprzedni(?:\s+(?:utw\u00f3r|utwor))?|vorige(?:\s+(?:nummer|liedje))?)$" +
+            @"|^(?:\u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449(?:\u0430\u044f|\u0438\u0439|\u0443\u044e)(?:\s+(?:\u043f\u0435\u0441\u043d\u044f|\u043f\u0435\u0441\u043d\u044e|\u0442\u0440\u0435\u043a))?|\u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044f(?:\s+\u043f\u0456\u0441\u043d\u044f)?|\u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u0456\u0439 \u0442\u0440\u0435\u043a|\u00f6nceki(?: \u015fark\u0131)?|lagu sebelumnya)$" +
+            @"|^(?:\u524d\u306e\u66f2(?:\u306b\u3057\u3066|\u306b\u623b\u3057\u3066)?)(?:\u304f\u3060\u3055\u3044)?$|^(?:\u8bf7|\u8acb)?(?:\u4e0a\u4e00\u9996|\u4e0a\u4e00\u66f2)(?:\u6b4c)?$|^(?:\uc774\uc804\s*(?:\uace1|\ub178\ub798)(?:\uc73c\ub85c|\ub85c)?)$", "previous", "",
+            @"^((what('|\u2019)?s|what is) (playing|this song|this track|the song|on spotify)|what (song|track)( is|('|\u2019)s)? (this|playing|on)|what am i listening to|what are we listening to)$|^(?:qu[eé] (?:canci[oó]n|m[uú]sica|tema) (?:es (?:esta|esa)|es|suena|est[aá] sonando)|qu[eé] est[aá] sonando|(?:cu[aá]l es|c[oó]mo se llama) (?:esta|esa) canci[oó]n)(?:\s+en\s+spotify)?$" +
+            @"|^(?:c'est quoi (?:cette|la|ce|le) (?:chanson|musique|son|morceau|titre)|(?:c'est )?quelle chanson(?: c'est)?|quelle est (?:cette|la) chanson|quel est (?:ce|le) (?:morceau|titre)|qu'est-ce (?:qu'on |que j')(?:écoute|ecoute)|qu'est-ce qui passe|comment s'appelle (?:cette|la) chanson)$" +
+            @"|^(?:was (?:ist das )?für ein (?:lied|song|track)(?: ist das)?|was ist das für (?:ein lied|ein song|ein track|musik)|welche[sr]? (?:lied|song|track|titel) (?:ist das|läuft(?: da| gerade| hier)?|spielt(?: gerade)?)|wie heißt (?:das|dieses|der) (?:lied|song|track)|was hör(?:e|en) (?:ich|wir)(?: gerade| da)?)$" +
+            @"|^(?:que (?:música|musica|som) é (?:essa|esta|esse|este)|qual (?:é )?(?:essa|esta|a) (?:música|musica)|qual (?:é )?o nome (?:dessa|desta|da) (?:música|musica)|(?:o )?que (?:música |musica )?(?:está|esta|tá|ta) tocando)$" +
+            @"|^(?:che (?:canzone|musica|brano|pezzo) (?:è|e'?)(?: questa| questo)?|che canzone sta suonando|cosa sta suonando|come si chiama (?:questa|la) canzone|qual (?:è|e'?) (?:questa|la) canzone|cos'(?:è|e) questa canzone|cosa (?:stiamo|sto) ascoltando)$" +
+            @"|^(?:co to za (?:piosenka|utwór|utwor|kawałek|kawalek|muzyka)|co (?:teraz )?(?:gra|leci)|jaka to (?:piosenka|muzyka)|jak si[eę] nazywa ta piosenka|czego (?:teraz )?(?:słucham|slucham|słuchamy|sluchamy))$" +
+            @"|^(?:welk (?:nummer|liedje|lied) is dit|wat is dit voor (?:een )?(?:nummer|liedje|lied|muziek)|hoe heet dit (?:nummer|liedje|lied)|waar luister(?:en we| ik) naar)$" +
+            @"|^(?:что (?:это )?за (?:песня|трек|музыка)|что (?:сейчас )?играет|какая (?:это )?песня|как называется (?:эта )?песня|что (?:я|мы) (?:сейчас )?слуша(?:ю|ем)|що (?:це )?за (?:пісня|трек|музика)|що (?:зараз )?грає|яка (?:це )?пісня|як називається (?:ця )?пісня)$" +
+            @"|^(?:bu (?:şarkı|sarki) ne|bu hangi (?:şarkı|sarki)|(?:şu an|su an|şimdi|simdi) (?:ne|hangi (?:şarkı|sarki)) (?:çalıyor|caliyor)|(?:çalan|calan) (?:şarkı|sarki) ne|bu (?:şarkının|sarkinin) (?:adı|adi) ne|ne dinliyoruz|lagu apa (?:ini|itu|yang (?:lagi |sedang )?diputar)|ini lagu apa|judul lagu(?:nya)? (?:ini )?apa|apa judul lagu (?:ini|itu))$" +
+            @"|^(?:(?:この|今の)(?:曲|歌)|(?:今|いま)?(?:流れて|かかって)(?:る|いる)(?:曲|歌))(?:は|って)?(?:何|なに|なん)(?:ですか|だっけ|て曲|て歌)?$|^これ(?:は|って)?(?:何|なに|なん)の(?:曲|歌)(?:ですか|だっけ)?$|^(?:今|いま)?(?:何|なに)が(?:流れて|かかって)(?:る|いる|ます)(?:の)?$" +
+            @"|^(?:这|這)(?:是)?(?:什么|什麼|哪首)(?:歌|歌曲|音乐|音樂)(?:啊|呀|呢)?$|^(?:这|這)首歌(?:叫|是)(?:什么|什麼)(?:名字)?(?:啊|呀|呢)?$|^(?:现在|現在)?(?:正在|在)(?:放|播|播放)(?:的是)?(?:什么|什麼)(?:歌|歌曲|音乐|音樂)?(?:啊|呀|呢)?$|^(?:现在|現在)?(?:放|播放)的是(?:什么|什麼)(?:歌|歌曲|音乐|音樂)?(?:啊|呀|呢)?$" +
+            @"|^(?:(?:이|이거|지금|지금 나오는|나오는)\s*)?(?:노래|곡)\s*(?:제목\s*)?(?:뭐야|뭐예요|뭐에요|뭐지|뭐니|머야)$|^(?:(?:이거|이건|지금)\s*)?무슨\s*(?:노래|곡)(?:야|이야|예요|이에요|지|임)$", "now_playing", ""
         };
 
         internal static bool Loudness(string said, out string action, out string level, out bool spotify)
@@ -534,6 +1373,15 @@ namespace CapriDesktop
             string minutes;
             string switched = PowerFor(text, out minutes);
             if (switched != null) { tool = "power"; args.Action = switched; args.Minutes = minutes; return true; }
+            Match napped = Napping.Match(text);
+            if (napped.Success) { tool = "nap"; args.Action = napped.Groups["wake"].Success ? "wake" : "sleep"; return true; }
+            string screen, window;
+            string moved = MovingFor(text, out screen, out window);
+            // A window they named only counts here while it's open, so "sit on my homework" stays chat for her brain.
+            if (moved != null && window != null && !Sittable(window)) moved = null;
+            if (moved != null) { tool = "move_yourself"; args.Action = moved; args.Screen = screen; args.Window = window; return true; }
+            string played = AnimationFor(text);
+            if (played != null) { tool = "animate"; args.Name = played; return true; }
             string pressed = ShortcutFor(text);
             if (pressed != null) { tool = "shortcut"; args.Name = pressed; return true; }
             if (ScreenAsk.IsMatch(text) || ScreenQuestion.IsMatch(text)) { tool = "look_at_screen"; args.Focus = ScreenQuestion.IsMatch(text) ? text : null; return true; }
@@ -571,13 +1419,15 @@ namespace CapriDesktop
             }
             found = Regex.Match(text, @"^(?:google|look up)\s+(.+)$", RegexOptions.IgnoreCase);
             if (found.Success && !Regex.IsMatch(found.Groups[1].Value, @"^(it|this|that|something|stuff|for me)$", RegexOptions.IgnoreCase)) { tool = "open_website"; args.Site = "google"; args.Search = found.Groups[1].Value.Trim(); return true; }
-            if (Regex.IsMatch(text, LookupWords, RegexOptions.IgnoreCase) && !Regex.IsMatch(Regex.Replace(text, @"\bnear me\b", ""), @"\b(my|your|you|me|i)\b", RegexOptions.IgnoreCase) && Safety.Screen(text) == null) { tool = "open_website"; args.Site = "google"; args.Search = text; return true; }
+            if (Regex.IsMatch(text, LookupWords, RegexOptions.IgnoreCase) && !Regex.IsMatch(Regex.Replace(text, @"\bnear me\b", ""), @"\b(my|your|you|me|i)\b", RegexOptions.IgnoreCase)) { tool = "open_website"; args.Site = "google"; args.Search = text; return true; }
             found = Regex.Match(text, @"^(?:play|shuffle|put on|blast)\s+(.+?)(\s+on\s+(spotify|youtube))?$", RegexOptions.IgnoreCase);
             if (found.Success)
             {
                 string target = found.Groups[1].Value.Trim();
                 if (!found.Groups[3].Success && Installed(target)) { tool = "open_app"; args.Name = target; return true; }
                 if (Regex.IsMatch(target, @"^(with|along|around|a game|games?\b|dead|nice|fair|it\b|me\b|us\b|together|((a|any|some|random) )?playlists?$)", RegexOptions.IgnoreCase)) return false;
+                // "play the wasd minigame" is a game, not a song to search Spotify for (a tester, 30 Oct), and so is a game that's open.
+                if (Playable.IsMatch(target) || Nickname(target) != null || (!found.Groups[3].Success && Showing(target))) return false;
                 if (found.Groups[3].Success) args.App = found.Groups[3].Value.ToLowerInvariant();
                 if (Regex.IsMatch(target, @"^(music$|some music$|((a|any|some|random) )?(song|track|tune|music)s?$|(something|anything)\b(?!\s+by\s))", RegexOptions.IgnoreCase)) { tool = "play_music"; args.Kind = "song"; args.Song = Pick(); return true; }
                 Match kind = Regex.Match(target, @"^(?:(?:the|my|your)\s+)?(.+?)\s+(playlist|album)$", RegexOptions.IgnoreCase);
@@ -600,9 +1450,9 @@ namespace CapriDesktop
             return true;
         }
 
-        internal static bool Failed(string result) { return Regex.IsMatch(result ?? "", @"^(Which app|What should I play|Not (opening|playing) that|No app called|More than one|That didn't work|Couldn't|There's no|That isn't a website|Which job|Not doing that|Should I |Got lost|Ran out of steps|You pressed Esc|You grabbed the mouse|Using the mouse and keyboard isn't)|isn't open\.$|but (couldn't|it's still open)"); }
+        internal static bool Failed(string result) { return Regex.IsMatch(result ?? "", @"^(Which app|What should I play|No app called|More than one|That didn't work|Couldn't|There's no|That isn't a website|Which job|Should I |Got lost|Ran out of steps|You pressed Esc|You grabbed the mouse|Using the mouse and keyboard isn't)|isn't open\.$|but (couldn't|it's still open)"); }
 
-        private static readonly Regex LooseText = new Regex(@"\b(open_app|open_website|media|look_at_screen|play_music|app_window|use_computer|shortcut|remember|power)\s*(\{[^{}]*\}|\([^()]*\))");
+        private static readonly Regex LooseText = new Regex(@"\b(open_app|open_website|media|look_at_screen|play_music|app_window|use_computer|shortcut|remember|power|nap|move_yourself|animate)\s*(\{[^{}]*\}|\([^()]*\))");
         private static readonly Regex ToolPair = new Regex(@"[""']?(\w+)[""']?\s*[:=]\s*(?:""([^""]*)""|'([^']*)'|([^,})\s][^,})]*))");
 
         private static ToolArguments Pairs(string tool, string call)
@@ -616,7 +1466,7 @@ namespace CapriDesktop
                 Set(args, pair.Groups[1].Value.ToLowerInvariant(), pair.Groups[2].Success ? pair.Groups[2].Value : pair.Groups[3].Success ? pair.Groups[3].Value : pair.Groups[4].Value.Trim());
             }
             string lone = inside.Trim().Trim('"', '\'');
-            if (!paired && lone.Length > 0) Set(args, tool == "open_website" ? "site" : tool == "media" || tool == "power" ? "action" : tool == "look_at_screen" ? "focus" : tool == "play_music" ? "song" : tool == "use_computer" ? "task" : tool == "remember" ? "text" : "name", lone);
+            if (!paired && lone.Length > 0) Set(args, tool == "open_website" ? "site" : tool == "media" || tool == "power" || tool == "nap" || tool == "move_yourself" ? "action" :tool == "look_at_screen" ? "focus" : tool == "play_music" ? "song" : tool == "use_computer" ? "task" : tool == "remember" ? "text" : "name", lone);
             return args;
         }
 
@@ -633,9 +1483,10 @@ namespace CapriDesktop
             else if (key == "task") args.Task = value;
             else if (key == "text") args.Text = value;
             else if (key == "minutes") args.Minutes = value;
+            else if (key == "screen") args.Screen = value;
         }
 
-        private static readonly Regex ToolText = new Regex(@"\A(open_app|open_website|media|look_at_screen|play_music|app_window|use_computer|shortcut|remember|power)\s*(\{.*\})\z", RegexOptions.Singleline);
+        private static readonly Regex ToolText = new Regex(@"\A(open_app|open_website|media|look_at_screen|play_music|app_window|use_computer|shortcut|remember|power|nap|move_yourself|animate)\s*(\{.*\})\z", RegexOptions.Singleline);
 
         internal static bool Typed(string reply, out string tool, out ToolArguments args, bool loose = false)
         {
@@ -659,9 +1510,68 @@ namespace CapriDesktop
             return true;
         }
 
+        private const string ToolNames = "open_app|open_website|media|look_at_screen|play_music|app_window|use_computer|shortcut|remember|power|nap|move_yourself|animate";
+        private static readonly Regex NamedBefore = new Regex(@"(?<![\p{L}\p{N}_])(" + ToolNames + @")\s*\z");
+        private static readonly Regex NamedInside = new Regex(@"""name""\s*:\s*""(" + ToolNames + @")""");
+        private static readonly Regex GivenInside = new Regex(@"""(?:arguments|parameters)""\s*:\s*\{");
+
+        // Every whole call written out as text, in order: open_app{"name":"Discord"}, Gemma's call:open_app{name:<|"|>Discord<|"|>}
+        // or {"name":"open_app","arguments":{"name":"Discord"}} in <tool_call> tags. One cut off partway through, where her brain ran
+        // out of room, is left out, and so is one that doesn't make sense.
+        internal static List<KeyValuePair<string, ToolArguments>> Written(string reply)
+        {
+            List<KeyValuePair<string, ToolArguments>> found = new List<KeyValuePair<string, ToolArguments>>();
+            string text = Regex.Replace(Brain.Visible(reply), @"<\|""\|>|<escape>", "\"");
+            for (int at = 0; at < text.Length; )
+            {
+                int open = text.IndexOf('{', at);
+                int close = open < 0 ? -1 : Closing(text, open);
+                if (close < 0) break;
+                string body = text.Substring(open, close - open + 1);
+                Match named = NamedBefore.Match(text.Substring(at, open - at));
+                string tool = null;
+                ToolArguments args = null;
+                if (named.Success) { tool = named.Groups[1].Value; args = Read(body); }
+                else
+                {
+                    Match inside = NamedInside.Match(body), given = GivenInside.Match(body);
+                    int start = given.Success ? given.Index + given.Length - 1 : -1;
+                    int end = start < 0 ? -1 : Closing(body, start);
+                    if (inside.Success && end > 0) { tool = inside.Groups[1].Value; args = Read(body.Substring(start, end - start + 1)); }
+                }
+                if (tool != null && Valid(tool, args)) found.Add(new KeyValuePair<string, ToolArguments>(tool, args));
+                at = close + 1;
+            }
+            return found;
+        }
+
+        // Where the brace at open closes, skipping braces in quotes, or -1 when it never does.
+        private static int Closing(string text, int open)
+        {
+            int depth = 0;
+            bool quoted = false;
+            for (int i = open; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (quoted) { if (c == '\\') i++; else if (c == '"') quoted = false; }
+                else if (c == '"') quoted = true;
+                else if (c == '{') depth++;
+                else if (c == '}' && --depth == 0) return i;
+            }
+            return -1;
+        }
+
         internal static ToolArguments Read(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return null;
+            ToolArguments args = Strict(json);
+            if (args != null) return args;
+            string loose = Loose(json);
+            return loose == json ? null : Strict(loose);
+        }
+
+        private static ToolArguments Strict(string json)
+        {
             try
             {
                 using (System.Xml.XmlDictionaryReader reader = JsonReaderWriterFactory.CreateJsonReader(Encoding.UTF8.GetBytes(json), System.Xml.XmlDictionaryReaderQuotas.Max))
@@ -672,6 +1582,40 @@ namespace CapriDesktop
             }
             catch (SerializationException) { return null; }
             catch (System.Xml.XmlException) { return null; }
+        }
+
+        // Gemma sometimes writes its own call format as text: type{enter:<|"|>yes<|"|>,target:<|"|>1<|"|>}. Its quotes become
+        // JSON quotes, and bare keys and values (target:3) get quoted.
+        internal static string Loose(string json)
+        {
+            string text = (json ?? "").Replace("<|\"|>", "\"");
+            StringBuilder loose = new StringBuilder();
+            char last = ' ';
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '"')
+                {
+                    int end = i + 1;
+                    while (end < text.Length && text[end] != '"') end += text[end] == '\\' ? 2 : 1;
+                    loose.Append(text, i, Math.Min(end + 1, text.Length) - i);
+                    i = end;
+                    last = '"';
+                    continue;
+                }
+                if ((last == '{' || last == ',' || last == ':') && !char.IsWhiteSpace(c) && "{}[],:".IndexOf(c) < 0)
+                {
+                    int end = i;
+                    while (end < text.Length && text[end] != ',' && text[end] != '}' && (last == ':' || text[end] != ':')) end++;
+                    loose.Append('"').Append(text.Substring(i, end - i).Trim().Replace("\\", "\\\\").Replace("\"", "\\\"")).Append('"');
+                    i = end - 1;
+                    last = '"';
+                    continue;
+                }
+                loose.Append(c);
+                if (!char.IsWhiteSpace(c)) last = c;
+            }
+            return loose.ToString();
         }
 
         internal static bool Valid(string tool, ToolArguments args)
@@ -689,9 +1633,12 @@ namespace CapriDesktop
             }
             if (tool == "app_window") return Named(args.Name) && Regex.IsMatch(args.Action ?? "", @"\A(switch_to|minimize|close)\z");
             if (tool == "use_computer") return Named(args.Task);
-            if (tool == "shortcut") return Regex.IsMatch(args.Name ?? "", @"\A(discord_mute|discord_deafen|screenshot|clip_that|record|game_bar|show_desktop|task_manager|clipboard|emoji)\z");
+            if (tool == "shortcut") return Regex.IsMatch(args.Name ?? "", @"\A(discord_mute|discord_deafen|screenshot|clip_that|record|game_bar|show_desktop|task_manager|clipboard|emoji|voice_typing|live_captions|narrator|magnifier|magnifier_off|color_filters|quick_settings)\z");
             if (tool == "remember") return Named(args.Text) && (string.IsNullOrEmpty(args.Action) || args.Action == "remember" || args.Action == "forget");
             if (tool == "power") return Regex.IsMatch(args.Action ?? "", @"\A(shut_down|restart|sleep|lock|sign_out|cancel)\z") && (string.IsNullOrEmpty(args.Minutes) || Regex.IsMatch(args.Minutes.Trim(), @"\A\d{1,4}\z"));
+            if (tool == "nap") return string.IsNullOrEmpty(args.Action) || args.Action == "sleep" || args.Action == "wake";
+            if (tool == "move_yourself") return Regex.IsMatch(args.Action ?? "", @"\A(come_here|other_screen|sit|sit_on|lie_down|sit_up|stand_up|walk_around|wander|hang|ride_cursor|hop_off|hide|show|move_mainframe)\z") && (args.Action != "sit_on" || Named(args.Window));
+            if (tool == "animate") return Regex.IsMatch(args.Name ?? "", @"\A(idle|glitch|grin|blink|dance|stop_dancing)\z");
             return tool == "play_music" && Named(args.Song) && (string.IsNullOrEmpty(args.Kind) || Regex.IsMatch(args.Kind, @"\A(song|playlist|album|artist)\z")) && (string.IsNullOrEmpty(args.App) || args.App == "spotify" || args.App == "youtube");
         }
 
@@ -750,11 +1697,24 @@ namespace CapriDesktop
             return false;
         }
 
+        private static readonly Regex Playable = new Regex(@"\b(games?|mini ?games?|obby|obbies|levels?|rounds?|match(es)?|matchmaking|ranked|deathmatch|map|mode|bedwars|skywars|roblox|minecraft|fortnite|valorant|counter[- ]?strike|wasd)\b", RegexOptions.IgnoreCase);
+
+        // What players call their games, for when nothing installed goes by the name they said ("open cs", a tester, 30 Oct).
+        private static readonly string[,] Nicknames = { { "cs", "counter strike" }, { "cs2", "counter strike 2" }, { "csgo", "counter strike" }, { "cs go", "counter strike" }, { "val", "valorant" }, { "valo", "valorant" }, { "mc", "minecraft" }, { "gta", "grand theft auto" }, { "gta 5", "grand theft auto v" }, { "gta v", "grand theft auto v" }, { "lol", "league of legends" }, { "r6", "rainbow six" }, { "cod", "call of duty" }, { "ow", "overwatch" }, { "rl", "rocket league" }, { "fn", "fortnite" }, { "tf2", "team fortress 2" }, { "dbd", "dead by daylight" } };
+
+        internal static string Nickname(string wanted)
+        {
+            string said = Regex.Replace(Plain(wanted), @"^the | (app|game)$", "");
+            for (int i = 0; i < Nicknames.GetLength(0); i++) if (said == Nicknames[i, 0]) return Nicknames[i, 1];
+            return null;
+        }
+
         private static string OpenApp(string wanted)
         {
             if (string.IsNullOrWhiteSpace(wanted)) return "Which app, choom?";
-            if (Safety.Stops(wanted) != null) return "Not opening that, choom.";
             List<InstalledApp> found = Match(Apps(), wanted);
+            string nicknamed = found.Count == 0 ? Nickname(wanted) : null;
+            if (nicknamed != null) found = Match(Apps(), nicknamed);
             if (found.Count == 0) found = Closest(Apps(), wanted);
             if (found.Count == 0) return "No app called " + wanted.Trim() + " is installed on this PC.";
             // When several match equally well, the one with the fewest extra words is closest to what they said.
@@ -874,7 +1834,67 @@ namespace CapriDesktop
             reader.Start();
             if (!reader.Join(10000)) throw new TimeoutException("The app list took too long.");
             if (failed != null) throw failed;
+            return WithSteam(apps, SteamApps(SteamFolder()));
+        }
+
+        // Steam games and apps show in All apps only when Steam made a Start menu shortcut, so her list adds the rest from Steam's own library.
+        internal static List<InstalledApp> WithSteam(List<InstalledApp> apps, List<InstalledApp> steam)
+        {
+            foreach (InstalledApp game in steam)
+                if (AppName(game).Length > 0 && !apps.Exists(app => AppName(app) == AppName(game))) apps.Add(game);
             return apps;
+        }
+
+        // Every library folder's fully installed games and apps, skipping Steam's own redistributables. They open through steam://rungameid.
+        internal static List<InstalledApp> SteamApps(string steam)
+        {
+            List<InstalledApp> apps = new List<InstalledApp>();
+            if (string.IsNullOrEmpty(steam)) return apps;
+            try
+            {
+                List<string> libraries = new List<string> { steam };
+                string folders = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
+                if (File.Exists(folders))
+                    foreach (Match library in Regex.Matches(File.ReadAllText(folders), @"""path""\s+""([^""]+)"""))
+                        libraries.Add(library.Groups[1].Value.Replace(@"\\", @"\"));
+                HashSet<string> seen = new HashSet<string>();
+                foreach (string library in libraries)
+                {
+                    string folder = Path.Combine(library, "steamapps");
+                    if (!Directory.Exists(folder)) continue;
+                    foreach (string manifest in Directory.GetFiles(folder, "appmanifest_*.acf"))
+                    {
+                        string text;
+                        try { text = File.ReadAllText(manifest); }
+                        catch (IOException) { continue; }
+                        catch (UnauthorizedAccessException) { continue; }
+                        Match id = Regex.Match(text, @"""appid""\s+""(\d+)""");
+                        Match name = Regex.Match(text, @"""name""\s+""([^""]+)""");
+                        Match state = Regex.Match(text, @"""StateFlags""\s+""(\d+)""");
+                        long flags;
+                        if (!id.Success || !name.Success || !seen.Add(id.Groups[1].Value)) continue;
+                        if (state.Success && long.TryParse(state.Groups[1].Value, out flags) && (flags & 4) == 0) continue;
+                        if (Regex.IsMatch(name.Groups[1].Value, @"^(Steamworks Common Redistributables|Steam Linux Runtime\b.*|Proton\b.*)$", RegexOptions.IgnoreCase)) continue;
+                        apps.Add(new InstalledApp(name.Groups[1].Value, "steam://rungameid/" + id.Groups[1].Value));
+                    }
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return apps;
+        }
+
+        private static string SteamFolder()
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam"))
+                {
+                    string path = key == null ? null : key.GetValue("SteamPath") as string;
+                    return string.IsNullOrEmpty(path) ? null : path.Replace('/', '\\');
+                }
+            }
+            catch (Exception) { return null; }
         }
 
         private static object Call(object target, string method, params object[] args) { return target.GetType().InvokeMember(method, BindingFlags.InvokeMethod, null, target, args); }
@@ -895,7 +1915,6 @@ namespace CapriDesktop
 
         private static string OpenSite(string site, string search)
         {
-            if (Safety.Stops((site ?? "") + " " + (search ?? "")) != null) return "Not opening that, choom.";
             string address = Address(site, search);
             if (address == null) return "That isn't a website.";
             Run(address);
@@ -926,12 +1945,12 @@ namespace CapriDesktop
         }
 
 #if CROSS
-        // Mac and Linux have no Windows audio API (Speakers lives in Ears.cs), so mute toggles with the key and a set level isn't possible.
+        // Mac and Linux have no Windows audio API (Speakers lives in Ears.cs); Limbs sets these from osascript, pactl or amixer.
         internal static Func<bool?> MuteState = delegate { return (bool?)null; };
         internal static Func<bool, bool> SetMute = delegate { return false; };
         internal static Func<double?> VolumeNow = delegate { return (double?)null; };
         internal static Func<double, bool> SetVolume = delegate { return false; };
-        private const string VolumeRefused = "Couldn't set the volume: here I can only turn it up or down.";
+        private const string VolumeRefused = "Couldn't set the volume: the system's sound control didn't answer.";
 #else
         internal static Func<bool?> MuteState = Speakers.Muted;
         internal static Func<bool, bool> SetMute = Speakers.Mute;
@@ -1026,7 +2045,14 @@ namespace CapriDesktop
             { "show_desktop", "", "5B 44", "Showed the desktop (Win + D)." },
             { "task_manager", "", "11 10 1B", "Opened Task Manager." },
             { "clipboard", "", "5B 56", "Opened clipboard history (Win + V)." },
-            { "emoji", "", "5B BE", "Opened the emoji picker (Win + .)." }
+            { "emoji", "", "5B BE", "Opened the emoji picker (Win + .)." },
+            { "voice_typing", "", "5B 48", "Opened voice typing (Win + H). Talk and it types where the cursor is." },
+            { "live_captions", "", "5B 11 4C", "Turned Live Captions on or off (Win + Ctrl + L)." },
+            { "narrator", "", "5B 11 0D", "Turned Narrator on or off (Win + Ctrl + Enter)." },
+            { "magnifier", "", "5B BB", "Zoomed in with Magnifier (Win + Plus). Win + Esc closes it." },
+            { "magnifier_off", "", "5B 1B", "Closed Magnifier (Win + Esc)." },
+            { "color_filters", "", "5B 11 43", "Turned colour filters on or off (Win + Ctrl + C). If nothing changed, switch on their keyboard shortcut in Settings > Accessibility > Color filters." },
+            { "quick_settings", "", "5B 41", "Opened Quick Settings (Win + A), with Wi-Fi, Bluetooth, airplane mode, hotspot, Energy Saver and brightness." }
         };
 
         private static readonly string[] ShortcutWords =
@@ -1040,7 +2066,14 @@ namespace CapriDesktop
             @"^show (me )?(the |my )?desktop$|^minimi[sz]e (everything|all( windows)?)$", "show_desktop",
             @"^(open|show|bring up|pull up) (the )?task manager$", "task_manager",
             @"^(open|show|bring up|pull up) (the |my )?clipboard( history)?$", "clipboard",
-            @"^(open|show|bring up|pull up) (the )?(emoji|emojis)( picker| keyboard| panel| menu)?$", "emoji"
+            @"^(open|show|bring up|pull up) (the )?(emoji|emojis)( picker| keyboard| panel| menu)?$", "emoji",
+            @"^((turn|switch) on |start |open )?(windows )?voice typing( on)?$", "voice_typing",
+            @"^((turn|switch) (on|off) |start |stop |open |close |show |hide |toggle )?(the )?live ?captions?( on| off)?$", "live_captions",
+            @"^((turn|switch) (on|off) |start |stop |open |close |toggle )?(the )?narrator( on| off)?$", "narrator",
+            @"^((turn|switch) off |stop |close |exit |quit )(the )?magnifier$|^(the )?magnifier off$", "magnifier_off",
+            @"^((turn|switch) on |start |open )?(the )?magnifier( on)?$", "magnifier",
+            @"^((turn|switch) (on|off) |toggle )?(the )?colou?r ?filters?( on| off)?$", "color_filters",
+            @"^(open|show|bring up|pull up) (the |my )?(quick settings|action cent(er|re))$", "quick_settings"
         };
 
         internal static string ShortcutFor(string text)
@@ -1055,10 +2088,12 @@ namespace CapriDesktop
             int row = -1;
             for (int i = 0; i < Shortcuts.GetLength(0); i++) if (Shortcuts[i, 0] == name) row = i;
             if (row < 0) return "There's no shortcut called " + name + ".";
+            string instead = Instead(name);
+            if (instead != null) return instead;
             string[] codes = Shortcuts[row, 2].Split(' ');
             byte[] keys = new byte[codes.Length];
             for (int i = 0; i < codes.Length; i++) keys[i] = Convert.ToByte(codes[i], 16);
-            if (Shortcuts[row, 1] != "discord") { Chord(keys); return Shortcuts[row, 3]; }
+            if (Shortcuts[row, 1] != "discord" || !Presses) { Chord(keys); return Shortcuts[row, 3]; }
             OpenWindow discord = FindDiscord();
             if (discord == null)
             {
@@ -1202,6 +2237,14 @@ namespace CapriDesktop
 
         internal static string Pick() { return Ost[Roll(Ost.Length)]; }
 
+        // A Night City song in a player's or tab's title, for her cheer. "Cyberpunk 2077 review - YouTube" isn't a song: the game's
+        // own name only counts next to a word for music.
+        private static readonly Regex NightCityMusic = new Regex(@"rezodrone|rosa walton|hallie coggins|adamczyk|przyby[lł]owicz|i really want to stay at your house|chippin.? in|never fade away|resist and disorder|the rebel path|this fffire|podsiad[lł]o|^\W*samurai\s*[-–—]", RegexOptions.IgnoreCase);
+        private static readonly Regex NightCityName = new Regex(@"cyberpunk|edgerunners|night city", RegexOptions.IgnoreCase);
+        private static readonly Regex MusicWord = new Regex(@"\b(ost|soundtrack|score|music|songs?|radio|playlist|mix|theme|lyrics|album)\b", RegexOptions.IgnoreCase);
+
+        internal static bool NightCity(string title) { return !string.IsNullOrEmpty(title) && (NightCityMusic.IsMatch(title) || (NightCityName.IsMatch(title) && MusicWord.IsMatch(title))); }
+
         private static readonly Regex Moon = new Regex(@"\bwish\s+(?:we|i|you\s+and\s+i|me\s+and\s+you)\s+could\s+(?:go|fly|get|run\s+away)\s+to\s+the\s+moon\b", RegexOptions.IgnoreCase);
         internal const string MoonSong = "I Really Want to Stay at Your House";
 
@@ -1213,7 +2256,6 @@ namespace CapriDesktop
             song = song.Trim();
             if (Regex.IsMatch(song, @"^((what('|\u2019)?s|what is)\s+)?((currently|now)\s+)?playing( now)?$|^(this|that|the current) (song|track)$", RegexOptions.IgnoreCase)) return Playing();
             if (Regex.IsMatch(song, @"^(play\s+)?(me\s+)?((some|any|a|random|good)\s+)?(music|songs?|tunes|tracks?|something)(\s+for me)?$", RegexOptions.IgnoreCase)) { song = Pick(); kind = "song"; }
-            if (Safety.Stops(song) != null) return "Not playing that, choom.";
             Match tail = Regex.Match(song, @"^(?:(?:the|my|your)\s+)?(.+?)\s+(playlist|album)$", RegexOptions.IgnoreCase);
             if (tail.Success && kind != "artist") { kind = tail.Groups[2].Value.ToLowerInvariant(); song = tail.Groups[1].Value; }
             bool liked = Regex.IsMatch(song, @"^((my|your|the)\s+)?((liked|saved)\s+songs|likes)$", RegexOptions.IgnoreCase);
@@ -1228,7 +2270,7 @@ namespace CapriDesktop
             if (app != "youtube" && Match(Apps(), "spotify").Count > 0)
             {
                 if (liked) named = "their Liked Songs";
-                string spotted = liked ? null : known ?? Find(Fetch("https://html.duckduckgo.com/html/?q=" + Uri.EscapeDataString("site:open.spotify.com/" + (kind == "song" ? "track" : kind) + " " + song)), @"open\.spotify\.com(?:/|%2F)" + (kind == "song" ? "track" : kind) + @"(?:/|%2F)([A-Za-z0-9]{22})");
+                string spotted = liked ? null : known ?? SpotifyLink(Fetch("https://html.duckduckgo.com/html/?q=" + Uri.EscapeDataString("site:open.spotify.com/" + (kind == "song" ? "track" : kind) + " " + song)), kind, song);
                 if (kind == "song" && spotted != null)
                 {
                     string before = NowPlaying();
@@ -1280,6 +2322,26 @@ namespace CapriDesktop
             }
             return false;
 #endif
+        }
+
+        // A site: lookup that matches nothing still lists popular pages from the site, so only a result whose title has
+        // the words they asked for counts (one may be missing from three or more). Otherwise she searches Spotify instead.
+        internal static string SpotifyLink(string page, string kind, string wanted)
+        {
+            string path = kind == "song" ? "track" : kind;
+            string[] want = Words(wanted);
+            if (want.Length == 0 || want[0].Length == 0) return null;
+            foreach (Match link in Regex.Matches(page ?? "", @"<a\b([^>]*)>(.*?)</a>", RegexOptions.Singleline | RegexOptions.IgnoreCase))
+            {
+                Match id = Regex.Match(link.Groups[1].Value, @"open\.spotify\.com(?:/|%2F)" + path + @"(?:/|%2F)([A-Za-z0-9]{22})");
+                if (!id.Success) continue;
+                // A link that only shows its address (open.spotify.com/playlist/...) says nothing about what's there.
+                string[] title = Plain(Regex.Replace(WebUtility.HtmlDecode(Regex.Replace(link.Groups[2].Value, "<[^>]+>", "")), @"\S*(spotify\.com|https?://|www\.)\S*", " ", RegexOptions.IgnoreCase)).Split(' ');
+                int missing = 0;
+                foreach (string word in want) if (Array.IndexOf(title, word) < 0) missing++;
+                if (missing == 0 || (missing == 1 && want.Length >= 3)) return id.Groups[1].Value;
+            }
+            return null;
         }
 
         internal static int PlayScore(string label, string name)
@@ -1362,16 +2424,9 @@ namespace CapriDesktop
             string want = Regex.Replace(Plain(wanted), @"^the |( app| application| game| tab| window)$", "");
             if (want.Length == 0) return "Which app, choom?";
             wanted = wanted.Trim();
-            List<OpenWindow> top = new List<OpenWindow>();
-            int best = 0;
-            foreach (OpenWindow window in Windows())
-            {
-                int score = Math.Max(Score(Plain(window.Program), want), Score(Plain(window.Title), want));
-                if (score == 0 || score < best) continue;
-                if (score > best) { best = score; top.Clear(); }
-                top.Add(window);
-            }
-            if (top.Count == 0) return wanted + " isn't open.";
+            int best;
+            List<OpenWindow> top = Best(want, out best);
+            if (top.Count == 0) return Unlisted() ?? wanted + " isn't open.";
             // When several apps match, the one whose own name matches goes first, then the one nearest the front.
             OpenWindow first = top.Find(window => Score(Plain(window.Program), want) == best) ?? top[0];
             top = top.FindAll(window => window.Program == first.Program);
@@ -1383,6 +2438,37 @@ namespace CapriDesktop
             if (action == "minimize") return "Minimized " + wanted + ".";
             return all ? "Closed " + wanted + "." : "Asked " + wanted + " to close, but it's still open. It might be asking you to save.";
         }
+
+        // The open windows whose program or title matches best, front first.
+        private static List<OpenWindow> Best(string want, out int best)
+        {
+            List<OpenWindow> top = new List<OpenWindow>();
+            best = 0;
+            foreach (OpenWindow window in Windows())
+            {
+                int score = Math.Max(Score(Plain(window.Program), want), Score(Plain(window.Title), want));
+                if (score == 0 || score < best) continue;
+                if (score > best) { best = score; top.Clear(); }
+                top.Add(window);
+            }
+            return top;
+        }
+
+        // The open windows of the app or game they named, front first, for her to sit on: "my Roblox window" finds Roblox by its
+        // title, "chrome" by its program. When several apps match, the one whose own name matches wins. A match by less than
+        // `least` (1 for part of a word, 2 for a whole word) finds none.
+        internal static List<OpenWindow> WindowsNamed(string wanted, int least = 1)
+        {
+            string want = Regex.Replace(Plain(wanted), @"^(?:the|my|your|ur|our|that|this) |( app| application| game| tab| window)$", "");
+            int best = 0;
+            List<OpenWindow> top = want.Length == 0 ? new List<OpenWindow>() : Best(want, out best);
+            if (top.Count == 0 || best < least) return new List<OpenWindow>();
+            OpenWindow first = top.Find(window => Score(Plain(window.Program), want) == best) ?? top[0];
+            return top.FindAll(window => window.Program == first.Program);
+        }
+
+        // Somewhere she can be told to sit: the taskbar, her Mainframe, or a window open now whose name matches theirs by a whole word.
+        internal static bool Sittable(string window) { return TaskbarWords.IsMatch(window ?? "") || MainframeWords.IsMatch(window ?? "") || WindowsNamed(window, 2).Count > 0; }
 
         private static List<OpenWindow> ReadWindows()
         {
