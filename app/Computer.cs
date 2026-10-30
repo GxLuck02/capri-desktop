@@ -20,6 +20,8 @@ namespace CapriDesktop
         internal bool Secret;
         internal bool Focused;
         internal bool Line;
+        // A web page's or app's document, as opposed to the tab strip, address bar and window buttons around it.
+        internal bool Page;
         internal Point Middle { get { return new Point(Box.Left + Box.Width / 2, Box.Top + Box.Height / 2); } }
         internal string Label { get { return "[" + Number + "] " + Role + (Name.Length > 0 ? " " + Voice.Quote(Name) : ""); } }
     }
@@ -256,11 +258,19 @@ namespace CapriDesktop
         // Newsletter and app popups: she closes them rather than clicking through, unless the job is about them.
         private static readonly Regex Dismissing = new Regex(@"^\W*(no,? thanks|no thank you|not now|maybe later|close|dismiss|skip|i'?ll pass|continue without|x|×|✕)\W*$", RegexOptions.IgnoreCase);
         private static readonly Regex Promo = new Regex(@"\b(newsletter|subscribe|sign up|\d+% off|discount|coupon|turn on notifications|get the app|download (our|the) app)\b", RegexOptions.IgnoreCase);
+        // A channel's Subscribe button on YouTube or Twitch, which isn't a popup.
+        private static readonly Regex Channel = new Regex(@"^\W*subscribe(\s+to\s+.+)?\W*$", RegexOptions.IgnoreCase);
 
+        // Only a close inside the page counts: a browser's tab and window buttons are called Close too, and pointing her at them
+        // closed YouTube under her (a tester, 30 Oct). A window with no page gets no hint.
         internal static Target PopupWayOut(Sight sight, string job)
         {
-            if (sight == null || Promo.IsMatch(job ?? "") || !(sight.Words.Exists(word => Promo.IsMatch(word)) || sight.Targets.Exists(target => Promo.IsMatch(target.Name)))) return null;
-            return sight.Targets.Find(target => (target.Role == "button" || target.Role == "link") && Dismissing.IsMatch(target.Name));
+            if (sight == null || Promo.IsMatch(job ?? "") || !(sight.Words.Exists(word => Promo.IsMatch(word)) || sight.Targets.Exists(target => Promo.IsMatch(target.Name) && !Channel.IsMatch(target.Name)))) return null;
+            Target page = null;
+            foreach (Target found in sight.Targets) if (found.Page && (page == null || found.Box.Width * found.Box.Height > page.Box.Width * page.Box.Height)) page = found;
+            if (page == null) return null;
+            return sight.Targets.Find(target => (target.Role == "button" || target.Role == "link") && Dismissing.IsMatch(target.Name) && page.Box.Contains(target.Box)
+                && !sight.Targets.Exists(tab => tab.Role == "tab" && tab.Box.Contains(target.Box)));
         }
 
         internal static bool AgreesToCookies(string job, Target target, Sight sight)
@@ -1215,7 +1225,7 @@ namespace CapriDesktop
                     if (read is string) value = Regex.Replace((string)read, @"\s+", " ").Trim();
                     if (value != null && value.Length > 60) value = value.Substring(0, 57) + "...";
                 }
-                targets.Add(new Target { Role = Role(kind), Name = name, Value = value, Box = shown, Secret = info.IsPassword, Focused = info.HasKeyboardFocus, Line = kind == ControlType.Edit || kind == ControlType.ComboBox });
+                targets.Add(new Target { Role = Role(kind), Name = name, Value = value, Box = shown, Secret = info.IsPassword, Focused = info.HasKeyboardFocus, Line = kind == ControlType.Edit || kind == ControlType.ComboBox, Page = kind == ControlType.Document });
             }
             Comparison<Target> reading = delegate(Target a, Target b) { int row = (a.Box.Top / 12).CompareTo(b.Box.Top / 12); return row != 0 ? row : a.Box.Left.CompareTo(b.Box.Left); };
             targets.Sort(reading);

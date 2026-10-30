@@ -12373,6 +12373,7 @@ namespace CapriDesktop
                                     newsletter.Targets.Add(new Target { Number = 1, Role = "box", Name = "Email address", Line = true, Box = new Rectangle(10, 10, 100, 20) });
                                     newsletter.Targets.Add(new Target { Number = 2, Role = "button", Name = "Sign up", Box = new Rectangle(10, 40, 60, 20) });
                                     newsletter.Targets.Add(new Target { Number = 3, Role = "button", Name = "No thanks", Box = new Rectangle(80, 40, 60, 20) });
+                                    newsletter.Targets.Add(new Target { Number = 4, Role = "box", Name = "Shop - Home", Page = true, Box = new Rectangle(0, 0, 400, 300) });
                                     string newsletterBrief = Computer.Brief("open the hoodies page", new System.Collections.Generic.List<string>(), newsletter);
                                     newsletter.Targets.RemoveAt(2);
                                     string footerBrief = Computer.Brief("open the hoodies page", new System.Collections.Generic.List<string>(), newsletter);
@@ -12429,6 +12430,7 @@ namespace CapriDesktop
                                     promoSight.Targets.Add(new Target { Number = 1, Role = "button", Name = "Sign up", Box = new Rectangle(10, 10, 60, 20) });
                                     promoSight.Targets.Add(new Target { Number = 2, Role = "button", Name = "No thanks", Box = new Rectangle(80, 10, 60, 20) });
                                     promoSight.Targets.Add(new Target { Number = 3, Role = "link", Name = "Hoodies", Box = new Rectangle(10, 40, 60, 20) });
+                                    promoSight.Targets.Add(new Target { Number = 4, Role = "box", Name = "Shop - Home", Page = true, Box = new Rectangle(0, 0, 400, 300) });
                                     Sight notepadClose = new Sight { Window = new IntPtr(7), Title = "Untitled - Notepad", Program = "Notepad" };
                                     notepadClose.Targets.Add(new Target { Number = 1, Role = "button", Name = "Close", Box = new Rectangle(10, 10, 60, 20) });
                                     string promoBrief = Computer.Brief("open the hoodies page", new System.Collections.Generic.List<string>(), promoSight);
@@ -12437,6 +12439,28 @@ namespace CapriDesktop
                                         || !Computer.AddsToCart("search the shop for blue hoodies", addToCart) || Computer.AddsToCart("put the blue hoodie in my cart", addToCart) || Computer.AddsToCart("add a blue hoodie, size M", addToCart) || Computer.AddsToCart("open the hoodies page", promoSight.Targets[2]))
                                         throw new Exception("A popup hint went wrong: " + promoBrief);
                                     checks.Add("PASS popups: a newsletter or app popup gets a hint to click No thanks or Close first, unless the job is about signing up, and a plain Close button (like Notepad's) doesn't count; she never clicks Add to cart unless the job says to");
+                                    // Chrome calls a tab's close button and its window's close button Close, and YouTube always shows Subscribe, so
+                                    // the popup hint pointed her at the tab's Close and she closed YouTube or the whole browser (a tester, 30 Oct).
+                                    Sight tube = new Sight { Window = new IntPtr(7), Title = "the real slim shady instrumental - YouTube - Google Chrome", Program = "chrome" };
+                                    tube.Targets.Add(new Target { Number = 1, Role = "tab", Name = "the real slim shady instrumental - YouTube", Box = new Rectangle(10, 5, 240, 34) });
+                                    tube.Targets.Add(new Target { Number = 2, Role = "button", Name = "Close", Box = new Rectangle(226, 14, 16, 16) });
+                                    tube.Targets.Add(new Target { Number = 3, Role = "button", Name = "Minimize", Box = new Rectangle(1150, 0, 46, 34) });
+                                    tube.Targets.Add(new Target { Number = 4, Role = "button", Name = "Close", Box = new Rectangle(1242, 0, 46, 34) });
+                                    tube.Targets.Add(new Target { Number = 5, Role = "box", Name = "Address and search bar", Line = true, Value = "youtube.com/results?search_query=the+real+slim+shady+instrumental", Box = new Rectangle(120, 44, 900, 30) });
+                                    tube.Targets.Add(new Target { Number = 6, Role = "box", Name = "the real slim shady instrumental - YouTube", Page = true, Box = new Rectangle(0, 84, 1288, 700) });
+                                    tube.Targets.Add(new Target { Number = 7, Role = "button", Name = "Subscribe to EminemMusic.", Box = new Rectangle(900, 200, 110, 36) });
+                                    tube.Targets.Add(new Target { Number = 8, Role = "link", Name = "The Real Slim Shady (Instrumental)", Box = new Rectangle(400, 300, 500, 30) });
+                                    string tubeBrief = Computer.Brief("Play \"the real slim shady instrumental version\" on YouTube", new System.Collections.Generic.List<string>(), tube);
+                                    // The same window with a real newsletter popup on the page gets the page's own Close, not the tab's.
+                                    tube.Words.Add("Sign up for our newsletter");
+                                    tube.Targets.Add(new Target { Number = 9, Role = "button", Name = "Close", Box = new Rectangle(800, 250, 30, 30) });
+                                    Target tubeCloser = Computer.PopupWayOut(tube, "open the hoodies page");
+                                    Sight noPage = new Sight { Window = new IntPtr(7), Title = "Promo - App", Program = "app" };
+                                    noPage.Words.Add("Get 10% off your first order!");
+                                    noPage.Targets.Add(new Target { Number = 1, Role = "button", Name = "Close", Box = new Rectangle(10, 10, 46, 30) });
+                                    if (tubeBrief.IndexOf("A popup is open", StringComparison.Ordinal) >= 0 || tubeCloser == null || tubeCloser.Number != 9 || Computer.PopupWayOut(noPage, "open the hoodies page") != null)
+                                        throw new Exception("The popup hint pointed at the browser's own Close: " + tubeBrief + " / " + (tubeCloser == null ? "none" : tubeCloser.Label));
+                                    checks.Add("PASS browser close buttons: the popup hint only points at a close inside the web page, never a browser tab's or window's Close, and YouTube's Subscribe buttons don't count as a popup, so she doesn't close YouTube while she plays a video");
                                     Sight signIn = new Sight { Window = new IntPtr(7), Title = "Sign in - Shop", Program = "chrome" };
                                     signIn.Targets.Add(new Target { Number = 1, Role = "box", Name = "Email", Line = true, Box = new Rectangle(10, 10, 100, 20) });
                                     Computer.Look = delegate { return signIn; };
