@@ -5202,6 +5202,23 @@ namespace CapriDesktop
             catch (System.ComponentModel.Win32Exception) { return false; }
         }
 
+        // A window drawn into the smoke test's picture at x, y, cut to its own shape the way the screen shows it.
+        private static void Snapped(Graphics sheet, Control window, int x, int y)
+        {
+            using (Bitmap picture = new Bitmap(window.Width, window.Height))
+            {
+                window.DrawToBitmap(picture, new Rectangle(Point.Empty, window.Size));
+                if (window.Region != null)
+                    using (Region shape = window.Region.Clone())
+                    {
+                        shape.Translate(x, y);
+                        sheet.SetClip(shape, CombineMode.Replace);
+                    }
+                sheet.DrawImageUnscaled(picture, x, y);
+                sheet.ResetClip();
+            }
+        }
+
         private static Bitmap GrabScreen(Rectangle area)
         {
             Bitmap shot = new Bitmap(area.Width, area.Height, PixelFormat.Format24bppRgb);
@@ -19012,6 +19029,42 @@ namespace CapriDesktop
                             bool cursorRecovered = HerCursor.Recover() && cursorSwaps.Count == 1 && !cursorSwaps[0] && !File.Exists(HerCursor.Marker) && !HerCursor.Recover();
                             if (!pointerOn || !pointerOnce || !pointerSat || !pointerGlided || !pointerStayed || !pointerRippled || !mouseLent || !mouseBack || !mouseKept || !hoverBack || !pointerOff || !cursorRecovered) throw new Exception("Her pointer: on " + pointerOn + ", once " + pointerOnce + ", sat " + pointerSat + ", glided " + pointerGlided + ", stayed " + pointerStayed + ", rippled " + pointerRippled + ", lent " + mouseLent + ", back " + mouseBack + ", kept " + mouseKept + ", hover " + hoverBack + ", off " + pointerOff + ", recovered " + cursorRecovered);
                             checks.Add("PASS her pointer: a job shows her own click-through pink pointer beside her on the task panel without swapping Windows' cursor, she stays sitting there while it glides alone and ripples on a click, their mouse is only borrowed for the press, she and the panel let it through only then, it goes back unless they moved it, asking or finishing puts it away, and an old cursor-swap marker still restores Windows' pointer");
+                            // Her right-click menu with Move dropped open, and her type box with a draft in it, each on a plain
+                            // backdrop and cut to its own shape, for checking her look.
+                            ToolStripMenuItem moveItem = (ToolStripMenuItem)wanderItem.OwnerItem;
+                            menu.Show(backdrop, new Point(60, 60));
+                            moveItem.Select();
+                            moveItem.ShowDropDown();
+                            moveItem.DropDownItems[2].Select();
+                            Application.DoEvents();
+                            bool menuShown = menu.Visible && moveItem.DropDown.Visible && menu.Items[0].Text.StartsWith("CAPRI", StringComparison.Ordinal);
+                            Rectangle menuArea = Rectangle.Union(menu.Bounds, moveItem.DropDown.Bounds);
+                            using (Bitmap menuSheet = new Bitmap(menuArea.Width + 48, menuArea.Height + 48))
+                            {
+                                using (Graphics sheet = Graphics.FromImage(menuSheet))
+                                {
+                                    sheet.Clear(Color.FromArgb(44, 47, 56));
+                                    foreach (ToolStripDropDown drop in new ToolStripDropDown[] { menu, moveItem.DropDown }) Snapped(sheet, drop, drop.Left - menuArea.Left + 24, drop.Top - menuArea.Top + 24);
+                                }
+                                menuSheet.Save(Path.Combine(output, "her-menu.png"), ImageFormat.Png);
+                            }
+                            menu.Close();
+                            typer.Draft = "play something chill";
+                            OpenTyper();
+                            bool typerShown = typer.Visible && typer.Draft == "play something chill";
+                            using (Bitmap typerSheet = new Bitmap(typer.Width + 48, typer.Height + 48))
+                            {
+                                using (Graphics sheet = Graphics.FromImage(typerSheet))
+                                {
+                                    sheet.Clear(Color.FromArgb(44, 47, 56));
+                                    Snapped(sheet, typer, 24, 24);
+                                }
+                                typerSheet.Save(Path.Combine(output, "type-box.png"), ImageFormat.Png);
+                            }
+                            typer.Hide();
+                            typer.Draft = "";
+                            if (!menuShown || !typerShown || typer.Visible) throw new Exception("Her menu or type box didn't show for their pictures: menu " + menuShown + ", type box " + typerShown);
+                            checks.Add("PASS her right-click menu, with Move open, and her type box, with a draft in it, are drawn for her-menu.png and type-box.png");
                             checks.Add("LIMIT handler-driven integration test; physical mouse input and tray UI require a manual check");
                             checks.Add("PASS quit menu requested application exit");
                             File.WriteAllLines(Path.Combine(output, "smoke-test.txt"), checks);
