@@ -1405,6 +1405,7 @@ namespace CapriDesktop
             Hands.Animate = AnimateTool;
             Hands.Hush = Computer.Mask;
             Computer.Grab = HandsGrab;
+            Computer.Halted = brain.StopDriving;
             string textKey = Voice.Unprotect(preferences.TextKey);
             if (!preferences.NvidiaGlm)
             {
@@ -4956,11 +4957,15 @@ namespace CapriDesktop
         // Voice chat pauses her glances only while their mic is on. Muted, she keeps commenting on their screen.
         private bool MicOpen { get { return chatting && !ears.Muted; } }
 
+        // While she plays a game for them she keeps quiet about the screen, since her glances would be a running commentary on
+        // her own play (Lachy, 30 Oct: "they were constantly yapping to chat").
+        private bool PlayingGame { get { Job running = job; return running != null && working != null && running.Playing; } }
+
         private void CheckGlance(double now, long quiet)
         {
             if (!preferences.Watch || glancing || Hushed) return;
             if (nextGlance < 0) nextGlance = now + Math.Min(20, GlanceGap);
-            if (now < nextGlance || quiet > 600000 || brain.Model == null || hidden || MicOpen || dragging || typer.Visible || talkState != TalkState.Off) return;
+            if (now < nextGlance || quiet > 600000 || brain.Model == null || hidden || MicOpen || PlayingGame || dragging || typer.Visible || talkState != TalkState.Off) return;
             nextGlance = now + GlanceGap * (0.8 + random.NextDouble() * 0.4);
             if (Unseeing() != null) return;
             byte[] shot;
@@ -5006,7 +5011,7 @@ namespace CapriDesktop
             string unseen = Unseeing();
             if (unseen != null || problem != null) { lastPrint = null; mainframe.ShowProblem(unseen ?? problem); return; }
             if (string.IsNullOrEmpty(said)) { Glimpsed(saw); return; }
-            if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || Hushed || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
+            if (ticket != asking || talkState != TalkState.Off || typer.Visible || MicOpen || PlayingGame || Hushed || hidden || dragging) { lastPrint = null; Glimpsed(saw); return; }
             // A line about something she already brought up is dropped like a SKIP, so the same scene waits before she tries again.
             if (Glances.Repeats(said, RecentGlances(clock.Elapsed.TotalSeconds), Brain.Nickname)) { Glimpsed(saw); return; }
             glanced.Add(Tuple.Create(clock.Elapsed.TotalSeconds, said));
@@ -5320,7 +5325,8 @@ namespace CapriDesktop
             job = running;
             running.Think = delegate(string system, string user, System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, ToolArguments>> calls) { return brain.Step(system, user, Computer.Tools, Computer.ClaudeTools, Computer.Listing, calls); };
             Cloud driver = brain.Remote;
-            running.Drive = brain.Drives && driver.Model != blindModel ? new Func<string, string, string, ClaudeReply>(brain.Drive) : null;
+            // A game job thinks harder on every turn.
+            running.Drive = brain.Drives && driver.Model != blindModel ? new Func<string, string, string, ClaudeReply>(delegate(string system, string tools, string messages) { return brain.Drive(system, tools, messages, running.Playing); }) : null;
             running.Blind = delegate { blindModel = driver.Model; };
             running.Progress = delegate(string status) { Post(delegate { working = status + " Esc stops me."; UpdateTalk(clock.Elapsed.TotalSeconds); }); };
             running.Seen = delegate(Sight sight)
@@ -11704,6 +11710,44 @@ namespace CapriDesktop
                                     }
                                     if (heldFor != Computer.Escaped || heldMs > 3000 || repeated != Computer.Escaped || repeatedMs > 3000) throw new Exception("Esc didn't stop a long hold or a run of key presses: " + heldFor + " after " + heldMs + " ms / " + repeated + " after " + repeatedMs + " ms");
                                     checks.Add("PASS Esc during a hold: a 60-second key hold and a 1,000-press run both stop within a moment of Esc and let the key go; only her own Esc presses are ignored");
+                                    // Games like Roblox and Minecraft only feel keys that carry their real scan codes.
+                                    if (Computer.Scan(Computer.Code("space")) != 0x39 || Computer.Scan(Computer.Code("enter")) != 0x1C || Computer.Scan(Computer.Code("esc")) != 0x01 || Computer.Scan(Computer.Code("print")) != 0 || Computer.Scan(Computer.Code("xf86audioraisevolume")) != 0)
+                                        throw new Exception("Her keys don't carry their scan codes: space " + Computer.Scan(Computer.Code("space")) + ", enter " + Computer.Scan(Computer.Code("enter")));
+                                    checks.Add("PASS her keys in games: each press carries the key's real scan code, so games like Roblox and Minecraft feel it, and stays down a few frames; Print Screen and media keys stay virtual");
+                                    // Stuck under a block, she holds w and presses space (Lachy, 30 Oct). Real F24 and F23 stand in for w and space.
+                                    string holdTool;
+                                    ToolArguments holdArgs;
+                                    bool holdListed = Computer.Toolset.IndexOf("{\"name\":\"hold_and_press\",", StringComparison.Ordinal) > 0 && Computer.Tools.IndexOf("\"name\":\"hold_and_press\"", StringComparison.Ordinal) > 0 && Computer.ClaudeTools.IndexOf("\"name\":\"hold_and_press\"", StringComparison.Ordinal) > 0
+                                        && Computer.Listing.IndexOf("\n- hold_and_press{\"hold\": \"...\", \"press\": \"...\", \"times\": \"...\", \"seconds\": \"...\"}: Hold keys down in a game while pressing another key", StringComparison.Ordinal) > 0
+                                        && Computer.Written("hold_and_press{\"hold\": \"w\", \"press\": \"space\", \"times\": \"3\"}", out holdTool, out holdArgs) && holdTool == "hold_and_press" && holdArgs.Hold == "w" && holdArgs.Press == "space" && holdArgs.Times == "3"
+                                        && Computer.Status("hold_and_press", new ToolArguments { Hold = "w", Press = "space" }, null) == "Holding w and pressing space." && Computer.Did("hold_and_press", new ToolArguments { Hold = "w", Press = "space" }, null) == "Held w and pressed space"
+                                        && Computer.Playing.IndexOf("call hold_and_press with hold w and press space", StringComparison.Ordinal) > 0;
+                                    Func<bool> holdEscapeWas = Computer.Escape;
+                                    Stopwatch holdPressClock = Stopwatch.StartNew();
+                                    string holdPressed, holdStopped, holdBadKey, holdBadPress;
+                                    long holdPressedMs, holdStoppedMs;
+                                    try
+                                    {
+                                        Computer.Escape = delegate { return false; };
+                                        Computer.Arm();
+                                        holdPressed = Computer.HoldAndPress("f24", "f23", "3", "0.6");
+                                        holdPressedMs = holdPressClock.ElapsedMilliseconds;
+                                        holdBadKey = Computer.HoldAndPress("hyper", "space", null, null);
+                                        holdBadPress = Computer.HoldAndPress("w", "hyper", null, null);
+                                        Computer.Arm();
+                                        holdPressClock.Restart();
+                                        Computer.Escape = delegate { return holdPressClock.ElapsedMilliseconds > 400; };
+                                        holdStopped = Computer.HoldAndPress("f24", "f23", null, "60");
+                                        holdStoppedMs = holdPressClock.ElapsedMilliseconds;
+                                    }
+                                    finally
+                                    {
+                                        Computer.Escape = holdEscapeWas;
+                                        Computer.Arm();
+                                    }
+                                    if (!holdListed || holdPressed != "Held f24 and pressed f23 3 times." || holdPressedMs < 550 || holdBadKey != "There's no key called hyper." || holdBadPress != "There's no key called hyper." || !Computer.Failed(holdBadKey) || holdStopped != Computer.Escaped || holdStoppedMs > 3000)
+                                        throw new Exception("Holding w while pressing space went wrong: listed " + holdListed + " / " + holdPressed + " after " + holdPressedMs + " ms / " + holdBadKey + " / " + holdBadPress + " / " + holdStopped + " after " + holdStoppedMs + " ms");
+                                    checks.Add("PASS hold and press: her jobs can hold w and press space together (hold_and_press, beside Claude's computer tools and in her button tools), with presses spread over the hold; her game lines tell her to do it when she's stuck; bad keys are refused and Esc stops a long hold");
                                     // A brain error partway through a job, like a rate limit, used to leave their mouse borrowed.
                                     Func<Point> cursorAtWas = Computer.CursorAt;
                                     Action<Point> putCursorWas = Computer.PutCursor;
@@ -12429,6 +12473,57 @@ namespace CapriDesktop
                                     if (heardRun != "Installed it." || heardAt < 0 || resultAt < 0 || resultAt > heardAt || heardTurns[0].Contains("spotify"))
                                         throw new Exception("What they said mid-job didn't reach her next turn: " + heardRun + " / " + heardTurns.Count + " turns");
                                     checks.Add("PASS mid-job words: what they say while a job runs rides on her next turn after its tool results, so she does it and carries on");
+                                    // A game job thinks harder and gets her game lines, from its words or once a game's window is in front (Lachy, 30 Oct).
+                                    if (!Computer.Gaming("play bedwars on roblox and answer chat") || !Computer.Gaming("go play minecraft") || !Computer.Gaming("hop on fortnite for a bit") || !Computer.Gaming("keep playing")
+                                        || Computer.Gaming("play lofi on youtube") || Computer.Gaming("Play \"Resist and Disorder\" on Spotify: open Spotify, click its search box, type \"Resist and Disorder\" and press Enter, then press play on the best match.")
+                                        || Computer.Gaming("watch a minecraft video") || Computer.Gaming("tell sam I'll play roblox later on discord") || Computer.Gaming("send hi in #general on discord") || Computer.Gaming(null)
+                                        || !Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "Roblox", Program = "RobloxPlayerBeta" }) || !Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "Minecraft 1.21.4", Program = "javaw" })
+                                        || Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "Minecraft Let's Play - YouTube - Google Chrome", Program = "chrome" }) || Computer.GameWindow(new Sight { Window = new IntPtr(7), Title = "#general - Discord", Program = "Discord" }) || Computer.GameWindow(null))
+                                        throw new Exception("Game jobs were told apart wrong.");
+                                    driveTurn = 0;
+                                    driveScript = new[] { "{\"content\":[{\"type\":\"text\",\"text\":\"Played a round.\"}],\"stop_reason\":\"end_turn\"}" };
+                                    Job drivePlay = new Job("play bedwars on roblox");
+                                    drivePlay.Drive = scripted;
+                                    string drivePlayed = drivePlay.Run();
+                                    string playSystem = driveSystem;
+                                    driveTurn = 0;
+                                    Job driveFun = new Job("have some fun");
+                                    driveFun.Drive = scripted;
+                                    bool funBefore = driveFun.Playing;
+                                    Computer.Glimpse = delegate { return new Sight { Window = new IntPtr(7), Title = "Roblox", Program = "RobloxPlayerBeta" }; };
+                                    string funRun = driveFun.Run();
+                                    string funSystem = driveSystem;
+                                    Computer.Glimpse = delegate { return new Sight { Window = new IntPtr(7), Title = "#general - Discord", Program = "Discord" }; };
+                                    if (drivePlayed != "Played a round." || !drivePlay.Playing || playSystem != Computer.Seeing + Computer.Playing || funRun != "Played a round." || funBefore || !driveFun.Playing || funSystem != Computer.Seeing + Computer.Playing || new Job("send hi in #general on discord").Playing)
+                                        throw new Exception("A game job didn't get her game lines: " + drivePlayed + " / " + drivePlay.Playing + " / " + funRun + " / " + driveFun.Playing);
+                                    // Lachy, 30 Oct: "they were constantly yapping to chat".
+                                    if (Computer.Playing.IndexOf("read it but keep playing quietly", StringComparison.Ordinal) < 0 || Computer.Playing.IndexOf("answer each message once", StringComparison.Ordinal) < 0 || Computer.Playing.IndexOf("Never comment on the game to chat between messages.", StringComparison.Ordinal) < 0)
+                                        throw new Exception("Her game lines lost the chat rules: " + Computer.Playing);
+                                    checks.Add("PASS quiet in chat: playing a game she reads the chat but answers only messages worth answering, once each in one short line, and never comments on the game to chat between them; her glances wait while she plays");
+                                    // Esc while a turn is still thinking stops the job then, not when the turn would have ended.
+                                    Func<bool> thinkEscapeWas = Computer.Escape;
+                                    Stopwatch thinkClock = Stopwatch.StartNew();
+                                    string thinkStopped = null;
+                                    long thinkMs = -1;
+                                    Job driveThinking = new Job("play bedwars on roblox");
+                                    driveThinking.Drive = delegate(string thinkSys, string thinkTools, string thinkMessages)
+                                    {
+                                        while (!Computer.Interrupted && thinkClock.ElapsedMilliseconds < 8000) Thread.Sleep(20);
+                                        throw new WebException("Reply cancelled.", WebExceptionStatus.RequestCanceled);
+                                    };
+                                    try
+                                    {
+                                        Computer.Escape = delegate { return thinkClock.ElapsedMilliseconds > 400; };
+                                        thinkStopped = driveThinking.Run();
+                                        thinkMs = thinkClock.ElapsedMilliseconds;
+                                    }
+                                    catch (WebException) { thinkStopped = "threw"; }
+                                    finally
+                                    {
+                                        Computer.Escape = thinkEscapeWas;
+                                        Computer.Arm();
+                                    }
+                                    if (thinkStopped != Computer.Escaped || driveThinking.Outcome != "stopped" || thinkMs > 3000) throw new Exception("Esc didn't stop a job whose turn was still thinking: " + thinkStopped + " after " + thinkMs + " ms");
                                 }
                                 finally
                                 {
@@ -12445,7 +12540,7 @@ namespace CapriDesktop
                                 System.Net.Sockets.TcpListener driveFake;
                                 string driveAnthropic = Brain.Anthropic;
                                 string driveReply = "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Clicking it.\"},{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"left_click\",\"toolset_name\":\"computer\",\"input\":{\"coordinate\":[12,34]}}],\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5}}";
-                                Brain.Anthropic = FakeServer(new[] { driveReply, driveReply }, driveAsked, out driveFake);
+                                Brain.Anthropic = FakeServer(new[] { driveReply, driveReply, driveReply }, driveAsked, out driveFake);
                                 try
                                 {
                                     Brain driver = new Brain();
@@ -12456,18 +12551,22 @@ namespace CapriDesktop
                                     driver.Remote = new Cloud("sk-ant-test", "claude-opus-5");
                                     driver.Drive(Computer.Seeing, Computer.Toolset, "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]");
                                     driver.Remote = new Cloud("sk-ant-test", "claude-sonnet-5-5");
+                                    // A game's turn thinks harder: high effort and room for it (Lachy, 30 Oct).
+                                    driver.Drive(Computer.Seeing + Computer.Playing, Computer.Toolset, "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]", true);
                                     string[] driveSent;
                                     lock (driveAsked) driveSent = driveAsked.ToArray();
-                                    string driveRequest = driveSent.Length == 2 ? driveSent[0] : "", unboundRequest = driveSent.Length == 2 ? driveSent[1] : "";
-                                    int driveBody = driveRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal), unboundBody = unboundRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal);
-                                    string driveJson = driveBody < 0 ? "" : driveRequest.Substring(driveBody + 4), unboundJson = unboundBody < 0 ? "" : unboundRequest.Substring(unboundBody + 4);
+                                    string driveRequest = driveSent.Length == 3 ? driveSent[0] : "", unboundRequest = driveSent.Length == 3 ? driveSent[1] : "", deepRequest = driveSent.Length == 3 ? driveSent[2] : "";
+                                    int driveBody = driveRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal), unboundBody = unboundRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal), deepBody = deepRequest.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                                    string driveJson = driveBody < 0 ? "" : driveRequest.Substring(driveBody + 4), unboundJson = unboundBody < 0 ? "" : unboundRequest.Substring(unboundBody + 4), deepJson = deepBody < 0 ? "" : deepRequest.Substring(deepBody + 4);
                                     bool driveShaped = Brain.Field(driveJson, "tools") == Computer.Toolset && Brain.Field(driveJson, "max_tokens") == "4096" && Brain.Field(driveJson, "output_config") == "{\"effort\":\"low\"}"
                                         && Brain.Field(driveJson, "system") == "[{\"type\":\"text\",\"text\":" + Voice.Quote(Computer.Seeing) + ",\"cache_control\":{\"type\":\"ephemeral\"}}]"
                                         && Brain.Field(driveJson, "messages") == "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]"
                                         && Brain.Field(driveJson, "thinking") == "{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}}"
                                         && driveRequest.IndexOf("anthropic-beta: server-side-fallback-2026-07-01,thinking-binding-controls-2026-08-01\r\n", StringComparison.OrdinalIgnoreCase) > 0
                                         && Brain.Field(unboundJson, "thinking") == null && Brain.Field(unboundJson, "max_tokens") == "4096"
-                                        && unboundRequest.IndexOf("anthropic-beta: server-side-fallback-2026-07-01\r\n", StringComparison.OrdinalIgnoreCase) > 0;
+                                        && unboundRequest.IndexOf("anthropic-beta: server-side-fallback-2026-07-01\r\n", StringComparison.OrdinalIgnoreCase) > 0
+                                        && Brain.Field(deepJson, "max_tokens") == "16000" && Brain.Field(deepJson, "output_config") == "{\"effort\":\"high\"}" && Brain.Field(deepJson, "thinking") == Brain.Field(driveJson, "thinking")
+                                        && Brain.Field(deepJson, "system") == "[{\"type\":\"text\",\"text\":" + Voice.Quote(Computer.Seeing + Computer.Playing) + ",\"cache_control\":{\"type\":\"ephemeral\"}}]";
                                     bool driveRead = drove.Raw == "[{\"type\":\"text\",\"text\":\"Clicking it.\"},{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"left_click\",\"toolset_name\":\"computer\",\"input\":{\"coordinate\":[12,34]}}]"
                                         && drove.Content.Length == 2 && drove.Content[1].Toolset == "computer" && drove.Content[1].Id == "toolu_1" && drove.Content[1].Input.Coordinate[1] == 34;
                                     bool driveNew = driver.Drives;
@@ -12479,7 +12578,38 @@ namespace CapriDesktop
                                     driveFake.Stop();
                                     Brain.Anthropic = driveAnthropic;
                                 }
-                                checks.Add("PASS Claude's hands: Claude 5 models get Anthropic's computer tools plus open_app and open_website, see a screenshot of the monitor in front, click and type at its coordinates scaled to the real screen, get a fresh look after each batch with only the last three pictures kept, keep its thinking, stop a batch at the first failure, re-look when the window in front changes, still stop before Buy now until they say yes, skip asking about a send they asked for, refuse banned keys (unless Bypass is on) and spots off the screenshot, and fall back to reading buttons if the model turns the computer tools down");
+                                // Esc cuts off a turn that's still thinking: her brain drops the request instead of waiting minutes for it.
+                                System.Collections.Generic.List<string> cutAsked = new System.Collections.Generic.List<string>();
+                                System.Net.Sockets.TcpListener cutFake;
+                                Brain.Anthropic = FakeServer(new[] { driveReply }, cutAsked, out cutFake, 200, 8000);
+                                try
+                                {
+                                    Brain cutDriver = new Brain();
+                                    cutDriver.Remote = new Cloud("sk-ant-test", "claude-sonnet-5-5");
+                                    cutDriver.Model = "claude-sonnet-5-5";
+                                    Exception cutError = null;
+                                    Thread cutTurn = new Thread(delegate()
+                                    {
+                                        try { cutDriver.Drive(Computer.Seeing + Computer.Playing, Computer.Toolset, "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Job\"}]}]", true); }
+                                        catch (Exception error) { cutError = error; }
+                                    });
+                                    cutTurn.IsBackground = true;
+                                    Stopwatch cutClock = Stopwatch.StartNew();
+                                    cutTurn.Start();
+                                    while (cutClock.ElapsedMilliseconds < 3000) { lock (cutAsked) if (cutAsked.Count > 0) break; Thread.Sleep(20); }
+                                    cutDriver.StopDriving();
+                                    bool cutEnded = cutTurn.Join(3000);
+                                    WebException cutWeb = cutError as WebException;
+                                    if (!cutEnded || cutWeb == null || cutWeb.Status != WebExceptionStatus.RequestCanceled || cutClock.ElapsedMilliseconds > 6000) throw new Exception("Esc didn't cut off a turn that was still thinking: " + (cutError == null ? "no error" : cutError.GetType().Name + " " + cutError.Message) + " after " + cutClock.ElapsedMilliseconds + " ms");
+                                }
+                                finally
+                                {
+                                    cutFake.Stop();
+                                    Brain.Anthropic = driveAnthropic;
+                                }
+                                checks.Add("PASS Esc while she thinks: a game's turn can think for minutes, so Esc drops the request she's waiting on and stops the job at once");
+                                checks.Add("PASS Claude's hands:Claude 5 models get Anthropic's computer tools plus open_app and open_website, see a screenshot of the monitor in front, click and type at its coordinates scaled to the real screen, get a fresh look after each batch with only the last three pictures kept, keep its thinking, stop a batch at the first failure, re-look when the window in front changes, still stop before Buy now until they say yes, skip asking about a send they asked for, refuse banned keys (unless Bypass is on) and spots off the screenshot, and fall back to reading buttons if the model turns the computer tools down");
+                                checks.Add("PASS game jobs think harder: a job that plays a game, by its words or once a game's window is in front, gets her game lines and asks Claude for high effort with 16000 tokens and as long as those take; songs, videos and messages that only mention a game stay quick");
                                 if (brainSent[6].IndexOf("\"tools\":", StringComparison.Ordinal) >= 0 || brainSent[6].IndexOf("To use one, reply with only the call", StringComparison.Ordinal) < 0 || brainSent[7].IndexOf("Searched youtube.com for parkour.", StringComparison.Ordinal) < 0) throw new Exception("The cached text path did not run its Listing call.");
                                 if (ran.Count != 9 || ran[6] != "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify" || ran[7] != "https://www.youtube.com/results?search_query=parkour" || ran[8] != "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify") throw new Exception("The brain's tool calls opened the wrong targets.");
                                 System.Collections.Generic.List<string> thinkAsked = new System.Collections.Generic.List<string>();
@@ -14559,14 +14689,20 @@ namespace CapriDesktop
                             string pageOutside = mainframe.Outside();
                             if (pageOutside != null) throw new Exception("A settings control pokes out of the page: " + pageOutside);
                             // Her personality and safety lines are fixed in code (personality.md is gone since 0.7.6), her reply rules come last, and her chat and voice-chat prompts start with all three.
-                            const string todaysPersona = "8d477080fe2773435efc60cc5ca13056f3c71aba5034e667f4e58977f262ded6";
+                            const string todaysPersona = "2e1ece41e406b8f9a9902283ba87d163b499d99e6edc785bda14d553b42d58f9";
                             Func<string, string> personaHash = delegate(string text) { using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(new System.Text.UTF8Encoding(false).GetBytes(text))).Replace("-", "").ToLowerInvariant(); };
                             bool personaEditable = false;
                             foreach (Control control in mainframe.Controls) if (control is Button && control.Text == "Edit personality") personaEditable = true;
-                            bool personaFixed = Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Safety + "\n" + Brain.Machinery && Brain.Persona.Length == 5098 && personaHash(Brain.Persona) == todaysPersona && Brain.PersonalityStamp == ""
-                                && Brain.Character.StartsWith(Brain.Persona, StringComparison.Ordinal) && Agent.Prompt.StartsWith(Brain.Persona + Hands.Note, StringComparison.Ordinal);
+                            bool personaFixed = Brain.Persona == Brain.DefaultPersonality + "\n" + Brain.Safety + "\n" + Brain.Machinery && Brain.Persona.Length == 5659 && personaHash(Brain.Persona) == todaysPersona && Brain.PersonalityStamp == ""
+                                && Brain.Character.StartsWith(Brain.Persona, StringComparison.Ordinal) && Agent.Prompt.StartsWith(Brain.Persona + Hands.Note, StringComparison.Ordinal)
+                                && Brain.Machinery.IndexOf("call people only by names you've actually seen or heard", StringComparison.Ordinal) > 0 && Brain.Machinery.IndexOf("never apologise for the same thing twice", StringComparison.Ordinal) > 0
+                                && Computer.Playing.IndexOf("never invent a name, a message or something nobody said", StringComparison.Ordinal) > 0
+                                && Brain.DefaultPersonality.IndexOf("When someone donates or tips", StringComparison.Ordinal) > 0 && Brain.DefaultPersonality.IndexOf("Thanks for the eddies. Good boy.", StringComparison.Ordinal) > 0
+                                && Computer.Playing.IndexOf("When someone donates", StringComparison.Ordinal) > 0 && Computer.Playing.IndexOf("call them a good boy", StringComparison.Ordinal) > 0
+                                && Brain.DefaultPersonality.IndexOf("it helps keep me online!", StringComparison.Ordinal) > 0 && Brain.DefaultPersonality.IndexOf("ko-fi.com/lachysdev", StringComparison.Ordinal) > 0
+                                && Computer.Playing.IndexOf("it helps keep me online!", StringComparison.Ordinal) > 0 && Computer.Playing.IndexOf("ko-fi.com/lachysdev", StringComparison.Ordinal) > 0;
                             if (!personaFixed || personaEditable) throw new Exception("Her personality or safety lines changed, or can be edited: " + Brain.Persona.Length + " characters, SHA-256 " + personaHash(Brain.Persona) + ", Edit personality button " + personaEditable + ". If they changed on purpose, update todaysPersona here.");
-                            checks.Add("PASS her personality: fixed in code with her safety lines right after it and her reply rules last (5098 characters, known SHA-256); there's no personality.md and no Edit personality button, and her chat and voice-chat prompts start with it");
+                            checks.Add("PASS her personality: fixed in code with her safety lines right after it and her reply rules last (5659 characters, known SHA-256), her reply rules and game lines keep her to names she's really seen or heard, correcting a slip once instead of apologising over and over, and she thanks donors and calls them a good boy and, when asked about donating, says it helps keep her online and gives ko-fi.com/lachysdev, in chat and in games; there's no personality.md and no Edit personality button, and her chat and voice-chat prompts start with it");
                             if (mainframe.PerchStatus != "30 fps | -" || !mainframe.PerchFits) throw new Exception("The perch fps row didn't open right: " + mainframe.PerchStatus + " / fits " + mainframe.PerchFits);
                             mainframe.SlidePerch(3);
                             string perchFast = mainframe.PerchStatus;
@@ -18419,6 +18555,8 @@ namespace CapriDesktop
                             dragging = true; paused(); dragging = false;
                             chatting = true; paused(); chatting = false;
                             typer.Show(); paused(); typer.Hide();
+                            // She plays a game quietly (Lachy, 30 Oct).
+                            job = new Job("play bedwars on roblox"); working = "On it. Esc stops me."; paused(); working = null; job = null;
                             foreach (TalkState state in new[] { TalkState.Thinking, TalkState.Talking, TalkState.Online, TalkState.Dormant }) { talkState = state; paused(); }
                             talkState = TalkState.Off;
                             brain.Model = null; paused(); brain.Model = brain.Remote.Model;
@@ -18466,11 +18604,12 @@ namespace CapriDesktop
                             hidden = true; held(); hidden = false;
                             chatting = true; held(); chatting = false;
                             typer.Show(); held(); typer.Hide();
+                            job = new Job("play bedwars on roblox"); working = "On it. Esc stops me."; held(); working = null; job = null;
                             talkState = TalkState.Thinking; held(); talkState = TalkState.Off;
                             lastPrint = new byte[64 * 36 * 3];
                             FinishGlance(asking, watchTicket, null, "Couldn't read the screen. I'll try again.");
                             if (reply != null || lastPrint != null || mainframe.Status.IndexOf("Couldn't read the screen.", StringComparison.Ordinal) < 0) throw new Exception("A failed vision request did not allow a retry or show its reason.");
-                            checks.Add("PASS glance gates: watch, busy, hidden, dragging, typing, voice chat with the mic on, talk states, unsighted models and 10 minutes away pause capture; her sleep pose and a muted voice chat do not; black frames stay local; failures retry; stopped or interrupted glances stay silent");
+                            checks.Add("PASS glance gates: watch, busy, hidden, dragging, typing, voice chat with the mic on, a game she's playing, talk states, unsighted models and 10 minutes away pause capture; her sleep pose and a muted voice chat do not; black frames stay local; failures retry; stopped or interrupted glances stay silent");
                             Grab = delegate(Rectangle place)
                             {
                                 Bitmap shot = new Bitmap(place.Width, place.Height, PixelFormat.Format24bppRgb);

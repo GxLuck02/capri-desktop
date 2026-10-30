@@ -47,6 +47,9 @@ namespace CapriDesktop
         [DataMember(Name = "scroll_amount")] public double? Amount;
         [DataMember(Name = "duration")] public double? Duration;
         [DataMember(Name = "repeat")] public double? Repeat;
+        [DataMember(Name = "hold")] public string Hold;
+        [DataMember(Name = "press")] public string Press;
+        [DataMember(Name = "times")] public string Times;
 
         internal ToolArguments Copy() { return (ToolArguments)MemberwiseClone(); }
     }
