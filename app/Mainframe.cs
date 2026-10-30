@@ -11,28 +11,29 @@ namespace CapriDesktop
     {
         // Her Mainframe's own look, after Cyberpunk 2077's settings screen (Lachy, 30 Oct): near black with a wine glow at the
         // top, sections on dark bands under a teal rule, setting names in red, values in cyan, and boxes with a dark red rim and
-        // clipped corners. Only her Mainframe and the windows it opens use these; her bubbles keep Look's.
-        private static readonly Color Ground = Color.FromArgb(10, 10, 16);
-        private static readonly Color Glow = Color.FromArgb(54, 14, 26);
-        private static readonly Color Band = Color.FromArgb(16, 12, 20);
-        private static readonly Color Rule = Color.FromArgb(44, 122, 134);
-        private static readonly Color Rose = Color.FromArgb(255, 93, 102);
-        private static readonly Color White = Color.FromArgb(236, 236, 241);
-        private static readonly Color Faint = Color.FromArgb(146, 130, 140);
-        private static readonly Color Field = Color.FromArgb(17, 16, 28);
-        private static readonly Color Hover = Color.FromArgb(30, 20, 36);
-        private static readonly Color Pressed = Color.FromArgb(46, 22, 38);
-        private static readonly Color Edge = Color.FromArgb(92, 24, 36);
-        private static readonly Color Hot = Color.FromArgb(232, 66, 70);
-        private static readonly Color Cyan = Color.FromArgb(94, 240, 246);
-        private static readonly Color Deep = Color.FromArgb(9, 30, 33);
-        private static readonly Color DeepEdge = Color.FromArgb(40, 120, 132);
-        private static readonly Color OnInk = Color.FromArgb(6, 14, 18);
-        private static readonly Color Dash = Color.FromArgb(78, 28, 40);
-        private static readonly Color Lit = Color.FromArgb(245, 90, 86);
-        private static readonly Color Brim = Color.FromArgb(120, 30, 44);
-        private static readonly Color Well = Color.FromArgb(12, 11, 20);
-        private static readonly Color WellEdge = Color.FromArgb(72, 28, 40);
+        // clipped corners. The colours come from Neon, which her menus, type box, installer and notices share too; her bubbles
+        // keep Look's.
+        private static readonly Color Ground = Neon.Ground;
+        private static readonly Color Glow = Neon.Glow;
+        private static readonly Color Band = Neon.Band;
+        private static readonly Color Rule = Neon.Rule;
+        private static readonly Color Rose = Neon.Rose;
+        private static readonly Color White = Neon.White;
+        private static readonly Color Faint = Neon.Faint;
+        private static readonly Color Field = Neon.Field;
+        private static readonly Color Hover = Neon.Hover;
+        private static readonly Color Pressed = Neon.Pressed;
+        private static readonly Color Edge = Neon.Edge;
+        private static readonly Color Hot = Neon.Hot;
+        private static readonly Color Cyan = Neon.Cyan;
+        private static readonly Color Deep = Neon.Deep;
+        private static readonly Color DeepEdge = Neon.DeepEdge;
+        private static readonly Color OnInk = Neon.OnInk;
+        private static readonly Color Dash = Neon.Dash;
+        private static readonly Color Lit = Neon.Lit;
+        private static readonly Color Brim = Neon.Brim;
+        private static readonly Color Well = Neon.Well;
+        private static readonly Color WellEdge = Neon.WellEdge;
         // Bahnschrift, Windows' own DIN-style face, in its semi-condensed cuts and the condensed bold of her title. Windows
         // before 10's 2017 update doesn't have it, so there she keeps her Share Tech Mono.
         private static readonly FontFamily Plain = Family("Bahnschrift SemiCondensed");
@@ -1056,58 +1057,16 @@ namespace CapriDesktop
             graphics.Restore(state);
         }
 
-        // The wine glow's falloff: strong at the top, gone well before the middle.
-        private static readonly Blend Fade = Falloff();
+        private static readonly Blend Fade = Neon.Fade;
 
-        private static Blend Falloff()
-        {
-            Blend blend = new Blend(9);
-            for (int i = 0; i < 9; i++)
-            {
-                float at = i / 8f;
-                blend.Positions[i] = at;
-                blend.Factors[i] = 1 - (1 - at) * (1 - at);
-            }
-            return blend;
-        }
-
-        // A box with each corner clipped by its own amount, top left first and on round the clock.
-        private static GraphicsPath Cut(RectangleF box, float topLeft, float topRight, float bottomRight, float bottomLeft)
-        {
-            GraphicsPath path = new GraphicsPath();
-            path.AddPolygon(new[]
-            {
-                new PointF(box.Left + topLeft, box.Top), new PointF(box.Right - topRight, box.Top), new PointF(box.Right, box.Top + topRight),
-                new PointF(box.Right, box.Bottom - bottomRight), new PointF(box.Right - bottomRight, box.Bottom), new PointF(box.Left + bottomLeft, box.Bottom),
-                new PointF(box.Left, box.Bottom - bottomLeft), new PointF(box.Left, box.Top + topLeft)
-            });
-            return path;
-        }
+        private static GraphicsPath Cut(RectangleF box, float topLeft, float topRight, float bottomRight, float bottomLeft) { return Neon.Cut(box, topLeft, topRight, bottomRight, bottomLeft); }
 
         // A window's edge: corners clipped big at the top left and bottom right and small at the others, a dark red line round
         // it, and hot red strokes over the two big corners. The rims draw it again over settings scrolled under her edges.
-        private static void Edging(Graphics graphics, Control window, float s)
-        {
-            float big = 16 * s, small = 6 * s;
-            RectangleF box = new RectangleF(0.5f * s, 0.5f * s, window.Width - s - 1, window.Height - s - 1);
-            using (GraphicsPath edge = Cut(box, big, small, big, small))
-            using (Pen line = new Pen(Brim, Math.Max(1, 1.2f * s)))
-                graphics.DrawPath(line, edge);
-            RectangleF hot = RectangleF.Inflate(box, -0.6f * s, -0.6f * s);
-            using (Pen stroke = new Pen(Hot, 2 * s))
-            {
-                graphics.DrawLines(stroke, new[] { new PointF(hot.Left, hot.Top + big + 34 * s), new PointF(hot.Left, hot.Top + big), new PointF(hot.Left + big, hot.Top), new PointF(hot.Left + big + 64 * s, hot.Top) });
-                graphics.DrawLines(stroke, new[] { new PointF(hot.Right, hot.Bottom - big - 34 * s), new PointF(hot.Right, hot.Bottom - big), new PointF(hot.Right - big, hot.Bottom), new PointF(hot.Right - big - 64 * s, hot.Bottom) });
-            }
-        }
+        private static void Edging(Graphics graphics, Control window, float s) { Neon.Frame(graphics, window.Size, s, 16 * s, 6 * s, 64 * s, 34 * s); }
 
         // Cuts a window to its clipped corners.
-        private static void Clip(Form window, float s)
-        {
-            Region old = window.Region;
-            using (GraphicsPath hull = Cut(new RectangleF(0, 0, window.Width, window.Height), 16 * s, 6 * s, 16 * s, 6 * s)) window.Region = new Region(hull);
-            if (old != null) old.Dispose();
-        }
+        private static void Clip(Form window, float s) { Neon.Clip(window, 16 * s, 6 * s); }
 
         private void Shape() { Clip(this, Unit()); }
 
@@ -2243,7 +2202,7 @@ namespace CapriDesktop
         private ContextMenuStrip Dropdown()
         {
             ContextMenuStrip strip = new ContextMenuStrip();
-            strip.Renderer = new ToolStripProfessionalRenderer(new MenuColors());
+            strip.Renderer = new MenuLook();
             strip.BackColor = Ground;
             strip.ForeColor = White;
             strip.Font = Font;
@@ -2547,7 +2506,7 @@ namespace CapriDesktop
         // Her dropdowns: a dark wine menu with a red rim round the choice under the mouse.
         private sealed class MenuColors : ProfessionalColorTable
         {
-            private static readonly Color Back = Color.FromArgb(16, 13, 22);
+            internal static readonly Color Back = Color.FromArgb(16, 13, 22);
             public override Color ToolStripDropDownBackground { get { return Back; } }
             public override Color ImageMarginGradientBegin { get { return Back; } }
             public override Color ImageMarginGradientMiddle { get { return Back; } }
@@ -2560,6 +2519,138 @@ namespace CapriDesktop
             public override Color CheckPressedBackground { get { return Color.FromArgb(60, 160, 172); } }
             public override Color SeparatorDark { get { return Edge; } }
             public override Color SeparatorLight { get { return Back; } }
+        }
+
+        // Her menus, the right-click one and the Mainframe's dropdowns: a dark wine panel cut at the corners with a red rim and
+        // hot red strokes over the two big corners, like her windows. The choice under the mouse sits on a band with a red tick
+        // and its words go cyan, ticks are small cyan boxes, a submenu has a ▷, and a menu's title, like CAPRI / 0.7.7, is rose.
+        internal sealed class MenuLook : ToolStripProfessionalRenderer
+        {
+            internal static readonly object Title = new object();
+            internal static readonly Color Panel = MenuColors.Back;
+            internal static readonly Color Ink = White;
+            private static readonly Color Chosen = Color.FromArgb(48, 18, 32);
+
+            internal MenuLook() : base(new MenuColors()) { RoundedEdges = false; }
+
+            private static float Unit(ToolStrip strip) { return strip.DeviceDpi / 96f; }
+
+            protected override void Initialize(ToolStrip strip)
+            {
+                base.Initialize(strip);
+                ToolStripDropDown drop = strip as ToolStripDropDown;
+                if (drop == null) return;
+                drop.DropShadowEnabled = false;
+                drop.SizeChanged += delegate { Shape(drop); };
+                Shape(drop);
+            }
+
+            // Cuts a menu to its clipped corners: big at the top left and bottom right, small at the others.
+            private static void Shape(ToolStripDropDown drop)
+            {
+                if (drop.Width <= 0 || drop.Height <= 0) return;
+                float s = Unit(drop);
+                Neon.Clip(drop, 10 * s, 4 * s);
+            }
+
+            protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+            {
+                if (!(e.ToolStrip is ToolStripDropDown)) { base.OnRenderToolStripBackground(e); return; }
+                float s = Unit(e.ToolStrip);
+                Size size = e.ToolStrip.Size;
+                using (Brush ground = new SolidBrush(Panel)) e.Graphics.FillRectangle(ground, 0, 0, size.Width, size.Height);
+                float glow = Math.Min(size.Height, 90 * s);
+                using (LinearGradientBrush wine = new LinearGradientBrush(new RectangleF(0, -1, 16, glow + 2), Glow, Panel, LinearGradientMode.Vertical))
+                {
+                    wine.Blend = Fade;
+                    e.Graphics.FillRectangle(wine, 0, 0, size.Width, glow);
+                }
+            }
+
+            protected override void OnRenderImageMargin(ToolStripRenderEventArgs e)
+            {
+                if (!(e.ToolStrip is ToolStripDropDown)) base.OnRenderImageMargin(e);
+            }
+
+            protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+            {
+                if (!(e.ToolStrip is ToolStripDropDown)) { base.OnRenderToolStripBorder(e); return; }
+                float s = Unit(e.ToolStrip);
+                Neon.Frame(e.Graphics, e.ToolStrip.Size, s, 10 * s, 4 * s, 30 * s, 18 * s);
+            }
+
+            protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+            {
+                if (!(e.ToolStrip is ToolStripDropDown)) { base.OnRenderMenuItemBackground(e); return; }
+                ToolStripItem item = e.Item;
+                if (!item.Enabled || !(item.Selected || item.Pressed)) return;
+                Graphics graphics = e.Graphics;
+                float s = Unit(e.ToolStrip);
+                RectangleF band = new RectangleF(4 * s, 1, item.Width - 8 * s, item.Height - 2);
+                SmoothingMode was = graphics.SmoothingMode;
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (GraphicsPath plate = Cut(band, 0, 0, 5 * s, 0))
+                using (Brush fill = new SolidBrush(Chosen))
+                    graphics.FillPath(fill, plate);
+                graphics.SmoothingMode = was;
+                using (Brush tick = new SolidBrush(Hot)) graphics.FillRectangle(tick, band.Left, band.Top + 4 * s, 2.5f * s, Math.Max(1, band.Height - 8 * s));
+            }
+
+            // Drawn here rather than by the base, which greys out every disabled item, the menu's rose title too.
+            protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+            {
+                ToolStripItem item = e.Item;
+                Color colour = item.Tag == Title ? Rose : !item.Enabled ? Faint : (item.Selected || item.Pressed) && e.ToolStrip is ToolStripDropDown ? Cyan : e.TextColor;
+                TextRenderer.DrawText(e.Graphics, e.Text, e.TextFont, e.TextRectangle, colour, e.TextFormat);
+            }
+
+            protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)
+            {
+                if (!(e.ToolStrip is ToolStripDropDown)) { base.OnRenderItemCheck(e); return; }
+                Graphics graphics = e.Graphics;
+                float s = Unit(e.ToolStrip);
+                Rectangle area = e.ImageRectangle;
+                float side = Math.Max(6 * s, Math.Min(area.Width, area.Height) - 4 * s);
+                RectangleF box = new RectangleF(area.Left + (area.Width - side) / 2f, area.Top + (area.Height - side) / 2f, side, side);
+                SmoothingMode was = graphics.SmoothingMode;
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (GraphicsPath plate = Cut(box, 0, 0, 3 * s, 0))
+                using (Brush fill = new SolidBrush(e.Item.Enabled ? Cyan : Faint))
+                    graphics.FillPath(fill, plate);
+                using (Pen tick = new Pen(OnInk, 1.6f * s))
+                {
+                    tick.LineJoin = LineJoin.Miter;
+                    graphics.DrawLines(tick, new[] { new PointF(box.Left + side * 0.22f, box.Top + side * 0.52f), new PointF(box.Left + side * 0.42f, box.Top + side * 0.72f), new PointF(box.Left + side * 0.78f, box.Top + side * 0.3f) });
+                }
+                graphics.SmoothingMode = was;
+            }
+
+            protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
+            {
+                ToolStrip strip = e.Item != null ? e.Item.Owner : null;
+                if (!(strip is ToolStripDropDown) || (e.Direction != ArrowDirection.Right && e.Direction != ArrowDirection.Left)) { base.OnRenderArrow(e); return; }
+                Graphics graphics = e.Graphics;
+                float s = Unit(strip);
+                Rectangle area = e.ArrowRectangle;
+                float x = area.Left + area.Width / 2f - 3 * s, y = area.Top + area.Height / 2f;
+                bool right = e.Direction == ArrowDirection.Right;
+                PointF[] mark = right
+                    ? new[] { new PointF(x, y - 4 * s), new PointF(x + 6 * s, y), new PointF(x, y + 4 * s) }
+                    : new[] { new PointF(x + 6 * s, y - 4 * s), new PointF(x, y), new PointF(x + 6 * s, y + 4 * s) };
+                bool lit = e.Item != null && e.Item.Enabled && (e.Item.Selected || e.Item.Pressed);
+                SmoothingMode was = graphics.SmoothingMode;
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                if (lit) using (Brush fill = new SolidBrush(Cyan)) graphics.FillPolygon(fill, mark);
+                using (Pen pen = new Pen(lit ? Cyan : Faint, 1.3f * s)) { pen.LineJoin = LineJoin.Miter; graphics.DrawPolygon(pen, mark); }
+                graphics.SmoothingMode = was;
+            }
+
+            protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+            {
+                if (!(e.ToolStrip is ToolStripDropDown) || e.Vertical) { base.OnRenderSeparator(e); return; }
+                float s = Unit(e.ToolStrip);
+                using (Brush line = new SolidBrush(Edge)) e.Graphics.FillRectangle(line, 10 * s, e.Item.Height / 2, e.Item.Width - 20 * s, Math.Max(1, (int)s));
+            }
         }
 
         // A voice model for CUSTOM LOCAL or CLOUD VOICE: a ready-made choice like Fish Audio, or their own server. Its address, an

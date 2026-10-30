@@ -1305,12 +1305,15 @@ namespace CapriDesktop
             Cursor = Look.Pointer;
             AutoScaleMode = AutoScaleMode.None;
             menu = new ContextMenuStrip();
-            menu.Renderer = new ToolStripProfessionalRenderer(new CapriMenuColors());
-            menu.ForeColor = Color.FromArgb(238, 239, 241);
-            menu.BackColor = Color.FromArgb(26, 27, 31);
+            menu.Renderer = new Mainframe.MenuLook();
+            menu.ForeColor = Mainframe.MenuLook.Ink;
+            menu.BackColor = Mainframe.MenuLook.Panel;
+            menu.Font = Neon.Type(10f);
             menu.ShowImageMargin = false;
             ToolStripMenuItem title = new ToolStripMenuItem("CAPRI  /  " + Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
             title.Enabled = false;
+            title.Font = Neon.Display(12f);
+            title.Tag = Mainframe.MenuLook.Title;
             menu.Items.Add(title);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("Open Capri Mainframe", null, delegate { mainframe.Restore(); }));
@@ -1367,6 +1370,7 @@ namespace CapriDesktop
                 drop.Renderer = menu.Renderer;
                 drop.ForeColor = menu.ForeColor;
                 drop.BackColor = menu.BackColor;
+                drop.Font = menu.Font;
                 drop.ShowImageMargin = false;
                 drop.ShowCheckMargin = parent != helpItem;
             }
@@ -1376,6 +1380,7 @@ namespace CapriDesktop
             playerMenu.Renderer = menu.Renderer;
             playerMenu.ForeColor = menu.ForeColor;
             playerMenu.BackColor = menu.BackColor;
+            playerMenu.Font = menu.Font;
             playerMenu.ShowImageMargin = false;
             playerOpenItem = new ToolStripMenuItem("Open the player", null, delegate { Tune tune = player.Tune; ThreadPool.QueueUserWorkItem(delegate { try { Tunes.Open(tune); } catch (Exception) { } }); });
             playerMenu.Items.Add(playerOpenItem);
@@ -19116,16 +19121,6 @@ namespace CapriDesktop
                 return value;
             }
         }
-    }
-
-    internal sealed class CapriMenuColors : ProfessionalColorTable
-    {
-        public override Color ToolStripDropDownBackground { get { return Color.FromArgb(26, 27, 31); } }
-        public override Color ImageMarginGradientBegin { get { return ToolStripDropDownBackground; } }
-        public override Color ImageMarginGradientEnd { get { return ToolStripDropDownBackground; } }
-        public override Color MenuItemSelected { get { return Color.FromArgb(65, 69, 53); } }
-        public override Color MenuItemBorder { get { return Color.FromArgb(167, 245, 88); } }
-        public override Color CheckBackground { get { return Color.FromArgb(65, 69, 53); } }
     }
 
     internal static class Native
