@@ -6374,6 +6374,13 @@ namespace CapriDesktop
 
         private bool Uncovered(Point screen) { return Native.GetAncestor(Native.WindowFromPoint(new Native.Point(screen.X, screen.Y)), 2) == Handle; }
 
+        // Seconds the pill shows when voice chat starts or stops or the mic is muted or unmuted, so you see the change.
+        private const double PillPop = 3;
+
+        // What keeps the pill up: the cursor on her or on it, the typer, or a reply she's giving outside voice chat. Voice chat
+        // itself doesn't, so the pill and its mic wave hide like any other time instead of staying under her for the whole call.
+        private bool PillHeld(bool hovered) { return hovered || typer.Visible || (!chatting && talkState != TalkState.Off); }
+
         private void UpdatePill(double now)
         {
             if (!IsHandleCreated) return;
@@ -6381,7 +6388,7 @@ namespace CapriDesktop
             Point cursor = Cursor.Position;
             Point inside = PointToClient(cursor);
             bool near = frame != null && inside.X >= 0 && inside.Y >= 0 && inside.X < Width && inside.Y < Height && Solid(inside, true);
-            if (allowed && (near || (pill.Visible && pill.Bounds.Contains(cursor)) || typer.Visible || chatting || talkState != TalkState.Off)) pillUntil = Math.Max(pillUntil, now + 1.5);
+            if (allowed && PillHeld(near || (pill.Visible && pill.Bounds.Contains(cursor)))) pillUntil = Math.Max(pillUntil, now + 1.5);
             if (!allowed || now > pillUntil) { if (pill.Visible) pill.Hide(); return; }
             float s = TalkScale();
             Point feet = Feet();
@@ -6423,7 +6430,7 @@ namespace CapriDesktop
             ears.Muted = false;
             if (!testing && !muteKey) muteKey = ByMouse(preferences.MuteVk) || Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk);
             pill.SetChat(true, false);
-            pillUntil = clock.Elapsed.TotalSeconds + 1.5;
+            pillUntil = clock.Elapsed.TotalSeconds + PillPop;
             brain.Cancel();
             CloseTalk();
             OpenLink();
@@ -6445,7 +6452,7 @@ namespace CapriDesktop
             ears.Muted = false;
             if (!testing && !muteKey) muteKey = ByMouse(preferences.MuteVk) || Native.RegisterHotKey(Handle, MuteKeyId, preferences.MuteMods | 0x4000, preferences.MuteVk);
             pill.SetChat(true, false);
-            pillUntil = clock.Elapsed.TotalSeconds + 1.5;
+            pillUntil = clock.Elapsed.TotalSeconds + PillPop;
             // Turned on mid-job, it leaves the job running, so what they say next goes to it.
             if (working == null)
             {
@@ -7129,6 +7136,7 @@ namespace CapriDesktop
             earsShut = false;
             transcribing = false;
             pill.SetChat(false, false);
+            pillUntil = clock.Elapsed.TotalSeconds + PillPop;
             ShowVoice();
             if (wasLocal)
             {
@@ -7178,6 +7186,7 @@ namespace CapriDesktop
             ears.Muted = !ears.Muted;
             if (dictation != null && earsReady) dictation.Hold(ears.Muted);
             pill.SetChat(true, ears.Muted);
+            pillUntil = clock.Elapsed.TotalSeconds + PillPop;
             CheckEars(clock.Elapsed.TotalSeconds);
             if (local && earsReady) mainframe.VoiceNote(ears.Muted ? "Mic muted. Click the mic to unmute." : transcribing ? "Hearing you..." : "Free voice chat on. Talk and I'll type back.", false);
             else if (!local) mainframe.VoiceNote(ears.Muted ? "Mic muted. Voice chat pauses once she stops talking." : "Mic on. Talk and she'll pick up.", false);
@@ -17341,6 +17350,7 @@ namespace CapriDesktop
                             CloseTalk();
                             pill.Press(2);
                             if (!pill.Chatting || pill.Muted || !chatting || TalkPill.Render(1, 0, true).Width <= TalkPill.Measure(1).Width + 30) throw new Exception("Wave did not start voice chat with the mic button apart on the right.");
+                            if (PillHeld(false) || pillUntil < clock.Elapsed.TotalSeconds + 2) throw new Exception("Voice chat should pop the talk pill up for a few seconds, not hold it up for the whole call: held " + PillHeld(false) + " (typer " + typer.Visible + "), up for " + (pillUntil - clock.Elapsed.TotalSeconds).ToString("0.0") + " s.");
                             Bitmap[] chips = { TalkPill.Render(2, 0, true, false, 2), TalkPill.Render(2, 3, true, false, 6), TalkPill.Render(2, 0, true, true), TalkPill.Render(2, 0) };
                             using (Bitmap sheet = new Bitmap(chips[0].Width + 40, chips.Length * (chips[0].Height + 16) + 16, PixelFormat.Format32bppArgb))
                             using (Graphics graphics = Graphics.FromImage(sheet))
@@ -17369,10 +17379,13 @@ namespace CapriDesktop
                             pill.Press(3);
                             if (pill.Muted || ears.Muted) throw new Exception("Mic button did not unmute the mic.");
                             Message mutePress = Message.Create(Handle, 0x0312, new IntPtr(MuteKeyId), IntPtr.Zero);
+                            pillUntil = 0;
                             WndProc(ref mutePress);
                             if (!pill.Muted || !ears.Muted) throw new Exception("Ctrl + Alt + N did not mute the mic.");
+                            if (pillUntil < clock.Elapsed.TotalSeconds + 2 || PillHeld(false)) throw new Exception("Ctrl + Alt + N should pop the talk pill up for a few seconds in voice chat: up for " + (pillUntil - clock.Elapsed.TotalSeconds).ToString("0.0") + " s, held " + PillHeld(false) + ".");
                             WndProc(ref mutePress);
                             if (pill.Muted || ears.Muted) throw new Exception("Ctrl + Alt + N did not unmute the mic.");
+                            checks.Add("PASS the talk pill doesn't stay up for a whole voice chat: it pops up for a few seconds when the call starts or the mic is muted or unmuted, then hides unless you hover her");
                             ears.Feed(loud);
                             ears.Feed(loud);
                         }
