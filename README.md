@@ -275,7 +275,7 @@ Pick what she calls you, her language, her voice and what she does on your PC fr
 Capri is free. To support the people who make her, tip them on Ko-fi:
 
 - [Lachy](https://ko-fi.com/lachysdev), developer
-- [lance and xoru](https://ko-fi.com/xorulance), project manager and head tester, who share one tip jar
+- [xoru](https://ko-fi.com/xorulance), head tester
 - [Guh](https://ko-fi.com/guh703214)
 - [BaldDcMod](https://ko-fi.com/balddcmod), Discord moderator
 
