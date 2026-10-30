@@ -463,7 +463,7 @@ namespace CapriDesktop
 
         private static readonly string[,] Specs =
         {
-            { "open_app", "Open, launch or play an app or game installed on their PC, like Spotify, Discord, Steam or Roblox.",
+            { "open_app", "Open, launch or play an app or game installed on their PC, like Spotify, Discord, Steam or Roblox. Give its full name, not a nickname: Counter-Strike 2 for cs, Valorant for val. If it's already open and they want something done in it, like a mode, a match or accepting a match, call use_computer instead of opening it again.",
               "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The app's name\"}},\"required\":[\"name\"]}" },
             { "open_website", "Open a website in their browser, or search a site like YouTube or Google.",
               "{\"type\":\"object\",\"properties\":{\"site\":{\"type\":\"string\",\"description\":\"The site's name or address, like youtube.com\"},\"search\":{\"type\":\"string\",\"description\":\"Words to search for on that site, if any\"}},\"required\":[\"site\"]}" },
@@ -475,7 +475,7 @@ namespace CapriDesktop
               "{\"type\":\"object\",\"properties\":{\"song\":{\"type\":\"string\",\"description\":\"What to play, like a song and its artist or a playlist's name\"},\"kind\":{\"type\":\"string\",\"description\":\"What it is\",\"enum\":[\"song\",\"playlist\",\"album\",\"artist\"]},\"app\":{\"type\":\"string\",\"description\":\"Where to play it, if they said\",\"enum\":[\"spotify\",\"youtube\"]}},\"required\":[\"song\"]}" },
             { "app_window", "Switch to, minimize or close an app or game that's open on their PC. Naming a site closes that browser tab.",
               "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The app's name, or the site in a browser tab\"},\"action\":{\"type\":\"string\",\"description\":\"What to do\",\"enum\":[\"switch_to\",\"minimize\",\"close\"]}},\"required\":[\"name\",\"action\"]}" },
-            { "use_computer", "Use their mouse and keyboard for any job inside an app or website: sending a message or DM, joining, leaving or ending a call, or anything that needs clicking, typing or several steps, like opening an app and searching in it.",
+            { "use_computer", "Use their mouse and keyboard for any job inside an app or website: sending a message or DM, joining, leaving or ending a call, or anything that needs clicking, typing or several steps, like opening an app and searching in it, or in a game: picking a mode, queueing for a match, or waiting for one and accepting it while they're away. You always have their mouse and keyboard through this tool.",
               "{\"type\":\"object\",\"properties\":{\"task\":{\"type\":\"string\",\"description\":\"The whole job in their exact words, including any message to send\"}},\"required\":[\"task\"]}" },
             { "shortcut", "Press a keyboard shortcut for them: mute or unmute their mic in Discord (discord_mute), deafen or undeafen in Discord (discord_deafen), take a screenshot, clip the last 30 seconds, start or stop recording, open the Game Bar, show the desktop, open Task Manager, clipboard history or the emoji picker, start voice typing, turn Live Captions, Narrator or colour filters on or off, zoom in with Magnifier or close it, or open Quick Settings.",
               "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Which shortcut\",\"enum\":[\"discord_mute\",\"discord_deafen\",\"screenshot\",\"clip_that\",\"record\",\"game_bar\",\"show_desktop\",\"task_manager\",\"clipboard\",\"emoji\",\"voice_typing\",\"live_captions\",\"narrator\",\"magnifier\",\"magnifier_off\",\"color_filters\",\"quick_settings\"]}},\"required\":[\"name\"]}" },
@@ -941,6 +941,7 @@ namespace CapriDesktop
             @"|\b(don'?t|do not|can'?t|cannot) (have )?(any )?access (to )?((your|ur|the|their)\s+)?(apps?|spotify|youtube|discord|steam|music|pc|computer|programs?|browser|files|media player)\b" +
             @"|\bno (tengo|puedo) (acceso|abrir|reproducir|poner|controlar|acceder|usar|buscar|cerrar|tocar)\b|\bno tengo (forma|manera) de\b" +
             @"|\bje ne (peux|sais) pas (ouvrir|lancer|jouer|contr[oô]ler|acc[ée]der|utiliser|chercher|fermer|mettre)\b|\bje n'ai pas acc[eè]s\b" +
+            @"|\b(don'?t|do not|can'?t|cannot) (have )?(any )?(control|access|ability)\s+(of|over|to|on)\s+((your|ur|the|their)\s+)?(pc|computer|mouse|keyboard|cursor|screen|games?)\b|\bi (can'?t|cannot|can not) (move|click|press) (\w+\s+){0,2}(mouse|cursor|keys|keyboard|buttons?)\b" +
             @"|\bich kann (\w+\s+){0,3}nicht\s+([öo]ffnen|abspielen|starten|steuern|spielen|zugreifen|bedienen|aufrufen)\b|\bkeinen? zugriff\b" +
             @"|\bn[ãa]o (consigo|posso|tenho como) (abrir|tocar|acessar|controlar|reproduzir|colocar|iniciar)\b|\bn[ãa]o tenho acesso\b" +
             @"|\bnon (posso|riesco a) (aprire|riprodurre|accedere|controllare|avviare|mettere|suonare)\b|\bnon ho accesso\b" +
@@ -1693,10 +1694,22 @@ namespace CapriDesktop
             return false;
         }
 
+        // What players call their games, for when nothing installed goes by the name they said ("open cs", a tester, 30 Oct).
+        private static readonly string[,] Nicknames = { { "cs", "counter strike" }, { "cs2", "counter strike 2" }, { "csgo", "counter strike" }, { "cs go", "counter strike" }, { "val", "valorant" }, { "valo", "valorant" }, { "mc", "minecraft" }, { "gta", "grand theft auto" }, { "gta 5", "grand theft auto v" }, { "gta v", "grand theft auto v" }, { "lol", "league of legends" }, { "r6", "rainbow six" }, { "cod", "call of duty" }, { "ow", "overwatch" }, { "rl", "rocket league" }, { "fn", "fortnite" }, { "tf2", "team fortress 2" }, { "dbd", "dead by daylight" } };
+
+        internal static string Nickname(string wanted)
+        {
+            string said = Regex.Replace(Plain(wanted), @"^the | (app|game)$", "");
+            for (int i = 0; i < Nicknames.GetLength(0); i++) if (said == Nicknames[i, 0]) return Nicknames[i, 1];
+            return null;
+        }
+
         private static string OpenApp(string wanted)
         {
             if (string.IsNullOrWhiteSpace(wanted)) return "Which app, choom?";
             List<InstalledApp> found = Match(Apps(), wanted);
+            string nicknamed = found.Count == 0 ? Nickname(wanted) : null;
+            if (nicknamed != null) found = Match(Apps(), nicknamed);
             if (found.Count == 0) return "No app called " + wanted.Trim() + " is installed on this PC.";
             // When several match equally well, the one with the fewest extra words is closest to what they said.
             InstalledApp chosen = found[0];
