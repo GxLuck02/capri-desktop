@@ -1512,6 +1512,7 @@ If she closes twice in a row while she's starting (a crash, but also Task Manage
 - Spotify opens but doesn't play: press the green Play button.
 - She played it on YouTube, not Spotify: she uses YouTube when Spotify isn't installed.
 - She paused the video she just played: a YouTube video starts by itself, and before 0.7.7 her hands sometimes clicked it to play it, which paused it. From 0.7.7 she leaves a video alone once it's open, and presses play once if her job left it paused. Click the video or press k to start it.
+- She closed the YouTube tab, or the whole browser, while playing a video, then started again: before 0.7.7 a YouTube page's Subscribe buttons looked like a newsletter popup to her, and her hint for closing popups picked the browser's own tab or window Close button. From 0.7.7 that hint only uses a close button inside the web page, and Subscribe buttons don't count. On 0.7.6 it doesn't happen with a Claude key under MAX INTELLIGENCE, because Claude works from screenshots and never gets that hint.
 - "No app called X is installed on this PC.": use the name from your Start menu.
 - She won't play a song: some song names have words she blocks (drinking, smoking, drugs and so on). Search it yourself.
 - "Mute my mic" doesn't work in Discord: she uses Discord's default keys (Ctrl + Shift + M). If you changed them in Discord, set them back.
