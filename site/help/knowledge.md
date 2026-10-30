@@ -210,6 +210,8 @@ Unless you've already said something, she greets you in her own recorded voice a
 
 This needs no key and uses no credits.
 
+On 31 October (0.7.7 and newer) her hello is a Happy Halloween line instead, like "Happy Halloween, choom. Trick or treat?", said in the voice you picked, since it isn't a recording. If she's already running when the 31st starts, she says one the first time she's free that day while you're at your PC, once. Quiet (Ctrl + Alt + P) and full-screen games hold it until they're over.
+
 ### Where did the Mainframe go after the first run?
 After the first run, the Mainframe starts minimized. Open it with right-click her > Open Capri Mainframe, or from her tray icon.
 
