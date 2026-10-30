@@ -680,6 +680,19 @@ namespace CapriDesktop
 
         internal bool HasFlipped { get { return source != null ? source.HasFlipped : flippable; } }
 
+        // Loads the art for that way round here and now, if it isn't in, for when she needs it this frame.
+        internal void Load(bool left)
+        {
+            if (source != null) { source.Load(left); return; }
+            bool wantLeft = left && flippable;
+            if (wantLeft) flippedUsed = Environment.TickCount; else stripUsed = Environment.TickCount;
+            lock (gate)
+            {
+                if (wantLeft && flipped == null) flipped = Companion.LoadArt(Resource(true));
+                else if (!wantLeft && strip == null) strip = Companion.LoadArt(Resource(false));
+            }
+        }
+
         // Whether the art for that way round is in, so she can show it without waiting: facing left, that's her artist's
         // flipped set when the clip has one.
         internal bool Ready(bool left)
@@ -799,6 +812,25 @@ namespace CapriDesktop
         private readonly Clip leave = new Clip("leave", 12, 15, 1.11f);
         private readonly Clip perchArrive = new Clip("perch_arrive", 14, 15, 1, PerchShiftX, PerchShiftY);
         private readonly Clip perchLeave = new Clip("perch_leave", 12, 15, 1, PerchShiftX, PerchShiftY);
+        // her artist's lay-down set: she lies along her ledge, hair and an arm hanging off one end and her legs off the other.
+        // She settles into it after sitting quietly a while, sleeps in it, and sits back up a few minutes later, for music or
+        // when she's picked up. Its cells are centred across her square and start 161 px down it, in 384 px art, and her hip
+        // sits on her perch's seat row at LieRight of her square, so her body reaches back along the ledge from it. It's all
+        // loaded only while she lies, being 21 MB a loop.
+        private const float LieShiftY = 94f / 384, LieHeight = 250f / 384, LieRight = 0.806f;
+        // How much ledge her body needs back from her hip, and how far her hair reaches, as shares of her size.
+        private const float LieTorso = 0.45f, LieReach = 0.78f;
+        private static readonly RectangleF LyingRight = RectangleF.FromLTRB(0.026f, 0.431f, 0.973f, 1.058f);
+        private readonly Clip laydown = new Clip("laydown", 60, 30, LieHeight, 0, LieShiftY, true);
+        private readonly Clip laydownTalk = new Clip("laydown_talk", 60, 30, LieHeight, 0, LieShiftY, true);
+        private readonly Clip laydownBlink = new Clip("laydown_blink", 8, 30, LieHeight, 0, LieShiftY, true);
+        private readonly Clip laydownBlinkGlitch = new Clip("laydown_blink_glitch", 8, 30, LieHeight, 0, LieShiftY, true);
+        private readonly Clip laydownSleep = new Clip("laydown_sleep", 60, 30, LieHeight, 0, LieShiftY, true);
+        private readonly Clip laydownGlitch = new Clip("laydown_glitch", 10, 15, LieHeight, 0, LieShiftY, true);
+        private readonly Clip laydownLeave = new Clip("laydown_leave", 12, 15, LieHeight, 0, LieShiftY, true);
+        private bool lying;
+        // When she next lies down, sitting quietly, or sits back up, lying.
+        private double nextLie = -1;
         private readonly Random random = new Random();
         private readonly NotifyIcon tray;
         private readonly ContextMenuStrip menu;
@@ -947,15 +979,16 @@ namespace CapriDesktop
         private static readonly RectangleF BodyRight = RectangleF.FromLTRB(0.25f, 0f, 0.76f, 1f);
         private static readonly RectangleF PerchedRight = RectangleF.FromLTRB(0.21f, 0.17f, 0.69f, 0.98f);
         private bool facingLeft;
-        private float SitX { get { return facingLeft ? 1 - SitRight : SitRight; } }
+        private float SitX { get { float right = lying ? LieRight : SitRight; return facingLeft ? 1 - right : right; } }
         private RectangleF Body { get { return Facing(BodyRight); } }
-        private RectangleF PerchedBody { get { return Facing(PerchedRight); } }
+        private RectangleF PerchedBody { get { return Facing(lying ? LyingRight : PerchedRight); } }
         private RectangleF Facing(RectangleF body) { return facingLeft ? RectangleF.FromLTRB(1 - body.Right, body.Top, 1 - body.Left, body.Bottom) : body; }
         private readonly System.Windows.Forms.Timer clickDelay;
         private readonly ToolStripMenuItem rideItem;
         private readonly ToolStripMenuItem sitItem;
         private readonly ToolStripMenuItem sitHereItem;
         private readonly ToolStripMenuItem hangHereItem;
+        private readonly ToolStripMenuItem lieItem;
         private bool hanging;
         private readonly ToolStripMenuItem updateItem;
         private readonly ToolStripMenuItem checkItem;
@@ -1301,13 +1334,15 @@ namespace CapriDesktop
             moves.DropDownItems.Add(sitHereItem);
             hangHereItem = new ToolStripMenuItem("Hang here", null, delegate { if (hanging) LetGo(); else HangHere(); });
             moves.DropDownItems.Add(hangHereItem);
-            sleepItem = new ToolStripMenuItem("Go to sleep", null, delegate { Nap(!napAsked && clip != sleep); });
+            lieItem = new ToolStripMenuItem("Lie down", null, delegate { if (lying) SitUp(); else LieDown(); });
+            moves.DropDownItems.Add(lieItem);
+            sleepItem = new ToolStripMenuItem("Go to sleep", null, delegate { Nap(!napAsked && !Asleep); });
             moves.DropDownItems.Add(sleepItem);
             moves.DropDownItems.Add(new ToolStripMenuItem("Bring to this screen", null, delegate { RestoreAtCursor(); }));
             screenItem = new ToolStripMenuItem("Go to the next screen", null, delegate { MoveSelf("other_screen", null); });
             moves.DropDownItems.Add(screenItem);
             menu.Items.Add(moves);
-            menu.Opening += delegate { sitHereItem.Text = seat != null && seat.Free ? "Stand up" : "Sit here"; hangHereItem.Text = hanging ? "Let go" : "Hang here"; sleepItem.Text = napAsked || clip == sleep ? "Wake up" : "Go to sleep"; danceNowItem.Checked = danceAsked; screenItem.Visible = Screen.AllScreens.Length > 1; };
+            menu.Opening += delegate { sitHereItem.Text = seat != null && seat.Free ? "Stand up" : "Sit here"; hangHereItem.Text = hanging ? "Let go" : "Hang here"; lieItem.Text = lying ? "Sit up" : "Lie down"; lieItem.Enabled = lying || (clip == perch && LieWay() != null); sleepItem.Text = napAsked || Asleep ? "Wake up" : "Go to sleep"; danceNowItem.Checked = danceAsked; screenItem.Visible = Screen.AllScreens.Length > 1; };
             clickDelay = new System.Windows.Forms.Timer();
             clickDelay.Interval = Math.Max(100, SystemInformation.DoubleClickTime);
             clickDelay.Tick += delegate { OnClickDelay(); };
@@ -1408,6 +1443,7 @@ namespace CapriDesktop
                 if (!testing) CheckPlayer(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckHome(clock.Elapsed.TotalSeconds);
                 if (!testing) CheckLag(clock.Elapsed.TotalSeconds);
+                if (!testing) CheckLie(clock.Elapsed.TotalSeconds);
                 if (!testing) Clip.RestAll(Environment.TickCount);
                 if (!testing) CheckPopIn(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckNudge(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
@@ -1547,6 +1583,8 @@ namespace CapriDesktop
 
         private void Face()
         {
+            // Lying, she keeps the way she lay down, which had the room.
+            if (lying) return;
             Point hip = Hip();
             int room = Screen.FromPoint(hip).WorkingArea.Right - hip.X;
             bool left = room < preferences.Size * (facingLeft ? 0.9f : 0.6f);
@@ -1638,15 +1676,18 @@ namespace CapriDesktop
 
         private int Advance(double now)
         {
-            bool seated = clip == perch || clip == perchGlitch || clip == perchDance || clip == perchArrive || clip == perchLeave;
+            bool lain = clip == laydown || clip == laydownGlitch || clip == laydownSleep || clip == laydownLeave;
+            bool seated = clip == perch || clip == perchGlitch || clip == perchDance || clip == perchArrive || clip == perchLeave || lain;
             bool perched = riding || onPanel || seat != null;
-            if (seated) WarmPerch();
-            if (perched && !seated && !walking) Play(perch);
+            // Lying needs her ledge still under her: anything else sits her back up first, her hip where it was.
+            if (lying && (seat == null || riding || onPanel || walking || falling || hanging || dragging)) SitUp(false);
+            if (seated) { if (lying) WarmLie(); else WarmPerch(); }
+            if (perched && (!seated || (lain && !lying && clip != laydownLeave)) && !walking) Play(lying ? laydown : perch);
             if ((!perched && seated) || (clip == dangle && !dragging && !falling && !hanging)) Play(idle);
             int index = (int)((now - clipStart) * clip.Fps);
             perchMix = 0;
-            if ((clip == perch || clip == perchDance) && preferences.PerchFps != 30) index = PerchIndex(now - clipStart, preferences.PerchFps, out perchMix);
-            if (clip == leave || clip == perchLeave) return Math.Min(index, clip.Count - 1);
+            if ((clip == perch || clip == perchDance || clip == laydown || clip == laydownSleep) && preferences.PerchFps != 30) index = PerchIndex(now - clipStart, preferences.PerchFps, out perchMix);
+            if (clip == leave || clip == perchLeave || clip == laydownLeave) return Math.Min(index, clip.Count - 1);
             if ((clip == glitch && index >= glitch.Count) || (clip == wake && index >= wake.Count) || (clip == grin && index >= grin.Count * 2)) { Play(idle); index = 0; }
             if (clip == arrive && index >= arrive.Count)
             {
@@ -1655,23 +1696,33 @@ namespace CapriDesktop
                 if (dropAfter) { dropAfter = false; if (spawnFall) Fall(); else if (!Drop()) SavePreferences(); }
             }
             if ((clip == perchGlitch && index >= perchGlitch.Count) || (clip == perchArrive && index >= perchArrive.Count)) { Play(perch); index = 0; }
+            if (clip == laydownGlitch && index >= laydownGlitch.Count) { Play(laydown); index = 0; }
             if (dropAfter && clip != arrive && clip != glitch)
             {
                 dropAfter = false;
                 if (!riding && !dragging && !hanging && !hidden && seat == null && !Drop()) SavePreferences();
             }
             if (clip == dance || clip == perchDance) { Jam(now, FollowBeat(now)); return index % clip.Count; }
-            if (clip != idle && clip != perch) return index % clip.Count;
+            if (clip != idle && clip != perch && clip != laydown) return index % clip.Count;
             if (!preferences.Motion) { perchMix = 0; return 0; }
             int cycle = index / clip.Count;
             if (cycle != idleCycle)
             {
                 idleCycle = cycle;
                 double roll = random.NextDouble();
-                blinkWith = roll < 0.1 ? (clip == perch ? perchBlinkGlitch : blinkGlitch) : roll < 0.55 ? (clip == perch ? perchBlink : blink) : null;
-                if (now >= nextGlitch && speech == null && talkState == TalkState.Off) { nextGlitch = now + 30 + random.NextDouble() * 30; Play(clip == perch ? perchGlitch : glitch); return 0; }
+                blinkWith = roll < 0.1 ? Blinks(true) : roll < 0.55 ? Blinks(false) : null;
+                if (now >= nextGlitch && speech == null && talkState == TalkState.Off) { nextGlitch = now + 30 + random.NextDouble() * 30; Play(clip == perch ? perchGlitch : clip == laydown ? laydownGlitch : glitch); return 0; }
             }
             return index % clip.Count;
+        }
+
+        // Her blink for the loop she's in, glitchy or not; lying, once those frames are in.
+        private Clip Blinks(bool glitchy)
+        {
+            if (clip == perch) return glitchy ? perchBlinkGlitch : perchBlink;
+            if (clip != laydown) return glitchy ? blinkGlitch : blink;
+            Clip lain = glitchy ? laydownBlinkGlitch : laydownBlink;
+            return lain.Ready(facingLeft) ? lain : null;
         }
 
         // Her perch frame t seconds into the loop at a given fps, and how much of the frame after it mixes in, in 256ths.
@@ -1862,19 +1913,19 @@ namespace CapriDesktop
             // A hide they asked for waits until she's said her line.
             if (hideAsked && !hidden && !dragging && !pressed && speech == null && talkState != TalkState.Thinking && talkState != TalkState.Talking && clock.Elapsed.TotalSeconds >= voiceUntil && !speaker.Busy) { hideAsked = false; SetHidden(true); return; }
             // A click, a drag or talking to her took her out of the nap they asked for.
-            if (napping && clip != sleep) napping = false;
-            if (napAsked && clip == idle && !dragging && !pressed && !riding && !walking && !falling && !hanging && seat == null && !onPanel
+            if (napping && !Asleep) napping = false;
+            if (napAsked && ((clip == idle && seat == null && !onPanel) || (clip == laydown && lying)) && !dragging && !pressed && !riding && !walking && !falling && !hanging
                 && speech == null && talkState != TalkState.Thinking && talkState != TalkState.Talking && clock.Elapsed.TotalSeconds >= voiceUntil && !speaker.Busy)
             {
                 napAsked = false;
                 napping = true;
                 StopChat();
-                Play(sleep);
+                Play(lying ? laydownSleep : sleep);
                 frames.Start();
                 return;
             }
             // After setup, once she's said hi and her bubble's gone, she gets to know them.
-            if (meetAt >= 0 && clock.Elapsed.TotalSeconds >= meetAt && !hidden && !dragging && !pressed && !chatting && !typer.Visible && clip != sleep && !napAsked && !napping
+            if (meetAt >= 0 && clock.Elapsed.TotalSeconds >= meetAt && !hidden && !dragging && !pressed && !chatting && !typer.Visible && !Asleep && !napAsked && !napping
                 && speech == null && talkState == TalkState.Off && clock.Elapsed.TotalSeconds >= voiceUntil && !speaker.Busy)
             {
                 meetAt = -1;
@@ -1882,26 +1933,35 @@ namespace CapriDesktop
                 return;
             }
             if (clip == sleep) { if (quiet < 1000 && !napping) Play(wake); return; }
-            if (SleepDue(quiet) && clip == idle && preferences.Motion && !riding && !dragging && !hidden && !chatting && speech == null && talkState == TalkState.Off && !typer.Visible) Play(sleep);
+            if (clip == laydownSleep) { if (quiet < 1000 && !napping) Play(laydown); return; }
+            bool drowsy = SleepDue(quiet) && preferences.Motion && !riding && !dragging && !hidden && !chatting && speech == null && talkState == TalkState.Off && !typer.Visible;
+            if (drowsy && clip == idle) Play(sleep);
+            // On a ledge with room she lies down first, then dozes off where she lies.
+            else if (drowsy && clip == laydown && lying) Play(laydownSleep);
+            else if (drowsy && clip == perch && SittingStill) LieDown();
         }
 
-        // "Go to sleep" from her menu, her brain or plain words: she gets down from wherever she is, finishes what she's saying,
-        // then sleeps where she floats. Unlike the doze she falls into by herself, their mouse and keyboard don't wake her.
+        // "Go to sleep" from her menu, her brain or plain words: she lies down along her ledge if it has room, or else gets down
+        // from wherever she is, finishes what she's saying, then sleeps there. Unlike the doze she falls into by herself, their
+        // mouse and keyboard don't wake her.
         internal string Nap(bool sleeping)
         {
             if (!sleeping)
             {
-                bool resting = napAsked || napping || clip == sleep;
+                bool resting = napAsked || napping || Asleep;
                 napAsked = false;
                 napping = false;
                 if (clip == sleep) { Play(wake); frames.Start(); }
+                else if (clip == laydownSleep) { Play(laydown); frames.Start(); }
                 return resting ? "Woke up." : "Already awake.";
             }
             if (hidden) SetHidden(false);
             if (riding) StopRide();
-            if (seat != null || hanging) StandUp();
             EndWalk();
             danceAsked = false;
+            if (clip == perchDance) Play(perch);
+            // On a ledge with room she lies down to sleep along it; anywhere else she gets down and sleeps where she floats.
+            if (hanging || (seat != null && !lying && !LieDown())) StandUp();
             if (clip == dance || clip == perchDance) Play(idle);
             napAsked = true;
             return "Going to sleep. A click on me wakes me up.";
@@ -2235,6 +2295,8 @@ namespace CapriDesktop
                 taskPanel.MoveTo(new Point(panelGrabbed.X + dx, panelGrabbed.Y + dy));
                 return;
             }
+            // Picked up lying, she sits up first, so she hangs from the cursor where her hip was.
+            if (!dragging && lying) { int was = anchor.X; SitUp(false); anchorStart.X += anchor.X - was; }
             if (!dragging) { seat = null; falling = false; hanging = false; walking = false; dropAfter = false; leanAngle = 0; Play(dangle); frames.Start(); RefreshIcons(); }
             dragging = true;
             pendingClick = false;
@@ -2265,7 +2327,8 @@ namespace CapriDesktop
         private void Petted()
         {
             EndWalk();
-            if (seat != null) { Play(perch); blinkWith = perchBlink; }
+            if (lying) { Play(laydown); blinkWith = Blinks(false); }
+            else if (seat != null) { Play(perch); blinkWith = perchBlink; }
             else Play(grin);
             frames.Start();
             RenderFrame();
@@ -3377,7 +3440,7 @@ namespace CapriDesktop
             dropAfter = false;
             pendingClick = false;
             clickDelay.Stop();
-            Play(seat != null || riding || onPanel ? perchLeave : leave);
+            Play(lying ? laydownLeave : seat != null || riding || onPanel ? perchLeave : leave);
             if (frame != null) { shatter.Play(new Bitmap(frame), anchor, Screen.FromPoint(new Point(anchor.X + Width / 2, anchor.Y + Height / 2)).Bounds, true, preferences.Size); veiled = true; }
             Static(everywhere, everywhere ? Cue.Leave : Cue.Hop);
             outro = then;
@@ -3534,7 +3597,7 @@ namespace CapriDesktop
                 if (hidden) return "Taking a break";
                 if (typer.Visible || speech != null) return "Chatting";
                 if (clip == dance || clip == perchDance) return musicOn ? "Dancing to music" : "Dancing";
-                if (clip == sleep) return "Asleep";
+                if (Asleep) return "Asleep";
                 return "Hanging out";
             }
         }
@@ -3959,7 +4022,7 @@ namespace CapriDesktop
             bool busy = speech != null || (working != null ? now < voiceUntil : talkState != TalkState.Off || chatting);
             bool free = wanted && !hidden && !dragging && !pressed && !riding && !falling && !hanging && !walking && outro == null && !busy && !napAsked && !napping;
             if (dancing && !free) { Play(seat != null || onPanel ? perch : idle); UpdateAnimation(); }
-            else if (!dancing && free && (clip == idle || clip == perch)) { Play(seat != null || onPanel ? perchDance : dance); frames.Start(); }
+            else if (!dancing && free && (clip == idle || clip == perch || clip == laydown)) { SitUp(false); Play(seat != null || onPanel ? perchDance : dance); frames.Start(); }
             groove.Want(!testing && musicOn && !preferences.NoDance && preferences.Motion && !hidden);
         }
 
@@ -4256,6 +4319,7 @@ namespace CapriDesktop
 
         private void Hop(Ledge spot, int x)
         {
+            lying = false;
             hanging = false;
             walking = false;
             seat = null;
@@ -4279,6 +4343,7 @@ namespace CapriDesktop
         private void HangHere()
         {
             if (hidden || riding || onPanel) return;
+            SitUp(false);
             Halt();
             dropAfter = false;
             walking = false;
@@ -4301,6 +4366,7 @@ namespace CapriDesktop
 
         private void StandUp()
         {
+            SitUp(false);
             Halt();
             hanging = false;
             walking = false;
@@ -4312,6 +4378,88 @@ namespace CapriDesktop
             leanAngle = 0;
             Play(glitch);
             frames.Start();
+        }
+
+        private bool Asleep { get { return clip == sleep || clip == laydownSleep; } }
+
+        // Which way she'd lie along her ledge: her own way if her body has ledge under it and her hair stays on screen, else
+        // the other way, else null. Facing right she lies back from her hip to the left, so that's where the room has to be.
+        private bool? LieWay()
+        {
+            if (seat == null || seat.Free || !seat.Icon.IsEmpty || riding || onPanel || walking || falling || hanging || dragging || hidden) return null;
+            Point hip = Hip();
+            Rectangle area = Screen.FromPoint(hip).WorkingArea;
+            int torso = (int)Math.Ceiling(preferences.Size * LieTorso), reach = (int)Math.Ceiling(preferences.Size * LieReach);
+            bool right = hip.X - seat.Left >= torso && hip.X - reach >= area.Left;
+            bool left = seat.Right - hip.X >= torso && hip.X + reach <= area.Right;
+            if (facingLeft ? left : right) return facingLeft;
+            if (facingLeft ? right : left) return !facingLeft;
+            return null;
+        }
+
+        // From sitting, she lies down along her ledge, her hip where it was, glitching into her artist's lay-down set.
+        private bool LieDown()
+        {
+            bool? way = LieWay();
+            if (lying || way == null || clip != perch) return false;
+            Point hip = Hip();
+            facingLeft = way.Value;
+            lying = true;
+            nextLie = -1;
+            anchor = Seated(hip.X, seat.Y);
+            Location = anchor;
+            // Her loop and its glitch load here and now; the rest follows off her thread while she lies.
+            laydown.Load(facingLeft);
+            laydownGlitch.Load(facingLeft);
+            WarmLie();
+            Play(preferences.Motion ? laydownGlitch : laydown);
+            Static(false, null);
+            frames.Start();
+            return true;
+        }
+
+        // She sits back up where she lay, her hip where it was: with her perch's glitch, unless something else takes over.
+        private void SitUp(bool glitched = true)
+        {
+            if (!lying) return;
+            Point hip = Hip();
+            lying = false;
+            nextLie = -1;
+            anchor = new Point(anchor.X + hip.X - Hip().X, anchor.Y);
+            Location = anchor;
+            if (!glitched || seat == null) return;
+            Play(preferences.Motion ? perchGlitch : perch);
+            frames.Start();
+        }
+
+        // While she lies, the rest of her lay-down set loads off her thread, facing her way: her blinks, her glitch, and her
+        // talking frames once she's answering or in voice chat. Sleeping loads when she nods off.
+        private void WarmLie()
+        {
+            laydown.Warm(facingLeft);
+            laydownBlink.Warm(facingLeft);
+            laydownBlinkGlitch.Warm(facingLeft);
+            laydownGlitch.Warm(facingLeft);
+            if (TalkingNow || talkState != TalkState.Off || chatting) laydownTalk.Warm(facingLeft);
+        }
+
+        // Sitting quietly on a ledge with room, after two to five minutes she lies down along it, and three to eight minutes
+        // later she sits back up. Talking, music, a job, her menu or a nap wait it out.
+        private void CheckLie(double now)
+        {
+            bool calm = preferences.Motion && !preferences.NoSitting && !hidden && !dragging && !pressed && !chatting && !typer.Visible && !menu.Visible && !napAsked && !napping && !musicOn && !danceAsked && working == null && outro == null && Quiet(now);
+            if (lying)
+            {
+                if (clip != laydown) return;
+                if (nextLie < 0) nextLie = now + 180 + random.NextDouble() * 300;
+                if (now >= nextLie && calm) SitUp();
+                return;
+            }
+            if (!calm || clip != perch || !SittingStill || seat.Free || !seat.Icon.IsEmpty) { nextLie = -1; return; }
+            if (nextLie < 0) nextLie = now + 120 + random.NextDouble() * 180;
+            if (now < nextLie) return;
+            nextLie = -1;
+            LieDown();
         }
 
         private void Tumble(double now)
@@ -4329,6 +4477,7 @@ namespace CapriDesktop
 
         private void Land(Ledge ledge, bool arriving = false)
         {
+            SitUp(false);
             fallTo = null;
             walking = false;
             if (ledge.Window != IntPtr.Zero)
@@ -4411,7 +4560,7 @@ namespace CapriDesktop
         {
             preferences.NoSitting = !preferences.NoSitting;
             sitItem.Checked = !preferences.NoSitting;
-            if (preferences.NoSitting && (seat != null || falling)) { seat = null; falling = false; walking = false; Play(idle); UpdateAnimation(); }
+            if (preferences.NoSitting && (seat != null || falling)) { SitUp(false); seat = null; falling = false; walking = false; Play(idle); UpdateAnimation(); }
             SavePreferences();
         }
 
@@ -4423,7 +4572,8 @@ namespace CapriDesktop
             napAsked = false;
             // A click wakes her the gentle way, from a nap they asked for or her own doze.
             if (clip == sleep) { napping = false; Play(wake); if (!hidden) frames.Start(); RenderFrame(); return; }
-            Play(seat != null || onPanel ? perchGlitch : glitch);
+            if (clip == laydownSleep) { napping = false; Play(laydown); if (!hidden) frames.Start(); RenderFrame(); return; }
+            Play(lying ? laydownGlitch : seat != null || onPanel ? perchGlitch : glitch);
             if (!hidden) frames.Start();
             RenderFrame();
         }
@@ -4440,7 +4590,7 @@ namespace CapriDesktop
             outro = null;
             hidden = value;
             visibilityItem.Text = value ? "Show Capri" : "Hide Capri";
-            if (value) { StopRide(); LeavePanel(true); seat = null; falling = false; hanging = false; walking = false; dropAfter = false; pendingClick = false; clickDelay.Stop(); frames.Stop(); Hide(); pill.Hide(); typer.Hide(); CloseTalk(); StopChat(); }
+            if (value) { SitUp(false); StopRide(); LeavePanel(true); seat = null; falling = false; hanging = false; walking = false; dropAfter = false; pendingClick = false; clickDelay.Stop(); frames.Stop(); Hide(); pill.Hide(); typer.Hide(); CloseTalk(); StopChat(); }
             else { anchor = KeepOnScreen(anchor); Location = anchor; Play(instant || !preferences.Motion ? grin : arrive); Show(); RenderFrame(); UpdateAnimation(); Static(true, Cue.Arrive); }
             mainframe.Sync();
         }
@@ -7640,11 +7790,12 @@ namespace CapriDesktop
                 if ((clip == arrive || clip == perchArrive) && !instant && preferences.Motion) Arrival(now);
             }
             Clip shown = clip;
-            int blinkFrom = clip == perch ? PerchBlinkFrom : BlinkFrom;
+            int blinkFrom = clip == perch || clip == laydown ? PerchBlinkFrom : BlinkFrom;
             int following = (cell + 1) % clip.Count, loopCell = cell;
-            if ((clip == idle || clip == perch) && blinkWith != null && cell >= blinkFrom && cell < blinkFrom + blinkWith.Count) { shown = blinkWith; cell -= blinkFrom; }
+            if ((clip == idle || clip == perch || clip == laydown) && blinkWith != null && cell >= blinkFrom && cell < blinkFrom + blinkWith.Count) { shown = blinkWith; cell -= blinkFrom; }
             int talk = MouthCell(now, shown);
             if (PerchTalks(TalkingNow)) { shown = perchTalk; cell = loopCell; }
+            else if (LieTalks(TalkingNow)) { shown = laydownTalk; cell = loopCell; }
             Bitmap tween = perchMix > 0 ? Tween(shown, cell, following) : null;
             Bitmap next = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb);
             using (Graphics graphics = Graphics.FromImage(next)) Draw(graphics, shown, cell, talk, tween);
@@ -7663,8 +7814,8 @@ namespace CapriDesktop
         // Neighbouring frames barely differ, so a straight mix reads as the frame between them, with no extra art in memory.
         private Bitmap Tween(Clip shown, int cell, int following)
         {
-            Clip after = shown == perchTalk ? perchTalk : clip;
-            if (after == perch && blinkWith != null && following >= PerchBlinkFrom && following < PerchBlinkFrom + blinkWith.Count) { after = blinkWith; following -= PerchBlinkFrom; }
+            Clip after = shown == perchTalk || shown == laydownTalk ? shown : clip;
+            if ((after == perch || after == laydown) && blinkWith != null && following >= PerchBlinkFrom && following < PerchBlinkFrom + blinkWith.Count) { after = blinkWith; following -= PerchBlinkFrom; }
             Bitmap from = Art(shown);
             int width = from.Width / shown.Count;
             if (inBetween != null && (inBetween.Width != width || inBetween.Height != from.Height)) { inBetween.Dispose(); inBetween = null; }
@@ -7723,20 +7874,25 @@ namespace CapriDesktop
             mouths = null;
             if (speech != null) EndWalk();
             if (speech != null && (clip == sleep || clip == wake || clip == glitch || clip == grin || clip == dance || clip == perchDance)) Play(idle);
+            // Lying, she wakes to talk where she lies.
+            if (speech != null && clip == laydownSleep) Play(laydown);
             UpdateAnimation();
         }
 
         // Whether her mouth is moving: a line she's saying, or her voice chat's audio. Read after MouthCell, which ends a line.
         private bool TalkingNow { get { return (chatting && speaker.Busy) || speech != null; } }
 
-        // On a perch she talks in her artist's talking frames, frame for frame with the plain ones, once they're in.
+        // On a perch, or lying, she talks in her artist's talking frames, frame for frame with the plain ones, once they're in.
         private bool PerchTalks(bool talking) { return clip == perch && talking && perchTalk.Ready(facingLeft); }
 
+        private bool LieTalks(bool talking) { return clip == laydown && talking && laydownTalk.Ready(facingLeft); }
+
         // While she sits, the perch art she might need next loads off her thread, facing whichever way she does: her talking
-        // frames, and facing left her artist's flipped set, with the music perch while a song plays.
+        // frames once she's answering or in voice chat, and facing left her artist's flipped set, with the music perch while a
+        // song plays.
         private void WarmPerch()
         {
-            perchTalk.Warm(facingLeft);
+            if (TalkingNow || talkState != TalkState.Off || chatting) perchTalk.Warm(facingLeft);
             if (!facingLeft) return;
             perch.Warm(true);
             perchBlink.Warm(true);
@@ -7788,7 +7944,7 @@ namespace CapriDesktop
             graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
             graphics.SmoothingMode = SmoothingMode.HighQuality;
             double now = clock.Elapsed.TotalSeconds;
-            bool settled = preferences.Motion && !dragging && clip != dangle && clip != sleep;
+            bool settled = preferences.Motion && !dragging && clip != dangle && !Asleep;
             float breathe = settled ? (float)Math.Sin(now * 1.75) * 2.2f : 0;
             float tilt = settled ? (float)Math.Sin(now * 0.95) * 0.65f : 0;
             graphics.TranslateTransform(Width / 2f, Height / 2f + breathe);
@@ -7959,8 +8115,9 @@ namespace CapriDesktop
 
         private void SavePreferences()
         {
-            // On the task panel she's only visiting, so where she sat before is what's kept.
-            Point spot = onPanel ? panelHome : anchor;
+            // On the task panel she's only visiting, so where she sat before is what's kept. Lying, it's where she'd sit, since
+            // she comes back sitting.
+            Point spot = onPanel ? panelHome : lying ? new Point(anchor.X + (int)(preferences.Size * SitX) - (int)(preferences.Size * (facingLeft ? 1 - SitRight : SitRight)), anchor.Y) : anchor;
             preferences.X = spot.X;
             preferences.Y = spot.Y;
             preferences.HasPosition = true;
@@ -8642,6 +8799,70 @@ namespace CapriDesktop
                                 shelf.Location = new Point(shelf.Left + 40, shelf.Top + 25);
                                 HoldSeat(clock.Elapsed.TotalSeconds);
                                 if (Hip().X != seatX + 40 || Hip().Y != shelf.Top) throw new Exception("She did not ride along when the window moved.");
+                                // Lying down: from sitting on a window with room she lies along its top edge, her hip where it was, glitches
+                                // into her artist's lay-down loop, talks in its talking frames, dozes off and wakes where she lies, and sits
+                                // back up the same. A ledge too short for her body gets none of it.
+                                int lieHip = Hip().X;
+                                bool? lieWay = LieWay();
+                                if (lieWay == null || !LieDown() || !lying || clip != laydownGlitch || Hip().X != lieHip || Hip().Y != shelf.Top) throw new Exception("She didn't lie down along the window with her hip where it was: way " + lieWay + ", lying " + lying + ", hip " + Hip() + " from " + lieHip + ".");
+                                Rectangle lyingBody = BodyOnScreen(anchor, PerchedBody);
+                                if (lyingBody.Top >= shelf.Top || lyingBody.Bottom <= shelf.Top || lyingBody.Width < preferences.Size * 0.9f) throw new Exception("Lying, her body wasn't stretched along the window's edge: " + lyingBody + " on " + shelf.Bounds);
+                                clipStart -= 1;
+                                RenderFrame();
+                                if (clip != laydown || !lying) throw new Exception("Lying down didn't settle into her lay-down loop.");
+                                laydownTalk.Load(facingLeft);
+                                if (!LieTalks(true) || LieTalks(false)) throw new Exception("Lying, she didn't switch to her talking frames while she talks.");
+                                int sleepAfterWas = preferences.SleepAfter;
+                                if (preferences.SleepAfter <= 0) preferences.SleepAfter = 120;
+                                CheckIdle(preferences.SleepAfter * 1000L + 1);
+                                bool lieDozed = clip == laydownSleep && Doing == "Asleep";
+                                CheckIdle(0);
+                                bool lieWoke = clip == laydown && lying;
+                                preferences.SleepAfter = sleepAfterWas;
+                                if (!lieDozed || !lieWoke) throw new Exception("Lying, she didn't doze off where she lay and wake there: dozed " + lieDozed + ", woke " + lieWoke + ", clip " + (clip == perch ? "perch" : clip == laydown ? "laydown" : clip == laydownSleep ? "asleep" : "other"));
+                                // Her lying frames, drawn the way she's drawn: right, talking, asleep and facing left, all inside her window.
+                                bool lieFacedWas = facingLeft, lieMotionWas = preferences.Motion;
+                                preferences.Motion = false;
+                                using (Bitmap lieSheet = new Bitmap(Width * 2, Height * 2, PixelFormat.Format32bppArgb))
+                                {
+                                    Clip[] lieClips = { laydown, laydownTalk, laydownSleep, laydown };
+                                    for (int k = 0; k < lieClips.Length; k++)
+                                    {
+                                        facingLeft = k == 3 ? !lieFacedWas : lieFacedWas;
+                                        lieClips[k].Load(facingLeft);
+                                        using (Bitmap still = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb))
+                                        {
+                                            using (Graphics graphics = Graphics.FromImage(still)) Draw(graphics, lieClips[k], 20);
+                                            int[] lain = new int[Width * Height];
+                                            Pixels(still, new Rectangle(0, 0, Width, Height), lain, false);
+                                            int solid = 0, edge = 0;
+                                            for (int i = 0; i < lain.Length; i++)
+                                            {
+                                                if ((lain[i] >> 24 & 255) < 128) continue;
+                                                solid++;
+                                                int x = i % Width, y = i / Width;
+                                                if (x == 0 || y == 0 || x == Width - 1 || y == Height - 1) edge++;
+                                            }
+                                            if (solid < Width * Height / 40 || edge > 0) throw new Exception("Lying frame " + k + " drew " + solid + " pixels, " + edge + " of them on her window's edge.");
+                                            using (Graphics graphics = Graphics.FromImage(lieSheet)) graphics.DrawImage(still, (k % 2) * Width, (k / 2) * Height);
+                                        }
+                                    }
+                                    lieSheet.Save(Path.Combine(output, "laydown.png"), ImageFormat.Png);
+                                }
+                                facingLeft = lieFacedWas;
+                                preferences.Motion = lieMotionWas;
+                                SitUp();
+                                if (lying || clip != perchGlitch || Hip().X != lieHip || Hip().Y != shelf.Top) throw new Exception("She didn't sit back up with her hip where it was: " + Hip() + " from " + lieHip + ".");
+                                clipStart -= 1;
+                                RenderFrame();
+                                int ledgeLeft = seat.Left, ledgeRight = seat.Right;
+                                seat.Left = lieHip - 20;
+                                seat.Right = lieHip + 20;
+                                bool cramped = LieWay() == null && !LieDown();
+                                seat.Left = ledgeLeft;
+                                seat.Right = ledgeRight;
+                                if (!cramped || lying) throw new Exception("She'd lie down on a ledge too short for her.");
+                                checks.Add("PASS lying down: from sitting on a window with room she lies along its edge with her hip where it was, settles into her artist's lay-down loop, talks in its talking frames, dozes off and wakes where she lies, sits back up the same, and won't lie on a ledge too short for her");
                                 if (Spots().Exists(candidate => candidate.Window == shelf.Handle)) throw new Exception("Wander offered the window she already sits on.");
                                 int blinkFrom = Hip().X;
                                 if (!Blink() || walking || seat == null || seat.Window != shelf.Handle || Hip().Y != shelf.Top || Hip().X == blinkFrom) throw new Exception("Wander did not teleport her along her window.");
