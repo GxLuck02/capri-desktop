@@ -904,6 +904,8 @@ namespace CapriDesktop
             Update(pet.Now);
         }
 
+        internal bool Busy { get { return thinking; } }
+
         internal void Dismiss()
         {
             reply = null;

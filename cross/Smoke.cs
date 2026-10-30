@@ -103,7 +103,7 @@ namespace CapriDesktop
             if (finished) return;
             if (started < 0) started = now;
             if (stepStart < 0) stepStart = now;
-            if (now - started > 300) { Finish("Timed out at step " + step + "."); return; }
+            if (now - started > 420) { Finish("Timed out at step " + step + "."); return; }
             if (now - stepStart > 15) { checks.Add("INFO " + Seen()); Finish("Step " + step + " took longer than 15 seconds."); return; }
             try
             {
@@ -1199,7 +1199,10 @@ namespace CapriDesktop
                     checks.Add("INFO built-in brain: only on a Mac with Apple silicon, skipped");
                     pet.Frame.Close();
                     Send(shelf, "quit");
-                    Finish(null);
+                    pet.Talk.Dismiss();
+                    pet.Hear("still there?");
+                    pet.HideAway();
+                    step = 40;
                     return true;
                 }
                 if (Engine.Fit(Machine.Unified(8L << 30)) != Engine.Picks[1] || Engine.Fit(Machine.Unified(16L << 30)) != Engine.Picks[0] || Engine.Fit(Machine.Unified(4L << 30)) != Engine.Picks[2]) throw new Exception("The Mac brain pick is wrong for 4, 8 or 16 GB of RAM.");
@@ -1472,7 +1475,7 @@ namespace CapriDesktop
                 pet.HideAway();
                 return true;
             }
-            if (step == 22)
+            if (step == 41)
             {
                 if (pet.IsVisible) return false;
                 if (!pet.Talk.Quiet) throw new Exception("A reply that came in after Hide her still showed a bubble: " + pet.Talk.Reply);
@@ -1485,7 +1488,7 @@ namespace CapriDesktop
                 if (!pet.Away || !pet.Leaving) throw new Exception("After popping in from hiding she didn't hide again.");
                 return true;
             }
-            if (step == 23)
+            if (step == 42)
             {
                 if (!poppedAgain)
                 {
@@ -1503,7 +1506,7 @@ namespace CapriDesktop
                 checks.Add("PASS a quick click while she's popped in from hiding keeps her out");
                 return true;
             }
-            if (step == 24)
+            if (step == 43)
             {
                 if (pet.Arriving || pet.Falling) return false;
                 pet.CheckNudge(pet.Now);
@@ -1521,7 +1524,7 @@ namespace CapriDesktop
                 if (!pet.Leaving || pet.Away) throw new Exception("She didn't glitch out to pop in somewhere else.");
                 return true;
             }
-            if (step == 25 && attention == 1)
+            if (step == 44 && attention == 1)
             {
                 if (pet.Talk.Reply == null) return false;
                 attentionSulk = pet.Talk.Reply;
@@ -1535,7 +1538,7 @@ namespace CapriDesktop
                 attention = 2;
                 return false;
             }
-            if (step == 25 && attention == 2)
+            if (step == 44 && attention == 2)
             {
                 if (now - emptyAt < 0.5) return false;
                 bool alone = pet.Talk.Quiet && pet.NudgeOut < 0 && pet.NudgeWait == Pet.NudgeGap * 4;
@@ -1563,7 +1566,7 @@ namespace CapriDesktop
                 pet.Glance(pet.Now);
                 return true;
             }
-            if (step == 25)
+            if (step == 44)
             {
                 if (pet.Leaving) return false;
                 string hello = pet.Talk.Reply;
@@ -1588,7 +1591,7 @@ namespace CapriDesktop
                 attention = 1;
                 return false;
             }
-            if (step == 26)
+            if (step == 45)
             {
                 if (pet.Glancing) return false;
                 string glanceLine = pet.Talk.Reply;
@@ -1599,7 +1602,7 @@ namespace CapriDesktop
                 pet.Glance(pet.Now);
                 return true;
             }
-            if (step == 27)
+            if (step == 46)
             {
                 if (pet.Glancing) return false;
                 int asks;
@@ -1609,7 +1612,7 @@ namespace CapriDesktop
                 pet.Glance(pet.Now);
                 return true;
             }
-            if (step == 28)
+            if (step == 47)
             {
                 if (pet.Glancing) return false;
                 int asks;
@@ -1620,7 +1623,7 @@ namespace CapriDesktop
                 if (!repeatDropped) throw new Exception("A changed screen with the same line wasn't dropped as a repeat: " + asks + " | " + pet.Talk.Reply);
                 return true;
             }
-            if (step == 29 && hushGlance)
+            if (step == 48 && hushGlance)
             {
                 if (pet.Glancing) return false;
                 bool hushedQuiet = pet.Talk.Quiet;
@@ -1634,7 +1637,7 @@ namespace CapriDesktop
                 Finish(null);
                 return true;
             }
-            if (step == 29)
+            if (step == 48)
             {
                 if (pet.Glancing) return false;
                 string told = pet.Talk.Reply;
@@ -2158,7 +2161,7 @@ namespace CapriDesktop
             if (pet.Leaving || pet.Arriving || pet.Falling) return false;
             pet.MouseAt = null;
             string said = string.Join(" / ", moveLines);
-            string wanted = "Teleporting to your mouse. / Sitting right here. / Already sitting. / Standing up. / Hanging right here. / Let go. / Riding your cursor is only on Windows so far. / My Mainframe is only on Windows so far. Here my settings are in my right-click menu."
+            string wanted = "Teleporting to your mouse. / Sitting right here. / Already sitting. / Standing up. / Hanging right here. / Let go. / Riding your cursor is only on Windows so far. / I can't move my Mainframe by myself here yet. Drag its window where you want it."
                 + " / Glitched. / Grinning. / Blinked. / Dancing. Tell me to stop when you've had enough. / Stopped dancing. / I wasn't dancing. / Back to my idle. / " + moveLines[15] + " / Hiding. Pick Show her in my tray menu to bring me back. / Back. / I'm right here.";
             if (said != wanted) throw new Exception("Her moves said the wrong things: " + said);
             checks.Add("PASS she moves herself: \"teleport here\" glitches her hip onto the mouse, she sits, stands, hangs and lets go where she is, goes to another screen " + (pet.Screens.All.Count > 1 ? "and lands there" : "only when there is one (one here)") + ", a hide waits for her line and \"show yourself\" brings her back, riding the cursor and the Mainframe say they're Windows-only so far, and glitch, grin, blink, idle and a dance until \"stop dancing\" play by name");

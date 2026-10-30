@@ -283,6 +283,7 @@ namespace CapriDesktop
         private const string NameHeard = "(nickname)";
         private const string BrainHeard = "(brain download)";
         private const string BrainKeyHeard = "(brain key)";
+        private bool cloudListing;
         // "Playing Capri" on their Discord profile, like on Windows. Off in the smoke test.
         private readonly Presence presence;
         private MenuItem discordItem;
@@ -1653,7 +1654,7 @@ namespace CapriDesktop
             menu.Items.Add(discord);
             menu.Items.Add(new Separator());
             menu.Items.Add(quit);
-            menu.Opening += delegate { Sync(); RefreshBrains(); RefreshVoice(); };
+            menu.Opening += delegate { Sync(); OpenBrains(); RefreshVoice(); };
             return menu;
         }
 
@@ -1781,8 +1782,33 @@ namespace CapriDesktop
 
         // Picking a style: she says a line in it so they hear it, like on Windows. ElevenLabs says the line once per voice; after
         // that its audio is restyled here, so trying settings spends no more credits.
+        // Her free voice puts its own style on as it speaks, so there's no clip to keep and restyle.
+        private void HearFreeStyle()
+        {
+            int ticket = ++asking;
+            voice.Stop();
+            Func<string, byte[]> speak = FreeSpeak ?? new Func<string, byte[]>(SpeakFree);
+            Talk.Thinking("(voice check)");
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                byte[] wav = null;
+                string problem = null;
+                try { wav = speak(StyleLine); }
+                catch (Exception error) { problem = Voice.Short("Her free voice glitched: " + error.Message); }
+                Dispatcher.UIThread.Post(delegate
+                {
+                    if (ticket != asking) return;
+                    double seconds = wav == null ? 0 : Voice.Seconds(wav);
+                    if (seconds < 0.2) { Talk.Answer("(voice check)", problem ?? StyleLine); return; }
+                    Talk.Answer("(voice check)", StyleLine, seconds);
+                    voice.Play(wav);
+                });
+            });
+        }
+
         internal void HearStyle()
         {
+            if (FreeSpeaks) { HearFreeStyle(); return; }
             if (!Speaks)
             {
                 Talk.Answer("(voice check)", voice.Ready ? "My voice is off, choom. Settings > Voice > Use ElevenLabs turns it back on." : "Add an ElevenLabs key under Settings > Voice to hear that, choom.");
@@ -1963,11 +1989,11 @@ namespace CapriDesktop
         internal bool Napping { get { return napping; } }
 
         // Her own moves, like on Windows: "teleport here" glitches her over to their mouse, "go to my other monitor" to the same
-        // spot on another screen, and she sits, stands, hangs, hides and comes back. Riding the cursor and the Mainframe are
+        // spot on another screen, and she sits, stands, hangs, hides and comes back. Riding the cursor and moving the Mainframe are
         // Windows-only so far.
         internal string MoveSelf(string action, string screen)
         {
-            if (action == "move_mainframe") return "My Mainframe is only on Windows so far. Here my settings are in my right-click menu.";
+            if (action == "move_mainframe") return "I can't move my Mainframe by myself here yet. Drag its window where you want it.";
             if (action == "ride_cursor" || action == "hop_off") return "Riding your cursor is only on Windows so far.";
             if (action == "hide")
             {
@@ -2440,11 +2466,21 @@ namespace CapriDesktop
             brainMenu.Items.Add(back);
         }
 
+        // Opening her menu reads a key's models only if they aren't in yet. Refresh in the Mainframe always asks again.
+        private void OpenBrains()
+        {
+            if (Brain.Remote == null) { RefreshBrains(); return; }
+            ShowBrains(ollamaModels);
+            ListCloud();
+        }
+
         // A saved key's models, read once for the menu and for a stuck NVIDIA model to hand over to.
         private void ListCloud()
         {
             Cloud remote = Brain.Remote;
-            if (remote != null && cloudModels == null) ListCloud(remote.Key, false);
+            if (remote == null || cloudModels != null || cloudListing) return;
+            cloudListing = true;
+            ListCloud(remote.Key, false);
         }
 
         // The model rows at the top of the Brain menu, above its key choices.
@@ -3197,7 +3233,7 @@ namespace CapriDesktop
             tier = Math.Max(0, Math.Min(2, tier));
             if (tier == Saved.Tier) return;
             Brain.Cancel();
-            ++asking;
+            DropReply();
             ++linking;
             Saved.Tier = tier;
             Save();
@@ -3225,13 +3261,12 @@ namespace CapriDesktop
             try { Keys.Forget(name); }
             catch (Exception error) { Brain.Log("keys", -1, "Couldn't forget the " + name + " key: " + error.Message); ShowProblem("Couldn't remove your key from " + Vault + "."); return; }
             Brain.Cancel();
-            ++asking;
+            DropReply();
             ++linking;
             if (Saved.Tier == 1) Saved.NvidiaModel = null;
             else Saved.PaidModel = null;
             Brain.Remote = null;
             Brain.Model = null;
-            Brain.Forget();
             cloudModels = null;
             BrainProblem = null;
             Saved.Tier = 0;
@@ -3247,12 +3282,18 @@ namespace CapriDesktop
             if (remote == null) { PickBrain(model); return; }
             if (string.IsNullOrEmpty(model) || model == remote.Model) return;
             Brain.Cancel();
-            ++asking;
+            DropReply();
             remote.Model = model;
             Brain.Model = model;
-            Brain.Forget();
             Keep(remote);
             ShowState();
+        }
+
+        // A reply still on its way is dropped with the brain it came from, so its thinking bubble goes too.
+        private void DropReply()
+        {
+            ++asking;
+            if (Talk.Busy) Talk.Dismiss();
         }
 
         private void Keep(Cloud remote)
@@ -3282,6 +3323,7 @@ namespace CapriDesktop
                 }
                 Dispatcher.UIThread.Post(delegate
                 {
+                    if (!connecting) cloudListing = false;
                     if (ticket != linking) return;
                     if (problem != null)
                     {
@@ -3627,6 +3669,7 @@ namespace CapriDesktop
             remote.Model = next;
             Brain.Model = next;
             Brain.Log("NVIDIA", -1, old + " wasn't answering, so she switched to " + next + ".");
+            ShowState();
             return true;
         }
 
@@ -3695,9 +3738,11 @@ namespace CapriDesktop
                     if (kind == "nvidia") Saved.NvidiaModel = Saved.CloudModel;
                     else Saved.PaidModel = Saved.CloudModel;
                 }
+                else Brain.Log("keys", -1, "The brain-key file didn't hold a key she knows, so it was dropped.");
                 File.Delete(path);
                 Saved.CloudModel = null;
-                Save();
+                // Save would put her at the corner: her spot isn't read until she's placed.
+                Write();
             }
             catch (Exception error) { Brain.Log("keys", -1, "Couldn't move the brain key: " + error.Message); }
         }
@@ -3736,7 +3781,7 @@ namespace CapriDesktop
                 catch (Exception error) { Brain.Log(company + " models", -1, error.Message); problem = "Couldn't reach " + company + ". Check your internet, then paste the key again."; }
                 Dispatcher.UIThread.Post(delegate
                 {
-                    if (link != linking) return;
+                    if (link != linking) { if (ticket == asking) Talk.Dismiss(); return; }
                     string model = found == null ? null : Brain.DefaultCloudModel(kind, found);
                     if (problem == null && model == null) problem = "That key can't use any chat models.";
                     if (problem == null)
@@ -3766,7 +3811,7 @@ namespace CapriDesktop
             ShowBrains(ollamaModels);
         }
 
-        internal void PickCloud(string model) { PickModel(model); }
+        internal void PickCloud(string model) { if (Brain.Remote != null) PickModel(model); }
 
         // Back to her local brain: the key goes, and she finds her Ollama model again.
         internal void ForgetBrainKey() { ForgetText(); }
@@ -3875,6 +3920,7 @@ namespace CapriDesktop
             voiceProblem = null;
             WriteVoiceKey(null);
             if (Saved.VoiceTier == 2) Saved.VoiceTier = 1;
+            Save();
             ShowState();
         }
 
@@ -3975,6 +4021,11 @@ namespace CapriDesktop
             Saved.X = anchor.X;
             Saved.Y = anchor.Y;
             Saved.Placed = true;
+            Write();
+        }
+
+        private void Write()
+        {
             if (Program.Smoke != null) return;
             try
             {

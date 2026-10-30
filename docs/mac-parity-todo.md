@@ -3,6 +3,9 @@
 Dernière session : 2026-10-29. Repo : fork https://github.com/GxLuck02/capri-desktop
 (remote `upstream` = lachydotmcg/capri-desktop). Mac M2.
 
+## Fusion avec la 0.7.7 de lachydotmcg (2026-10-30)
+Les paliers du Mainframe et le Trousseau restent la référence sur Mac ; le menu Brain du créateur passe par eux.
+
 ## Décisions déjà prises
 - On avance étape par étape, but = parité avec la version Windows (`app/`).
 - Le Mainframe Mac se construit section par section, une section par étape.
@@ -28,7 +31,7 @@ Dernière session : 2026-10-29. Repo : fork https://github.com/GxLuck02/capri-de
 - [ ] Étape 4 — Chat vocal : micro, Test, raccourcis
 - [ ] Étape 5 — Section CAPRI + page Settings (langue, surnom, personnalité, raccourcis, démarrage, Discord, Check in)
 - [ ] Étape 6 — Voir l'écran
-- [ ] Étape 7 — Jobs avec son curseur + Blackwall (le plus risqué)
+- [ ] Étape 7 — Jobs avec son curseur (le plus risqué). Le curseur Security avec Blackwall est arrivé sur Mac avec la 0.7.7 de lachydotmcg.
 - [ ] Étape 8 — Deux cerveaux : local privé + cloud (nouveauté, pas sur Windows). Piste retenue :
   règles fixes par tâche (tout ce qui contient une capture d'écran reste local, le texte peut aller au cloud).
 
@@ -101,6 +104,6 @@ affiche « needs Apple silicon » sur Linux/Mac Intel.
 - Clic droit sur Capri = deux doigts sur le trackpad.
 - App installée : `sh cross/mac/build-app.sh` → `~/Applications/Capri.app` (à refaire après chaque étape).
   Ollama arrêté (`brew services stop ollama`) : Capri utilise son cerveau intégré ; clé NVIDIA aussi enregistrée.
-- Personnalité : `~/Library/Application Support/Capri/personality.md` (Settings > Edit her personality).
+- Personnalité : retirée sur Mac et Linux par la 0.7.7 de lachydotmcg, elle reste dans le code (`Brain.DefaultPersonality`).
 - Smoke : fermer les fenêtres au centre de l'écran (ex. Moniteur d'activité), sinon le test « sitting »
   échoue (« She didn't land on the test shelf's top edge »).
