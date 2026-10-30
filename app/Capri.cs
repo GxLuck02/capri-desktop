@@ -7555,8 +7555,9 @@ namespace CapriDesktop
         private readonly System.Collections.Generic.List<string> mouseJobs = new System.Collections.Generic.List<string>();
         private volatile int escTold = -1;
         private Action<string> finishedTest;
-        internal const string StartedLater = "Capri started that job with her cursor. It can take a minute, and you'll hear how it went when it's done. Tell them she's on it, but don't say it's done yet.";
-        internal const string AlreadyLater = "Capri is already doing that job with her cursor. Tell them she's on it, and don't call the tool again.";
+        // Not "tell them she's on it": she's usually just said so, and the agent said it again word for word (Lachy, 30 Oct).
+        internal const string StartedLater = "Capri started that job with her cursor. It can take a minute, and you'll hear how it went when it's done. If you already told them she's on it, don't say it again; if you didn't, say so in a few words. Don't say it's done yet, and don't call the tool again for it.";
+        internal const string AlreadyLater = "Capri is already doing that job with her cursor. Don't call the tool again, and don't repeat what you already told them.";
 
         // The job a tool call puts on the mouse, if any: a use_computer job, or a quick tool she does with her cursor.
         private string MouseKey(string tool, ToolArguments args)
@@ -7566,7 +7567,31 @@ namespace CapriDesktop
             return string.IsNullOrWhiteSpace(task) ? null : Regex.Replace(task.Trim().ToLowerInvariant(), @"\s+", " ");
         }
 
-        private bool Claim(string key) { lock (mouseJobs) { if (mouseJobs.Contains(key)) return false; mouseJobs.Add(key); return true; } }
+        // The same job in other words joins it too: the agent often asks again after its first call, like "craft a crafting table"
+        // then "craft a crafting table in minecraft", which queued it twice (Lachy, 30 Oct). A different job still gets its turn.
+        private bool Claim(string key)
+        {
+            lock (mouseJobs)
+            {
+                if (mouseJobs.Exists(held => SameJob(held, key))) return false;
+                mouseJobs.Add(key);
+                return true;
+            }
+        }
+
+        private static readonly Regex JobFiller = new Regex(@"^(a|an|the|in|on|at|to|for|of|and|then|now|it|its|me|my|your|their|them|please|pls|capri|can|you|u|up|some|this|that|with)$");
+
+        internal static bool SameJob(string one, string other)
+        {
+            if (one == other) return true;
+            System.Collections.Generic.HashSet<string> first = new System.Collections.Generic.HashSet<string>(), second = new System.Collections.Generic.HashSet<string>();
+            foreach (Match word in Regex.Matches(one.ToLowerInvariant(), @"[\p{L}\p{N}']+")) if (!JobFiller.IsMatch(word.Value)) first.Add(word.Value);
+            foreach (Match word in Regex.Matches(other.ToLowerInvariant(), @"[\p{L}\p{N}']+")) if (!JobFiller.IsMatch(word.Value)) second.Add(word.Value);
+            if (first.Count == 0 || second.Count == 0) return false;
+            int both = 0;
+            foreach (string word in first) if (second.Contains(word)) both++;
+            return both * 10 >= (first.Count + second.Count - both) * 6;
+        }
 
         private void Free(string key) { lock (mouseJobs) mouseJobs.Remove(key); }
 
@@ -10843,7 +10868,7 @@ namespace CapriDesktop
                             Func<string, string, string> laterWorkWas = Hands.Work;
                             string laterModelWas = brain.Model;
                             System.Collections.Generic.List<string> laterLog = new System.Collections.Generic.List<string>(), laterTold = new System.Collections.Generic.List<string>();
-                            string firstAnswer, retryAnswer, secondAnswer;
+                            string firstAnswer, retryAnswer, rewordAnswer, secondAnswer;
                             long answeredMs;
                             try
                             {
@@ -10855,6 +10880,8 @@ namespace CapriDesktop
                                 firstAnswer = Later(null, "use_computer", notepadJob, MouseKey("use_computer", notepadJob));
                                 answeredMs = answering.ElapsedMilliseconds;
                                 retryAnswer = Later(null, "use_computer", notepadAgain, MouseKey("use_computer", notepadAgain));
+                                ToolArguments notepadReworded = new ToolArguments { Task = "Open Notepad, then type hi in it" };
+                                rewordAnswer = Later(null, "use_computer", notepadReworded, MouseKey("use_computer", notepadReworded));
                                 secondAnswer = Later(null, "use_computer", paintJob, MouseKey("use_computer", paintJob));
                                 Stopwatch laterWait = Stopwatch.StartNew();
                                 while (laterWait.ElapsedMilliseconds < 6000) { lock (laterTold) if (laterTold.Count >= 2) break; Thread.Sleep(20); }
@@ -10869,7 +10896,10 @@ namespace CapriDesktop
                             lock (laterLog) laterRan = string.Join(" | ", laterLog.ToArray());
                             lock (laterTold) laterSaid = string.Join(" | ", laterTold.ToArray());
                             bool laterTurns = laterRan == "start open notepad and type hi | end open notepad and type hi | start open paint | end open paint" || laterRan == "start open paint | end open paint | start open notepad and type hi | end open notepad and type hi";
-                            if (firstAnswer != StartedLater || answeredMs > 500 || retryAnswer != AlreadyLater || secondAnswer != StartedLater || !laterTurns || laterTold.Count != 2 || laterSaid.IndexOf("Did open notepad and type hi.", StringComparison.Ordinal) < 0 || laterSaid.IndexOf("Did open paint.", StringComparison.Ordinal) < 0)
+                            if (rewordAnswer != AlreadyLater || !SameJob("craft a crafting table", "Craft a crafting table in Minecraft") || SameJob("open spotify", "open spotify and play resist and disorder") || SameJob("open discord", "open spotify")
+                                || StartedLater.IndexOf("Tell them she's on it", StringComparison.Ordinal) >= 0 || StartedLater.IndexOf("don't say it again", StringComparison.Ordinal) < 0 || StartedLater.IndexOf("don't call the tool again", StringComparison.Ordinal) < 0)
+                                throw new Exception("A voice chat job asked again in other words ran twice, or her answer still tells the agent to repeat itself: " + rewordAnswer);
+                            if (firstAnswer != StartedLater || answeredMs > 500 || retryAnswer != AlreadyLater || secondAnswer != StartedLater ||!laterTurns || laterTold.Count != 2 || laterSaid.IndexOf("Did open notepad and type hi.", StringComparison.Ordinal) < 0 || laterSaid.IndexOf("Did open paint.", StringComparison.Ordinal) < 0)
                                 throw new Exception("A voice chat job didn't answer at once, ran twice or shared the mouse: " + firstAnswer + " in " + answeredMs + " ms / " + retryAnswer + " / " + laterRan + " / told " + laterSaid);
                             checks.Add("PASS voice chat jobs: a cursor job answers ElevenLabs' tool call at once instead of timing out at 20 s, runs on its own and says how it went when it ends; the same job asked again joins it, and a second job waits its turn on the mouse");
                             checks.Add("PASS use her cursor: on by default she searches YouTube and picks a video, plays from Spotify's search and drags Spotify's volume slider with her own cursor when they say Spotify; plain volume uses the PC's volume keys even with Spotify open; a slider she can't reach falls back to the keys unless they stopped her; if her brain gets lost the quick tool still does it, and turning it off uses the quick tools");
