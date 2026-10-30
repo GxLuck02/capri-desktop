@@ -1511,6 +1511,7 @@ If she closes twice in a row while she's starting (a crash, but also Task Manage
 - She only plays one song, or the wrong one: name the song and the artist. "Play something" picks from the Cyberpunk soundtracks.
 - Spotify opens but doesn't play: press the green Play button.
 - She played it on YouTube, not Spotify: she uses YouTube when Spotify isn't installed.
+- She paused the video she just played: a YouTube video starts by itself, and before 0.7.7 her hands sometimes clicked it to play it, which paused it. From 0.7.7 she leaves a video alone once it's open, and presses play once if her job left it paused. Click the video or press k to start it.
 - "No app called X is installed on this PC.": use the name from your Start menu.
 - She won't play a song: some song names have words she blocks (drinking, smoking, drugs and so on). Search it yourself.
 - "Mute my mic" doesn't work in Discord: she uses Discord's default keys (Ctrl + Shift + M). If you changed them in Discord, set them back.
