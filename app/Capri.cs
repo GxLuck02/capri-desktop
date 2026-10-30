@@ -1464,6 +1464,7 @@ namespace CapriDesktop
                 if (!testing) Clip.RestAll(Environment.TickCount);
                 if (!testing) CheckPopIn(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
                 if (!testing) CheckNudge(clock.Elapsed.TotalSeconds, Native.IdleMilliseconds());
+                if (!testing) CheckHoliday(DateTime.Now, Native.IdleMilliseconds());
                 if (!testing) presence.Show(preferences.NoDiscord ? null : Doing);
                 if (!testing) CheckHd(clock.Elapsed.TotalSeconds);
                 StayOnTop();
@@ -2485,18 +2486,39 @@ namespace CapriDesktop
         private void GreetSoon()
         {
             int ticket = asking;
-            ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(GreetPause); Post(delegate { Greet(ticket, DateTime.Now.Hour); }); });
+            ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(GreetPause); Post(delegate { Greet(ticket, DateTime.Now); }); });
         }
 
-        private void Greet(int ticket, int hour)
+        // On a holiday her hello is its line, in her voice, since there's no recording of it.
+        private void Greet(int ticket, DateTime now)
         {
-            string line = Brain.Greeting(hour);
+            greetTried = true;
+            string[] holiday = Brain.Holiday(now);
+            string line = holiday != null ? holiday[random.Next(holiday.Length)] : Brain.Greeting(now.Hour);
             if (line == null || ticket != asking || hidden || chatting || speech != null || talkState != TalkState.Off || typer.Visible) return;
             heard = "startup";
             box.Prompt = "> sys: ";
-            byte[] hello = Hello(Brain.GreetingClip(hour));
+            if (holiday != null) holidaySaid = now.Date;
+            byte[] hello = holiday != null ? null : Hello(Brain.GreetingClip(now.Hour));
             if (hello == null) Answer(++asking, line, TalkState.Talking);
             else Begin(++asking, line, TalkState.Talking, hello);
+        }
+
+        // The day she last wished them a happy holiday, and whether her startup hello has had its turn.
+        private DateTime holidaySaid;
+        private bool greetTried;
+
+        // Already running on a holiday, like through midnight into Halloween (Lachy, 30 Oct: "check time and say Happy Halloween
+        // on the 31st"), she says its line once that day, the first time she's free while they're at the PC.
+        private void CheckHoliday(DateTime now, long quiet)
+        {
+            string[] holiday = Brain.Holiday(now);
+            if (holiday == null || now.Date == holidaySaid || !greetTried) return;
+            if (quiet > 60000 || Hushed || hidden || quitting || dragging || pressed || chatting || typer.Visible || menu.Visible || speech != null || talkState != TalkState.Off || outro != null || onPanel || popOut >= 0 || working != null || FullScreen()) return;
+            holidaySaid = now.Date;
+            heard = "holiday";
+            box.Prompt = "> sys: ";
+            Answer(++asking, holiday[random.Next(holiday.Length)], TalkState.Talking);
         }
 
         internal static byte[] Hello(string name)
@@ -8884,28 +8906,70 @@ namespace CapriDesktop
                             }
                             bool quietWas = preferences.Quiet;
                             preferences.Quiet = false;
-                            Greet(asking, 8);
+                            // An ordinary day, so these hold when the smoke test runs on a holiday too.
+                            DateTime ordinary = new DateTime(2026, 10, 30);
+                            Greet(asking, ordinary.AddHours(8));
                             string morning = reply;
                             bool greetedMorning = asking == askedBeforeGreet + 1 && morning == "Good morning, choom." && heard == "startup" && voiceUntil > 0 && mouths != null;
                             CloseTalk();
-                            Greet(asking, 23);
+                            Greet(asking, ordinary.AddHours(23));
                             string late = reply;
                             bool lateVoiced = voiceUntil > 0;
                             CloseTalk();
-                            Greet(asking, 15);
+                            Greet(asking, ordinary.AddHours(15));
                             string afternoon = reply;
                             bool afternoonVoiced = voiceUntil > 0;
                             CloseTalk();
                             preferences.Quiet = true;
-                            Greet(asking, 15);
+                            Greet(asking, ordinary.AddHours(15));
                             bool quietTyped = reply == "Miss me, choom?" && voiceUntil > 0;
                             CloseTalk();
                             preferences.Quiet = quietWas;
                             int askedStale = asking;
-                            Greet(asking - 1, 8);
+                            Greet(asking - 1, ordinary.AddHours(8));
                             bool skippedStale = asking == askedStale && talkState == TalkState.Off;
                             if (!greetedMorning || late != "Isn't it late, choom?" || !lateVoiced || afternoon != "Miss me, choom?" || !afternoonVoiced || !quietTyped || !skippedStale) throw new Exception("Startup greeting went wrong: " + morning + " / " + late + " / " + afternoon + " / quiet " + quietTyped + " / stale " + skippedStale);
                             checks.Add("PASS startup greeting: she giggles and says good morning from 5 am to noon, isn't it late from 10 pm to 5 am, and miss me the rest of the day, in her recorded voice with no key needed (even with Use ElevenLabs off, since it costs no credits); none once you've already said something");
+                            // Halloween: 31 October in any year, from midnight to midnight, and not the days either side.
+                            string halloweenWrong = null;
+                            foreach (DateTime day in new[] { new DateTime(2026, 10, 30, 23, 59, 59), new DateTime(2026, 11, 1), new DateTime(2027, 10, 30, 12, 0, 0), new DateTime(2026, 12, 25) })
+                                if (Brain.Holiday(day) != null) halloweenWrong = "a holiday on " + day.ToString("d MMM yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+                            foreach (DateTime day in new[] { new DateTime(2026, 10, 31), new DateTime(2026, 10, 31, 23, 59, 59), new DateTime(2031, 10, 31, 9, 0, 0) })
+                                if (Brain.Holiday(day) == null) halloweenWrong = "no Halloween on " + day.ToString("d MMM yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+                            foreach (string spookyLine in Brain.HalloweenLines) if (spookyLine.IndexOf("Happy Halloween", StringComparison.Ordinal) < 0) halloweenWrong = "a Halloween line without Happy Halloween: " + spookyLine;
+                            // Started on the 31st, her hello is a Halloween line in her voice instead of the recording, and counts for the day.
+                            DateTime halloween = new DateTime(2026, 10, 31, 8, 0, 0);
+                            holidaySaid = DateTime.MinValue;
+                            int askedBeforeHalloween = asking;
+                            Greet(asking, halloween);
+                            string spooky = reply;
+                            bool halloweenHello = asking == askedBeforeHalloween + 1 && Array.IndexOf(Brain.HalloweenLines, spooky) >= 0 && heard == "startup" && holidaySaid == halloween.Date;
+                            CloseTalk();
+                            int askedAfterHello = asking;
+                            CheckHoliday(halloween.AddHours(3), 0);
+                            bool onceADay = asking == askedAfterHello && talkState == TalkState.Off;
+                            // Already running through midnight: away from the PC or under a full-screen game she waits, back she says it
+                            // once, and not on the 30th.
+                            Func<bool> holidayFullWas = FullScreen;
+                            bool holidayFull = false;
+                            FullScreen = delegate { return holidayFull; };
+                            holidaySaid = DateTime.MinValue;
+                            CheckHoliday(new DateTime(2026, 10, 30, 23, 59, 0), 0);
+                            CheckHoliday(new DateTime(2026, 10, 31, 0, 0, 5), 120000);
+                            holidayFull = true;
+                            CheckHoliday(new DateTime(2026, 10, 31, 0, 0, 30), 0);
+                            holidayFull = false;
+                            bool heldAway = asking == askedAfterHello && holidaySaid == DateTime.MinValue;
+                            CheckHoliday(new DateTime(2026, 10, 31, 0, 1, 0), 0);
+                            string midnight = reply;
+                            bool saidRunning = asking == askedAfterHello + 1 && Array.IndexOf(Brain.HalloweenLines, midnight) >= 0 && heard == "holiday";
+                            CloseTalk();
+                            CheckHoliday(new DateTime(2026, 10, 31, 20, 0, 0), 0);
+                            saidRunning &= asking == askedAfterHello + 1;
+                            FullScreen = holidayFullWas;
+                            holidaySaid = DateTime.MinValue;
+                            if (halloweenWrong != null || !halloweenHello || !onceADay || !heldAway || !saidRunning) throw new Exception("Halloween went wrong: " + (halloweenWrong ?? "") + " / hello " + halloweenHello + " (" + spooky + "), once a day " + onceADay + ", held while away " + heldAway + ", said running " + saidRunning + " (" + midnight + ")");
+                            checks.Add("PASS Halloween: on 31 October, any year, her startup hello is a Happy Halloween line in her voice; already running, she says one once that day the first time she's free with them at the PC and no full-screen game in front, and never on other days");
                             System.Collections.Generic.List<short[]> typedHeard = new System.Collections.Generic.List<short[]>();
                             int untypes = 0;
                             Action<short[]> realTypeOut = Sfx.TypeOut;

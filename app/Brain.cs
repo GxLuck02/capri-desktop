@@ -426,6 +426,11 @@ namespace CapriDesktop
 
         internal static string GreetingClip(int hour) { return hour >= 5 && hour < 12 ? "morning" : hour >= 22 || hour < 5 ? "late" : "miss"; }
 
+        // Her lines for a holiday on its day, by their clock, or null on an ordinary day. Halloween so far (Lachy, 30 Oct).
+        internal static string[] Holiday(DateTime day) { return day.Month == 10 && day.Day == 31 ? HalloweenLines : null; }
+
+        internal static readonly string[] HalloweenLines = { "Happy Halloween, choom!", "Happy Halloween, choom. Trick or treat?", "Boo! Happy Halloween, choom." };
+
         internal const string NotesHead = "# What Capri remembers about you\n> She reads this every time you chat. Edit or delete anything here.\n\n";
         private static readonly object noting = new object();
         // Only secrets and things that find them in real life stay out of me.md: Lachy wants every other memory to save.
