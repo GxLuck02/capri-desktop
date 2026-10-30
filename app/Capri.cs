@@ -2516,9 +2516,7 @@ namespace CapriDesktop
             if (holiday == null || now.Date == holidaySaid || !greetTried) return;
             if (quiet > 60000 || Hushed || hidden || quitting || dragging || pressed || chatting || typer.Visible || menu.Visible || speech != null || talkState != TalkState.Off || outro != null || onPanel || popOut >= 0 || working != null || FullScreen()) return;
             holidaySaid = now.Date;
-            heard = "holiday";
-            box.Prompt = "> sys: ";
-            Answer(++asking, holiday[random.Next(holiday.Length)], TalkState.Talking);
+            Remark("holiday", holiday[random.Next(holiday.Length)]);
         }
 
         internal static byte[] Hello(string name)
@@ -5048,7 +5046,7 @@ namespace CapriDesktop
             glanced.Add(Tuple.Create(clock.Elapsed.TotalSeconds, said));
             brain.Saw(saw, said);
             brain.Remember(string.IsNullOrEmpty(saw) ? "(You glanced at their screen.)" : "(You glanced at their screen and saw: " + saw + ")", said);
-            Tell("watching", said);
+            Remark("watching", said);
         }
 
         // With Keep her caught up on, a glance she kept quiet about still goes in her memory, so she can say what was on their screen.
@@ -5919,6 +5917,16 @@ namespace CapriDesktop
             if (hidden) SetHidden(false);
             heard = shown;
             box.Prompt = "> sys: ";
+            Answer(++asking, line, TalkState.Talking);
+        }
+
+        // Something she says on her own, like what she makes of their screen: her bubble shows only her words, with no
+        // "> sys: watching" above them (Lachy, 30 Oct: testers found it too robotic).
+        private void Remark(string shown, string line)
+        {
+            if (hidden) SetHidden(false);
+            heard = shown;
+            box.Prompt = "";
             Answer(++asking, line, TalkState.Talking);
         }
 
@@ -8962,7 +8970,7 @@ namespace CapriDesktop
                             bool heldAway = asking == askedAfterHello && holidaySaid == DateTime.MinValue;
                             CheckHoliday(new DateTime(2026, 10, 31, 0, 1, 0), 0);
                             string midnight = reply;
-                            bool saidRunning = asking == askedAfterHello + 1 && Array.IndexOf(Brain.HalloweenLines, midnight) >= 0 && heard == "holiday";
+                            bool saidRunning = asking == askedAfterHello + 1 && Array.IndexOf(Brain.HalloweenLines, midnight) >= 0 && heard == "holiday" && box.Prompt == "";
                             CloseTalk();
                             CheckHoliday(new DateTime(2026, 10, 31, 20, 0, 0), 0);
                             saidRunning &= asking == askedAfterHello + 1;
@@ -11191,6 +11199,17 @@ namespace CapriDesktop
                                     bubble.Update(12.51, 1, head, feet, bubbleArea);
                                     if (bubble.Image == still) throw new Exception("A changed bubble did not redraw.");
                                 }
+                                // Her own remarks, like what she says about their screen, have no "> sys: watching" line above them.
+                                bubble.State = TalkState.Online;
+                                bubble.Reply = "Don't skip that chest.";
+                                bubble.Revealed = 100;
+                                bubble.Heard = "watching";
+                                bubble.Prompt = "> sys: ";
+                                bubble.Update(13, 1, head, feet, bubbleArea);
+                                int withPrompt = bubble.PanelOnScreen.Height;
+                                bubble.Prompt = "";
+                                bubble.Update(13, 1, head, feet, bubbleArea);
+                                if (withPrompt - bubble.PanelOnScreen.Height != 19) throw new Exception("Her own remark kept the line above it: " + withPrompt + " / " + bubble.PanelOnScreen.Height);
                                 int width = bubble.Width;
                                 bubble.Update(12.51, 1.25f, head, feet, bubbleArea);
                                 if (bubble.Width <= width) throw new Exception("A bubble did not resize with the scale.");
@@ -18760,7 +18779,7 @@ namespace CapriDesktop
                         else if (step == 16)
                         {
                             if (glancing) { if (clock.Elapsed.TotalSeconds > glanceDeadline) throw new Exception("The fake glance retry timed out."); return; }
-                            if (reply != "Don't skip that chest." || heard != "watching" || clip == sleep || lastGlance != 1300) throw new Exception("The retried game comment was not delivered or did not wake Capri.");
+                            if (reply != "Don't skip that chest." || heard != "watching" || box.Prompt != "" || clip == sleep || lastGlance != 1300) throw new Exception("The retried game comment was not delivered, kept \"> sys: watching\" above it (" + box.Prompt + ") or did not wake Capri.");
                             lock (glanceAsked)
                             {
                                 if (glanceAsked.Count != 2) throw new Exception("The unchanged scene did not get one bounded retry.");

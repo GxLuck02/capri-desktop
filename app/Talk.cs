@@ -2603,8 +2603,10 @@ namespace CapriDesktop
                 float tail = 16 * s;
                 int columns = Fit(Speaker + (Reply ?? ""));
                 List<string> lines = Look.Wrap(Speaker + (Reply ?? ""), columns);
+                // Her own remarks have no prompt, so nothing sits above her words.
+                int above = string.IsNullOrEmpty(Prompt) ? 0 : 1;
                 float panelWidth = 24 * s + columns * cw + 14 * s;
-                float panelHeight = 13 * s + line * (1 + lines.Count) + 10 * s;
+                float panelHeight = 13 * s + line * (above + lines.Count) + 10 * s;
                 int width = (int)Math.Ceiling(panelWidth + margin * 2);
                 int height = (int)Math.Ceiling(top + panelHeight + tail + 4 * s);
                 bool below = head.Y - height < area.Top;
@@ -2633,10 +2635,13 @@ namespace CapriDesktop
                     using (Brush red = new SolidBrush(Look.Red)) graphics.FillRectangle(red, panel.Left + 10 * s, panel.Top + 13 * s, 3 * s, panel.Height - 26 * s);
                     float x = panel.Left + 24 * s;
                     float row2 = panel.Top + 12 * s;
-                    string you = Prompt + (Heard ?? "");
-                    if (Look.Cells(you) > columns) you = Look.Cut(you, columns - 3) + "...";
-                    using (Brush dim = new SolidBrush(Look.Dim)) Look.Draw(graphics, you, heard, dim, x, row2);
-                    row2 += line;
+                    if (above > 0)
+                    {
+                        string you = Prompt + (Heard ?? "");
+                        if (Look.Cells(you) > columns) you = Look.Cut(you, columns - 3) + "...";
+                        using (Brush dim = new SolidBrush(Look.Dim)) Look.Draw(graphics, you, heard, dim, x, row2);
+                        row2 += line;
+                    }
                     int[] takes = Look.Takes(lines, Speaker + (Reply ?? ""), Speaker.Length + (State == TalkState.Thinking ? (Reply ?? "").Length : Math.Max(0, Revealed)));
                     PointF caret = new PointF(x, row2);
                     using (Brush red = new SolidBrush(Look.Red))
