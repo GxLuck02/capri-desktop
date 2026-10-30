@@ -356,16 +356,18 @@ YOU
 
 VOICE ("Every voice, ElevenLabs too" on the right of the heading, then the Layers button)
 - Layers (0.7.6 and newer): the button at the right of VOICE's heading opens her VOICE LAYERS window. Its word lights up cyan while they're on. See "Voice layers" under Her voice.
-- Volume: Mute, 10% to 100%, 125%, 150%. Default 100%.
-- Pitch (from 0.7.5): -6 to +6 semitones. Default Normal. Higher or deeper, at the same speed.
-- Speed (from 0.7.5): 0.7x to 1.5x. Default Normal.
-- Robot (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off for every voice, HD too, which shows as "Off · HD" while HD is the voice she's using. A smooth synth under her voice that follows her pitch on the nearest note, like a talk box. Low settings add a light robotic shimmer; 100% is all robot.
-- Glitch (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off. Stutters, crushed bits and skips in her voice, more as it goes up.
+- Volume: Mute, 10% to 100%, 125%, 150%. Default 80% (100% before 0.7.7).
+- Pitch (from 0.7.5): -6 to +6 semitones. Default +3 (Normal before 0.7.7). Higher or deeper, at the same speed.
+- Speed (from 0.7.5): 0.7x to 1.5x. Default 1.2x (Normal before 0.7.7).
+- Robot (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off, except her HD voice, which starts at 40% from 0.7.7 and shows as "40% · HD" while HD is the voice she's using. A smooth synth under her voice that follows her pitch on the nearest note, like a talk box. Low settings add a light robotic shimmer; 100% is all robot.
+- Glitch (from 0.7.5): Off, 5%, 10%, 15%, then 20% to 100%. Default Off, except her HD voice, which starts at 20% from 0.7.7. Stutters, crushed bits and skips in her voice, more as it goes up.
 - Sounds: her sound effects. Off, or 10% to 100%. Default 60%.
 - Typing sound: "When she types". A soft typing sound while her text replies type out.
 - Free voice in games (0.7.6 and newer): only shows while her HD voice is on, under Typing sound. Off by default, so her HD voice keeps talking while a game or video is full screen. Turn it on and her free voice talks while anything is full screen, so the game gets your graphics card back.
 
 Pitch, Speed, Robot and Glitch change every voice she has: her free voice styles, HD, ElevenLabs and ElevenLabs voice chat. See "Pitch, speed, robot and glitch" under Her voice. Her voice layers do too; see "Voice layers".
+
+Her tuned voice (0.7.7 and newer): a new install starts at 80% volume, pitch +3, 1.2x, her HD voice at 40% robot and 20% glitch, and voice layers on. Updating from an older version, you get it once if you'd never moved a voice slider; if you'd moved any, your settings stay as they were. Volume, Pitch, Speed and the layers go for every voice, ElevenLabs too.
 
 MOVES
 - Mini player: on by default, the first row under MOVES. While music plays, a small player shows what's playing, and she perches on it. See "Her mini player" in section 14.
@@ -579,31 +581,31 @@ From 0.7.6 the rows are OFF, PREBUILT LOCAL (her free voice, HD and Your voice),
 
 ### Pitch, speed, robot and glitch (from 0.7.5)
 Mainframe > Settings > VOICE has four sliders. They change every voice she has: her free voice (any style), HD, ElevenLabs, and ElevenLabs voice chat.
-- Pitch: -6 to +6 semitones. Default Normal. Higher or deeper, without talking faster or slower.
-- Speed: 0.7x to 1.5x. Default Normal.
+- Pitch: -6 to +6 semitones. Default +3 (Normal before 0.7.7). Higher or deeper, without talking faster or slower.
+- Speed: 0.7x to 1.5x. Default 1.2x (Normal before 0.7.7).
 - Robot: Off, 5%, 10%, 15%, then 20% to 100%. A synth sings under her voice, like a talk box or a vocoder: it follows her pitch, pulled toward the nearest note, and takes the shape of her words. Smooth and musical, with no stutters. Low settings add a light robotic shimmer; 100% is all robot.
 - Glitch: Off, 5%, 10%, 15%, then 20% to 100%. Short stutters, crushed bits and skips, like a glitchy chip. More of them as it goes up. The same line glitches the same way each time.
 
-Her HD voice keeps its own Robot and Glitch. Both start at Off, so out of the box she sounds dry, just like the clip her HD voice copies. While HD is the voice she's using, those sliders show its values with HD after them ("Off · HD"), and moving them only changes HD. Her other voices share one Robot and one Glitch, which both start at Off.
+Her HD voice keeps its own Robot and Glitch. From 0.7.7 they start at 40% and 20% (before that, both Off, so she sounded dry, just like the clip her HD voice copies). While HD is the voice she's using, those sliders show its values with HD after them ("40% · HD"), and moving them only changes HD. Her other voices share one Robot and one Glitch, which both start at Off.
 
 When you let go of a slider, she says "How do I sound now, choom?" in the voice she's using, so you can hear it. With ELEVENLABS she makes that line once (about 25 credits), then restyles the same audio on your PC, so moving the sliders again uses no more credits. If her HD voice is asleep (it rests after 10 quiet minutes), she says "One sec, waking my HD voice." first, then the line in HD. With her voice OFF she says "My voice is OFF, choom. Pick FREE VOICE to hear that." (0.7.6: "Pick PREBUILT LOCAL to hear that.") With no voice set up she says "Get my free voice under VOICE to hear that, choom."
 
 In ElevenLabs voice chat the sliders change her as she talks. A slower Speed makes her replies take a little longer to finish.
 
-They're saved, so they stay after a restart or update. Normal, Normal and Off (10% for HD) is her usual voice.
+They're saved, so they stay after a restart or update. From 0.7.7 her usual voice is pitch +3, 1.2x, Robot and Glitch Off (40% and 20% for HD), with her voice layers on.
 
 On Mac and Linux they're under right-click her > Settings > Voice style (Pitch, Speed, Robot, Glitch), with the same steps, and they change her ElevenLabs voice. Each pick says "How do I sound now, choom?" in the new style. ElevenLabs makes that line once per voice, then it's restyled on your computer, so trying more settings uses no more credits. With her voice off she says "My voice is off, choom. Settings > Voice > Use ElevenLabs turns it back on." With no key: "Add an ElevenLabs key under Settings > Voice to hear that, choom."
 
 ### Voice layers (0.7.6 and newer)
-Voice layers make her sound doubled, with an AI shimmer: two copies of her voice mixed in quietly under her own. They're off out of the box, so she sounds just as she always has until you turn them on, and with them off her voice is exactly the same as before.
+Voice layers make her sound doubled, with an AI shimmer: two copies of her voice mixed in quietly under her own. From 0.7.7 they're on out of the box, and for anyone updating who never moved a voice slider. In 0.7.6 they were off out of the box. With them off her voice is exactly the same as before.
 
 Open them with the Layers button at the right of Mainframe > Settings > VOICE's heading. Its word lights up cyan while they're on. The VOICE LAYERS window has three channels:
 - Voice layers: the on/off switch. "Off: she sounds as she always has. On: every voice she has, ElevenLabs too."
 - MAIN: her voice itself. Its Pitch is the same setting as Settings > VOICE > Pitch (-6 to +6), and the two move together.
-- LAYER 1: a copy of her voice. Pitch -12 to +12 semitones from hers, in half steps (Same is her own pitch). Delay 0 to 250 ms behind her. Out of the box +1.5 semitones and 25 ms: a little higher, just behind her.
+- LAYER 1: a copy of her voice. Pitch -12 to +12 semitones from hers, in half steps (Same is her own pitch). Delay 0 to 250 ms behind her. Out of the box +2 semitones (+1.5 in 0.7.6) and 25 ms: a little higher, just behind her.
 - LAYER 2: another copy, with its own Pitch and Delay. Out of the box -2.5 semitones and 25 ms: lower, just behind her.
 - Hear her: she says "How do I sound now, choom?" in her voice as it is now. Letting go of any slider, or flipping the switch, does the same.
-- Defaults: puts both layers back to +1.5 and -2.5 semitones, 25 ms, and leaves the switch as it is.
+- Defaults: puts both layers back to +2 and -2.5 semitones (+1.5 and -2.5 in 0.7.6), 25 ms, and leaves the switch as it is.
 
 Each copy changes pitch without talking faster or slower, and mixes in about 8 dB under her, so she still leads. Short delays (about 15 to 35 ms) thicken her into one doubled voice; longer ones (50 ms and up) sound like an echo behind her. Pitches far from hers sound more like a harmony than a double: +7 sings a fifth above her, and -12 an octave below. A limiter keeps the mix from ever clipping, however loud. With a delay set, a line ends that much later while the copies finish, and her mouth moves with them.
 
