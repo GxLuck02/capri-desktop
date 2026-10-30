@@ -874,6 +874,13 @@ Tell her, typed or in voice chat. Typed, these work even before she has a brain:
 - "Move the Mainframe to my other monitor" or "bring the Mainframe here": she moves her Capri Mainframe window to that screen, or to your mouse.
 - "Sit down", "stand up", "hang here", "let go", "ride my cursor" and "hop off my cursor" do what they say, right where she is.
 - "Hide": she finishes what she's saying, then hides in the tray. "Show yourself" or "come out" brings her back.
+- "Sit on my Roblox window", "perch on Discord" or "hop onto my Chrome window" (0.7.7 and newer): she glitches onto the top edge of that app's window. "Sit on the taskbar" and "sit on your Mainframe" work too. A window that's minimized, maximized or full screen has no top edge for her to sit on, and she says so.
+- "Lie down" and "sit up" (0.7.7 and newer): she lies down along the window or taskbar she sits on, if it has room, and sits back up. In mid-air she drops onto whatever is under her first. "Lie down on the taskbar" or "lie down on my Roblox window" takes her there first.
+- "Walk around" or "go for a walk" (0.7.7 and newer): she strolls along her window. "Teleport somewhere" or "go somewhere else": she hops onto a random window or the taskbar.
+- "Sleep here" is the same as "go to sleep".
+
+### Lying down (0.7.7 and newer)
+After two to five quiet minutes sitting on a window or the taskbar with room, she lies down along it, and sits back up a few minutes later, or when music starts or you pick her up. She blinks, talks and falls asleep lying down too. Right-click her > Move > Lie down or Sit up, or tell her "lie down" or "sit up".
 
 ### Her animations (0.7.6 and newer)
 Ask for one by name: "do your glitch", "smile" or "grin", "blink", "play your idle animation", or "dance". Her dance goes on, with or without music, until you say "stop dancing" or untick Move > Dance. Telling her to stop while a song plays keeps her still until the song ends.
